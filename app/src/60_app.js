@@ -76,7 +76,7 @@
   const sunGal = [0, 0, 0];
   const bodyPosM = k => { const o = F.orb || 1; if (k === 'sun') return [0, 0, 0]; if (k === 'moon') return [(sol.earth[0] * o + sol.moonGeo[0]) * AU, (sol.earth[1] * o + sol.moonGeo[1]) * AU, (sol.earth[2] * o + sol.moonGeo[2]) * AU]; const p = k === 'earth' ? sol.earth : sol.planets[k].pos; return [p[0] * o * AU, p[1] * o * AU, p[2] * o * AU]; };
   const minLog = () => Math.log10(2.4 * BODY[S.focus].r * 1e3);
-  const clampZoom = l => clamp(l, S.focus === 'earth' && !S.center ? LMICRO : Math.max(LMIN, S.center && S.center.radM ? Math.log10(2.4 * S.center.radM) : minLog()), LMAX);      // sur une étoile : on s'arrête à sa surface
+  const clampZoom = l => clamp(l, S.focus === 'earth' && !S.center ? LMICRO : Math.max(LMIN, S.center ? (S.center.radM ? Math.log10(2.4 * S.center.radM) : LMIN) : minLog()), LMAX);      /* sur une étoile : on s'arrête à sa surface ; un objet sans rayon connu (comète, sonde) : à la borne générale, plus à celle de l'astre suivi */
 
   const sunDirLocal = new THREE.Vector3(...mulM(M, [-1, 0, 0])).applyQuaternion(Rr.qFrameGal.clone().invert());
   const AZ_GAL = Math.atan2(sunDirLocal.y, sunDirLocal.x) + 0.45;
@@ -1311,10 +1311,11 @@
     const wF = fadeOut(S.logR, 13.4, 14.4), wG = smoothstep(2, 50, R / (1000 * LY));
     for (let i = 0; i < 3; i++) F.tg[i] = fo[i] * wF + F.gcRel[i] * wG;
     F.selPos = S.sel ? S.sel.get() : null; if (F.selPos && !isFinite(F.selPos[0])) F.selPos = null;
-    S.ck = clamp(S.ck + (S.center ? dt : -dt) / 0.9, 0, 1); if (S.center) S.cpos = S.center.get();
+    const ck0 = S.ck; S.ck = clamp(S.ck + (S.center ? dt : -dt) / 0.9, 0, 1); if (S.center) S.cpos = S.center.get();
     if (S.ck > 0 && S.cpos) { const k = ease(S.ck); for (let i = 0; i < 3; i++) F.tg[i] = lerp(F.tg[i], S.cpos[i], k); }
-    /* passage d'un centre à un autre (toucher un second objet) : glissement en 0,9 s au lieu d'un saut */
-    if (S.center !== S.cWas) { if (S.center && S.cWas && S.lastTg) S.cbl = { from: S.lastTg, t0: wall }; S.cWas = S.center; }
+    /* nouveau centre alors que la vue est encore (même en partie) tirée vers l'ancien : glissement en 0,9 s au lieu d'un saut.
+       Couvre le passage direct A → B, A → (fiche fermée) → B en moins de 0,9 s, et le retour en arrière (goBack). */
+    if (S.center !== S.cWas) { if (S.center && S.lastTg && (S.cWas || ck0 > 0)) S.cbl = { from: S.lastTg, t0: wall }; S.cWas = S.center; }
     if (S.cbl) { const k = ease(clamp((wall - S.cbl.t0) / (reduced ? 0.001 : 0.9), 0, 1)); for (let i = 0; i < 3; i++) F.tg[i] = lerp(S.cbl.from[i], F.tg[i], k); if (k >= 1) S.cbl = null; }
     S.lastTg = [F.tg[0], F.tg[1], F.tg[2]];
     F.aFac = S.opts.comoving ? Math.pow(cs.a, smoothstep(22.6, 23.6, S.logR)) : 1;
