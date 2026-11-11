@@ -28,3 +28,11 @@ Décision de Marc (11/11/2026) : toutes les recommandations du cadrage (« oui �
 
 ## S2 — mesure de départ (11/11)
 `app/test/orbits_measure.js` compare l'approximation des épicycles (`25_future.js`) à une intégration exacte (saut de grenouille, pas de 0,5 Ma) dans le même potentiel, pour les 58 967 étoiles HYG : écart médian 148 pc à 50 Ma, 403 pc à 200 Ma, 2,3 kpc à 1 Ga ; 63 % des étoiles à plus de 100 pc dès 50 Ma. Le Soleil lui-même dérive de 108 pc en 50 Ma. L'intégration exacte des 58 967 étoiles sur 1 Ga prend 2 s sous Node sur le PC : faisable dans la page pour ce catalogue, pas pour les millions d'étoiles Gaia.
+
+## S2 — conception retenue (à construire sur sa propre branche)
+- Portée : orbite exacte pour le catalogue principal (`K`, 58 967 étoiles HYG, `initStarKin` dans `40_render.js`). Les étoiles Gaia en flux (`K2`, millions) gardent les épicycles, et leur fiche le dit (« orbite approchée »).
+- Où : nouveau fichier `app/src/26_orbits.js` (ajouté à la liste de `app/build.py`), pour ne pas croiser le lot A de la mission 2 qui modifie `25_future.js`.
+- Calcul : saut de grenouille, pas de 0,5 Ma, dans le potentiel `GAL` existant (Hernquist + Miyamoto-Nagai + NFW), dans un Web Worker (créé depuis un Blob) pour ne pas bloquer l'image. État courant gardé ; on avance ou recule depuis le point de contrôle le plus proche (un point tous les 100 Ma, Float32, au plus 20 gardés : 28 Mo).
+- Branchement : `starPositions` prend la position exacte quand elle existe pour `tEff` (à 1 Ma près), sinon l'épicycle, sans saut visible (fondu interdit : on attend la fin du calcul et on le dit, « calcul des orbites »). Le Soleil (`sunGalAt`) suit la même orbite exacte, pour que tout reste cohérent.
+- Piège : `tEff` n'est pas le temps réel quand la matière noire est retirée (`S.dmMix`, `oSunNo / oSunDM`) ; dans ce mode, le potentiel sans halo doit être utilisé, ou l'orbite exacte coupée et le dire.
+- Fini quand : énergie de chaque orbite conservée à 0,1 % sur 1 Ga ; période du Soleil 220 à 240 Ma ; les 42 passages d'étoiles gardent leurs dates publiées (pris en ligne droite sous 3 Ma, inchangé) ; temps par image sous deux fois la référence pendant la lecture à vitesse maximale ; quatre critiques PASSE.
