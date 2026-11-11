@@ -118,6 +118,14 @@ Les formats binaires des fichiers en flux sont définis par leur décodeur (`loa
 - Mission 2 : 100 puis 500 millions d'étoiles, une vingtaine de millions de galaxies, tous les astéroïdes. Les gros traitements devront tourner dans le nuage, par lots.
 - Mission 3 : toutes les étoiles Gaia ayant une distance estimée, 10 000 photos de galaxies en haute définition, surfaces plus fines.
 
+## Orbites des étoiles calculées pas à pas (S2, 11 novembre 2026)
+- `app/src/26_orbits.js` : les 58 967 étoiles du catalogue principal et le Soleil sont intégrés pas à pas (vitesse de Verlet, pas de 1 Ma, sous-pas fixes pour les orbites qui plongent vers le bulbe) dans le modèle de Voie lactée de `20_physics.js` (bulbe de Hernquist, disque de Miyamoto-Nagai, halo NFW ; sans barre ni bras ; paramètres inspirés de MWPotential2014, Bovy 2015, recalés sur 230 km/s). Le calcul tourne dans un Web Worker ; points de contrôle tous les 100 Ma.
+- Au-delà de 3 Ma, chaque étoile prend sa position calculée si le dernier résultat est à moins de 6 Ma de l'instant affiché (prolongement x + v·d + a·d²/2 : écart vu du Soleil de 26 pc pour 99 % des étoiles à 5,9 Ma). Sinon, et en attendant le calcul : épicycles, comme avant ; la fiche dit « calcul en cours ». Bascule avec écart (retour au calcul sous 3 Ma) pour éviter le scintillement.
+- Le Soleil dans la galaxie (`sunGalAt`, vue d'ensemble, rencontre avec Andromède) est calculé dans la page même, à toute date, sans attendre.
+- Les étoiles Gaia en flux gardent les épicycles ; leur fiche dit « orbite approchée ». Matière noire retirée : épicycles partout (le temps affiché n'y est plus le temps réel).
+- Mesuré : épicycles contre calcul pas à pas, écart médian 150 pc à 50 Ma, 2,3 kpc à 1 Ga (`app/test/orbits_measure.js`). Tour du Soleil : 229 Ma (rayon guide 8,67 kpc). Énergie conservée à 0,01 % pour 99,9 % des étoiles sur 1 Ga. Tests : `app/test/orbits.test.js`.
+- Pas vérifié : comparaison avec un logiciel de référence (galpy) ; fluidité sur téléphone (rendu logiciel seulement) ; le saut visible (environ 250 pc à +200 Ma) quand le calcul remplace l'approximation après un saut dans le temps.
+
 ## Couleur des galaxies lointaines (S3, 11 novembre 2026)
 - Avant : les galaxies des relevés passaient du blanc bleuté à l'orange selon z par une rampe choisie à la main ; les quasars avaient une couleur fixe.
 - Après : `pipeline/build_zcol.py` décale un vrai spectre au repos de (1+z) et l'intègre sur l'œil CIE 1931 : galaxies, modèle Sb de l'atlas Kinney-Calzetti (Kinney et al. 1996) ; quasars, première composante principale du modèle SDSS spDR2-029 (positive partout : la forme moyenne). Table `DATA.ZCOL` (`app/gen/data16.js`), lue par le shader `surv` (`zcol`) pour les galaxies embarquées et en flux. Fiche : ligne « Couleur ».

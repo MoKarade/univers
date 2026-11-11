@@ -1,6 +1,6 @@
 const fs = require('fs'), vm = require('vm'), path = require('path'), root = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(root, f), 'utf8'); global.atob = s => Buffer.from(s, 'base64').toString('binary');
-vm.runInThisContext((rd('gen/data.js') + rd('gen/data3.js') + rd('src/20_physics.js') + rd('src/30_gen.js') + rd('src/25_future.js')).replace(/^const /gm, 'var '));
+vm.runInThisContext((rd('gen/data.js') + rd('gen/data3.js') + rd('src/20_physics.js') + rd('src/30_gen.js') + rd('src/25_future.js') + rd('src/26_orbits.js')).replace(/^const /gm, 'var '));
 const C = buildCosmo(PLANCK), V = [28.4, -109.8, 41.4], P = DATA.M31.pos, d0 = Math.hypot(...P), vr = (V[0]*P[0]+V[1]*P[1]+V[2]*P[2])/d0, vt = Math.hypot(V[0]-vr*P[0]/d0, V[1]-vr*P[1]/d0, V[2]-vr*P[2]/d0);
 for (const [nm, v] of [['Gaia 2025', [28.4, -109.8, 41.4]], ['Hubble 2012', [44.1, -118.0, 3.1]], ['Gaia 2021', DATA.M31.vel]]) { const O = andromedaOrbit(C, undefined, v); console.log('%s : v transverse %s km/s | passages %s | fusion %s', nm, O.vt.toFixed(1), O.peri.slice(0, 3).map(q => '+' + q[0].toFixed(2) + ' Ga à ' + q[1].toFixed(0) + ' kpc').join(', '), O.tMerge ? '+' + O.tMerge.toFixed(2) + ' Ga' : 'pas avant 14 Ga'); }
 const O = andromedaOrbit(C, vt, V); let tOn = null; for (let i = Math.round(-O.t0 / O.dt); i < O.n; i++) if (Math.hypot(O.r[i*3], O.r[i*3+1], O.r[i*3+2]) < 150) { tOn = Math.max(0.02, O.t0 + i * O.dt - 0.35); break; }

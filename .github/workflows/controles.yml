@@ -35,3 +35,6 @@ jobs:
       - name: Construire puis tester
         shell: bash
         run: python3 app/build.py && for f in app/test/*.test.js; do echo "== $f"; node "$f" || exit 1; done
+      - name: Plus de fondu daté pour les planètes (R7)
+        shell: bash
+        run: "! grep -rn FATE_P app/src"

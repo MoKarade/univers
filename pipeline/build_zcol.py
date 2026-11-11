@@ -108,7 +108,7 @@ def main() -> None:
     gal, qso = read_kc96(REF / 'kc96_sb_template.fits'), read_sdss(REF / 'sdss_spDR2-029_qso.fit')
     data = {'ZCOL': {'n': N, 'zg': ZMAX_GAL, 'zq': ZMAX_QSO, 'gal': table(gal, ZMAX_GAL, cmf), 'qso': table(qso, ZMAX_QSO, cmf),
                      'src': 'Galaxies : modèle Sb, Kinney et al. 1996 ; quasars : SDSS spDR2-029, première composante ; CIE 1931 2°'}}
-    OUT.write_text('Object.assign(DATA, ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ');\n', encoding='utf-8')
+    OUT.write_text('Object.assign(DATA, ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ');\n', encoding='utf-8', newline='\n')
     print('écrit', OUT)
 
 
