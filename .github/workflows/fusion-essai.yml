@@ -1,0 +1,32 @@
+# R8 : essai réduit du calcul de la fusion (docs/fusion-methode.md § 6). Lancé à la main, ou quand pipeline/fusion change.
+name: Fusion - essai
+
+on:
+  workflow_dispatch:
+    inputs:
+      n: { description: "particules par galaxie", default: "15000" }
+      duree: { description: "durée en milliards d'années", default: "1.0" }
+  push:
+    paths: ["pipeline/fusion/**", ".github/workflows/fusion-essai.yml"]
+
+concurrency:
+  group: fusion-essai-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  essai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Logiciels (AGAMA, pyfalcon)
+        run: python -m pip install --quiet numpy agama pyfalcon
+      - name: Essai
+        working-directory: pipeline/fusion
+        run: python essai.py "${{ github.event.inputs.n || '15000' }}" "${{ github.event.inputs.duree || '1.0' }}"
