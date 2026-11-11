@@ -1,6 +1,6 @@
 const fs = require('fs'), vm = require('vm'), path = require('path'), root = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(root, f), 'utf8'); global.atob = s => Buffer.from(s, 'base64').toString('binary');
-vm.runInThisContext((rd('gen/data.js') + rd('gen/data2.js') + rd('gen/ephem.js') + rd('gen/data3.js') + rd('src/20_physics.js') + rd('src/30_gen.js').split('/* ====')[1].replace(/^/, '/* ====') + rd('src/25_future.js')).replace(/^const /gm, 'var '));
+vm.runInThisContext((rd('gen/data.js') + rd('gen/data2.js') + rd('gen/ephem.js') + rd('gen/data3.js') + rd('src/20_physics.js') + rd('src/30_gen.js').split('/* ====')[1].replace(/^/, '/* ====') + rd('src/25_future.js') + rd('src/26_orbits.js')).replace(/^const /gm, 'var '));
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('ECHEC :', m); } }, st = new Float64Array(6), st2 = new Float64Array(6), kv = [0, 0, 0];
 // 1) orbite circulaire à 10 000 UA : période d'un million d'années, retour au point de départ
 { const r = [10000, 0, 0], v = [0, Math.sqrt(MU_SUN / 10000), 0], o = orbFromState(r, v, 0, MU_SUN), P = 2 * Math.PI / o.n; orbState(o, P, st); orbState(o, P / 4, st2);
