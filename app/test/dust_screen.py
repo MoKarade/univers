@@ -2,6 +2,7 @@
 # un nuage (ΔA > 2 mag selon dustPair) doivent être plus faibles avec la poussière que sans, sans erreur WebGL.
 # Lancer : U_URL=file:///…/dist/index.html python app/test/dust_screen.py
 import time, os, sys
+sys.stdout.reconfigure(encoding='utf-8')
 from playwright.sync_api import sync_playwright
 from PIL import Image
 JS_SEL = '''(() => { const u = __U.Rr, cl = u.dustU.uCamLy.value, cg = eclLyToGalPc([cl.x, cl.y, cl.z]), sp = u.starPos, N = u.star.N, sc = [0,0,0], out = [];
@@ -16,7 +17,7 @@ with sync_playwright() as p:
     sel = pg.evaluate(JS_SEL); ids = [i for i, _ in sel]; res = {}
     for f in [0, 1, 0, 1]:
         pg.evaluate(f'__U.Rr.dustForce = {f}'); time.sleep(2.5); pos = pg.evaluate(JS_POS, ids); pg.screenshot(path='dc.png'); im = Image.open('dc.png').convert('L')
-        res.setdefault(f, []).append([max(im.getpixel((x+dx, y+dy)) for dx in range(-2,3) for dy in range(-2,3)) if q else None for q in pos for x, y in [q]] if all(pos) else None)
+        res.setdefault(f, []).append([max(im.getpixel((min(max(x+dx,0),999), min(max(y+dy,0),699))) for dx in range(-2,3) for dy in range(-2,3)) if q else None for q in pos for x, y in [q or (0, 0)]])
     for k, (i, d) in enumerate(sel): print(f'étoile {i} : ΔA = +{d:.2f} mag ; sans poussière {[r[k] for r in res[0]]} ; avec {[r[k] for r in res[1]]}')
-    ok = sum(1 for k in range(len(sel)) if max(r[k] for r in res[1]) < min(r[k] for r in res[0])); print(f'{ok} / {len(sel)} étoiles nettement assombries'); b.close()
+    ok = sum(1 for k in range(len(sel)) if None not in [r[k] for r in res[0] + res[1]] and max(r[k] for r in res[1]) < min(r[k] for r in res[0])); print(f'{ok} / {len(sel)} étoiles nettement assombries'); b.close()
     sys.exit(0 if len(sel) >= 5 and ok >= len(sel) * 0.8 and not gl else 1)

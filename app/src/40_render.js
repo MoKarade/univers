@@ -55,7 +55,8 @@ ${dustGlsl()}void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); g
       else { M=mix(aMag-0.7*(1.0-x0),aMag-(sn>0.5?2.0:4.5),g); col=mix(aCol,vec3(1.0,0.55,0.3),smoothstep(0.0,0.5,g)); } }
     else { float dt=uT-tD; if(sn>0.5){ if(dt<uFlash){ M=-17.0+6.0*dt/uFlash; col=vec3(0.85,0.92,1.0); } else vis=0.0; } else { M=11.0+2.5*log(1.0+dt/200.0)/2.302585; col=vec3(0.8,0.88,1.0); } }
   }
-  if(uDust>0.5){ vec3 sp=uE2G*((position+aVel*uVt)/3.26156), cq=uE2G*(uCamLy/3.26156); vec2 ap=dustPair(cq,sp); float dA=ap.x-ap.y;      /* S5 : l'éclat mesuré depuis la Terre contient déjà la poussière Soleil-étoile ; on remplace par celle caméra-étoile */
+  float m0=M+5.0*log(max(length(mv.xyz)*uUnitToPc,1e-7)/10.0)/2.302585-uExpo;      /* éclat avant poussière : une étoile bien sous la coupure ne coûte rien */
+  if(uDust>0.5&&m0<uMcut+3.0){ vec3 sp=uE2G*((position+aVel*uVt)/3.26156), cq=uE2G*(uCamLy/3.26156); vec2 ap=dustPair(cq,sp); float dA=ap.x-ap.y;      /* S5 : l'éclat mesuré depuis la Terre contient déjà la poussière Soleil-étoile ; on remplace par celle caméra-étoile */
     M+=dA*uAk; col*=vec3(pow(10.0,0.4*dA*0.252),1.0,pow(10.0,-0.4*dA*0.324)); }      /* uAk : 1 pour les magnitudes V, 0,79 pour la bande G de Gaia (A_G/A_V) */      /* rougissement : A_R/A_V = 0,748, A_B/A_V = 1,324 (Cardelli et al. 1989, R_V = 3,1) */
   float dpc=max(length(mv.xyz)*uUnitToPc,1e-7); float m=M+5.0*log(dpc/10.0)/2.302585-uExpo; float f=pow(10.0,-0.4*(m-6.5));
   float r=min(0.8+0.62*pow(f,0.27),8.5); vA=clamp(pow(f,0.66)*0.6,0.0,1.0)*uOpacity*vis*(1.0-smoothstep(uMcut-0.8,uMcut,m))*step(uTgtR,distance(position+aVel*uVt,uTgt)); vCore=clamp(f/60.0,0.0,1.0); vColor=col; /* couleur du corps noir telle quelle (S1) : plus de saturation gonflée */ gl_PointSize=r*4.0*uDpr; }`,
