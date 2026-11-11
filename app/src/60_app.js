@@ -72,7 +72,7 @@
   const M31_MEAS = [['Gaia, 2025', [28.4, -109.8, 41.4]], ['Hubble, 2012', [44.1, -118.0, 3.1]], ['Gaia, 2021', DATA.M31.vel]];
   const vtOf = V => { const P = DATA.M31.pos, d = Math.hypot(P[0], P[1], P[2]), vr = (V[0] * P[0] + V[1] * P[1] + V[2] * P[2]) / d; return Math.hypot(V[0] - vr * P[0] / d, V[1] - vr * P[1] / d, V[2] - vr * P[2] / d); };
   const DTAB = dynTables(), LMCO = lmcOrbit(); andromedaAt(LMCO, 0, MAG.r0);
-  const LMIN = 6.6, LMAX = 26.95, SPEED_MAX_LOG = 17.2, LMICRO = -35.3;      // LMICRO : un peu en dessous de la longueur de Planck, accessible seulement en plongeant vers la Terre
+  const LMIN = 6.6, LMAX = 26.95, SPEED_MAX_LOG = 17.2, LMICRO = -20.0;      /* R13 : le zoom s'arrête à 10⁻²⁰ m, le plus fin jamais sondé (ordre de grandeur, LHC) ; accessible seulement en plongeant vers la Terre */
   const S = { logR: Math.log10(42 * AU), az: -0.95, el: 0.6, focus: 'sun', fa: null, curFo: [0, 0, 0], ty: 0, lastTy: 0, speed: 20 * DAY_S, dir: 1, playing: true, T1: 0, T2: 0, dmMix: 1, beltYears: 0, par: Object.assign({}, PLANCK), cosmo: fid, anim: null, lite: false, hit: null, vt: 33.7, m31V: null, tOn: null, dyn: null, orbit: null, sel: null, center: null, ck: 0, cpos: null,
     opts: { labels: true, orbits: true, realSize: false, dm: true, horizons: true, comoving: false, simWeb: false } };
   const F = { tg: [0, 0, 0], gcRel: [0, 0, 0], cos: {}, opts: S.opts, aFac: 1 };
@@ -96,14 +96,14 @@
     { name: 'Superamas voisins', logR: Math.log10(2.6e8 * LY), speed: 0.4e9 * YEAR_S, el: 0.42 },
     { name: 'Toile cosmique', logR: Math.log10(2.2e9 * LY), speed: 0.4e9 * YEAR_S, el: 0.34 },
     { name: 'Univers observable', logR: Math.log10(6.7e10 * LY), speed: 0.4e9 * YEAR_S, el: 0.3 },
-    // l'infiniment petit : on plonge vers la Terre, puis dans une gouttelette d'eau, jusqu'à la longueur de Planck
+    // l'infiniment petit : on plonge vers la Terre, puis dans une gouttelette d'eau, jusqu'à 10⁻²⁰ m (au-delà : inconnu)
     { name: 'Gouttelette d’eau', logR: Math.log10(3e-3), focus: 'earth', micro: true },
     { name: 'Molécules d’eau', logR: Math.log10(5.5e-10), focus: 'earth', micro: true },
     { name: 'Atome', logR: Math.log10(7e-11), focus: 'earth', micro: true },
     { name: 'Noyau atomique', logR: Math.log10(6.5e-15), focus: 'earth', micro: true },
     { name: 'Proton', logR: Math.log10(1.1e-15), focus: 'earth', micro: true },
     { name: 'Quarks', logR: Math.log10(8e-19), focus: 'earth', micro: true },
-    { name: 'Longueur de Planck', logR: Math.log10(4e-35), focus: 'earth', micro: true },
+    { name: 'Limite du connu', logR: -20.0, focus: 'earth', micro: true },
   ];
   /* ---- l'infiniment petit : ce qui est affiché et dit à chaque palier. lo : le palier vaut tant que log10(demi-champ en mètres) reste au-dessus. ---- */
   const MLEV = [
@@ -130,11 +130,8 @@
     { id: 'quark', lo: -19.3, place: 'Quark', name: 'Quarks et électrons', sub: 'Aucune taille mesurée', note: 'Un quark reste un point : aucune expérience ne lui a trouvé de taille ni de structure.',
       rows: [['Taille d’un quark', 'inférieure à 0,43 × 10⁻¹⁸ m'], ['Portée de l’interaction faible', '2,5 × 10⁻¹⁸ m'], ['Détail le plus fin sondé', 'de l’ordre de 10⁻¹⁹ à 10⁻²⁰ m, au collisionneur LHC'], ['Dans la simulation', 'Le quark reste un point à toutes les échelles. Les cercles orangés marquent les limites mesurées.'],
         ['Sources', 'Limite : collaboration ZEUS 2016 ; portée : calculée d’après la masse du boson W'], ['Certitude', 'Certain pour la limite ; ordre de grandeur pour le LHC']] },
-    { id: 'desert', lo: -33.3, place: 'Territoire inexploré', name: 'Au-delà des mesures', sub: 'De 10⁻²⁰ à 10⁻³⁵ m : aucune expérience', note: 'Ici, plus aucune mesure. Quinze puissances de dix séparent le plus petit détail jamais sondé de la longueur de Planck. Les cercles ne sont que des repères, un par puissance de dix.',
-      rows: [['Ce que vous voyez', 'des cercles repères : rien n’est connu ici'], ['Pourquoi', 'sonder plus petit demande plus d’énergie, bien au-delà de tout accélérateur'], ['Hypothèses', 'une unification des forces vers 10⁻³² m, des cordes : rien de cela n’est observé'], ['Certitude', 'Supposition']] },
-    { id: 'planck', lo: -99, place: 'Longueur de Planck', name: 'Longueur de Planck', sub: '1,6 × 10⁻³⁵ m', note: 'Fin du zoom. En dessous de cette longueur, gravitation et physique quantique devraient se mêler : aucune théorie vérifiée ne le décrit. Le bouillonnement est une vue d’artiste.',
-      rows: [['Valeur', '1,616255 × 10⁻³⁵ m'], ['D’où elle vient', 'de trois constantes : gravitation, constante de Planck, vitesse de la lumière'], ['La lumière la parcourt en', '5,39 × 10⁻⁴⁴ s (temps de Planck)'], ['Ce que cela signifie', 'en dessous, on ne sait plus ce que « distance » veut dire'],
-        ['Dans la simulation', 'Le bouillonnement est une vue d’artiste. Le zoom s’arrête ici.'], ['Sources', 'CODATA 2022'], ['Certitude', 'Certain pour la valeur ; Supposition pour ce qui s’y passe']] },
+    { id: 'inconnu', lo: -99, place: 'Inconnu', name: 'Inconnu', sub: 'Aucune expérience n’a sondé plus fin', note: 'Inconnu : aucune expérience n’a sondé plus fin. Il reste quinze puissances de dix jusqu’à la longueur de Planck, 1,616 × 10⁻³⁵ m. Le zoom s’arrête ici.',
+      rows: [['Détail le plus fin sondé', 'de l’ordre de 10⁻¹⁹ à 10⁻²⁰ m, au collisionneur LHC'], ['Jusqu’à la longueur de Planck', 'quinze puissances de dix, où aucune expérience n’est possible aujourd’hui'], ['Longueur de Planck', '1,616255 × 10⁻³⁵ m (CODATA 2022) : un chiffre calculé à partir de trois constantes, rien de plus n’est connu à cette échelle'], ['Dans la simulation', 'Le zoom s’arrête à 10⁻²⁰ m : rien n’est dessiné au-delà, faute de mesure.'], ['Certitude', 'Certain pour la valeur de la longueur de Planck ; inconnu pour tout le reste']] },
   ];
   const microOn = () => S.focus === 'earth' && !S.center && S.logR < 6.3, microLevel = lr => { for (const m of MLEV) if (lr > m.lo) return m; return MLEV[MLEV.length - 1]; }; let lastMl = '';
 
@@ -204,7 +201,7 @@
     ML('noyau d’oxygène', 'nuc', -13.9, -10.6); ML('proton', 'p', -15.0, -13.95, { center: true }); ML('neutron', 'n', -15.0, -13.95, { center: true });
     ML('quark up', 'q0', -16.9, -15.2); ML('quark up', 'q1', -16.9, -15.2); ML('quark down', 'q2', -16.9, -15.2); ML('gluons', 'glu', -16.4, -15.4);
     ML('portée de l’interaction faible', 'weak', -18.35, -16.95, { center: true }); ML('aucune structure observée en dessous', 'lim', -19.15, -17.7, { center: true }); ML('détail le plus fin sondé (ordre de grandeur)', 'lhc', -20.5, -19.0, { center: true });
-    ML('unification des forces ? (hypothèse)', 'gut', -32.5, -31.0, { center: true }); ML('longueur de Planck', 'planck', -35.3, -34.0, { center: true }); }
+    }
   for (const tag of ['AST', 'TNO']) { const B = Rr[tag], ast = tag === 'AST';
     for (const l of DATA[tag + '_LABELS']) if (l.i < B.count) addLabel(l.n, '', l.p + 0.4, ast ? 11.05 : 12.35, ast ? 12.75 : 14.5, () => [B.pos[l.i * 3] * AU, B.pos[l.i * 3 + 1] * AU, B.pos[l.i * 3 + 2] * AU], { gate: () => (ast ? Rr.beltVis : Rr.kuiperVis) }); }
   addLabel('Soleil', 'here', 0, 14.75, 21.6, () => [0, 0, 0]);
@@ -333,7 +330,7 @@
 
   /* ---- règle des échelles ---- */
   const rail = $('rail'), RAILK = 0.34, railF = l => l >= LMIN ? RAILK + (1 - RAILK) * (l - LMIN) / (LMAX - LMIN) : RAILK * (l - LMICRO) / (LMIN - LMICRO), railL = f => f >= RAILK ? LMIN + (f - RAILK) / (1 - RAILK) * (LMAX - LMIN) : LMICRO + f / RAILK * (LMIN - LMICRO), SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹';
-  for (let d = -35; d <= 26; d++) { if (d < 7 && d % 5 !== 0) continue; const t = document.createElement('div'); t.className = 'tick'; t.style.bottom = railF(d) * 100 + '%'; if (d >= 7 ? d % 3 === 0 : d % 10 === 0 || d === -35) { t.style.width = '13px'; t.innerHTML = '<b>10' + (d < 0 ? '⁻' : '') + String(Math.abs(d)).split('').map(c => SUP[+c]).join('') + ' m</b>'; } $('ticks').appendChild(t); }
+  for (let d = Math.ceil(LMICRO); d <= 26; d++) { if (d < 7 && d % 5 !== 0) continue; const t = document.createElement('div'); t.className = 'tick'; t.style.bottom = railF(d) * 100 + '%'; if (d >= 7 ? d % 3 === 0 : d % 10 === 0) { t.style.width = '13px'; t.innerHTML = '<b>10' + (d < 0 ? '⁻' : '') + String(Math.abs(d)).split('').map(c => SUP[+c]).join('') + ' m</b>'; } $('ticks').appendChild(t); }
   const stopEls = STOPS.map(st => { const b = document.createElement('button'); b.className = 'stop'; b.type = 'button'; b.style.bottom = railF(st.logR) * 100 + '%'; b.innerHTML = '<span></span>'; b.firstChild.textContent = st.name; b.setAttribute('aria-label', 'Aller à : ' + st.name); b.addEventListener('click', () => { goStop(st); showRail(); }); rail.insertBefore(b, $('rail-hit')); return b; });
   let railTimer = 0;
   const showRail = () => { rail.classList.add('show'); clearTimeout(railTimer); railTimer = setTimeout(() => rail.classList.remove('show'), 3200); };
@@ -373,7 +370,7 @@
     });
     const up = e => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (ptrs.size === 0) { canvas.classList.remove('drag'); if (e.type === 'pointerup' && moved < 6 && performance.now() - t0 < 450) tap(e.clientX, e.clientY); } pinch = 0; };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 40 puissances de dix : la molette y va plus vite */ }, { passive: false });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 26 puissances de dix : la molette y va plus vite */ }, { passive: false });
     function labelAt(x, y) { for (const b of placed) if (b[4] && x >= b[0] - 5 && x <= b[1] + 5 && y >= b[2] - 5 && y <= b[3] + 5) { const L = b[4]; if (L.micro) return null; if (L.body) return { body: L.body }; const p = L.get(), q = [0, 0, 0]; if (p && isFinite(p[0]) && Rr.project(p, F, q)) return { x: q[0], y: q[1] }; } return null; }
     S._tap = (x, y) => tap(x, y);
     function tap(x, y) { const now = performance.now(), dbl = now - lastTap[0] < 380 && Math.hypot(x - lastTap[1], y - lastTap[2]) < 26; lastTap = [now, x, y]; let best = null, bd = 30; for (const b of BODIES) { const o = Rr.bodies[b.key]; if (!o.screen) continue; const d = Math.hypot(o.screen[0] - x, o.screen[1] - y) - Math.min(o.px, 200); if (d < bd) { bd = d; best = b.key; } } if (best) { select(null); if (best !== S.focus) focusBody(best); return; }

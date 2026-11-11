@@ -163,15 +163,15 @@ void main(){ vec3 c=uLens>0.5?lensed():texture2D(tMap,vUv).rgb+uBloom*(texture2D
 
 /* ------------------------------------------------------------------ moteur */
 /* ============================================================================
-   L'infiniment petit : de la surface de la Terre à la longueur de Planck.
+   L'infiniment petit : de la surface de la Terre à 10⁻²⁰ m (au-delà : inconnu, rien n'est dessiné).
    Le point visé est l'origine de la scène. Chaque objet est défini en mètres autour de ce point
    (un quark d'un proton du noyau d'oxygène d'une molécule d'eau), puis multiplié par l'échelle vraie F.sT.
    Le décor astronomique reste figé derrière un fond opaque.
-   Mesuré : géométrie de la molécule d'eau, rayon de Bohr, rayons du noyau et du proton, limite de taille des quarks, longueur de Planck.
+   Mesuré : géométrie de la molécule d'eau, rayon de Bohr, rayons du noyau et du proton, limite de taille des quarks.
    Modèle : position des molécules voisines, détail du nuage d'électrons, arrangement des nucléons, intérieur du proton.
    ============================================================================ */
 function initMicro(THREE, scene, camera, R, Q) {
-  const ANG = 1e-10, FM = 1e-15, A0 = 0.529177210544, LP = 1.616255e-35, RP = 0.84075, rng = makeRng(4242), big = (Q.oort || 0) >= 10000;
+  const ANG = 1e-10, FM = 1e-15, A0 = 0.529177210544, RP = 0.84075, rng = makeRng(4242), big = (Q.oort || 0) >= 10000;
   const M = { pos: {}, k: 0 }, m4 = new THREE.Matrix4(), ORD = 5000, all = [];
   const vis = (lr, lo, hi, w) => fadeIn(lr, lo - (w || 0.35), lo) * fadeOut(lr, hi, hi + (w || 0.35));
   const gam = (k, s) => { let p = 1; for (let i = 0; i < k; i++) p *= 1 - rng(); return -s * Math.log(p); };
@@ -266,17 +266,13 @@ function initMicro(THREE, scene, camera, R, Q) {
   // le quark visé, seul, quand on descend plus bas : un point sans taille mesurable
   const q1Mat = ptMat([1.0, 0.5, 0.4], 14, 'a'), q1 = mkPts(new Float32Array(3), new Float32Array([1]), q1Mat, 56);
 
-  // --- repères : un cercle par puissance de dix, et des cercles nommés (limites mesurées, hypothèses, longueur de Planck)
+  // --- repères : un cercle par puissance de dix, et des cercles nommés (limites mesurées)
   const circ = new Float32Array(97 * 3); for (let i = 0; i <= 96; i++) { circ[i * 3] = Math.cos(i / 96 * TAU); circ[i * 3 + 1] = Math.sin(i / 96 * TAU); }
   const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.BufferAttribute(circ, 3));
   const ring = (col, ord) => add(new THREE.Line(cg, new THREE.LineBasicMaterial({ color: new THREE.Color(col[0], col[1], col[2]), transparent: true, opacity: 0, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending })), ord);
   const dec = [0, 1, 2, 3, 4, 5].map(() => ring([0.35, 0.45, 0.6], 60));
-  const MARK = [['weak', 2.455e-18, [1.0, 0.7, 0.25]], ['lim', 4.3e-19, [1.0, 0.7, 0.25]], ['lhc', 2e-20, [1.0, 0.7, 0.25]], ['gut', 2e-32, [0.65, 0.45, 1.0]], ['planck', LP, [1.0, 1.0, 1.0]]].map(a => ({ key: a[0], r: a[1], o: ring(a[2], 61) }));
-  // --- longueur de Planck : bouillonnement, vue d'artiste
-  const foamU = { uT: { value: 0 }, uK: { value: 1 }, uOp: { value: 0 } };
-  const foam = add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: foamU, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
-    vertexShader: 'varying vec2 vU; void main(){ vU = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'uniform float uT; uniform float uK; uniform float uOp; varying vec2 vU; float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); } float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); } void main(){ vec2 p = vU * uK; float t = uT * 0.6; float a = n(p + vec2(t, -t * 0.7)) * 0.6 + n(p * 2.1 - vec2(t * 1.3, t)) * 0.3 + n(p * 4.3 + t) * 0.1; float b = smoothstep(0.5, 0.8, a); float e = smoothstep(1.0, 0.55, length(vU)); gl_FragColor = vec4(vec3(0.4, 0.3, 0.85) * b * e * uOp, 1.0); }' })), 5);
+  const MARK = [['weak', 2.455e-18, [1.0, 0.7, 0.25]], ['lim', 4.3e-19, [1.0, 0.7, 0.25]], ['lhc', 2e-20, [1.0, 0.7, 0.25]]].map(a => ({ key: a[0], r: a[1], o: ring(a[2], 61) }));
+  /* R13 : plus de bouillonnement « vue d'artiste » à la longueur de Planck : le zoom s'arrête à 10⁻²⁰ m. */
 
   const mine = new Set(all), hidden = new Set(), far = new Set();
   const cd = new THREE.Vector3(), cu = new THREE.Vector3(), P = M.pos, setP = (k, x, y, z) => { const a = P[k] || (P[k] = [0, 0, 0]); a[0] = x; a[1] = y; a[2] = z; };
@@ -314,8 +310,6 @@ function initMicro(THREE, scene, camera, R, Q) {
     // cercles repères
     { const dk = vis(lr, -36, -18.4, 0.5), k0 = Math.floor(lr) - 2; dec.forEach((o, j) => { const r = Math.pow(10, k0 + j) * s, a = dk * smoothstep(0.08, 0.5, r) * (1 - smoothstep(6, 14, r)); o.visible = a > 0.01; if (o.visible) { o.quaternion.copy(camera.quaternion); o.scale.setScalar(r); o.material.opacity = a * 0.5; } });
       for (const mk of MARK) { const r = mk.r * s, a = smoothstep(0.06, 0.4, r) * (1 - smoothstep(7, 16, r)); mk.o.visible = a > 0.01; if (mk.o.visible) { mk.o.quaternion.copy(camera.quaternion); mk.o.scale.setScalar(r); mk.o.material.opacity = a * 0.9; } setP(mk.key, cu.x * mk.r, cu.y * mk.r, cu.z * mk.r); } }
-    // bouillonnement à la longueur de Planck
-    { const v = fadeOut(lr, -34.0, -33.0); foam.visible = v > 0.01; if (foam.visible) { foam.quaternion.copy(camera.quaternion); foam.scale.setScalar(1.3 * R.viewUnits / Math.min(1, camera.aspect) * 1.2); foamU.uT.value = t; foamU.uK.value = 1.3 * Math.pow(10, lr) / LP; foamU.uOp.value = v * 0.55; } }
   };
   M.count = { mol: NMOL, electrons: NE };
   return M;
