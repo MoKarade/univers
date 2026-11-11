@@ -31,8 +31,9 @@ def telecharger(chemin):
         except OSError as err:
             print('échec', s, err)
             continue
-        if 'QUERY_STATUS=ERROR' in txt or '\nPGC' not in txt and '\t' not in txt:
-            print('réponse en erreur depuis', s)
+        lignes_donnees = sum(1 for l in txt.split('\n') if l and not l.startswith('#'))
+        if 'QUERY_STATUS=ERROR' in txt or lignes_donnees < NB_ATTENDU:
+            print('réponse incomplète depuis %s (%d lignes)' % (s, lignes_donnees))
             continue
         with open(chemin, 'w', encoding='utf-8', newline='\n') as f:
             f.write(txt)

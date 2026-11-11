@@ -723,7 +723,7 @@
      Avant le 15 octobre 1582, les dates sont données dans le calendrier julien, celui des chroniques. */
   const closest = (name, t0, t1, st) => { const l = DATA.STAR_LABELS.find(l => l.n === name), o = new Float32Array(Rr.star.N * 3); let b = [0, 1e9]; if (!l) return b; for (let t = t0; t <= t1; t += st) { starPositions(Rr.K, t, t / 1e9, o, l.i, l.i + 1); const d = Math.hypot(o[l.i * 3], o[l.i * 3 + 1], o[l.i * 3 + 2]); if (d < b[1]) b = [t, d]; } return b; };
   const EV_AC = closest('Alpha du Centaure', 0, 6e4, 100), EV_GL = closest('Gliese 710', 1.0e6, 1.6e6, 500);
-  const EVCAT = { U: 'Univers', G: 'Voie lactée et étoiles', S: 'Système solaire', T: 'Terre et vie', H: 'Ciel observé et exploration' }, EVCONF = { C: 'Certain', P: 'Probable', S: 'Supposition (modèle ou estimation)', V: 'Contesté, à vérifier' };
+  const EVCAT = { U: 'Univers', G: 'Voie lactée et étoiles', S: 'Système solaire', T: 'Terre et vie', H: 'Ciel observé et exploration', O: 'Ondes gravitationnelles' }, EVCONF = { C: 'Certain', P: 'Probable', S: 'Supposition (modèle ou estimation)', V: 'Contesté, à vérifier' };
   const isoJd = s => { const jul = s[0] === 'J', m = (jul ? s.slice(1) : s).match(/^(-?\d+)-(\d\d)-(\d\d)(?:T(\d\d):(\d\d))?$/); return jdFromCal(+m[1], +m[2], +m[3], jul) + (m[4] ? (+m[4] + (+m[5]) / 60) / 24 : 0.5); };
   const jyr = y => (jdFromCal(y, 1, 1, y < 1583) - JD_NOW) / 365.25;
   const H3 = 3 * 3600 / YEAR_S, D1 = DAY_S / YEAR_S, FLY = { sp: 3600 / YEAR_S, lead: 8 / 8766, sim: 'Vue centrée sur la planète : la sonde est le point qui porte son nom. Sa trajectoire est réelle (JPL Horizons), la planète est à sa position calculée. Les lunes ne sont pas à leur place réelle à cette date.' };
@@ -906,7 +906,7 @@
     [300, 'H', 3, 'Voyager 1 atteint le nuage d’Oort', 'Elle mettra ensuite environ 30 000 ans à le traverser.', 'P', 'NASA (JPL)', '@Voyager 1'],
     [4.0e4, 'H', 3, 'Voyager 1 passe près d’une autre étoile', 'À 1,6 année-lumière de Gliese 445. La sonde sera éteinte depuis longtemps.', 'C', 'NASA (JPL)', 'n'],
   ];
-  let EVL = []; S.evCats = { U: true, G: true, S: true, T: true, H: true }; S.evCur = null;
+  let EVL = []; S.evCats = { U: true, G: true, S: true, T: true, H: true, O: false };   /* O : 391 détections, masquées par défaut pour ne pas noyer la chronologie */ S.evCur = null;
   const evShown = e => !!S.evCats[e.cat];
   function tRange() { const C = S.cosmo; return [C.tBang !== null ? C.tBang * 1e9 + 1e5 : C.tStart * 1e9, Math.min(C.tEnd * 1e9, 2e11)]; }
   // âge de l'univers jeune (matière et rayonnement seuls) : formule exacte, et son inverse
@@ -953,6 +953,15 @@
   function evCross(a, b) { if (a === b || !EVL.length) return; const lo = Math.min(a, b), hi = Math.max(a, b); let i0 = 0, i1 = EVL.length, best = null, n = 0; while (i0 < i1) { const m = (i0 + i1) >> 1; if (EVL[m].t <= lo) i0 = m + 1; else i1 = m; }
     for (let i = i0; i < EVL.length && EVL[i].t <= hi; i++) { const e = EVL[i]; if (!evShown(e) || e.now) continue; n++; if (!best || e.imp < best.imp) best = e; }
     if (!best || (S.sel && S.sel.ev === best)) return; if (n > 2 && best.imp > 1) return; if (evtE && !evtEl.hidden && performance.now() - evtT < 1500 && best.imp >= evtE.imp) return; evToast(best); }
+  /* Ondes gravitationnelles détectées (GWOSC, catalogues GWTC) : une ligne par détection, valeurs telles que publiées.
+     GW150914 et GW170817 ont déjà leur propre événement dans « Ciel observé et exploration ». */
+  function gwEvents(dyn) { const G = DATA.GW || [], dup = { GW150914: 1, GW170817: 1 }, src = 'GWOSC (LIGO, Virgo, KAGRA), catalogue ';
+    const mass = q => sig(q[0], 2) + NBSP + 'masses solaires', rng = (q, f) => q[1] !== null && q[2] !== null ? ' (entre ' + f(q[1]) + ' et ' + f(q[2]) + ')' : '';
+    for (const g of G) { if (dup[g.n]) continue; let d;
+      if (g.m1 && g.m2) d = 'Fusion de deux objets compacts de ' + mass(g.m1) + ' et ' + mass(g.m2) + '.' + (g.dl ? ' Distance de luminosité : ' + fmtDist(g.dl[0] * MPC) + rng(g.dl, x => fmtDist(x * MPC)) + '.' : '');
+      else d = 'Détection publiée. Masses et distance pas encore disponibles dans l’interface de GWOSC.';
+      if (g.pa !== null && g.pa < 1) d += ' Probabilité d’origine astrophysique : ' + Math.round(g.pa * 100) + NBSP + '%.';
+      dyn.push([g.t.slice(0, 16), 'O', 3, 'Onde gravitationnelle ' + g.n, d, 'C', src + g.cat, '', { sim: 'Détection réelle. Sa position sur le ciel n’est pas affichée : les zones de localisation ne sont pas encore chargées.' }]); } }
   function buildEvents() { const O = S.orbit, C = S.cosmo, p = O.peri[0], L10 = Math.log10, dyn = []; if (!OO.el) oortInit();
     dyn.push([0, 'H', 1, 'Aujourd’hui', 'L’instant présent, à l’ouverture de la page.', 'C', 'Horloge de l’appareil', 's', { now: true, sp: 20 / 365.25 }]);
     dyn.push([EV_AC[0], 'G', 2, 'Alpha du Centaure au plus près du Soleil', 'Le système d’étoiles le plus proche passe à ' + sig(EV_AC[1], 2) + ' années-lumière, puis s’éloigne.', 'C', 'Calculé ici d’après la position et la vitesse mesurées (Hipparcos, Gaia)', 'n', { sp: 2500, lead: 9000 }]);
@@ -976,6 +985,7 @@
     { const ta = cosmoCross(a => C.acc(a)), td = cosmoCross(a => C.par.OL * Math.pow(a, -3 * (1 + C.par.w)) - C.par.Om / (a * a * a));
       if (ta !== null) dyn.push([ta, 'U', 1, 'L’expansion se met à accélérer', 'La matière s’est assez diluée pour que l’énergie noire l’emporte sur la gravité : l’expansion, qui ralentissait, accélère.', 'P', 'Date calculée avec le modèle cosmologique de la page ; découverte : Riess et al. 1998, Perlmutter et al. 1999', 'w']);
       if (td !== null) dyn.push([td, 'U', 2, 'L’énergie noire devient majoritaire', 'Sa densité dépasse celle de la matière.', 'P', 'Date calculée avec le modèle cosmologique de la page', 'w']); }
+    gwEvents(dyn);
     EVL = evResolve(EV_RAW.concat(dyn)); evList();
     $('s-vt').value = S.vt; $('o-vt').textContent = nf(Math.round(S.vt), 0) + NBSP + 'km/s';
     $('vt-hint').textContent = 'Les mesures publiées donnent de 34 à 76 km/s, avec une incertitude d’une trentaine de km/s. ' + (p ? 'Avec ' + nf(Math.round(S.vt), 0) + ' km/s : au plus près dans ' + fmtYears(p[0] * 1e9) + ', à ' + fmtDist(Number((p[1] * KPC).toPrecision(2))) + '. ' : '') + (O.tMerge ? 'Fusion dans ' + fmtYears(O.tMerge * 1e9) + '.' : 'Pas de fusion avant 14 milliards d’années.') + ' Les études récentes donnent entre une chance sur deux et neuf sur dix de fusion d’ici 10 milliards d’années.';
@@ -993,7 +1003,7 @@
     if (y === null || !isFinite(y) || mo < 1 || mo > 12 || d < 1 || d > 31) return null; if (bc) y = 1 - Math.abs(y);
     const h = s.match(/(\d{1,2}) ?h ?(\d{2})?/), fr = h ? (+h[1] + (+h[2] || 0) / 60) / 24 : 0.5, jul = y < 1582 || (y === 1582 && (mo < 10 || (mo === 10 && d < 15)));
     return (jdFromCal(y, mo, d, jul) + fr - JD_NOW) / 365.25; }
-  { const box = $('ev-cats'); for (const k in EVCAT) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.setAttribute('aria-pressed', 'true'); b.textContent = EVCAT[k]; b.addEventListener('click', () => { S.evCats[k] = !S.evCats[k]; b.setAttribute('aria-pressed', S.evCats[k]); evList(); }); box.appendChild(b); }
+  { const box = $('ev-cats'); for (const k in EVCAT) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.setAttribute('aria-pressed', String(!!S.evCats[k])); b.textContent = EVCAT[k]; b.addEventListener('click', () => { S.evCats[k] = !S.evCats[k]; b.setAttribute('aria-pressed', S.evCats[k]); evList(); }); box.appendChild(b); }
     const sp = $('t-speeds'); for (const q of [['temps réel', 1], ['1 heure', 3600], ['1 jour', DAY_S], ['1 mois', YEAR_S / 12], ['1 an', YEAR_S], ['100 ans', 100 * YEAR_S], ['10 000 ans', 1e4 * YEAR_S], ['1 million d’années', 1e6 * YEAR_S], ['100 millions', 1e8 * YEAR_S], ['1 milliard', 1e9 * YEAR_S]]) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = q[0]; b.addEventListener('click', () => { setSpeed(q[1]); if (!S.playing) { S.playing = true; syncPlay(); } }); sp.appendChild(b); }
     const go = () => { const t = parseWhen($('t-date').value), msg = $('t-msg'); if (t === null) { msg.textContent = 'Date non comprise. Exemples : 20/07/1969, 4 juillet 1054, −66 Ma, dans 5 milliards d’années.'; return; }
       S.hit = null; S.evCur = null; const r = setTime(t); S.lastTy = S.ty; S.playing = false; syncPlay(); msg.textContent = r === 'start' ? 'Avant le début du calcul : placé au plus tôt possible.' : r === 'end' ? 'Après la fin du calcul : placé au plus tard possible.' : 'Temps arrêté à cette date. Le bouton lecture le relance.'; if (innerWidth < 700 && !r) openPanel(null); };
@@ -1133,7 +1143,7 @@
     : lr < 23.6 ? (S.opts.realSize || Rr.galExag < 1.05 ? 'Galaxies à leur position mesurée. Leur aspect est généré.' : 'Galaxies à leur position mesurée, grossies pour rester visibles. Leur aspect est généré.')
     : S.opts.simWeb ? 'Toile simulée. Les amas nommés sont à leur vraie place.'
     : lr < LOG.MPC + 3.3 ? 'Galaxies réellement observées. Les zones vides ne sont pas encore cartographiées.'
-    : 'Quasars observés, fond diffus mesuré par WMAP, limites calculées.';
+    : 'Quasars observés, fond diffus mesuré par Planck, limites calculées.';
   function noticeText() {
     const C = S.cosmo, lr = S.logR, age = F.age;
     if (S.lost) return S.lostMsg || '';
