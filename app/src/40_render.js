@@ -168,7 +168,7 @@ void main(){ vec3 c=uLens>0.5?lensed():texture2D(tMap,vUv).rgb+uBloom*(texture2D
    (un quark d'un proton du noyau d'oxygène d'une molécule d'eau), puis multiplié par l'échelle vraie F.sT.
    Le décor astronomique reste figé derrière un fond opaque.
    Mesuré : géométrie de la molécule d'eau, rayon de Bohr, rayons du noyau et du proton, limite de taille des quarks.
-   Modèle : position des molécules voisines, détail du nuage d'électrons, arrangement des nucléons, intérieur du proton.
+   Modèle : position des molécules voisines, détail du nuage d'électrons, position de chaque nucléon (tirée dans la répartition mesurée), intérieur du proton.
    ============================================================================ */
 function initMicro(THREE, scene, camera, R, Q) {
   const ANG = 1e-10, FM = 1e-15, A0 = 0.529177210544, RP = 0.84075, rng = makeRng(4242), big = (Q.oort || 0) >= 10000;
@@ -234,9 +234,20 @@ function initMicro(THREE, scene, camera, R, Q) {
   const cloudMat = ptMat([0.25, 0.62, 1.0], 2.4), cloud = mkPts(eP, ePh, cloudMat, 30);
   const nucMat = ptMat([1.0, 0.9, 0.6], 6, 'a'), nucPts = mkPts(new Float32Array([0, 0, 0, hw1.x, hw1.y, hw1.z, hw2.x, hw2.y, hw2.z]), new Float32Array([1, 0.8, 0.8]), nucMat, 32);
 
-  // --- noyau d'oxygène 16 : 8 protons et 8 neutrons en quatre groupes de 2 + 2 (description courante, pas une image)
-  const TET = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map(v => vnorm(v)), nuc = [];
-  TET.forEach(a => { const q = new THREE.Quaternion().setFromAxisAngle(V3(rng.dir()), rng() * TAU); TET.forEach((b, j) => { tv.set(b[0], b[1], b[2]).applyQuaternion(q); nuc.push({ p: [a[0] * 2.11 + tv.x * 1.05, a[1] * 2.11 + tv.y * 1.05, a[2] * 2.11 + tv.z * 1.05], isP: j < 2, ph: rng() * 9, f: 2 + rng() * 2 }); }); });
+  // --- noyau d'oxygène 16 (R16) : 8 protons et 8 neutrons placés au hasard dans la répartition de charge MESURÉE par diffusion d'électrons,
+  //     modèle de l'oscillateur harmonique de de Vries, de Jager et de Vries 1987 : ρ(r) ∝ [1 + α (r/a)²] exp(−(r/a)²), a = 1,833 fm, α = 1,544.
+  //     Les nucléons n'ont pas de position fixe : seules la répartition et le rayon sont mesurés. Les centres sont remis à l'échelle pour que leur
+  //     rayon quadratique moyen vaille le rayon des centres de protons, √(2,6991² − 0,8409²) = 2,565 fm (rayon de charge : Angeli et Marinova 2013 ;
+  //     rayon du proton : CODATA 2022), et deux centres restent à plus de 1,0 fm l'un de l'autre (cœur dur des nucléons, ordre de grandeur).
+  const NUC_A = 1.833, NUC_AL = 1.544, NUC_RMS = Math.sqrt(2.6991 * 2.6991 - 0.8409 * 0.8409), nuc = [];
+  { const rhoMax = (() => { let m = 0; for (let r = 0; r < 6; r += 0.01) m = Math.max(m, r * r * (1 + NUC_AL * r * r / (NUC_A * NUC_A)) * Math.exp(-r * r / (NUC_A * NUC_A))); return m; })();
+    const pts = []; let guard = 0;
+    while (pts.length < 16 && guard++ < 100000) { const r = rng() * 6, w = r * r * (1 + NUC_AL * r * r / (NUC_A * NUC_A)) * Math.exp(-r * r / (NUC_A * NUC_A)); if (rng() * rhoMax > w) continue;
+      const d = rng.dir(), p = [d[0] * r, d[1] * r, d[2] * r]; if (pts.some(q => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) < 1.0)) continue; pts.push(p); }
+    const c = [0, 1, 2].map(k => pts.reduce((a, q) => a + q[k], 0) / pts.length); pts.forEach(q => { q[0] -= c[0]; q[1] -= c[1]; q[2] -= c[2]; });
+    const rms = Math.sqrt(pts.reduce((a, q) => a + q[0] * q[0] + q[1] * q[1] + q[2] * q[2], 0) / pts.length), k = NUC_RMS / rms;
+    pts.forEach((q, j) => nuc.push({ p: [q[0] * k, q[1] * k, q[2] * k], isP: j % 2 === 0, ph: rng() * 9, f: 2 + rng() * 2 })); }
+  R.nucRms = () => Math.sqrt(nuc.reduce((a, n) => a + n.p[0] * n.p[0] + n.p[1] * n.p[1] + n.p[2] * n.p[2], 0) / nuc.length);      /* test « noyau » */
   const P0 = nuc[0], QOFF = [-0.18, 0.10, 0.05], CP = [-QOFF[0], -QOFF[1], -QOFF[2]], CN = [CP[0] - P0.p[0], CP[1] - P0.p[1], CP[2] - P0.p[2]];       // centre du proton visé et centre du noyau, en fm, comptés depuis le quark visé
   const prot = nuc.filter(n => n.isP && n !== P0), neut = nuc.filter(n => !n.isP);
   const pM = add(new THREE.InstancedMesh(sphHi, ballMat(0xb8301f), prot.length), 40), nM = add(new THREE.InstancedMesh(sphHi, ballMat(0x6f7890), neut.length), 40), p0M = add(new THREE.Mesh(sphHi, ballMat(0xb8301f)), 41);
