@@ -62,7 +62,11 @@
   // avenir : Soleil, planètes englouties, Andromède
   /* R5 : Mercure et Vénus suivent l'orbite calculée par planetTide (marées et frottement, Schröder et Smith 2008) ; engloutissement à la fin de la spirale. */
   const TIDE_P = { mercury: planetTide(DATA.JPL1.mercury[0], 3.3011e23), venus: planetTide(DATA.JPL1.venus[0], 4.8675e24) };
-  const ENG = { mercury: TIDE_P.mercury.tEng, venus: TIDE_P.venus.tEng, earth: engulfTime(1.0) }, SS = {}, m31r = [0, 0, 0], m31r0 = [0, 0, 0];
+  /* R6 : la Terre suit son orbite calculée tant qu'elle s'élargit (perte de masse du Soleil : résultat commun à toutes les études). Au moment où les
+     marées commencent à la resserrer, les études divergent : engloutie selon Schröder et Smith 2008 et Rasio et al. 1996, rescapée selon Rybicki et
+     Denis 2001. À partir de là, la Terre n'est plus dessinée et un panneau le dit (décision 3 de Marc : « sort inconnu »). */
+  const TIDE_E = planetTide(DATA.JPL1.emb[0], 5.9722e24 + 7.342e22), T_DIV = (() => { const T = TIDE_E.tab; let mx = 0, tm = 0; for (let i = 0; i < T.length; i += 2) if (T[i + 1] > mx) { mx = T[i + 1]; tm = T[i]; } return tm; })();
+  const ENG = { mercury: TIDE_P.mercury.tEng, venus: TIDE_P.venus.tEng, earth: T_DIV }, SS = {}, m31r = [0, 0, 0], m31r0 = [0, 0, 0];
   let orbitDirty = true;
   // vitesse d'Andromède par rapport au centre de la Voie lactée (km/s, axes galactiques), selon trois mesures publiées de son mouvement propre
   const M31_MEAS = [['Gaia, 2025', [28.4, -109.8, 41.4]], ['Hubble, 2012', [44.1, -118.0, 3.1]], ['Gaia, 2021', DATA.M31.vel]];
@@ -970,7 +974,7 @@
       dyn.push([q.t, 'G', 3, 'Passage douteux de l’étoile ' + q.n, wd ? 'Gaia mesurait pour cette naine blanche une vitesse de 374' + NBSP + 'km/s, qui l’aurait amenée à ' + passAU(q.d) + ' du Soleil dans 29' + NBSP + '000 ans. Un nouveau spectre a montré que cette vitesse était fausse : ce passage n’aura pas lieu.'
         : 'D’après les mesures de Gaia, cette étoile ' + (fut ? 'passerait' : 'serait passée') + ' à ' + passAU(q.d) + ' du Soleil (entre ' + passAU(q.d5) + ' et ' + passAU(q.d95) + '), à ' + sig(q.vk, 3) + NBSP + 'km/s. ' + (q.f.indexOf('b') >= 0 ? 'Elle fait probablement partie d’une étoile double large, ce qui fausse la trajectoire calculée.' : 'L’auteur de l’étude juge ce passage douteux : vitesse ou position peu fiables.'),
         'V', wd ? 'Bailer-Jones 2022 ; Landstreet et al. 2023' : 'Bailer-Jones 2022 (Gaia DR3)', 'o', { sp, lead: 5 * sp, sim: 'Passage non simulé : l’étoile n’est pas déplacée et les comètes ne sont pas déviées.' }]); });
-    dyn.push([1.1e9, 'T', 1, 'La Terre perd ses océans', 'Le Soleil brille 10 % plus fort : l’eau s’évapore et s’échappe peu à peu vers l’espace.', 'S', 'Estimation (Kasting 1988 ; Wolf et Toon 2015)', '', { lr: L10(2.6 * AU), sp: 2e7 }]);
+    dyn.push([1.1e9, 'T', 1, 'La Terre perd ses océans', 'Quand le Soleil brille assez fort, l’eau s’évapore et s’échappe peu à peu vers l’espace : vers +10 % d’éclat, dans environ 1,1 milliard d’années, selon Kasting 1988 ; vers +12,5 %, donc plus tard, selon Wolf et Toon 2015. La date réelle est inconnue.', 'S', 'Estimations : Kasting 1988 ; Wolf et Toon 2015 (JGR Atmospheres 120, 5775)', '', { lr: L10(2.6 * AU), sp: 2e7 }]);
     { const q = LMCO.peri[0]; if (LMCO.tMerge) dyn.push([LMCO.tMerge * 1e9, 'G', 1, 'Le Grand Nuage de Magellan est absorbé par la Voie lactée', 'Scénario calculé ici ; il dépend beaucoup de la masse du Nuage.', 'S', 'Orbite calculée d’après Kallivayalil et al. 2013 ; Cautun et al. 2019', '', { lr: L10(150 * KPC), sp: 8e7, lead: 5e8 }]);
       else if (q) dyn.push([q[0] * 1e9, 'G', 2, 'Le Grand Nuage de Magellan repasse au plus près', 'À ' + fmtDist(Number((q[1] * KPC).toPrecision(2))) + ' de la Voie lactée.', 'S', 'Orbite calculée d’après Kallivayalil et al. 2013', '', { lr: L10(150 * KPC), sp: 8e7, lead: 3e8 }]); }
     if (p) dyn.push([p[0] * 1e9, 'G', 1, 'Andromède passe au plus près', 'À ' + fmtDist(Number((p[1] * KPC).toPrecision(2))) + (S.tOn !== null ? ' : les deux galaxies se déforment.' : '.') + ' Le résultat dépend de la vitesse de côté d’Andromède, mal connue.', 'S', 'Orbite calculée ici ; mesures : van der Marel et al. 2012, Salomon et al. 2021', '', { lr: L10(S.tOn !== null ? 300 * KPC : 1100 * KPC), sp: 1.2e8, lead: 6e8 }]);
@@ -1140,12 +1144,14 @@
     : S.opts.simWeb ? 'Toile simulée. Les amas nommés sont à leur vraie place.'
     : lr < LOG.MPC + 3.3 ? 'Galaxies réellement observées. Les zones vides ne sont pas encore cartographiées.'
     : 'Quasars observés, fond diffus mesuré par WMAP, limites calculées.';
+  const EARTH_TXT = 'Sort de la Terre inconnu : engloutie par le Soleil géant selon Schröder et Smith 2008 et Rasio et al. 1996, rescapée selon Rybicki et Denis 2001. À partir du moment où les marées commencent à resserrer son orbite, la Terre et la Lune ne sont plus dessinées.';
   const SYS_END_TXT = 'Inconnu : des étoiles de passage défont le système solaire. Dans les simulations de Zink, Batygin et Adams (2020), l’instabilité se déclenche environ 30 milliards d’années après la mort du Soleil (vers 38 milliards d’années d’ici), puis les éjections s’étalent sur environ 10 milliards d’années ; la dernière planète part en moyenne 100 milliards d’années après la mort du Soleil. L’ordre et les dates de chaque planète ne sont pas connus : plus aucune n’est dessinée.';
   function noticeText() {
     const C = S.cosmo, lr = S.logR, age = F.age;
     if (S.lost) return S.lostMsg || '';
     if (microOn()) return microLevel(lr).note || '';
-    if (lr < 17.6 && S.ty >= SYS_END * 1e9) return SYS_END_TXT;      /* vue du système solaire : son état passe avant le calcul d'Andromède */
+    if (lr < 17.6 && S.ty >= SYS_END * 1e9) return SYS_END_TXT;
+    if (lr < 13.5 && S.ty / 1e9 >= T_DIV) return EARTH_TXT;      /* R6 : panneau du sort de la Terre, dans le système solaire */      /* vue du système solaire : son état passe avant le calcul d'Andromède */
     if (S.dyn && Math.abs((S.dynT !== undefined ? S.dynT : S.ty / 1e9) - S.dyn.t) > 0.04) return 'Calcul de la rencontre avec Andromède : ' + Math.round(clamp((S.dyn.t - S.dyn.t0) / Math.max((S.dynT !== undefined ? S.dynT : S.ty / 1e9) - S.dyn.t0, 1e-6), 0, 1) * 100) + NBSP + '%';
     if (S.hit === 'end') return C.endKind === 'crunch' ? 'Big Crunch : dans ce modèle, l’univers s’effondre ici. Remontez le temps pour continuer.' : C.endKind === 'rip' ? 'Big Rip : dans ce modèle, l’expansion déchire tout ici. Remontez le temps pour continuer.' : 'Limite du calcul atteinte. Remontez le temps pour continuer.';
     if (S.hit === 'start') return C.tBang !== null ? 'Vous êtes à 100 000 ans du Big Bang : l’univers est un plasma opaque. Relancez le temps vers le futur.' : 'Début du calcul atteint. Relancez le temps vers le futur.';
@@ -1325,7 +1331,7 @@
       S.solOff = lag(S.solOff || 0, capS); S.moonOff = lag(S.moonOff || 0, 0.02 / 365.25); S.sOff = lag(S.sOff || 0, 0.05); S.capS = capS; }
     sol = solarSystemAt(T_NOW + (S.ty + S.solOff) / 100, sol);
     const C = S.cosmo, cs = cosmoAt(C, S.ty / 1e9, F.cos);
-    const tG = S.ty / 1e9, ss = sunState(tG, SS); F.sun = ss; F.sunCol = tempRgb(ss.T); F.orb = 1 / ss.M; F.orbP = F.orbP || {}; for (const k in TIDE_P) F.orbP[k] = tideAt(TIDE_P[k], tG); F.eng.mercury = tG >= ENG.mercury; F.eng.venus = tG >= ENG.venus; F.eng.earth = tG >= ENG.earth; for (const k of SYS_PL) F.eng[k] = tG >= SYS_END; F.sysK = tG < SYS_END ? 1 : 0;      /* petits corps et nuage d'Oort : coupure nette avec le système solaire (R7), plus de fondu */ F.ringsGone = tG > FATE.rings;
+    const tG = S.ty / 1e9, ss = sunState(tG, SS); F.sun = ss; F.sunCol = tempRgb(ss.T); F.orb = 1 / ss.M; F.orbP = F.orbP || {}; for (const k in TIDE_P) F.orbP[k] = tideAt(TIDE_P[k], tG); F.orbP.earth = tideAt(TIDE_E, Math.min(tG, T_DIV)); F.eng.mercury = tG >= ENG.mercury; F.eng.venus = tG >= ENG.venus; F.eng.earth = tG >= ENG.earth; for (const k of SYS_PL) F.eng[k] = tG >= SYS_END; F.sysK = tG < SYS_END ? 1 : 0;      /* petits corps et nuage d'Oort : coupure nette avec le système solaire (R7), plus de fondu */ F.ringsGone = tG > FATE.rings;
     F.ty = S.ty; F.tMyr = S.ty / 1e6; F.tEff = S.T1 + S.T2 * (oSunNo / oSunDM); if (S.playing) F.flash = Math.max(3e-7, 1.3 * S.speed / YEAR_S / 1e6); else if (!F.flash) F.flash = 3e-7;
     if (orbitDirty) { orbitDirty = false; if (!S.m31V) S.m31V = M31_MEAS[0][1]; const O = S.orbit = andromedaOrbit(S.cosmo, S.vt, S.m31V); andromedaAt(O, 0, m31r0); lgStart(); S.dyn = null; S.tOn = null;
       for (let i = Math.round(-O.t0 / O.dt); i < O.n; i++) if (Math.hypot(O.r[i * 3], O.r[i * 3 + 1], O.r[i * 3 + 2]) < 150) { S.tOn = Math.max(0.02, O.t0 + i * O.dt - 0.35); break; }
@@ -1378,7 +1384,7 @@
     requestAnimationFrame(step);
   }
   setSpeed(S.speed); syncPlay(); syncSliders();
-  window.__U = { zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
+  window.__U = { zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
   if (!reduced) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
   requestAnimationFrame(now => { last = now; step(now); requestAnimationFrame(() => { $('loader').classList.add('out'); setTimeout(() => $('loader').remove(), 1000); if (!reduced && !S.resumed) { S.anim = { t0: performance.now() / 1000 + 0.3, dur: 5.5, l0: S.logR, l1: STOPS[1].logR, a0: S.az, a1: S.az + 0.5, e0: S.el, e1: 0.6 }; } showRail(); }); });
 })();
