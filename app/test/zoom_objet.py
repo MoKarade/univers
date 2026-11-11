@@ -52,7 +52,7 @@ PROJ = r"""(() => { const U = window.__U, F = U.F, R = U.Rr, p = window.__P();
   if (w <= 0) return { behind: true, lr: U.S.logR };
   const sx = ((e[0] * X + e[4] * Y + e[8] * Z + e[12]) / w * 0.5 + 0.5) * R.cssW, sy = (0.5 - (e[1] * X + e[5] * Y + e[9] * Z + e[13]) / w * 0.5) * R.cssH;
   const fe = document.getElementById('follow'), mt = /translate\(([-\d.]+)px,\s*([-\d.]+)px/.exec(fe.style.transform || ''),
-    mk = !fe.hidden && mt ? Math.hypot(+mt[1] - Math.min(Math.max(sx, 18), R.cssW - 18), +mt[2] - Math.min(Math.max(sy, 18), R.cssH - 18)) : 999;      /* R2 : repère affiché et posé sur l'objet */
+    mk = !fe.hidden && mt ? Math.hypot(+mt[1] - Math.min(Math.max(sx, 18), R.cssW - 18), +mt[2] - Math.min(Math.max(sy, 18), R.cssH - (document.getElementById('time').offsetHeight + 12) - 56)) : 999;      /* R2 : repère affiché et posé sur l'objet */
   return { mark: mk, off: Math.hypot(sx - R.cssW / 2, sy - R.cssH / 2) / (R.cssW / 2), x: sx, y: sy, lr: U.S.logR, name: U.S.center ? U.S.center.name : U.S.focus }; })()"""
 LMIN, LMAX = 6.6, 26.95
 
