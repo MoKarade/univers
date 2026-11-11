@@ -60,7 +60,9 @@
   }
   Rr.setSurvey(surveyLut(fid)); let surveyDirty = false;
   // avenir : Soleil, planètes englouties, Andromède
-  const ENG = { mercury: engulfTime(0.387), venus: engulfTime(0.723), earth: engulfTime(1.0) }, SS = {}, m31r = [0, 0, 0], m31r0 = [0, 0, 0];
+  /* R5 : Mercure et Vénus suivent l'orbite calculée par planetTide (marées et frottement, Schröder et Smith 2008) ; engloutissement à la fin de la spirale. */
+  const TIDE_P = { mercury: planetTide(DATA.JPL1.mercury[0], 3.3011e23), venus: planetTide(DATA.JPL1.venus[0], 4.8675e24) };
+  const ENG = { mercury: TIDE_P.mercury.tEng, venus: TIDE_P.venus.tEng, earth: engulfTime(1.0) }, SS = {}, m31r = [0, 0, 0], m31r0 = [0, 0, 0];
   let orbitDirty = true;
   // vitesse d'Andromède par rapport au centre de la Voie lactée (km/s, axes galactiques), selon trois mesures publiées de son mouvement propre
   const M31_MEAS = [['Gaia, 2025', [28.4, -109.8, 41.4]], ['Hubble, 2012', [44.1, -118.0, 3.1]], ['Gaia, 2021', DATA.M31.vel]];
@@ -74,7 +76,7 @@
   let sol = solarSystemAt(T_NOW), scrubbing = false;
   const oSunDM = omegaGal(GAL.R0, true), oSunNo = omegaGal(GAL.R0, false), oArm = GAL.OMEGA_ARMS * KMS_KPC_RADGYR;
   const sunGal = [0, 0, 0];
-  const bodyPosM = k => { const o = F.orb || 1; if (k === 'sun') return [0, 0, 0]; if (k === 'moon') return [(sol.earth[0] * o + sol.moonGeo[0]) * AU, (sol.earth[1] * o + sol.moonGeo[1]) * AU, (sol.earth[2] * o + sol.moonGeo[2]) * AU]; const p = k === 'earth' ? sol.earth : sol.planets[k].pos; return [p[0] * o * AU, p[1] * o * AU, p[2] * o * AU]; };
+  const bodyPosM = k => { const o = (F.orbP && F.orbP[k]) || F.orb || 1; if (k === 'sun') return [0, 0, 0]; if (k === 'moon') return [(sol.earth[0] * o + sol.moonGeo[0]) * AU, (sol.earth[1] * o + sol.moonGeo[1]) * AU, (sol.earth[2] * o + sol.moonGeo[2]) * AU]; const p = k === 'earth' ? sol.earth : sol.planets[k].pos; return [p[0] * o * AU, p[1] * o * AU, p[2] * o * AU]; };
   const minLog = () => Math.log10(2.4 * BODY[S.focus].r * 1e3);
   const clampZoom = l => clamp(l, S.focus === 'earth' && !S.center ? LMICRO : Math.max(LMIN, S.center ? (S.center.radM ? Math.log10(2.4 * S.center.radM) : LMIN) : minLog()), LMAX);      /* sur une étoile : on s'arrête à sa surface ; un objet sans rayon connu (comète, sonde) : à la borne générale, plus à celle de l'astre suivi */
 
@@ -561,7 +563,7 @@
   const nearExtra = i => { const x = DATA.NEAR_X[i], r = []; if (!x) return r; if (x[0] !== null) r.push(['Type', x[0] <= 0 ? 'elliptique ou lenticulaire' : x[0] <= 8 ? 'spirale' : 'irrégulière ou naine']); if (x[1] !== null) r.push(velRow(x[1])); if (x[2] !== null) r.push(['Éclat', bigMass(Math.pow(10, 0.4 * (5.48 - x[2])))]); if (x[3]) r.push(['Masse d’après sa rotation', bigMass(Math.pow(10, x[3]))]); if (x[4]) r.push(['Gaz d’hydrogène', bigMass(Math.pow(10, x[4]))]); return r; };
   const PSRA = DATA.PSR_AGE ? new Float32Array(b64ToBytes(DATA.PSR_AGE).buffer) : null;
   const psrExtra = (i, p) => { const r = []; if (PSRA && PSRA[i] > 0) r.push(['Âge estimé', fmtYears(PSRA[i])]); if (p > 0) r.push(['Vitesse à son équateur', sig(TAU * 12 / p / 299792.458 * 100, 2) + NBSP + '% de la vitesse de la lumière (pour un rayon supposé de 12 km)']); return r; };
-  const planetRows = key => { const el = DATA.JPL1[key === 'earth' ? 'emb' : key], r = vlen(bodyPosM(key)) / AU, base = [['Distance au Soleil', nf(r, 3) + NBSP + 'UA']]; if (!el) return base; const a = el[0], e = el[1];
+  const planetRows = key => { const el = DATA.JPL1[key === 'earth' ? 'emb' : key], r = vlen(bodyPosM(key)) / AU, base = [['Distance au Soleil', nf(r, 3) + NBSP + 'UA']].concat(TIDE_P[key] ? [['Fin calculée', 'engloutie par le Soleil géant ' + (S.ty / 1e9 < TIDE_P[key].tEng ? inTime((TIDE_P[key].tEng - S.ty / 1e9) * 1e9) : 'il y a ' + fmtYears((S.ty / 1e9 - TIDE_P[key].tEng) * 1e9)) + ', au bout d’une spirale : son orbite s’élargit quand le Soleil perd de la masse, puis se resserre sous l’effet des marées et du frottement. Calculé ici avec la méthode de Schröder et Smith 2008.']] : []); if (!el) return base; const a = el[0], e = el[1];
     return base.concat([['Orbite', 'de ' + sig(a * (1 - e), 3) + ' à ' + sig(a * (1 + e), 3) + NBSP + 'UA'], ['Excentricité', sig(e, 2)]], key === 'earth' ? [] : [['Inclinaison', sig(el[2], 2) + '° sur l’orbite de la Terre']], [['Un tour du Soleil', fmtYears(Math.pow(a, 1.5))], ['Vitesse sur l’orbite', sig(orbSpeed(r / (F.orb || 1), a), 3) + NBSP + 'km/s']]); };
   const fmtDays = d => d < 2 ? sig(d * 24, 2) + NBSP + 'heures' : d < 800 ? sig(d, 3) + NBSP + 'jours' : sig(d / 365.25, 3) + NBSP + 'ans';
   const exoStar = i => { const q = (DATA.EXO_ST[i] || '').split('~'), o = []; if (q[0]) o.push('type ' + q[0]); if (+q[1] > 0) o.push(sig(+q[1], 2) + NBSP + 'fois la masse du Soleil'); if (+q[3] > 0) o.push(sig(+q[3], 2) + NBSP + 'fois son rayon'); if (+q[2] > 0) o.push(nf(Math.round(+q[2] / 10) * 10, 0) + NBSP + 'K'); if (+q[4] > 0) o.push('âge ' + sig(+q[4], 2) + NBSP + 'milliards d’années'); return o.length ? [['Son étoile', o.join(', ')]] : []; };
@@ -1323,7 +1325,7 @@
       S.solOff = lag(S.solOff || 0, capS); S.moonOff = lag(S.moonOff || 0, 0.02 / 365.25); S.sOff = lag(S.sOff || 0, 0.05); S.capS = capS; }
     sol = solarSystemAt(T_NOW + (S.ty + S.solOff) / 100, sol);
     const C = S.cosmo, cs = cosmoAt(C, S.ty / 1e9, F.cos);
-    const tG = S.ty / 1e9, ss = sunState(tG, SS); F.sun = ss; F.sunCol = tempRgb(ss.T); F.orb = 1 / ss.M; F.eng.mercury = tG >= ENG.mercury; F.eng.venus = tG >= ENG.venus; F.eng.earth = tG >= ENG.earth; for (const k of SYS_PL) F.eng[k] = tG >= SYS_END; F.sysK = tG < SYS_END ? 1 : 0;      /* petits corps et nuage d'Oort : coupure nette avec le système solaire (R7), plus de fondu */ F.ringsGone = tG > FATE.rings;
+    const tG = S.ty / 1e9, ss = sunState(tG, SS); F.sun = ss; F.sunCol = tempRgb(ss.T); F.orb = 1 / ss.M; F.orbP = F.orbP || {}; for (const k in TIDE_P) F.orbP[k] = tideAt(TIDE_P[k], tG); F.eng.mercury = tG >= ENG.mercury; F.eng.venus = tG >= ENG.venus; F.eng.earth = tG >= ENG.earth; for (const k of SYS_PL) F.eng[k] = tG >= SYS_END; F.sysK = tG < SYS_END ? 1 : 0;      /* petits corps et nuage d'Oort : coupure nette avec le système solaire (R7), plus de fondu */ F.ringsGone = tG > FATE.rings;
     F.ty = S.ty; F.tMyr = S.ty / 1e6; F.tEff = S.T1 + S.T2 * (oSunNo / oSunDM); if (S.playing) F.flash = Math.max(3e-7, 1.3 * S.speed / YEAR_S / 1e6); else if (!F.flash) F.flash = 3e-7;
     if (orbitDirty) { orbitDirty = false; if (!S.m31V) S.m31V = M31_MEAS[0][1]; const O = S.orbit = andromedaOrbit(S.cosmo, S.vt, S.m31V); andromedaAt(O, 0, m31r0); lgStart(); S.dyn = null; S.tOn = null;
       for (let i = Math.round(-O.t0 / O.dt); i < O.n; i++) if (Math.hypot(O.r[i * 3], O.r[i * 3 + 1], O.r[i * 3 + 2]) < 150) { S.tOn = Math.max(0.02, O.t0 + i * O.dt - 0.35); break; }
