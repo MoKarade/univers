@@ -55,7 +55,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); gl_Position=pr
     else { float dt=uT-tD; if(sn>0.5){ if(dt<uFlash){ M=-17.0+6.0*dt/uFlash; col=vec3(0.85,0.92,1.0); } else vis=0.0; } else { M=11.0+2.5*log(1.0+dt/200.0)/2.302585; col=vec3(0.8,0.88,1.0); } }
   }
   float dpc=max(length(mv.xyz)*uUnitToPc,1e-7); float m=M+5.0*log(dpc/10.0)/2.302585-uExpo; float f=pow(10.0,-0.4*(m-6.5));
-  float r=min(0.8+0.62*pow(f,0.27),8.5); vA=clamp(pow(f,0.66)*0.6,0.0,1.0)*uOpacity*vis*(1.0-smoothstep(uMcut-0.8,uMcut,m))*step(uTgtR,distance(position+aVel*uVt,uTgt)); vCore=clamp(f/60.0,0.0,1.0); float lum=dot(col,vec3(0.3,0.5,0.2)); vColor=max(mix(vec3(lum),col,1.55),0.0); gl_PointSize=r*4.0*uDpr; }`,
+  float r=min(0.8+0.62*pow(f,0.27),8.5); vA=clamp(pow(f,0.66)*0.6,0.0,1.0)*uOpacity*vis*(1.0-smoothstep(uMcut-0.8,uMcut,m))*step(uTgtR,distance(position+aVel*uVt,uTgt)); vCore=clamp(f/60.0,0.0,1.0); vColor=col; /* couleur du corps noir telle quelle (S1) : plus de saturation gonflée */ gl_PointSize=r*4.0*uDpr; }`,
     f: `varying vec3 vColor; varying float vA; varying float vCore;
 void main(){ vec2 p=gl_PointCoord*2.0-1.0; float d2=dot(p,p); if(d2>1.0) discard; float core=exp(-d2*15.0); float halo=exp(-d2*3.5)*0.16-0.005; vec2 q=abs(p); float spike=(exp(-q.y*26.0)*exp(-q.x*3.2)+exp(-q.x*26.0)*exp(-q.y*3.2))*0.22*vCore*vCore*(1.0-d2);
   gl_FragColor=vec4(mix(vColor,vec3(1.0),core*0.28)*vA*(core*(1.0+3.0*vCore)+max(halo,0.0)*(0.5+vCore)+spike),1.0); }` },
@@ -839,7 +839,8 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
 
     const sol = F.sol, d = F.days;
     const orb = F.orb, mg = sol.moonGeo, sc3 = (p, k) => [p[0] * k, p[1] * k, p[2] * k];
-    const posOf = k => k === 'sun' ? ZERO : k === 'earth' ? sc3(sol.earth, orb) : k === 'moon' ? [sol.earth[0] * orb + mg[0], sol.earth[1] * orb + mg[1], sol.earth[2] * orb + mg[2]] : sc3(sol.planets[k].pos, orb);
+    const oP = k => (F.orbP && F.orbP[k]) || orb;      /* R5 : Mercure et Vénus ont leur propre facteur d'orbite (spirale calculée) */
+    const posOf = k => k === 'sun' ? ZERO : k === 'earth' ? sc3(sol.earth, oP('earth')) : k === 'moon' ? [sol.earth[0] * oP('earth') + mg[0], sol.earth[1] * oP('earth') + mg[1], sol.earth[2] * oP('earth') + mg[2]] : sc3(sol.planets[k].pos, oP(k));
     for (const b of BODIES) {
       const o = bodies[b.key], pa = posOf(b.key);
       o.pos[0] = pa[0] * AU; o.pos[1] = pa[1] * AU; o.pos[2] = pa[2] * AU;
@@ -874,7 +875,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
       const m = orbits[k], st = sol.planets[k], u = m.userData.u, body = k === 'emb' ? bodies.earth : bodies[k];
       const close = fadeIn(lr, Math.log10(st.a * AU) - 2.6, Math.log10(st.a * AU) - 1.7);
       m.visible = oOrb * close > 0.004 && !F.eng[k === 'emb' ? 'earth' : k]; if (!m.visible) continue;
-      place(m, [st.pos[0] * AU * orb, st.pos[1] * AU * orb, st.pos[2] * AU * orb], AU * orb, F);
+      const ok = oP(k === 'emb' ? 'earth' : k); place(m, [st.pos[0] * AU * ok, st.pos[1] * AU * ok, st.pos[2] * AU * ok], AU * ok, F);
       const b = st.a * Math.sqrt(1 - st.e * st.e); u.uP.value.set(st.P[0] * st.a, st.P[1] * st.a, st.P[2] * st.a); u.uQ.value.set(st.Q[0] * b, st.Q[1] * b, st.Q[2] * b);
       u.uE0.value = st.E; u.uWidth.value = 0.85 * dpr; u.uViewport.value.set(R.w, R.h); u.uOpacity.value = oOrb * close * lerp(0.5, 0.85, 1 - body.vis) * 0.62;
     }

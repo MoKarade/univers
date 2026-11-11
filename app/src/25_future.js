@@ -11,20 +11,26 @@ const interp = (xs, ys, x) => { if (x <= xs[0]) return ys[0]; const n = xs.lengt
    Colonnes : âge (Ga), luminosité, température (K), rayon, masse (en unités solaires).
    -------------------------------------------------------------------------- */
 const SUN_NOW = 4.58, R_SUN_AU = 695700 / 149597870.7;
+/* Naine blanche (R7) : refroidissement par la loi de Mestel (1952), t = 8,8 Myr · (A/12)⁻¹ · M^(5/7) · (μ/2)^(-2/7) · L^(-5/7), avec A = 14 (carbone et
+   oxygène), μ = 2 et M = 0,5405 (masse finale publiée par Schröder et Smith 2008). Calculé, approché : sans cristallisation ni neutrinos.
+   Température tirée de L et du rayon 0,0125 (Stefan-Boltzmann). t en milliards d'années depuis la naissance de la naine blanche (âge 12,30). */
+const WD_K = 8.8e-3 * (12 / 14) * Math.pow(0.5405, 5 / 7), WD_L = t => Math.pow(t / WD_K, -7 / 5), WD_T = L => 5772 * Math.pow(L / (0.0125 * 0.0125), 0.25);
 const SUN_TRACK = [
   [0.00, 0.70, 5596, 0.89, 1.000], /* * naissance */ [4.58, 1.00, 5774, 1.00, 1.000], /* * aujourd'hui */ [7.13, 1.26, 5820, 1.11, 1.000], /* * */ [10.00, 1.84, 5751, 1.37, 1.000], /* * fin de séquence principale */
-  [11.00, 2.30, 5400, 1.75, 1.000], [11.60, 2.90, 4900, 2.40, 0.999], [11.90, 9.0, 4600, 4.8, 0.995], [12.05, 45, 4200, 12.8, 0.985], [12.12, 240, 3700, 38, 0.95], [12.155, 1000, 3100, 110, 0.85],
+  /* de 10,00 à 12,167 : branche des géantes rouges tirée de DATA.SUN_RGB (pipeline/build_sun_rgb.py : forme MIST, ancrages et perte de masse de Schröder et Smith 2008) */
   [12.167, 2730, 2602, 256, 0.668], /* * sommet de la branche des géantes rouges */ [12.1675, 53.7, 4667, 11.2, 0.668], /* * fusion de l'hélium */
-  [12.27, 62, 4600, 12.4, 0.665], [12.293, 520, 3700, 56, 0.62], [12.30, 2090, 3200, 149, 0.546], /* * sommet de la branche asymptotique */
+  [12.27, 62, 4600, 12.4, 0.665], [12.293, 520, 3700, 56, 0.62], [12.30, 2090, 3200, 149, 0.546], /* * sommet de la branche asymptotique */ [12.3001, 4170, 3467, 179, 0.544], /* * pic du dernier pulse thermique (« AGB:tip-TP », âge 12,30 à l'arrondi de la table) */
   [12.3003, 2000, 8000, 23.3, 0.542], [12.3006, 1500, 30000, 1.43, 0.541], [12.301, 300, 100000, 0.058, 0.5405], [12.31, 0.88, 50000, 0.0125, 0.5405],
-  [12.40, 0.055, 25000, 0.0125, 0.5405], [13.3, 9.2e-4, 9000, 0.0125, 0.5405], [17.3, 8.8e-5, 5000, 0.0125, 0.5405], [22.3, 3.2e-5, 3900, 0.0125, 0.5405], [60, 2e-6, 2000, 0.0125, 0.5405],
+  [12.40, WD_L(0.1), WD_T(WD_L(0.1)), 0.0125, 0.5405], /* raccord à la loi de Mestel ; au-delà, voir sunState */
 ];
 const SUN_PHASES = [[10.0, 'étoile de la séquence principale'], [11.6, 'sous-géante'], [12.167, 'géante rouge'], [12.27, 'géante en fusion d’hélium'], [12.3003, 'géante asymptotique'], [12.31, 'naine blanche en formation'], [1e9, 'naine blanche']];
+let SUN_RGB_C = null; const SUN_RGB_T = () => SUN_RGB_C || (SUN_RGB_C = [SUN_TRACK[3]].concat(DATA.SUN_RGB.map(r => [r[0], r[1], r[2], r[3], r[4]]), [SUN_TRACK[4]]));      /* fin de séquence principale, montée calculée, sommet publié */
 function sunState(tGyr, o) {
-  o = o || {}; const age = SUN_NOW + tGyr, T = SUN_TRACK; let i = 1;
+  o = o || {}; const age = SUN_NOW + tGyr; const T = age > 10.0 && age < 12.167 && typeof DATA !== 'undefined' && DATA.SUN_RGB ? SUN_RGB_T() : SUN_TRACK; let i = 1;
   if (age <= T[0][0]) i = 1; else if (age >= T[T.length - 1][0]) i = T.length - 1; else while (T[i][0] < age) i++;
   const a = T[i - 1], b = T[i], f = clamp((age - a[0]) / (b[0] - a[0]), 0, 1);
   o.age = age; o.L = Math.exp(lerp(Math.log(a[1]), Math.log(b[1]), f)); o.T = Math.exp(lerp(Math.log(a[2]), Math.log(b[2]), f)); o.R = Math.exp(lerp(Math.log(a[3]), Math.log(b[3]), f)); o.M = lerp(a[4], b[4], f);
+  if (age > 12.40) { o.L = WD_L(age - 12.30); o.T = WD_T(o.L); o.R = 0.0125; o.M = 0.5405; }      /* naine blanche : loi de Mestel au-delà du raccord */
   o.phase = SUN_PHASES.find(p => age < p[0])[1]; return o;
 }
 /** Instant (Ga depuis aujourd'hui) où le Soleil géant avale une planète d'orbite actuelle a0 (UA). Seuil calé sur le résultat publié : il faut partir d'au moins 1,15 UA pour survivre. */
@@ -33,6 +39,42 @@ function engulfTime(a0) {
   for (let age = 11.6; age <= 12.167; age += 0.00002) { sunState(age - SUN_NOW, s); if (s.R * R_SUN_AU >= 0.69 * a0 / s.M) return age - SUN_NOW; }
   return Infinity;
 }
+/* --------------------------------------------------------------------------
+   R5 : orbite d'une planète pendant que le Soleil devient géant, méthode de Schröder et Smith 2008 (MNRAS 386, 155, § 4).
+   On suit le moment cinétique Λ = m √(G M a) :
+   - perte de masse du Soleil : Λ se conserve, donc a = Λ² / (m² G M) grandit quand M baisse (leur éq. 3) ;
+   - marées (Zahn 1977, 1989 ; leur éq. 4) : dΛ/dt = 6 (λ₂ / t_f) q² M R² (R/a)⁶ (Ω − ω), Ω = 0, ω = √(G M / a³),
+     q = m / M, t_f = (M R² / L)^(1/3), λ₂ = 0,019 α^(4/3), α = 2,0 pour log g ≥ 1,94, réduit linéairement à 1,67 à log g = 0 ;
+   - frottement dans l'atmosphère étendue (Ostriker 1999 ; leurs éq. 5-6) : F = 3 · 4π ρ (G m / c_s)², c_s = 8 km/s,
+     dΛ/dt = −F a, avec ρ = 4×10⁻⁹ kg/m³ à 5×10⁶ km de la surface et une hauteur d'échelle de 5×10⁶ km (leur § 4.3).
+   La planète est engloutie quand a ≤ R. Le Soleil (L, R, T, M) vient de sunState : points publiés de la table 1 et, sur la branche des géantes rouges,
+   la trajectoire DATA.SUN_RGB (forme du modèle MIST v1.2, Choi et al. 2016, ancrée sur le sommet publié, rayon calé sur la masse publiée au sommet).
+   α : l'article écrit « α = 2.0 for log g < 1.94, reduced to 1.67 at log g = 0.0 » ; seule lecture cohérente, retenue ici : 2,0 au-dessus de log g = 1,94,
+   puis réduction linéaire jusqu'à 1,67 à log g = 0 ; au sommet (log g ≈ −0,55) on retrouve λ₂ ≈ 0,038 publié.
+   Rend une table [temps (Ga depuis aujourd'hui), a/a0] et la date d'engloutissement (Infinity si la planète survit).
+   -------------------------------------------------------------------------- */
+const TIDE = { G: 6.674e-11, MS: 1.98847e30, RS: 6.957e8, LS: 3.828e26, AU: 1.495978707e11, YR: 3.15576e7 };
+function tideLambda2(M, R) { const lg = Math.log10(27400 * M / (R * R)), a = lg >= 1.94 ? 2.0 : 1.67 + 0.33 * Math.max(lg, 0) / 1.94; return 0.019 * Math.pow(a, 4 / 3); }
+function planetTide(a0AU, mKg, tEnd) {
+  const C = TIDE, s = {}, m = mKg, out = [0, 1]; let t = 0, M = C.MS, a = a0AU * C.AU, Lam = m * Math.sqrt(C.G * M * a), tEng = Infinity;
+  tEnd = tEnd === undefined ? 12.31 - SUN_NOW : tEnd;
+  while (t < tEnd) {
+    sunState(t, s); M = s.M * C.MS; const R = s.R * C.RS, L = s.L * C.LS, age = s.age;
+    a = Lam * Lam / (m * m * C.G * M); if (a <= R) { tEng = t; out.push(t, a / (a0AU * C.AU)); break; }
+    const q = m / M, tf = Math.cbrt(M * R * R / L), om = Math.sqrt(C.G * M / (a * a * a)), lam2 = tideLambda2(s.M, s.R);
+    const dTide = -6 * (lam2 / tf) * q * q * M * R * R * Math.pow(R / a, 6) * om, rho = 4e-9 * Math.exp(-(a - R - 5e9) / 5e9), dDrag = -3 * 4 * Math.PI * rho * Math.pow(C.G * m / 8e3, 2) * a, dL = dTide + dDrag;
+    let dtY = age < 11.6 ? 2e6 : age < 12.1 ? 2e4 : 500;      /* pas en années : plus fin quand le Soleil enfle vite */
+    if (dL < 0) dtY = Math.min(dtY, 0.002 * Lam / -dL / C.YR);
+    dtY = Math.max(dtY, 0.01); Lam += dL * dtY * C.YR; t += dtY / 1e9;
+    if (out.length < 2 || t - out[out.length - 2] > (age < 11.6 ? 0.05 : 2e-6)) out.push(t, a / (a0AU * C.AU));
+  }
+  return { tab: out, tEng };
+}
+/** Facteur d'orbite a/a0 à la date t (Ga) d'après une table de planetTide. */
+function tideAt(P, t) { const T = P.tab, n = T.length / 2; if (t <= T[0]) return T[1]; if (t >= T[(n - 1) * 2]) return T[(n - 1) * 2 + 1];
+  let lo = 0, hi = n - 1; while (hi - lo > 1) { const k = (lo + hi) >> 1; if (T[k * 2] <= t) lo = k; else hi = k; }
+  const f = (t - T[lo * 2]) / (T[hi * 2] - T[lo * 2]); return T[lo * 2 + 1] + f * (T[hi * 2 + 1] - T[lo * 2 + 1]); }
+
 /** Couleur (linéaire) d'un corps noir de température T. */
 function tempRgb(T) { const t = clamp(T, 1500, 40000) / 100; let r, g, b;
   if (t <= 66) { r = 255; g = 99.4708025861 * Math.log(t) - 161.1195681661; b = t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307; } else { r = 329.698727446 * Math.pow(t - 60, -0.1332047592); g = 288.1221695283 * Math.pow(t - 60, -0.0755148492); b = 255; }
