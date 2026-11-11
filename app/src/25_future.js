@@ -38,6 +38,39 @@ function engulfTime(a0) {
   for (let age = 11.6; age <= 12.167; age += 0.00002) { sunState(age - SUN_NOW, s); if (s.R * R_SUN_AU >= 0.69 * a0 / s.M) return age - SUN_NOW; }
   return Infinity;
 }
+/* --------------------------------------------------------------------------
+   R5 : orbite d'une planète pendant que le Soleil devient géant, méthode de Schröder et Smith 2008 (MNRAS 386, 155, § 4).
+   On suit le moment cinétique Λ = m √(G M a) :
+   - perte de masse du Soleil : Λ se conserve, donc a = Λ² / (m² G M) grandit quand M baisse (leur éq. 3) ;
+   - marées (Zahn 1977, 1989 ; leur éq. 4) : dΛ/dt = 6 (λ₂ / t_f) q² M R² (R/a)⁶ (Ω − ω), Ω = 0, ω = √(G M / a³),
+     q = m / M, t_f = (M R² / L)^(1/3), λ₂ = 0,019 α^(4/3), α = 2,0 pour log g ≥ 1,94, réduit linéairement à 1,67 à log g = 0 ;
+   - frottement dans l'atmosphère étendue (Ostriker 1999 ; leurs éq. 5-6) : F = 3 · 4π ρ (G m / c_s)², c_s = 8 km/s,
+     dΛ/dt = −F a, avec ρ = 4×10⁻⁹ kg/m³ à 5×10⁶ km de la surface et une hauteur d'échelle de 5×10⁶ km (leur § 4.3).
+   La planète est engloutie quand a ≤ R. Le Soleil (L, R, T, M) vient de SUN_TRACK (points publiés de la table 1, interpolés).
+   Rend une table [temps (Ga depuis aujourd'hui), a/a0] et la date d'engloutissement (Infinity si la planète survit).
+   -------------------------------------------------------------------------- */
+const TIDE = { G: 6.674e-11, MS: 1.98847e30, RS: 6.957e8, LS: 3.828e26, AU: 1.495978707e11, YR: 3.15576e7 };
+function tideLambda2(M, R) { const lg = Math.log10(27400 * M / (R * R)), a = lg >= 1.94 ? 2.0 : 1.67 + 0.33 * Math.max(lg, 0) / 1.94; return 0.019 * Math.pow(a, 4 / 3); }
+function planetTide(a0AU, mKg, tEnd) {
+  const C = TIDE, s = {}, m = mKg, out = [0, 1]; let t = 0, M = C.MS, a = a0AU * C.AU, Lam = m * Math.sqrt(C.G * M * a), tEng = Infinity;
+  tEnd = tEnd === undefined ? 12.31 - SUN_NOW : tEnd;
+  while (t < tEnd) {
+    sunState(t, s); M = s.M * C.MS; const R = s.R * C.RS, L = s.L * C.LS, age = s.age;
+    a = Lam * Lam / (m * m * C.G * M); if (a <= R) { tEng = t; out.push(t, a / (a0AU * C.AU)); break; }
+    const q = m / M, tf = Math.cbrt(M * R * R / L), om = Math.sqrt(C.G * M / (a * a * a)), lam2 = tideLambda2(s.M, s.R);
+    const dTide = -6 * (lam2 / tf) * q * q * M * R * R * Math.pow(R / a, 6) * om, rho = 4e-9 * Math.exp(-(a - R - 5e9) / 5e9), dDrag = -3 * 4 * Math.PI * rho * Math.pow(C.G * m / 8e3, 2) * a, dL = dTide + dDrag;
+    let dtY = age < 11.6 ? 2e6 : age < 12.1 ? 2e4 : 500;      /* pas en années : plus fin quand le Soleil enfle vite */
+    if (dL < 0) dtY = Math.min(dtY, 0.002 * Lam / -dL / C.YR);
+    dtY = Math.max(dtY, 0.01); Lam += dL * dtY * C.YR; t += dtY / 1e9;
+    if (out.length < 2 || t - out[out.length - 2] > (age < 11.6 ? 0.05 : 2e-6)) out.push(t, a / (a0AU * C.AU));
+  }
+  return { tab: out, tEng };
+}
+/** Facteur d'orbite a/a0 à la date t (Ga) d'après une table de planetTide. */
+function tideAt(P, t) { const T = P.tab, n = T.length / 2; if (t <= T[0]) return T[1]; if (t >= T[(n - 1) * 2]) return T[(n - 1) * 2 + 1];
+  let lo = 0, hi = n - 1; while (hi - lo > 1) { const k = (lo + hi) >> 1; if (T[k * 2] <= t) lo = k; else hi = k; }
+  const f = (t - T[lo * 2]) / (T[hi * 2] - T[lo * 2]); return T[lo * 2 + 1] + f * (T[hi * 2 + 1] - T[lo * 2 + 1]); }
+
 /** Couleur (linéaire) d'un corps noir de température T. */
 function tempRgb(T) { const t = clamp(T, 1500, 40000) / 100; let r, g, b;
   if (t <= 66) { r = 255; g = 99.4708025861 * Math.log(t) - 161.1195681661; b = t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307; } else { r = 329.698727446 * Math.pow(t - 60, -0.1332047592); g = 288.1221695283 * Math.pow(t - 60, -0.0755148492); b = 255; }
