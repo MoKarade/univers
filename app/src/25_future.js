@@ -99,7 +99,7 @@ function initStarKin(posEclLy, N, sunGal0, vqIn, vdiv, ecl) {      // ecl : vite
   return K;
 }
 /** Position du Soleil dans la galaxie (kpc, repère galactique centré sur le centre galactique) au temps t (Ga). */
-function sunGalAt(K, t, out) { return starOrbSun(K, t, out); }
+function sunGalAt(K, t, out) { return sunOrbAt(K, t, out); }
 /** Positions des étoiles par rapport au Soleil (années-lumière, repère écliptique) à l'instant tYears ; tEff (Ga) pour les orbites galactiques. */
 function starPositions(K, tYears, tEff, out, i0, i1) {
   const at = Math.abs(tYears), w = smoothstep(3e6, 1.5e7, at), M = K.M, p0 = K.p0, ve = K.ve, g = K.tmp, s = K.ts;

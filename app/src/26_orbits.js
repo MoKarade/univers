@@ -1,7 +1,7 @@
 /* --------------------------------------------------------------------------
-   S2 — Orbites exactes des étoiles du catalogue principal (HYG, environ 59 000 étoiles).
-   Chaque étoile, et le Soleil, est intégrée pas à pas dans le potentiel de la Voie lactée
-   de 20_physics.js (bulbe de Hernquist + disque de Miyamoto-Nagai + halo NFW, objet GAL),
+   S2 — Orbites calculées pas à pas des étoiles du catalogue principal (HYG, environ 59 000 étoiles).
+   Chaque étoile, et le Soleil, est intégrée pas à pas dans le MODÈLE de la Voie lactée
+   de 20_physics.js (sans barre ni bras ; inspiré de MWPotential2014, Bovy 2015, recalé) (bulbe de Hernquist + disque de Miyamoto-Nagai + halo NFW, objet GAL),
    par la méthode du saut de grenouille (vitesse de Verlet), pas de 1 Ma, dans un Web Worker.
    Tant que le résultat pour l'instant affiché n'est pas prêt, on garde l'approximation des
    épicycles (25_future.js), comme avant. Les étoiles Gaia en flux (millions) restent en épicycles.
@@ -10,7 +10,7 @@
 const ORB_DT = 0.001;            /* pas d'intégration : 1 Ma */
 const ORB_CP = 0.1;              /* point de contrôle tous les 100 Ma */
 const ORB_MAXCP = 24;            /* points de contrôle gardés au plus (Float32 : environ 34 Mo pour 59 000 étoiles) */
-const ORB_EXTRA = 0.02;          /* au-delà de 20 Ma d'écart avec le dernier résultat exact, on revient aux épicycles */
+const ORB_EXTRA = 0.006;         /* au-delà de 6 Ma d'écart avec le dernier résultat calculé, on revient aux épicycles */
 const ORB_KV = 1.0227121650456;  /* km/s -> kpc/Ga */
 
 /** Paramètres du potentiel, copiés de GAL pour le Worker (qui ne voit pas le reste de la page). */
@@ -88,42 +88,73 @@ function orbWorkerMain() {
 }
 
 /** Démarre le calcul pour un catalogue : K vient d'initStarKin (K.gx0, K.gv0), le Soleil est ajouté en dernier.
- *  Sans Worker (vieux navigateur, test), K.orb reste absent et rien ne change. */
+ *  Sans Worker (vieux navigateur, test), K.orb reste absent : les étoiles gardent les épicycles. */
 function orbInit(K, sunGal0) {
   if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || !K.gx0) return null;
   const n = K.N + 1, X = new Float64Array(n * 3), V = new Float64Array(n * 3);
   X.set(K.gx0); V.set(K.gv0); X.set(sunGal0, K.N * 3); V.set(SUN_UVW, K.N * 3);
-  const src = [orbAcc, orbEnergy, orbSub, orbSteps, 'const ORB_DT=' + ORB_DT + ', ORB_CP=' + ORB_CP + ', ORB_MAXCP=' + ORB_MAXCP + ';', '(' + orbWorkerMain.toString() + ')();'].map(String).join('\n');
-  let w; try { w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' }))); } catch (e) { return null; }
-  const O = K.orb = { w, n: K.N, res: null, want: null, busy: false, on: true };
-  w.onmessage = e => { O.res = e.data; O.busy = false; if (O.want !== null && Math.abs(O.want - O.res.t) >= ORB_DT) orbRequest(K, O.want); };
+  const src = [orbAcc, orbEnergy, orbSub, orbSteps, 'const ORB_DT=' + ORB_DT + ', ORB_CP=' + ORB_CP + ', ORB_MAXCP=' + ORB_MAXCP + ';', '(' + orbWorkerMain.toString() + ')();'].map(String).join(String.fromCharCode(10));
+  let w; try { const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })); w = new Worker(url); URL.revokeObjectURL(url); } catch (e) { return null; }
+  const O = K.orb = { w, n: K.N, P: orbParams(), res: null, acc: null, want: null, sent: null, sentAt: 0, on: true, far: false, exact: false };
+  w.onmessage = e => { O.res = e.data; O.acc = new Float32Array(n * 3).fill(NaN); O.sent = null; };
   w.onerror = () => { K.orb = null; };
-  w.postMessage({ init: true, P: orbParams(), n, X, V }, [X.buffer, V.buffer]);
+  w.postMessage({ init: true, P: O.P, n, X, V }, [X.buffer, V.buffer]);
   return O;
 }
 
-/** À chaque image : demande l'orbite exacte pour tEff (Ga). on = false quand la matière noire est retirée (temps effectif). */
-function orbRequest(K, tEff, on) {
+/** À chaque image, avant le dessin. on : false quand la matière noire a été retirée (le temps affiché n'est plus le temps réel) ;
+ *  far : plus de 2 Ma d'aujourd'hui (en deçà, les étoiles vont en ligne droite et rien n'est demandé).
+ *  Choisit aussi, une fois pour l'image, entre orbite calculée et épicycles, avec un écart de bascule pour éviter le scintillement. */
+function orbRequest(K, tEff, on, far) {
   const O = K && K.orb; if (!O) return;
-  if (on !== undefined) O.on = on;
-  O.want = tEff;
-  if (!O.on || O.busy || (O.res && Math.abs(O.res.t - tEff) < ORB_DT)) return;
-  O.busy = true; O.w.postMessage({ goto: tEff });
+  O.on = on; O.far = far; O.want = tEff;
+  const lag = O.res ? Math.abs(O.res.t - tEff) : Infinity;
+  if (O.exact && lag > ORB_EXTRA) O.exact = false; else if (!O.exact && lag <= ORB_EXTRA / 2) O.exact = true;
+  if (!on || !far || lag < ORB_DT) return;
+  const now = Date.now();
+  if (O.sent !== null && (Math.abs(O.sent - tEff) < ORB_DT || now - O.sentAt < 80)) return;      /* une nouvelle demande remplace l'ancienne, au plus une toutes les 80 ms */
+  O.sent = tEff; O.sentAt = now; O.w.postMessage({ goto: tEff });
 }
 
-/** Le résultat exact est-il utilisable à tEff ? */
-const orbFresh = (K, tEff) => { const O = K.orb; return !!(O && O.on && O.res && Math.abs(O.res.t - tEff) <= ORB_EXTRA); };
+/** L'orbite calculée sert-elle à tEff ? (mode choisi pour l'image, et résultat assez proche pour le prolongement) */
+const orbFresh = (K, tEff) => { const O = K.orb; return !!(O && O.on && O.exact && O.res && Math.abs(O.res.t - tEff) <= ORB_EXTRA); };
 
-/** Position galactique (kpc) de l'étoile i à tEff : orbite exacte (prolongée en ligne droite sur moins de 20 Ma), sinon épicycle. */
+/** Position galactique (kpc) de l'étoile i à tEff : orbite calculée, prolongée au second ordre (x + v·d + a·d²/2) sur moins
+ *  de 6 Ma (au-delà, écart de plus de 50 pc pour 1 % des étoiles) ; sinon épicycle. Écart du prolongement mesuré dans orbits.test.js. */
 function starOrbPos(K, i, tEff, out, j) {
   j = j || 0;
   if (!orbFresh(K, tEff)) { epicyclePos(K.epi, i * 10, tEff, out, j); return; }
-  const R = K.orb.res, d = (tEff - R.t) * ORB_KV, q = i * 3;
-  out[j] = R.pos[q] + R.vel[q] * d; out[j + 1] = R.pos[q + 1] + R.vel[q + 1] * d; out[j + 2] = R.pos[q + 2] + R.vel[q + 2] * d;
+  const O = K.orb, R = O.res, d = (tEff - R.t) * ORB_KV, q = i * 3, A = O.acc;
+  if (Number.isNaN(A[q])) { const a = [0, 0, 0]; orbAcc(O.P, R.pos[q], R.pos[q + 1], R.pos[q + 2], a); A[q] = a[0]; A[q + 1] = a[1]; A[q + 2] = a[2]; }
+  for (let c = 0; c < 3; c++) out[j + c] = R.pos[q + c] + R.vel[q + c] * d + 0.5 * A[q + c] * d * d;
 }
 
-/** Position galactique du Soleil à tEff, de la même façon. */
+/** Soleil, pour les positions des étoiles vues du Soleil : même règle que les étoiles, pour que leur écart reste cohérent. */
 function starOrbSun(K, tEff, out) {
   if (!orbFresh(K, tEff)) { epicyclePos(K.sun, 0, tEff, out, 0); return out; }
-  return starOrbPos(K, K.orb.n, tEff, out, 0), out;
+  starOrbPos(K, K.orb.n, tEff, out, 0); return out;
+}
+
+/** Soleil dans la galaxie (vue d'ensemble, calcul de la rencontre) : une seule orbite, calculée ici même, sans attendre le Worker,
+ *  à toute date. Points de contrôle tous les 100 Ma. Matière noire retirée : épicycles, comme avant. */
+const SUN_ORB = { X: null, V: null, t: 0, cps: new Map() };
+function sunOrbAt(K, tEff, out) {
+  if (K && K.orb && !K.orb.on) { epicyclePos(K.sun, 0, tEff, out, 0); return out; }
+  const S = SUN_ORB, P = orbParams();
+  if (!S.X) { S.X = Float64Array.from(DATA.SGRA_GAL.map(x => -x * GAL.R0)); S.V = Float64Array.from(SUN_UVW); S.t = 0; S.cps.set(0, [S.X.slice(), S.V.slice()]); }
+  const goal = Math.round(tEff / ORB_DT) * ORB_DT;
+  let best = null; for (const k of S.cps.keys()) if (best === null || Math.abs(k * ORB_CP - goal) < Math.abs(best * ORB_CP - goal)) best = k;
+  if (Math.abs(best * ORB_CP - goal) < Math.abs(S.t - goal)) { const c = S.cps.get(best); S.X = c[0].slice(); S.V = c[1].slice(); S.t = best * ORB_CP; }
+  while (Math.abs(goal - S.t) > ORB_DT / 2) { const dir = Math.sign(goal - S.t); orbSteps(P, S.X, S.V, 1, dir * ORB_DT, 1); S.t = Math.round((S.t + dir * ORB_DT) / ORB_DT) * ORB_DT; const k = Math.round(S.t / ORB_CP); if (Math.abs(k * ORB_CP - S.t) < ORB_DT / 2 && !S.cps.has(k)) S.cps.set(k, [S.X.slice(), S.V.slice()]); }
+  const d = (tEff - S.t) * ORB_KV; for (let c = 0; c < 3; c++) out[c] = S.X[c] + S.V[c] * d;
+  return out;
+}
+
+/** Ligne « Mouvement » des fiches d'étoiles. gaia : étoile du flux Gaia (épicycles seulement). */
+function orbMotionText(K, i, tEff, gaia) {
+  if (K.lin && K.lin[i]) return 'en ligne droite avec la vitesse mesurée (passage près du Soleil publié)';
+  const base = "ligne droite avec la vitesse mesurée jusqu'à 3 millions d'années, puis orbite ";
+  if (gaia || !K.orb) return base + 'approchée (épicycles) dans un modèle de la Voie lactée';
+  const now = K.orb.far && K.orb.on && !orbFresh(K, tEff) ? ' ; calcul en cours, orbite approchée affichée en attendant' : '';
+  return base + 'calculée pas à pas dans un modèle de la Voie lactée (bulbe, disque et halo, d’après Bovy 2015, recalé sur 230 km/s)' + now;
 }

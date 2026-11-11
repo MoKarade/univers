@@ -44,13 +44,39 @@ check(K.gx0 && K.gx0.length === N * 3 && Number.isFinite(K.gx0[0]), `état initi
   let d2 = 0; for (let k = 0; k < n * 3; k++) d2 = Math.max(d2, Math.abs(r2.pos[k] - Xb[k]));
   check(Math.abs(r2.t + 0.1) < 1e-9 && d2 < 1e-3, `Worker : retour à −100 Ma depuis le point de contrôle de départ, écart ${(d2 * 1e3).toFixed(4)} pc`); }
 
-/* 4. Branchement : sans résultat exact, la page garde les épicycles ; avec, elle prend l'orbite exacte */
-{ const g = [0, 0, 0], e = [0, 0, 0]; starOrbPos(K, 7, 0.3, g); epicyclePos(K.epi, 70, 0.3, e, 0); check(g.every((v, k) => v === e[k]), 'sans résultat exact : position identique aux épicycles (aucun changement pour les vieux navigateurs)');
-  const pos = new Float32Array((N + 1) * 3), vel = new Float32Array((N + 1) * 3); pos[21] = 1; pos[22] = 2; pos[23] = 3; vel[21] = 100;
-  K.orb = { on: true, n: N, res: { t: 0.3, pos, vel } }; starOrbPos(K, 7, 0.31, g);
-  check(Math.abs(g[0] - (1 + 100 * 0.01 * ORB_KV)) < 1e-6 && g[1] === 2, 'avec résultat exact : position exacte, prolongée sur 10 Ma par la vitesse');
-  starOrbPos(K, 7, 0.5, g); epicyclePos(K.epi, 70, 0.5, e, 0); check(g.every((v, k) => v === e[k]), 'résultat trop ancien (200 Ma d\'écart) : retour aux épicycles');
-  K.orb.on = false; starOrbPos(K, 7, 0.3, g); epicyclePos(K.epi, 70, 0.3, e, 0); check(g.every((v, k) => v === e[k]), 'matière noire retirée : épicycles (le temps affiché n\'est plus le temps réel)'); K.orb = null; }
+/* 4. Branchement : sans résultat, épicycles ; avec résultat, orbite calculée prolongée au second ordre ; bascule avec écart */
+{ const g = [0, 0, 0], e = [0, 0, 0]; starOrbPos(K, 7, 0.3, g); epicyclePos(K.epi, 70, 0.3, e, 0); check(g.every((v, k) => v === e[k]), 'sans résultat calculé : position identique aux épicycles (aucun changement pour les vieux navigateurs)');
+  const n1 = N + 1, X = new Float64Array(n1 * 3), V = new Float64Array(n1 * 3); X.set(K.gx0); V.set(K.gv0); X.set(sunGal0, N * 3); V.set(SUN_UVW, N * 3);
+  const SUBa = orbSub(P, X, V, n1); orbSteps(P, X, V, n1, ORB_DT, 200, SUBa);      /* état calculé à +200 Ma */
+  const res = { t: 0.2, pos: Float32Array.from(X), vel: Float32Array.from(V) }, posted = [];
+  K.orb = { w: { postMessage: m => posted.push(m) }, n: N, P, res, acc: new Float32Array(n1 * 3).fill(NaN), want: null, sent: null, sentAt: 0, on: true, far: true, exact: false };
+  orbRequest(K, 0.2, true, true); check(K.orb.exact && posted.length === 0, 'résultat à l\'instant affiché : orbite calculée choisie, aucune demande inutile');
+  /* justesse du prolongement : comparé au calcul pas à pas, vu du Soleil (ce qui est dessiné) */
+  for (const dMa of [2, 4, 5.9]) { const Xs = X.slice(), Vs = V.slice(); orbSteps(P, Xs, Vs, n1, ORB_DT, dMa, SUBa); const tt = 0.2 + dMa / 1000, s = [0, 0, 0], err = []; starOrbSun(K, tt, s);
+    for (let i = 0; i < N; i += 7) { starOrbPos(K, i, tt, g); err.push(Math.hypot(g[0] - s[0] - (Xs[i * 3] - Xs[N * 3]), g[1] - s[1] - (Xs[i * 3 + 1] - Xs[N * 3 + 1]), g[2] - s[2] - (Xs[i * 3 + 2] - Xs[N * 3 + 2])) * 1000); }
+    err.sort((a, b) => a - b); const med = err[err.length >> 1], p99 = err[Math.floor(0.99 * (err.length - 1))];
+    check(med < 10 && p99 < 60, `prolongement de ${dMa} Ma : écart vu du Soleil, médiane ${med.toFixed(1)} pc, 99 % ${p99.toFixed(0)} pc (seuils 10 et 60 pc ; épicycles à +200 Ma : ~265 pc)`); }
+  orbRequest(K, 0.215, true, true); check(!K.orb.exact && posted.length === 1 && Math.abs(posted[0].goto - 0.215) < 1e-12, 'résultat à plus de 6 Ma : retour aux épicycles et nouvelle demande');
+  K.orb.res = Object.assign({}, res, { t: 0.211 }); orbRequest(K, 0.215, true, true); check(!K.orb.exact, 'écart de bascule : revenu à 4 Ma, on reste en épicycles tant qu’on n’est pas sous 3 Ma (pas de scintillement)');
+  K.orb.res = Object.assign({}, res, { t: 0.213 }); orbRequest(K, 0.215, true, true); check(K.orb.exact, 'écart de bascule : à 2 Ma, on repasse à l\'orbite calculée');
+  orbRequest(K, 0.3, false, true); starOrbPos(K, 7, 0.3, g); epicyclePos(K.epi, 70, 0.3, e, 0); check(g.every((v, k) => v === e[k]), 'matière noire retirée : épicycles (le temps affiché n\'est plus le temps réel)');
+  check(/approchée/.test(orbMotionText(K, 7, 0.3, true)) && /calculée pas à pas/.test(orbMotionText(K, 7, 0.3, false)), 'fiche : « approchée » pour Gaia, « calculée pas à pas dans un modèle » pour le catalogue principal');
+  K.orb = null; }
 
-console.log(fails ? `\n${fails} échec(s)` : '\norbites exactes : tout est vert');
+/* 5. Référence indépendante de l'énergie : une orbite circulaire à 8,2 kpc et vCirc (formule de la courbe de rotation, 20_physics.js) reste circulaire */
+{ const v = vCirc(GAL.R0, true), X = Float64Array.from([GAL.R0, 0, 0]), V = Float64Array.from([0, v, 0]); let dr = 0;
+  for (let s = 0; s < 1000; s++) { orbSteps(P, X, V, 1, ORB_DT, 1); dr = Math.max(dr, Math.abs(Math.hypot(X[0], X[1]) - GAL.R0)); }
+  check(dr < 0.002, `orbite circulaire à 8,2 kpc et ${v.toFixed(1)} km/s : rayon constant à ${(dr * 1000).toFixed(2)} pc près sur 1 Ga (forces et courbe de rotation d'accord)`); }
+
+/* 6. Soleil dans la galaxie : calculé dans la page, à toute date, même résultat que le Worker */
+{ const a = sunOrbAt(null, 0.2, [0, 0, 0]), X = Float64Array.from(sunGal0), V = Float64Array.from(SUN_UVW); orbSteps(P, X, V, 1, ORB_DT, 200);
+  const b = sunOrbAt(null, -0.35, [0, 0, 0]), c = sunOrbAt(null, 0.2, [0, 0, 0]);
+  check(Math.hypot(a[0] - X[0], a[1] - X[1], a[2] - X[2]) < 1e-9 && Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]) < 1e-6 && Number.isFinite(b[0]), `Soleil dans la galaxie à +200 Ma : (${a.map(v => v.toFixed(3)).join(', ')}) kpc, identique après un détour par −350 Ma`); }
+
+/* 7. Rejoue la mesure de départ : à 50 Ma, l'écart des épicycles au calcul pas à pas dépasse 100 pc pour la médiane des étoiles */
+{ const X = Float64Array.from(K.gx0), V = Float64Array.from(K.gv0), SB = orbSub(P, X, V, N); orbSteps(P, X, V, N, ORB_DT, 50, SB); const g = [0, 0, 0], e = [];
+  for (let i = 0; i < N; i += 3) { epicyclePos(K.epi, i * 10, 0.05, g, 0); e.push(Math.hypot(g[0] - X[i * 3], g[1] - X[i * 3 + 1], g[2] - X[i * 3 + 2]) * 1000); } e.sort((a, b) => a - b);
+  check(e[e.length >> 1] > 100, `épicycles contre calcul pas à pas à 50 Ma : écart médian ${e[e.length >> 1].toFixed(0)} pc (mesure de départ : 148 pc)`); }
+
+console.log(fails ? `\n${fails} échec(s)` : '\norbites calculées : tout est vert');
 process.exit(fails ? 1 : 0);
