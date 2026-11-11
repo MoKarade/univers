@@ -35,6 +35,8 @@ def main():
         check(abs(lr + 20.0) < 0.01, f"après dix crans de plus, l'échelle reste à 10^{lr:.3f} m (borne : 10^-20 m)")
         txt = pg.evaluate("[document.getElementById('place').textContent, document.getElementById('notice').hidden ? '' : document.getElementById('notice').textContent].join(' | ')")
         check('Inconnu' in txt and 'quinze puissances de dix' in txt and '1,616' in txt, f"écran : « {txt[:160]}… »")
+        ticks = pg.evaluate("[...document.querySelectorAll('#ticks .tick b')].map(b => b.textContent)")
+        check(not any(('³⁰' in t or '³⁵' in t or '²⁵' in t) for t in ticks), f"graduations de la barre : rien sous 10⁻²⁰ m ({', '.join(t for t in ticks if '⁻' in t)})")
         n_art = pg.evaluate("__U.Rr.scene.children.filter(o => o.visible && o.material && o.material.fragmentShader && /43758/.test(o.material.fragmentShader) && o.geometry && o.geometry.type === 'PlaneGeometry').length")
         check(n_art == 0, f"aucun plan « bouillonnement » dessiné ({n_art})")
         b.close()

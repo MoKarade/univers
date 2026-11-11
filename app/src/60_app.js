@@ -330,7 +330,7 @@
 
   /* ---- règle des échelles ---- */
   const rail = $('rail'), RAILK = 0.34, railF = l => l >= LMIN ? RAILK + (1 - RAILK) * (l - LMIN) / (LMAX - LMIN) : RAILK * (l - LMICRO) / (LMIN - LMICRO), railL = f => f >= RAILK ? LMIN + (f - RAILK) / (1 - RAILK) * (LMAX - LMIN) : LMICRO + f / RAILK * (LMIN - LMICRO), SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹';
-  for (let d = -35; d <= 26; d++) { if (d < 7 && d % 5 !== 0) continue; const t = document.createElement('div'); t.className = 'tick'; t.style.bottom = railF(d) * 100 + '%'; if (d >= 7 ? d % 3 === 0 : d % 10 === 0 || d === -35) { t.style.width = '13px'; t.innerHTML = '<b>10' + (d < 0 ? '⁻' : '') + String(Math.abs(d)).split('').map(c => SUP[+c]).join('') + ' m</b>'; } $('ticks').appendChild(t); }
+  for (let d = Math.ceil(LMICRO); d <= 26; d++) { if (d < 7 && d % 5 !== 0) continue; const t = document.createElement('div'); t.className = 'tick'; t.style.bottom = railF(d) * 100 + '%'; if (d >= 7 ? d % 3 === 0 : d % 10 === 0) { t.style.width = '13px'; t.innerHTML = '<b>10' + (d < 0 ? '⁻' : '') + String(Math.abs(d)).split('').map(c => SUP[+c]).join('') + ' m</b>'; } $('ticks').appendChild(t); }
   const stopEls = STOPS.map(st => { const b = document.createElement('button'); b.className = 'stop'; b.type = 'button'; b.style.bottom = railF(st.logR) * 100 + '%'; b.innerHTML = '<span></span>'; b.firstChild.textContent = st.name; b.setAttribute('aria-label', 'Aller à : ' + st.name); b.addEventListener('click', () => { goStop(st); showRail(); }); rail.insertBefore(b, $('rail-hit')); return b; });
   let railTimer = 0;
   const showRail = () => { rail.classList.add('show'); clearTimeout(railTimer); railTimer = setTimeout(() => rail.classList.remove('show'), 3200); };
@@ -370,7 +370,7 @@
     });
     const up = e => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (ptrs.size === 0) { canvas.classList.remove('drag'); if (e.type === 'pointerup' && moved < 6 && performance.now() - t0 < 450) tap(e.clientX, e.clientY); } pinch = 0; };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 40 puissances de dix : la molette y va plus vite */ }, { passive: false });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 26 puissances de dix : la molette y va plus vite */ }, { passive: false });
     function labelAt(x, y) { for (const b of placed) if (b[4] && x >= b[0] - 5 && x <= b[1] + 5 && y >= b[2] - 5 && y <= b[3] + 5) { const L = b[4]; if (L.micro) return null; if (L.body) return { body: L.body }; const p = L.get(), q = [0, 0, 0]; if (p && isFinite(p[0]) && Rr.project(p, F, q)) return { x: q[0], y: q[1] }; } return null; }
     S._tap = (x, y) => tap(x, y);
     function tap(x, y) { const now = performance.now(), dbl = now - lastTap[0] < 380 && Math.hypot(x - lastTap[1], y - lastTap[2]) < 26; lastTap = [now, x, y]; let best = null, bd = 30; for (const b of BODIES) { const o = Rr.bodies[b.key]; if (!o.screen) continue; const d = Math.hypot(o.screen[0] - x, o.screen[1] - y) - Math.min(o.px, 200); if (d < bd) { bd = d; best = b.key; } } if (best) { select(null); if (best !== S.focus) focusBody(best); return; }
