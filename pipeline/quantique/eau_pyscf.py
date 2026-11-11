@@ -41,17 +41,17 @@ def eau():
               basis='aug-cc-pvtz', unit='Angstrom', verbose=0)
     mf = scf.RHF(m).run()
     occ = mf.mo_energy[mf.mo_occ > 0] * HA_TO_EV
-    # densité sur deux grilles : fine (0,004 Å) dans un cube de ±0,2 Å autour de l'oxygène, pour la couche interne 1s, très resserrée ;
+    # densité sur deux grilles : fine (0,0045 Å) dans un cube de ±0,225 Å autour de l'oxygène, pour la couche interne 1s, très resserrée ;
     # 0,05 Å ailleurs, de −2,5 à +2,5 Å (x et z) et de −2,3 à +2,7 Å (y), sans le cube fin
     D = mf.make_rdm1()
     def grille(h, xs, ys, zs, sauf=None):
         X, Y, Z = np.meshgrid(xs, ys, zs, indexing='ij'); C = np.stack([X.ravel(), Y.ravel(), Z.ravel()], 1)
-        if sauf is not None: C = C[np.max(np.abs(C), axis=1) >= sauf]
+        if sauf is not None: C = C[np.max(np.abs(C), axis=1) > sauf + 1e-9]      # cases grossières entièrement hors du cube fin
         rho = np.empty(len(C))
         for k in range(0, len(C), 50000):
             rho[k:k + 50000] = numint.eval_rho(m, numint.eval_ao(m, C[k:k + 50000] / 0.529177210544), D)      # PySCF attend des bohrs
         return C, np.clip(rho, 0, None) * (h / 0.529177210544) ** 3, h
-    hf = 0.004; f = np.arange(-0.2 + hf / 2, 0.2, hf)
+    hf = 0.0045; f = np.arange(-0.225 + hf / 2, 0.225, hf)      # cube fin ±0,225 Å, aligné sur les bords des cases grossières de 0,05 Å
     G1 = grille(hf, f, f, f); hc = 0.05
     G2 = grille(hc, np.arange(-2.5, 2.5 + 1e-9, hc), np.arange(-2.3, 2.7 + 1e-9, hc), np.arange(-2.5, 2.5 + 1e-9, hc), sauf=0.2)
     C = np.concatenate([G1[0], G2[0]]); w = np.concatenate([G1[1], G2[1]]); hh = np.concatenate([np.full(len(G1[0]), hf), np.full(len(G2[0]), hc)])
