@@ -1,0 +1,4 @@
+# Fins de ligne LF partout (le code vient de Linux et les tests comparent du texte)
+* text=auto eol=lf
+*.jpg binary
+*.png binary
