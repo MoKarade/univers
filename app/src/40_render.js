@@ -235,7 +235,7 @@ function initMicro(THREE, scene, camera, R, Q) {
   const nucMat = ptMat([1.0, 0.9, 0.6], 6, 'a'), nucPts = mkPts(new Float32Array([0, 0, 0, hw1.x, hw1.y, hw1.z, hw2.x, hw2.y, hw2.z]), new Float32Array([1, 0.8, 0.8]), nucMat, 32);
 
   // --- noyau d'oxygène 16 (R16) : 8 protons et 8 neutrons placés au hasard dans la répartition de charge MESURÉE par diffusion d'électrons,
-  //     modèle de l'oscillateur harmonique de de Vries, de Jager et de Vries 1987 : ρ(r) ∝ [1 + α (r/a)²] exp(−(r/a)²), a = 1,833 fm, α = 1,544.
+  //     modèle de l'oscillateur harmonique de de Vries, de Jager et de Vries 1987 : ρ(r) ∝ [1 + α (r/a)²] exp(−(r/a)²), a = 1,833 fm, α = 1,544 [Probable : table originale non relue ; cohérent, redonne 2,718 fm].
   //     Les nucléons n'ont pas de position fixe : seules la répartition et le rayon sont mesurés. Les centres sont remis à l'échelle pour que leur
   //     rayon quadratique moyen vaille le rayon des centres de protons : r² = r_ch² − r_p² − (N/Z) r_n² − 3/(4M²) = 2,6991² − 0,84075² + 0,1161 − 0,0331,
   //     soit 2,581 fm (r_ch : Angeli et Marinova 2013 ; r_p = RP et r_n² = −0,1161 fm² : CODATA 2022 ; terme de Darwin-Foldy). Au tirage, deux centres restent
