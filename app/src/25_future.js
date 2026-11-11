@@ -94,18 +94,19 @@ function initStarKin(posEclLy, N, sunGal0, vqIn, vdiv, ecl) {      // ecl : vite
     K.ve.set([ve[0] * KMS_LY_YR, ve[1] * KMS_LY_YR, ve[2] * KMS_LY_YR], i * 3); K.vkms[i] = Math.hypot(v[0], v[1], v[2]);
     const g = [(M[0][0] * p[0] + M[1][0] * p[1] + M[2][0] * p[2]) / KPC_LY, (M[0][1] * p[0] + M[1][1] * p[1] + M[2][1] * p[2]) / KPC_LY, (M[0][2] * p[0] + M[1][2] * p[1] + M[2][2] * p[2]) / KPC_LY];
     K.epi.set(epicycle(sunGal0[0] + g[0], sunGal0[1] + g[1], sunGal0[2] + g[2], SUN_UVW[0] + v[0], SUN_UVW[1] + v[1], SUN_UVW[2] + v[2]), i * 10);
+    if (!ecl) { if (!K.gx0) { K.gx0 = new Float64Array(N * 3); K.gv0 = new Float64Array(N * 3); } for (let c = 0; c < 3; c++) { K.gx0[i * 3 + c] = sunGal0[c] + g[c]; K.gv0[i * 3 + c] = SUN_UVW[c] + v[c]; } }      /* S2 : état initial exact, pour le calcul des orbites (26_orbits.js) */
   }
   return K;
 }
 /** Position du Soleil dans la galaxie (kpc, repère galactique centré sur le centre galactique) au temps t (Ga). */
-function sunGalAt(K, t, out) { epicyclePos(K.sun, 0, t, out, 0); return out; }
+function sunGalAt(K, t, out) { return starOrbSun(K, t, out); }
 /** Positions des étoiles par rapport au Soleil (années-lumière, repère écliptique) à l'instant tYears ; tEff (Ga) pour les orbites galactiques. */
 function starPositions(K, tYears, tEff, out, i0, i1) {
   const at = Math.abs(tYears), w = smoothstep(3e6, 1.5e7, at), M = K.M, p0 = K.p0, ve = K.ve, g = K.tmp, s = K.ts;
-  if (w > 0) epicyclePos(K.sun, 0, tEff, s, 0);
+  if (w > 0) starOrbSun(K, tEff, s);
   for (let i = i0 === undefined ? 0 : i0, n = i1 === undefined ? K.N : i1; i < n; i++) {
     const j = i * 3; let x = p0[j] + ve[j] * tYears, y = p0[j + 1] + ve[j + 1] * tYears, z = p0[j + 2] + ve[j + 2] * tYears;
-    if (w > 0 && !(K.lin && K.lin[i])) { epicyclePos(K.epi, i * 10, tEff, g, 0); /* K.lin : étoile gardée en ligne droite (passage près du Soleil publié) */ const a = (g[0] - s[0]) * KPC_LY, b = (g[1] - s[1]) * KPC_LY, c = (g[2] - s[2]) * KPC_LY;
+    if (w > 0 && !(K.lin && K.lin[i])) { starOrbPos(K, i, tEff, g, 0); /* orbite exacte si prête (26_orbits.js), sinon épicycle. K.lin : étoile gardée en ligne droite (passage près du Soleil publié) */ const a = (g[0] - s[0]) * KPC_LY, b = (g[1] - s[1]) * KPC_LY, c = (g[2] - s[2]) * KPC_LY;
       const ex = M[0][0] * a + M[0][1] * b + M[0][2] * c, ey = M[1][0] * a + M[1][1] * b + M[1][2] * c, ez = M[2][0] * a + M[2][1] * b + M[2][2] * c;
       if (w >= 1) { x = ex; y = ey; z = ez; } else { x = lerp(x, ex, w); y = lerp(y, ey, w); z = lerp(z, ez, w); } }
     out[j] = x; out[j + 1] = y; out[j + 2] = z;

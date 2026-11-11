@@ -397,7 +397,7 @@ function createRenderer(canvas, Q, generated) {
   sHip.set(new Uint32Array(b64ToBytes(DATA.STARS_HIP).buffer).subarray(0, sN0));
   for (let i = 0; i < sN; i++) { sBv[i] = i < sN0 ? sAux[i * 2 + 1] / 100 - 0.5 : XS[i - sN0].bv; const L = starLife(sMag[i], sBv[i], i, sHip[i]); sLife.set([clamp(L[0], -2e5, 2e5), clamp(L[1], -2e5, 2e5), clamp(L[2], -2e5, 2e5)], i * 3); sFate[i] = L[3]; sMass[i] = L[4]; sCls[i] = L[5]; }
   const vq = new Int16Array(sN * 3), Mg = DATA.M_GAL2ECL; vq.set(new Int16Array(b64ToBytes(DATA.STARS_VEL).buffer).subarray(0, sN0 * 3)); XS.forEach((o, k) => { for (let a = 0; a < 3; a++) vq[(sN0 + k) * 3 + a] = Math.round(20 * (Mg[0][a] * o.v[0] + Mg[1][a] * o.v[1] + Mg[2][a] * o.v[2])); });
-  const K = initStarKin(sPos, sN, DATA.SGRA_GAL.map(x => -x * GAL.R0), vq); R.K = K;
+  const K = initStarKin(sPos, sN, DATA.SGRA_GAL.map(x => -x * GAL.R0), vq); R.K = K; orbInit(K, DATA.SGRA_GAL.map(x => -x * GAL.R0));
   // trajectoire publiée (instant, distance et vitesse du passage) pour chaque étoile frôleuse, ajoutée ou déjà présente
   K.lin = new Uint8Array(sN);
   R.passers = (DATA.PASSERS || []).map(o => { const i = o.i >= 0 ? o.i : sN0 + XS.indexOf(o); K.lin[i] = 1; for (let a = 0; a < 3; a++) { K.p0[i * 3 + a] = o.p[a]; sPos[i * 3 + a] = o.p[a]; K.ve[i * 3 + a] = o.v[a] * KMS_LY_YR; } K.vkms[i] = o.vk; sMass[i] = o.m; if (!DATA.STAR_NAMES[i]) DATA.STAR_NAMES[i] = o.n; return Object.assign({ idx: i }, o); });

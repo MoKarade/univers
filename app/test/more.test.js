@@ -1,6 +1,6 @@
 const fs = require('fs'), vm = require('vm'), path = require('path'), root = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(root, f), 'utf8'); global.atob = s => Buffer.from(s, 'base64').toString('binary');
-vm.runInThisContext((rd('gen/data.js') + rd('gen/data3.js') + rd('gen/data4.js') + rd('src/20_physics.js') + rd('src/30_gen.js') + rd('src/25_future.js')).replace(/^const /gm, 'var '));
+vm.runInThisContext((rd('gen/data.js') + rd('gen/data3.js') + rd('gen/data4.js') + rd('src/20_physics.js') + rd('src/30_gen.js') + rd('src/25_future.js') + rd('src/26_orbits.js')).replace(/^const /gm, 'var '));
 let worst = 0; for (const e of [0.31, 0.6, 0.9, 0.97, 0.995, 0.9995]) for (let k = -2000; k <= 2000; k++) { const M = k * 0.0031 + (k % 7) * 1e-5, E = keplerHigh(M, e); let m = M % TAU; if (m > Math.PI) m -= TAU; if (m < -Math.PI) m += TAU; worst = Math.max(worst, Math.abs(E - e * Math.sin(E) - m)); }
 console.log('équation de Kepler, excentricités de 0,31 à 0,9995 : résidu maximal %s rad', worst.toExponential(1));
 const C = decodeComets(), days = 2461355.5 - 2451545, nm = DATA.COM_NAMES.split('|'); updateComets(C, days);

@@ -1318,7 +1318,7 @@
     sol = solarSystemAt(T_NOW + (S.ty + S.solOff) / 100, sol);
     const C = S.cosmo, cs = cosmoAt(C, S.ty / 1e9, F.cos);
     const tG = S.ty / 1e9, ss = sunState(tG, SS); F.sun = ss; F.sunCol = tempRgb(ss.T); F.orb = 1 / ss.M; F.eng.mercury = tG >= ENG.mercury; F.eng.venus = tG >= ENG.venus; F.eng.earth = tG >= ENG.earth; for (const k in FATE_P) F.eng[k] = tG >= FATE_P[k]; F.sysK = fadeOut(tG, 38, 42); F.ringsGone = tG > FATE.rings;
-    F.ty = S.ty; F.tMyr = S.ty / 1e6; F.tEff = S.T1 + S.T2 * (oSunNo / oSunDM); if (S.playing) F.flash = Math.max(3e-7, 1.3 * S.speed / YEAR_S / 1e6); else if (!F.flash) F.flash = 3e-7;
+    F.ty = S.ty; F.tMyr = S.ty / 1e6; F.tEff = S.T1 + S.T2 * (oSunNo / oSunDM); if (Math.abs(S.ty) > 2e6) orbRequest(Rr.K, F.tEff, S.T2 === 0); if (S.playing) F.flash = Math.max(3e-7, 1.3 * S.speed / YEAR_S / 1e6); else if (!F.flash) F.flash = 3e-7;
     if (orbitDirty) { orbitDirty = false; if (!S.m31V) S.m31V = M31_MEAS[0][1]; const O = S.orbit = andromedaOrbit(S.cosmo, S.vt, S.m31V); andromedaAt(O, 0, m31r0); lgStart(); S.dyn = null; S.tOn = null;
       for (let i = Math.round(-O.t0 / O.dt); i < O.n; i++) if (Math.hypot(O.r[i * 3], O.r[i * 3 + 1], O.r[i * 3 + 2]) < 150) { S.tOn = Math.max(0.02, O.t0 + i * O.dt - 0.35); break; }
       buildEvents(); }
