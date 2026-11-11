@@ -83,10 +83,12 @@ void main(){ float r=length(position); vec4 mv=modelViewMatrix*vec4(position,1.0
   float pk=min(1.0,Sof(uCR)/Sof(r)*(r*r)/(uCR*uCR)); float lod=clamp((pk-aRnd.x)/(0.25*pk+1e-5),0.0,1.0); float hz=1.0-smoothstep(0.97*uHorizon,uHorizon,r);
   vA=uOpacity*lod*hz*(0.5+0.5*aRnd.y)*smoothstep(0.15,0.9,uAge); vColor=mix(vec3(0.62,0.74,1.0),vec3(1.0,0.86,0.66),fract(aRnd.x*7.31)); gl_PointSize=uMinPx*(2.1+1.3*aRnd.y); }`, f: FRAG_SOFT },
   surv: { v: `attribute float aDist; attribute vec3 aInfo; uniform float uPx,uOpacity,uMinPx,uCR,uHorizon,uAge,uKeep; varying vec3 vColor; varying float vA;
+uniform vec3 uZG[64]; uniform vec3 uZQ[64]; uniform vec2 uZM;
+vec3 zcol(float z,float q){ float u=clamp(log(1.0+z)/mix(uZM.x,uZM.y,q),0.0,1.0)*63.0; int i=int(min(floor(u),62.0)); float f=u-float(i); return q>0.5?mix(uZQ[i],uZQ[i+1],f):mix(uZG[i],uZG[i+1],f); }
 void main(){ float r=aDist; vec4 mv=modelViewMatrix*vec4(position*r,1.0); gl_Position=projectionMatrix*mv; gl_Position.z=0.0;
   float pk=uKeep*min(1.0,pow(r/uCR,1.7)); float lod=clamp((pk-aInfo.y)/(0.3*pk+1e-5),0.0,1.0);
   float hz=1.0-smoothstep(0.97*uHorizon,uHorizon,r); float q=step(1.5,aInfo.z); float ns=1.0-step(0.5,aInfo.z);
-  vec3 cg=mix(vec3(0.76,0.85,1.0),vec3(1.0,0.72,0.46),smoothstep(0.03,0.8,aInfo.x)); vColor=mix(cg,vec3(0.6,0.82,1.0),q);
+  vColor=zcol(aInfo.x,q);      /* S3 : couleur observée calculée selon z (spectre au repos décalé, œil CIE 1931), table DATA.ZCOL */
   vA=uOpacity*lod*hz*smoothstep(0.15,0.9,uAge)*(0.9+0.3*ns); gl_PointSize=uMinPx*(2.5+1.0*ns+0.6*q); if(vA<=0.002) gl_Position=vec4(2.0,2.0,2.0,1.0); }`, f: FRAG_SOFT },
   dots: { v: `attribute vec2 aLook; uniform float uOpacity,uDpr,uZ; uniform vec3 uColor; varying vec3 vColor; varying float vA;
 void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv; if(uZ>0.5) gl_Position.z=0.0; vA=aLook.y*uOpacity; vColor=uColor; gl_PointSize=clamp(aLook.x*1.5,1.0,4.5)*uDpr; }`, f: FRAG_SOFT },
@@ -360,6 +362,7 @@ function createRenderer(canvas, Q, generated) {
   { const lz = Math.log(1 + DATA.SURV_ZMAX), n1 = DATA.SURV_N[0], n2 = n1 + DATA.SURV_N[1];
     for (let i = 0; i < svN; i++) { const lon = sv[i * 3] / 65535 * TAU, lat = (sv[i * 3 + 1] / 65535 - 0.5) * Math.PI, cl = Math.cos(lat); svDir.set([cl * Math.cos(lon), cl * Math.sin(lon), Math.sin(lat)], i * 3); svU[i] = sv[i * 3 + 2] / 65535; svInfo.set([Math.exp(svU[i] * lz) - 1, ((Math.imul(i + 1, 2654435761) >>> 0) / 4294967296), i < n1 ? 0 : i < n2 ? 1 : 2], i * 3); } }
   const survU = { uPx: U(1), uOpacity: U(1), uMinPx: U(1), uCR: U(100), uHorizon: U(14000), uAge: U(13.8), uKeep: U(Q.keep || 1) };
+  const ZC = DATA.ZCOL, zv = a => Array.from({ length: ZC.n }, (_, i) => new THREE.Vector3(a[i * 3], a[i * 3 + 1], a[i * 3 + 2])); survU.uZG = U(zv(ZC.gal)); survU.uZQ = U(zv(ZC.qso)); survU.uZM = U(new THREE.Vector2(Math.log(1 + ZC.zg), Math.log(1 + ZC.zq)));      /* S3 : partagés avec les tuiles de galaxies */
   const surv = pts({ position: [svDir, 3], aDist: [svDist, 1], aInfo: [svInfo, 3] }, mk(SH.surv, survU), 2);
   R.pick = { nPos, nLook, nN, svDir, svDist, svInfo, svN, keep: Q.keep || 1 };
   R.setSurvey = lut => { const K = lut.length - 1; for (let i = 0; i < svN; i++) { const x = svU[i] * K, k = Math.min(x | 0, K - 1); svDist[i] = lut[k] + (lut[k + 1] - lut[k]) * (x - k); } surv.geometry.attributes.aDist.needsUpdate = true; };
@@ -431,7 +434,7 @@ function createRenderer(canvas, Q, generated) {
       T.n += cnt; };
     return tileObj(T, SH.star, 8); };
   R.addGalTile = cap => {
-    const T = { kind: 'gal', rec: 6, cap, n: 0, sent: 0, draw: 0, dir: new Float32Array(cap * 3), dist: new Float32Array(cap), info: new Float32Array(cap * 3), zu: new Float32Array(cap), u: { uPx: U(1), uOpacity: U(1), uMinPx: U(1), uCR: U(100), uHorizon: U(14000), uAge: U(13.8), uKeep: U(1) }, attrs: [['position', 3], ['aDist', 1], ['aInfo', 3]], g: new THREE.BufferGeometry() };
+    const T = { kind: 'gal', rec: 6, cap, n: 0, sent: 0, draw: 0, dir: new Float32Array(cap * 3), dist: new Float32Array(cap), info: new Float32Array(cap * 3), zu: new Float32Array(cap), u: { uPx: U(1), uOpacity: U(1), uMinPx: U(1), uCR: U(100), uHorizon: U(14000), uAge: U(13.8), uKeep: U(1), uZG: survU.uZG, uZQ: survU.uZQ, uZM: survU.uZM }, attrs: [['position', 3], ['aDist', 1], ['aInfo', 3]], g: new THREE.BufferGeometry() };
     dynAttr(T.g, 'position', T.dir, 3); dynAttr(T.g, 'aDist', T.dist, 1); dynAttr(T.g, 'aInfo', T.info, 3); T.P = { svDir: T.dir, svDist: T.dist, svInfo: T.info };
     const lz = Math.log(1 + DATA.SURV_ZMAX), seed = R.tiles.length * 7919 + 13;
     const dOf = x => { const lut = R.survLut; if (!lut) return 0; const K = lut.length - 1, y = x * K, k = Math.min(y | 0, K - 1); return lut[k] + (lut[k + 1] - lut[k]) * (y - k); };

@@ -117,3 +117,10 @@ Les formats binaires des fichiers en flux sont définis par leur décodeur (`loa
 - Mission 1 : la page sur Firebase, chargée par zone, avec les données actuelles. Détail dans `docs/mission-lot1.md`.
 - Mission 2 : 100 puis 500 millions d'étoiles, une vingtaine de millions de galaxies, tous les astéroïdes. Les gros traitements devront tourner dans le nuage, par lots.
 - Mission 3 : toutes les étoiles Gaia ayant une distance estimée, 10 000 photos de galaxies en haute définition, surfaces plus fines.
+
+## Couleur des galaxies lointaines (S3, 11 novembre 2026)
+- Avant : les galaxies des relevés passaient du blanc bleuté à l'orange selon z par une rampe choisie à la main ; les quasars avaient une couleur fixe.
+- Après : `pipeline/build_zcol.py` décale un vrai spectre au repos de (1+z) et l'intègre sur l'œil CIE 1931 (comme les étoiles) : galaxies, modèle Sb de l'atlas Kinney-Calzetti (Kinney et al. 1996) ; quasars, spectre moyen SDSS spDR2-029. Table `DATA.ZCOL` (`app/gen/data16.js`), lue par le shader `surv` (`zcol`) pour les galaxies embarquées et en flux. Fiche : ligne « Couleur ».
+- Supposé, et dit dans la fiche : toutes les galaxies ont le spectre d'une spirale Sb (leur type n'est pas dans nos catalogues). Au-delà de z = 2,07 (galaxies) et 4,35 (quasars), le spectre manque dans le visible : couleur du bord.
+- Pas appliqué : l'assombrissement de Tolman, (1+z)⁻⁴, ne concerne que les objets résolus ; les galaxies des relevés sont des points de taille fixe, et les galaxies photographiées sont à z < 0,03 (moins de 12 %). Pas pris en compte : l'absorption par le gaz intergalactique devant les quasars lointains (forêt Lyman-α) au-delà de ce que contient le spectre moyen [À vérifier].
+- Tests : `app/test/zcol.test.js` (Hα et Lyα à leur longueur d'onde, vert des quasars vers z = 3,3, rougissement des galaxies, recherche du shader).

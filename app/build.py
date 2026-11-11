@@ -8,7 +8,7 @@ import json
 _d2 = rd('gen/data2.js'); _o = json.loads(_d2[len('Object.assign(DATA, '):_d2.rindex(');')])
 for _k in ('STARS_GEO', 'STARS_AUX', 'STAR_LABELS', 'STARS_N'): _o.pop(_k, None)
 _d2 = 'Object.assign(DATA, ' + json.dumps(_o, ensure_ascii=False, separators=(',', ':')) + ');\n'
-out = html.replace('/*__DATA__*/', rd('gen/data.js') + _d2 + rd('gen/ephem.js') + rd('gen/data3.js') + rd('gen/data4.js') + rd('gen/data5.js') + rd('gen/data6.js') + rd('gen/data7.js') + rd('gen/data8.js') + rd('gen/data9.js') + rd('gen/data10.js') + rd('gen/data11.js') + rd('gen/data12.js') + rd('gen/data13.js') + rd('gen/data14.js')).replace('/*__JS__*/', js)
+out = html.replace('/*__DATA__*/', rd('gen/data.js') + _d2 + rd('gen/ephem.js') + rd('gen/data3.js') + rd('gen/data4.js') + rd('gen/data5.js') + rd('gen/data6.js') + rd('gen/data7.js') + rd('gen/data8.js') + rd('gen/data9.js') + rd('gen/data10.js') + rd('gen/data11.js') + rd('gen/data12.js') + rd('gen/data13.js') + rd('gen/data14.js') + rd('gen/data16.js')).replace('/*__JS__*/', js)
 assert '/*__DATA__*/' not in out and '/*__JS__*/' not in out
 dst = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, '..', 'dist', 'index.html')
 os.makedirs(os.path.dirname(dst), exist_ok=True)
