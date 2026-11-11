@@ -5,7 +5,7 @@ from the Sun », Zenodo 10.5281/zenodo.10658339, fichier mean_and_std_healpix.fi
 Contenu : moyenne de la densité de poussière sur 516 sphères HEALPix (nside 256, ordre NEST) à distances espacées en log,
 en unités d'extinction de Zhang, Green et Rix 2023 par parsec. Conversion de l'article : A_V (540 nm) = 2,8 × E_ZGR23.
 
-Sortie : app/gen/data17.js, DATA.DUST = grille cartésienne héliocentrique galactique (x vers le centre galactique, y vers
+Sortie : app/gen/data20.js, DATA.DUST = grille cartésienne héliocentrique galactique (x vers le centre galactique, y vers
 l = 90°, z vers le pôle nord galactique), 160 × 160 × 52 cases de 15,625 pc (|x|, |y| ≤ 1250 pc, |z| ≤ 406,25 pc).
 Chaque case : moyenne de 27 points (3 × 3 × 3) de dA_V/ds en mag/pc, codée sur un octet en log :
 0 = moins de 1e-5 mag/pc ou hors de la carte (au-delà de 1,25 kpc) ; k = 1..255 : 10^(-5 + (k - 1) / 254 × 4).
@@ -24,7 +24,7 @@ from astropy_healpix import HEALPix
 import astropy.units as u
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / 'app' / 'gen' / 'data17.js'
+OUT = ROOT / 'app' / 'gen' / 'data20.js'
 NX, NY, NZ, CELL = 160, 160, 52, 15.625
 AV_PER_E = 2.8                      # Edenhofer et al. 2024, section 2 : A_V = 2,8 × E_ZGR23
 LOG_LO, LOG_SPAN = -5.0, 4.0        # 1e-5 à 1e-1 mag/pc

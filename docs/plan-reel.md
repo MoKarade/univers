@@ -48,3 +48,7 @@ Encore ouvert (pas de recommandation possible) :
 - 13 : l'échelle où Marc voit encore des galaxies figées. À demander au début de R18.
 
 Le détail des tâches est dans `docs/mission-reel.md`.
+
+## Lot S, sources de référence (ajouté le 11 novembre 2026)
+
+Marc a dit « oui » à toutes les recommandations du cadrage. Détail, décisions et tâches S1 à S5 : `docs/mission-sources.md`. Les données se préparent à part ; le branchement dans la page vient après le lot C, et S4 (Laniakea) rejoint le lot E.
