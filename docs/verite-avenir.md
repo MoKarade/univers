@@ -53,7 +53,7 @@ Temps : en milliards d'années (Ga) à partir d'aujourd'hui, sauf mention.
 |---|---|---|---|---|---|
 | Astéroïdes, objets lointains, nuage d'Oort | `F.sysK = fadeOut(tG, 38, 42)` (40_render.js, `sysK`) | **Fondu** de 38 à 42 Ga | **choisi** ; fondu qui remplace un phénomène [Certain] | — | Coupé : retiré ; ces corps s'arrêtent avec le système solaire sur « inconnu » (R7) |
 | Comètes du nuage d'Oort déviées par les étoiles qui passent | `oortInit`, `updateOort` | Orbites de Kepler et coups de vitesse | calculé | Bailer-Jones 2022, ApJL 935, L9 | Gardé |
-| Voyager 1 : nuage d'Oort à +300 ans, traversée en 30 000 ans | `EV_RAW` | Textes | estimé (NASA) | NASA | Gardé |
+| Voyager 1 : nuage d'Oort à +300 ans, traversée en 30 000 ans ; passage à 1,6 année-lumière de Gliese 445 à +40 000 ans | `EV_RAW` | Textes | estimé (NASA) pour le nuage d'Oort ; calculé (NASA/JPL) pour Gliese 445 | NASA (JPL) | Gardé |
 
 ## 5. Galaxies
 
