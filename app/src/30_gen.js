@@ -349,3 +349,27 @@ function genDiskGalaxy(R, n, seed) {
   }
   return { N: n, pos, om, col, look };
 }
+
+/* ============================================================================
+   R14 : fiche du nuage d'électrons, d'après le calcul de chimie quantique (gen/water_qm.js). Fonction pure, testée par app/test/orbitales.test.js.
+   Énergies d'ionisation verticales mesurées de la molécule d'eau en phase gazeuse (spectroscopie de photoélectrons, eV) : 1b1 12,62 ; 3a1 14,74 ;
+   1b2 18,51 ; 2a1 32,2 [Probable : valeurs classiques, Banna et Shirley 1975, J. Chem. Phys.] ; 1a1 (couche interne de l'oxygène) 539,83
+   (étalonnage de 2021 des énergies 1s de l'oxygène, Université de Bergen). Calculées : −ε (théorème de Koopmans), qui néglige la réorganisation
+   des autres électrons : écarts de quelques pour cent à une quinzaine de pour cent attendus.
+   ============================================================================ */
+const IE_EXP = [539.83, 32.2, 18.51, 14.74, 12.62], IE_NOM = ['1a1, cœur de l’oxygène', '2a1', '1b2', '3a1', '1b1, la plus facile à arracher'];
+function hydrogenSvg(H) {      /* densité radiale de l'hydrogène : formule exacte (trait) et calcul (points) */
+  const W = 170, Hh = 56, xm = 8, ym = 0.6, X = r => 4 + r / xm * (W - 8), Y = p => Hh - 4 - p / ym * (Hh - 10);
+  let line = '', dots = ''; for (let r = 0; r <= xm; r += 0.1) line += (line ? ' L' : 'M') + X(r).toFixed(1) + ' ' + Y(4 * r * r * Math.exp(-2 * r)).toFixed(1);
+  for (let k = 0; k < H.r.length; k += 6) dots += '<circle cx="' + X(H.r[k]).toFixed(1) + '" cy="' + Y(H.P[k]).toFixed(1) + '" r="1.6" fill="#f2b56b"/>';
+  return '<svg viewBox="0 0 ' + W + ' ' + Hh + '" width="' + W + '" height="' + Hh + '" role="img" aria-label="Densité radiale de l’hydrogène : calcul et formule exacte confondus"><path d="' + line + '" fill="none" stroke="#9cc4ff" stroke-width="1.2"/>' + dots + '</svg>'; }
+function waterRows(W) {
+  if (!W) return [['Ce que montrent les points', 'les endroits où un électron a une chance d’être trouvé']];
+  const e = W.eau.eps_eV, rows = [['Ce que montrent les points', 'les endroits où un électron a une chance d’être trouvé, d’après un calcul de chimie quantique'], ['Électrons', '8 venus de l’oxygène, 1 de chaque hydrogène : dans la molécule, ils sont partagés, les atomes ne sont plus isolés'],
+    ['Arracher un électron', 'énergie de chaque orbitale de la molécule, du cœur vers l’extérieur, en électronvolts : calculée, puis mesurée']];
+  e.forEach((x, k) => rows.push([IE_NOM[k], nf(-x, 1) + ' calculé, ' + nf(IE_EXP[k], 1) + ' mesuré (écart ' + (-x / IE_EXP[k] > 1 ? '+' : '') + nf(100 * (-x / IE_EXP[k] - 1), 0) + ' %)']));
+  rows.push(['Hydrogène seul, forme exacte', hydrogenSvg(W.H) + '<br>répartition de l’électron selon la distance au noyau : formule exacte (trait) et même calcul (points), écart ' + nf(100 * W.H.ecart_forme, 2) + ' % ; énergie à ' + nf(Math.abs(100 * (W.H.E / -0.5 - 1)), 3) + ' %, taille moyenne à ' + nf(Math.abs(100 * (W.H.r2 / 3 - 1)), 2) + ' %'],
+    ['Taille de l’atome d’hydrogène isolé', '53 pm de rayon (rayon de Bohr)'],
+    ['Dans la simulation', 'Densité calculée (Hartree-Fock, base aug-cc-pVTZ), puis ' + nf(W.eau.n, 0) + ' points tirés selon elle. Les écarts sur les énergies viennent de la méthode, qui néglige la réorganisation des autres électrons.'],
+    ['Sources', 'Calcul : PySCF (Sun et al. 2018, 2020, licence Apache 2.0) ; énergies mesurées : Banna et Shirley 1975 ; étalonnage 1s de l’oxygène, 2021 ; rayon de Bohr : CODATA 2022'], ['Certitude', 'Calculé pour la densité ; mesuré pour les énergies de comparaison']);
+  return rows; }
