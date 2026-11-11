@@ -63,6 +63,17 @@ def main():
             ok = had and pg.evaluate('!__U.S.zoff')
             bad += 0 if ok else 1
             print(f"{'PASSE' if ok else 'ÉCHEC'}  « Accueil » annule le décalage (décalage avant : {'oui' if had else 'non'})")
+        if pg.evaluate("typeof __U.zoffReset === 'function'"):      # suivre la Terre, reculer vers un point au-delà de 10^14,4 m, revenir : la Terre est au centre
+            pg.evaluate("__U.focusBody('earth')"); pg.wait_for_function('!__U.S.anim', timeout=180000); frames(pg, 3)
+            pg.evaluate("__U.S.anim = null; __U.S.logR = 15.0"); frames(pg, 2)
+            pg.mouse.move(W * 0.62, H * 0.35)      # hors de la fiche (à gauche) et des noms
+            for _ in range(5): pg.mouse.wheel(0, 2 * WHEEL); frames(pg, 1)
+            had = pg.evaluate('!!__U.S.zoff')
+            pg.evaluate("__U.goTo(9, { noHist: true, instant: true })"); frames(pg, 2); pg.wait_for_timeout(1500); frames(pg, 2)
+            m = pg.evaluate("""(() => { const U = __U, sc = [0, 0, 0]; return U.Rr.project(U.bodyPosM('earth'), U.F, sc) ? Math.hypot(sc[0] - U.Rr.cssW / 2, sc[1] - U.Rr.cssH / 2) : 9999; })()""")
+            ok = had and m < 3
+            bad += 0 if ok else 1
+            print(f"{'PASSE' if ok else 'ÉCHEC'}  Terre suivie, recul vers un point puis retour à 10^9 m : Terre à {m:.1f} px du centre (décalage créé : {'oui' if had else 'non'})")
         b.close()
     print('zoom-point :', 'PASSE' if bad == 0 else f'ÉCHEC ({bad})')
     sys.exit(1 if bad else 0)

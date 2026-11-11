@@ -146,7 +146,7 @@
   const NAVH = []; let histT = 0;
   function syncNav() { const b = $('n-back'); if (b) b.disabled = !NAVH.length; }
   function pushHist() { const now = performance.now(); if (now - histT < 80) return; histT = now; NAVH.push({ lr: S.anim ? S.anim.l1 : S.logR, az: S.az, el: S.el, focus: S.focus, center: S.center, sel: S.sel }); if (NAVH.length > 40) NAVH.shift(); syncNav(); }
-  function goBack() { const h = NAVH.pop(); if (!h) return; histT = performance.now(); select(h.sel); goTo(h.lr, { az: h.az, el: h.el, focus: h.focus, noHist: true }); S.center = h.center; renderCard(); syncNav(); }
+  function goBack() { const h = NAVH.pop(); if (!h) return; histT = performance.now(); zoffReset(); select(h.sel); goTo(h.lr, { az: h.az, el: h.el, focus: h.focus, noHist: true }); S.center = h.center; renderCard(); syncNav(); }
   function goHome() { pushHist(); select(null); zoffReset(); const st = STOPS[1]; goTo(st.logR, { az: st.az, el: st.el, focus: 'sun', speed: st.speed, noHist: true }); }
   function goLr(o) { if (o.lr) return o.lr; if (o.orbit && o.orbit.P) return clamp(Math.log10(Math.hypot(o.orbit.P[0], o.orbit.P[1], o.orbit.P[2]) * AU * 2.4), 6.6, 15.6); const d = vlen(o.get()); return d < 1e14 ? 12.4 : d < 3e16 ? 15.6 : d < 1e19 ? 16.4 : d < 1.2e21 ? 18.9 : d < 4e22 ? 21.6 : d < 1.5e24 ? 22.6 : 24.3; }
   function flyTo(o, lrWanted) { const ph = photoNear(o), lr = ph ? clamp(Math.log10(ph.half * 1.05), 19.0, 23.8) : (lrWanted || goLr(o)), opt = { focus: 'sun', noHist: true }; o.isGal = !!ph;
@@ -1346,6 +1346,7 @@
     F.selPos = S.sel && S.sel !== S.center ? S.sel.get() : null;      /* l'objet sélectionné et suivi porte le repère de R2 (updateFollow) au lieu de l'anneau 3D */ if (F.selPos && !isFinite(F.selPos[0])) F.selPos = null;
     const ck0 = S.ck; S.ck = clamp(S.ck + (S.center ? dt : -dt) / 0.9, 0, 1); if (S.center) S.cpos = S.center.get();
     if (S.ck > 0 && S.cpos) { const k = ease(S.ck); for (let i = 0; i < 3; i++) F.tg[i] = lerp(F.tg[i], S.cpos[i], k); }
+    if (S.zoff && (microOn() || (S.focus !== 'sun' && S.logR < 14.4))) zoffReset();      /* revenu près d'un astre suivi ou dans l'infiniment petit : le zoom se recentre sur lui (en glissant) */
     if (S.zoff && !S.center) for (let i = 0; i < 3; i++) F.tg[i] += S.zoff[i];      /* R3 : décalage du zoom vers un point */
     /* nouveau centre alors que la vue est encore (même en partie) tirée vers l'ancien : glissement en 0,9 s au lieu d'un saut.
        Couvre le passage direct A → B, A → (fiche fermée) → B en moins de 0,9 s, et le retour en arrière (goBack). */
