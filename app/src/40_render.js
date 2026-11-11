@@ -923,7 +923,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
       if (moved || aged) { L.key = key; L.keyAt = now; L.dirty = true; } }
     if (!lensTex) { lensTex = new THREE.DataTexture(new Float32Array(512 * 4), 512, 1, THREE.RGBAFormat, THREE.FloatType); lensTex.minFilter = lensTex.magFilter = THREE.NearestFilter; }
     if (cube && !lensRT) { L.dirty = true; lensRT = new THREE.WebGLCubeRenderTarget(R.w > 1200 ? 256 : 128, { type: rtType, format: THREE.RGBAFormat, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }); lensCam3 = new THREE.CubeCamera(0.01, 2e7, lensRT); }
-    if (Math.abs(best.r / (lensR || 1) - 1) > 0.003) { const T = lensLut(best.r, 512), d = lensTex.image.data; for (let i = 0; i < 512; i++) d[i * 4] = T.alpha[i]; lensTex.needsUpdate = true; lensR = best.r; f.uPsiC.value = T.psiC; f.uLl.value.set(T.l0, T.l1); }
+    if (Math.abs(best.r / (lensR || 1) - 1) > 0.01) {      /* table refaite à 1 % de distance près (environ 4 ms) : ombre juste à 1 % près entre deux tables */ const T = lensLut(best.r, 512), d = lensTex.image.data; for (let i = 0; i < 512; i++) d[i * 4] = T.alpha[i]; lensTex.needsUpdate = true; lensR = best.r; f.uPsiC.value = T.psiC; f.uLl.value.set(T.l0, T.l1); }
     lensDir.set((best.pos[0] - F.tg[0]) * F.s - camPos.x, (best.pos[1] - F.tg[1]) * F.s - camPos.y, (best.pos[2] - F.tg[2]) * F.s - camPos.z).normalize().transformDirection(camera.matrixWorldInverse);
     const t = Math.tan(FOV * DEG / 2); f.uBH.value.copy(lensDir); f.uTanF.value.set(t * camera.aspect, t); f.uRot.value.setFromMatrix4(camera.matrixWorld); f.tLut.value = lensTex; f.uCubeOn.value = cube ? 1 : 0; if (cube) f.tCube.value = lensRT.texture;
   };
