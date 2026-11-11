@@ -35,8 +35,8 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 ### S3 — Méthode de mesure des distances (A1)
 - Après : la fiche de chaque galaxie de Cosmicflows-4 dit comment sa distance a été mesurée (Céphéides, TRGB, Tully-Fisher, plan fondamental, supernova, fluctuations de brillance de surface…), avec l'incertitude.
 - Données : Cosmicflows-4, Tully et al. 2023, ApJ 944, 94 (VizieR J/ApJ/944/94, 55 874 galaxies). `pipeline/sources/build_cf4.py`.
-- État : serveurs du CDS injoignables le 11/11/2026 à 21 h 50 UTC ; à relancer.
-- Fini quand : test `distances` : 20 galaxies tirées au hasard ont la ligne « Distance mesurée par » ; M31 et NGC 4258 donnent la méthode publiée.
+- Fait : table VizieR de 55 877 galaxies (l'EDD en annonce 55 874). La table complète (3,6 Mo) ne tient pas dans la page : seules les galaxies qui ont une fiche sont gardées (`app/gen/data17.js`, 23 ko), associées par position à moins de 1,5′ et à moins d'un facteur 3 de la distance déjà affichée. 405 galaxies proches sur 788 et 55 du Groupe local sur 101 ; 4 associations écartées. Contrôle : NGC 4258 à 7,5 Mpc, dont le maser (7,6 Mpc publiés). Manque connu : M51, dont la position du catalogue de Karachentsev est à 2,4′ de celle de Cosmicflows-4. Table complète hors dépôt (`cf4_complet.json`) pour un chargement à part.
+- Fini quand : test `app/test/lot_s.py` : fiche de NGC 4258 avec distance, précision et méthodes (maser, Céphéides) ; 460 galaxies associées ; critiques PASSE.
 
 ### S4 — Mouvements à grande échelle et Laniakea (A2, rejoint le lot E)
 - Après : les galaxies de Cosmicflows-4 portent leur vitesse particulière mesurée ; la frontière de Laniakea est tracée d'après la reconstruction publiée.

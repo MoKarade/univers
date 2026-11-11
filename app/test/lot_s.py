@@ -87,6 +87,15 @@ def main():
         lieu = pg.evaluate("document.getElementById('place').textContent")
         check('Terre' in lieu, 'vue après le toucher : « %s »' % lieu)
 
+        # S3 : distances Cosmicflows-4 dans les fiches. NGC 4258 : 7,5 millions de parsecs, dont le maser (Tully et al. 2023).
+        txt = norm(pg.evaluate("""(() => { const i = DATA.NEAR_NAMES.split('|').indexOf('NGC4258'); if (i < 0) return null;
+            __U.select(__U.selNear(i)); return document.getElementById('card').innerText; })()"""))
+        manque = [a for a in ('Distance mesurée', 'Cosmicflows-4, PGC 39600', 'maser', 'Céphéides', 'à 1 % près') if a not in txt]
+        check(not manque, 'fiche NGC 4258%s' % ((' : manque ' + str(manque) + ' dans « ' + txt.replace(chr(10), ' / ')[:300] + ' »') if manque else ''))
+        n_cf4 = pg.evaluate("DATA.CF4_NEAR.filter(Boolean).length + DATA.CF4_LOCAL.filter(Boolean).length")
+        check(n_cf4 == 460, 'galaxies de la page avec une distance Cosmicflows-4 : %d (attendu 460)' % n_cf4)
+        pg.evaluate("__U.select(null)")
+
         dims = pg.evaluate("""new Promise(r => { const i = new Image(); i.onload = () => r([i.naturalWidth, i.naturalHeight]); i.onerror = () => r(null); i.src = DATA.CMB; })""")
         check(dims == [2048, 1024], 'texture du fond diffus : %s (Planck 2048 × 1024 ; WMAP faisait 720 × 360)' % dims)
         chk = pg.evaluate('DATA.CMB_CHK || null')
