@@ -54,9 +54,9 @@ Les valeurs marquées [à vérifier] viennent de la mémoire de l'assistant : le
 
 ### R7 — Après la mort du Soleil : orbites élargies, puis « inconnu »
 - Avant : Uranus, Pluton, Neptune, Mars, Saturne et Jupiter s'éteignent à 39, 40, 41, 43, 45 et 95 milliards d'années.
-- Après : les planètes restantes tournent sur des orbites 1,85 fois plus larges (calculé). Dix milliards d'années après la fin de la perte de masse du Soleil, borne publiée de stabilité, l'affichage du système solaire s'arrête sur un panneau : « Inconnu : des étoiles de passage finiront par défaire le système. Les simulations donnent une première éjection vers 30 milliards d'années en moyenne et une dissolution complète vers 100 milliards, sans ordre certain. »
+- Après : les planètes restantes tournent sur des orbites 1,85 fois plus larges (calculé). Environ 30 milliards d'années après la fin de la perte de masse du Soleil (vers 37,7 milliards d'années d'ici), début de l'instabilité publié par Zink, Batygin et Adams 2020 (la borne « 10 milliards d'années après la fin de la perte de masse » n'a été trouvée dans aucune publication, voir `docs/verite-avenir.md`), l'affichage du système solaire s'arrête sur un panneau : « Inconnu : des étoiles de passage finiront par défaire le système. Les simulations donnent une première éjection vers 30 milliards d'années en moyenne et une dissolution complète vers 100 milliards, sans ordre certain. »
 - Lunes et anneaux : même règle. Phobos (rapprochement mesuré, donc calculable), anneaux de Saturne et Triton sont tranchés dans R4.
-- Fini quand : `grep -n "FATE_P" app/src` ne trouve rien ; aucun fondu d'opacité lié à une date pour un astre ; test `avenir` : à +9 milliards d'années les orbites valent 1,85 fois l'actuel à 1 % près ; à +20, +50 et +100 milliards d'années, le panneau « inconnu » est affiché et aucune planète n'est dessinée.
+- Fini quand : `grep -n "FATE_P" app/src` ne trouve rien ; aucun fondu d'opacité lié à une date pour un astre ; test `avenir` : à +9 et +20 milliards d'années les orbites valent 1,85 fois l'actuel à 1 % près ; à +50 et +100 milliards d'années, le panneau « inconnu » est affiché et aucune planète n'est dessinée.
 - Fichiers touchés : `app/src/60_app.js`, `app/src/40_render.js`, textes de la chronologie.
 
 ## Lot B — La fusion avec Andromède
