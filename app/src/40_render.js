@@ -255,26 +255,30 @@ function initMicro(THREE, scene, camera, R, Q) {
   pM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); nM.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const nucleonAt = (n, t, o) => { o[0] = n.p[0] + 0.1 * Math.sin(t * n.f + n.ph); o[1] = n.p[1] + 0.1 * Math.sin(t * n.f * 1.3 + n.ph * 2); o[2] = n.p[2] + 0.1 * Math.cos(t * n.f * 0.8 + n.ph); return o; }, np = [0, 0, 0];
 
-  // --- intérieur du proton : nuage suivant la répartition de charge mesurée, trois quarks, tubes de gluons, paires éphémères (schéma)
+  // --- intérieur du proton (R15) : nuage suivant la répartition de charge mesurée, et des « partons » colorés selon les parts d'impulsion MESURÉES
+  //     (distributions de partons CT18NNLO, gen/proton_pdf.js) à la finesse affichée : quarks de valence u et d, paires quark-antiquark, gluons.
+  //     Chaque point représente une part d'impulsion, pas une particule. Les trois gros points restent des repères des quarks de valence.
   const NPC = big ? 7000 : 3500, pcP = new Float32Array(NPC * 3), pcPh = new Float32Array(NPC);
   for (let i = 0; i < NPC; i++) { const r = gam(3, RP / Math.sqrt(12)), d = rng.dir(); pcP[i * 3] = d[0] * r; pcP[i * 3 + 1] = d[1] * r; pcP[i * 3 + 2] = d[2] * r; pcPh[i] = rng(); }
   const pcMat = ptMat([1.0, 0.55, 0.3], 2.2), pCloud = mkPts(pcP, pcPh, pcMat, 50);
   const qP = new Float32Array(9), qC = new Float32Array(9), qMat = ptMat([1, 1, 1], 16, 'c'), quarks = mkPts(qP, new Float32Array([1, 1, 1]), qMat, 54, qC);
-  const TUBE = 30, tubeP = new Float32Array(3 * (TUBE - 1) * 2 * 3), tubeG = new THREE.BufferGeometry(); tubeG.setAttribute('position', new THREE.BufferAttribute(tubeP, 3));
-  const tubeMat = new THREE.LineBasicMaterial({ color: new THREE.Color(1.0, 0.8, 0.35), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }), tubes = add(new THREE.LineSegments(tubeG, tubeMat), 52);
-  const NSEA = 12, seaP = new Float32Array(NSEA * 6), seaA = new Float32Array(NSEA * 2), seaC = new Float32Array(NSEA * 6), seaMat = ptMat([1, 1, 1], 7, 'c'), sea = mkPts(seaP, seaA, seaMat, 53, seaC);
-  for (let k = 0; k < NSEA; k++) { seaC.set([0.3, 0.9, 1.0, 1.0, 0.35, 0.9], k * 6); }
+  const PDF = (typeof DATA !== 'undefined' && DATA.PROTON_PDF) ? DATA.PROTON_PDF.rows : null;
+  M.pdfAt = lam => { if (!PDF) return null; const R0 = PDF[0], R1 = PDF[PDF.length - 1]; if (lam >= R0.lam) return Object.assign({ clamp: 'grossier' }, R0); if (lam <= R1.lam) return Object.assign({ clamp: 'fin' }, R1);
+    let i = 1; while (PDF[i].lam > lam) i++; const a = PDF[i - 1], b = PDF[i], w = Math.log(lam / a.lam) / Math.log(b.lam / a.lam), mix = k => a.mom[k] + w * (b.mom[k] - a.mom[k]);
+    return { lam, Q: Math.exp(Math.log(a.Q) + w * Math.log(b.Q / a.Q)), mom: { uv: mix('uv'), dv: mix('dv'), sea: mix('sea'), g: mix('g') }, clamp: '' }; };
+  const NPP = big ? 1600 : 800, ppP = new Float32Array(NPP * 3), ppU = new Float32Array(NPP), ppC = new Float32Array(NPP * 3), ppMat = ptMat([1, 1, 1], 4, 'c'), partons = mkPts(ppP, new Float32Array(NPP).fill(1), ppMat, 53, ppC);
+  for (let i = 0; i < NPP; i++) { const r = gam(3, RP / Math.sqrt(12)), d = rng.dir(); ppP[i * 3] = d[0] * r; ppP[i * 3 + 1] = d[1] * r; ppP[i * 3 + 2] = d[2] * r; ppU[i] = rng(); }
+  const PPCOL = [[1.0, 0.2, 0.12], [0.2, 0.4, 1.0], [0.1, 1.0, 0.85], [1.0, 0.85, 0.1]]; let ppKey = '';
+  function partonColors(m) { if (!m) { if (ppKey !== 'gris') { ppKey = 'gris'; for (let i = 0; i < NPP; i++) ppC.set([0.55, 0.55, 0.6], i * 3); partons.geometry.attributes.aC.needsUpdate = true; } return; } const key = [m.uv, m.dv, m.sea].map(x => x.toFixed(3)).join(); if (key === ppKey) return; ppKey = key; const tot = m.uv + m.dv + m.sea + m.g, c1 = m.uv / tot, c2 = c1 + m.dv / tot, c3 = c2 + m.sea / tot;
+    for (let i = 0; i < NPP; i++) { const u = ppU[i], c = PPCOL[u < c1 ? 0 : u < c2 ? 1 : u < c3 ? 2 : 3]; ppC[i * 3] = c[0]; ppC[i * 3 + 1] = c[1]; ppC[i * 3 + 2] = c[2]; } partons.geometry.attributes.aC.needsUpdate = true; }
   const QCOL = [[1.0, 0.25, 0.2], [0.25, 1.0, 0.3], [0.3, 0.45, 1.0]], qpos = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], hsh = x => { const s = Math.sin(x * 127.1) * 43758.5453; return s - Math.floor(s); };
   function protonUpdate(t) {
     qpos[0][0] = QOFF[0]; qpos[0][1] = QOFF[1]; qpos[0][2] = QOFF[2];
     qpos[1][0] = 0.30 * Math.cos(t * 0.9 + 1) + 0.12; qpos[1][1] = 0.30 * Math.sin(t * 1.1 + 2) - 0.1; qpos[1][2] = 0.24 * Math.sin(t * 0.7);
     qpos[2][0] = -0.05 + 0.26 * Math.sin(t * 0.8 + 4); qpos[2][1] = -0.22 + 0.2 * Math.cos(t * 1.0); qpos[2][2] = 0.3 * Math.cos(t * 0.6 + 1);
     const ph = t / 1.6, sh = Math.floor(ph), mix = smoothstep(0.75, 1, ph - sh), J = [(qpos[0][0] + qpos[1][0] + qpos[2][0]) / 3, (qpos[0][1] + qpos[1][1] + qpos[2][1]) / 3, (qpos[0][2] + qpos[1][2] + qpos[2][2]) / 3];
-    for (let i = 0; i < 3; i++) { const a = QCOL[(i + sh) % 3], b = QCOL[(i + sh + 1) % 3]; qP.set(qpos[i], i * 3); qC[i * 3] = lerp(a[0], b[0], mix); qC[i * 3 + 1] = lerp(a[1], b[1], mix); qC[i * 3 + 2] = lerp(a[2], b[2], mix); }      // les quarks échangent leurs « couleurs » en permanence
-    let o = 0; for (let i = 0; i < 3; i++) { const q = qpos[i]; let px = J[0], py = J[1], pz = J[2]; for (let s = 1; s < TUBE; s++) { const u = s / (TUBE - 1), w = 0.012 * Math.sin(u * Math.PI) * Math.sin(u * 16 - t * 5 + i * 2), x = lerp(J[0], q[0], u) + w, y = lerp(J[1], q[1], u) - w, z = lerp(J[2], q[2], u) + w * 0.6; tubeP[o++] = px; tubeP[o++] = py; tubeP[o++] = pz; tubeP[o++] = x; tubeP[o++] = y; tubeP[o++] = z; px = x; py = y; pz = z; } }
-    for (let k = 0; k < NSEA; k++) { const c = t * 0.55 + k * 0.37, cy = Math.floor(c), u = c - cy, r = 0.15 + 0.55 * hsh(cy * 3.1 + k), th = TAU * hsh(cy * 1.7 + k * 5.3), zz = 2 * hsh(cy * 2.3 + k * 9.1) - 1, sx = Math.sqrt(1 - zz * zz), bx = r * sx * Math.cos(th), by = r * sx * Math.sin(th), bz = r * zz, sp = 0.07 * u;
-      seaP.set([bx + sp, by, bz, bx - sp, by, bz], k * 6); seaA[k * 2] = seaA[k * 2 + 1] = Math.sin(Math.PI * u); }
-    quarks.geometry.attributes.position.needsUpdate = true; quarks.geometry.attributes.aC.needsUpdate = true; tubeG.attributes.position.needsUpdate = true; sea.geometry.attributes.position.needsUpdate = true; sea.geometry.attributes.aPh.needsUpdate = true; return J; }
+    for (let i = 0; i < 3; i++) { const c = PPCOL[i < 2 ? 0 : 1]; qP.set(qpos[i], i * 3); qC[i * 3] = c[0]; qC[i * 3 + 1] = c[1]; qC[i * 3 + 2] = c[2]; }      /* repères : deux quarks u (rouge), un d (bleu), comme la légende */
+    quarks.geometry.attributes.position.needsUpdate = true; quarks.geometry.attributes.aC.needsUpdate = true; return J; }
   // le quark visé, seul, quand on descend plus bas : un point sans taille mesurable
   const q1Mat = ptMat([1.0, 0.5, 0.4], 14, 'a'), q1 = mkPts(new Float32Array(3), new Float32Array([1]), q1Mat, 56);
 
@@ -314,10 +318,10 @@ function initMicro(THREE, scene, camera, R, Q) {
       if (p0M.visible) { p0M.position.set(CP[0] * FM * s, CP[1] * FM * s, CP[2] * FM * s); p0M.scale.setScalar(RP * FM * s); p0M.material.opacity = v0; }
       setP('p', CP[0] * FM, CP[1] * FM, CP[2] * FM + RP * FM); }
     // intérieur du proton
-    { const v = vis(lr, -18.0, -14.95, 0.3), on = v > 0.01; pCloud.visible = quarks.visible = tubes.visible = sea.visible = on;
-      if (on) { const J = protonUpdate(t * 1.2); for (const o of [pCloud, quarks, tubes, sea]) { o.position.set(CP[0] * FM * s, CP[1] * FM * s, CP[2] * FM * s); o.scale.setScalar(FM * s); }
-        pcMat.uniforms.uOp.value = v * 0.35; pcMat.uniforms.uPx.value = 2.2 * dpr; pcMat.uniforms.uT.value = t; qMat.uniforms.uOp.value = v * 1.6; qMat.uniforms.uPx.value = 16 * dpr; seaMat.uniforms.uOp.value = v * 0.9; seaMat.uniforms.uPx.value = 7 * dpr; tubeMat.opacity = v * 0.75;
-        for (let i = 0; i < 3; i++) setP('q' + i, (CP[0] + qpos[i][0]) * FM, (CP[1] + qpos[i][1]) * FM, (CP[2] + qpos[i][2]) * FM); setP('glu', (CP[0] + J[0]) * FM, (CP[1] + J[1]) * FM, (CP[2] + J[2]) * FM); } }
+    { const v = vis(lr, -18.0, -14.95, 0.3), on = v > 0.01; pCloud.visible = quarks.visible = partons.visible = on;
+      if (on) { const J = protonUpdate(t * 1.2); for (const o of [pCloud, quarks, partons]) { o.position.set(CP[0] * FM * s, CP[1] * FM * s, CP[2] * FM * s); o.scale.setScalar(FM * s); }
+        pcMat.uniforms.uOp.value = v * 0.35; pcMat.uniforms.uPx.value = 2.2 * dpr; pcMat.uniforms.uT.value = t; qMat.uniforms.uOp.value = v * 1.6; qMat.uniforms.uPx.value = 16 * dpr; { const P = M.pdfAt(Math.pow(10, lr)); if (P) partonColors(P.clamp === 'grossier' ? null : P.mom); } ppMat.uniforms.uOp.value = v * 1.4; ppMat.uniforms.uPx.value = 7 * dpr;
+        for (let i = 0; i < 3; i++) setP('q' + i, (CP[0] + qpos[i][0]) * FM, (CP[1] + qpos[i][1]) * FM, (CP[2] + qpos[i][2]) * FM); } }
     { const v = vis(lr, -22.0, -16.9, 0.4); q1.visible = v > 0.01; if (q1.visible) { q1Mat.uniforms.uOp.value = v * 1.5; q1Mat.uniforms.uPx.value = 14 * dpr; } }
     // cercles repères
     { const dk = vis(lr, -36, -18.4, 0.5), k0 = Math.floor(lr) - 2; dec.forEach((o, j) => { const r = Math.pow(10, k0 + j) * s, a = dk * smoothstep(0.08, 0.5, r) * (1 - smoothstep(6, 14, r)); o.visible = a > 0.01; if (o.visible) { o.quaternion.copy(camera.quaternion); o.scale.setScalar(r); o.material.opacity = a * 0.5; } });
