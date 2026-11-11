@@ -41,6 +41,10 @@ void main(){ vec2 p=gl_PointCoord*2.0-1.0; float d2=dot(p,p); if(d2>1.0) discard
 
 const SH = {
   star: { v: `attribute float aMag; attribute vec3 aCol; attribute vec3 aLife; attribute float aFate; attribute vec3 aVel; uniform float uUnitToPc,uExpo,uOpacity,uDpr,uEvolve,uT,uFlash,uVt,uMcut,uTgtR; uniform vec3 uTgt; varying vec3 vColor; varying float vA; varying float vCore;
+uniform sampler2D tDust; uniform float uDust; uniform vec3 uCamLy; uniform mat3 uE2G;
+float dustD(vec3 g){ vec3 c=g/15.625+vec3(80.0,80.0,26.0); if(c.x<0.0||c.y<0.0||c.z<0.0||c.x>=160.0||c.y>=160.0||c.z>=52.0) return 0.0;      /* S5 : dA_V/ds (mag/pc), carte d'Edenhofer et al. 2024 (DATA.DUST) */
+  float k=floor(c.z); float b=texture2D(tDust,vec2((mod(k,8.0)*160.0+floor(c.x)+0.5)/1280.0,(floor(k/8.0)*160.0+floor(c.y)+0.5)/1120.0)).r*255.0; return b<0.5?0.0:pow(10.0,-5.0+(b-1.0)/254.0*4.0); }
+float dustA(vec3 a,vec3 b){ vec3 d=(b-a)/12.0; float s=0.0; for(int i=0;i<12;i++) s+=dustD(a+d*(float(i)+0.5)); return s*length(d); }      /* extinction A_V (mag) de a à b, en pc galactiques */
 void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); gl_Position=projectionMatrix*mv; gl_Position.z=0.0;
   float M=aMag; vec3 col=aCol; float vis=1.0;
   if(uEvolve>0.5){   // vie de l'étoile : naine, puis géante, puis naine blanche ou supernova
@@ -54,6 +58,8 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); gl_Position=pr
       else { M=mix(aMag-0.7*(1.0-x0),aMag-(sn>0.5?2.0:4.5),g); col=mix(aCol,vec3(1.0,0.55,0.3),smoothstep(0.0,0.5,g)); } }
     else { float dt=uT-tD; if(sn>0.5){ if(dt<uFlash){ M=-17.0+6.0*dt/uFlash; col=vec3(0.85,0.92,1.0); } else vis=0.0; } else { M=11.0+2.5*log(1.0+dt/200.0)/2.302585; col=vec3(0.8,0.88,1.0); } }
   }
+  if(uDust>0.5){ vec3 sp=uE2G*((position+aVel*uVt)/3.26156), cq=uE2G*(uCamLy/3.26156); float dA=dustA(cq,sp)-dustA(vec3(0.0),sp);      /* S5 : l'éclat mesuré depuis la Terre contient déjà la poussière Soleil-étoile ; on remplace par celle caméra-étoile */
+    M+=dA; col*=vec3(pow(10.0,0.4*dA*0.252),1.0,pow(10.0,-0.4*dA*0.324)); }      /* rougissement : A_R/A_V = 0,748, A_B/A_V = 1,324 (Cardelli et al. 1989, R_V = 3,1) */
   float dpc=max(length(mv.xyz)*uUnitToPc,1e-7); float m=M+5.0*log(dpc/10.0)/2.302585-uExpo; float f=pow(10.0,-0.4*(m-6.5));
   float r=min(0.8+0.62*pow(f,0.27),8.5); vA=clamp(pow(f,0.66)*0.6,0.0,1.0)*uOpacity*vis*(1.0-smoothstep(uMcut-0.8,uMcut,m))*step(uTgtR,distance(position+aVel*uVt,uTgt)); vCore=clamp(f/60.0,0.0,1.0); vColor=col; /* couleur du corps noir telle quelle (S1) : plus de saturation gonflée */ gl_PointSize=r*4.0*uDpr; }`,
     f: `varying vec3 vColor; varying float vA; varying float vCore;
@@ -380,7 +386,13 @@ function createRenderer(canvas, Q, generated) {
   const galaxy = pts({ position: [G.gal.pos, 3], aOm: [G.gal.om, 2], aCol: [G.gal.col, 3], aLook: [G.gal.look, 2] }, mk(SH.galaxy, mwU), 6);
   galaxy.quaternion.copy(qGal);
   // étoiles : champ local généré, catalogue réel, Soleil vu comme une étoile (années-lumière)
-  const starU = () => ({ uUnitToPc: U(1), uExpo: U(0), uOpacity: U(1), uDpr: U(1), uEvolve: U(0), uT: U(0), uFlash: U(1e-6), uVt: U(0), uMcut: U(99), uTgt: U(new THREE.Vector3()), uTgtR: U(0) });
+  /* S5 : carte de poussière en atlas 2D (52 tranches de 160 × 160, 8 par ligne), lue dans le shader des étoiles */
+  const dustU = (() => { const D = DATA.DUST, q = b64ToBytes(D.q), A = new Uint8Array(1280 * 1120);
+    for (let k = 0; k < D.nz; k++) { const c0 = (k % 8) * 160, r0 = Math.floor(k / 8) * 160; for (let j = 0; j < D.ny; j++) A.set(q.subarray((k * D.ny + j) * D.nx, (k * D.ny + j + 1) * D.nx), (r0 + j) * 1280 + c0); }
+    const t = new THREE.DataTexture(A, 1280, 1120, THREE.LuminanceFormat, THREE.UnsignedByteType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true;
+    const Mg = DATA.M_GAL2ECL, e2g = new THREE.Matrix3().set(Mg[0][0], Mg[1][0], Mg[2][0], Mg[0][1], Mg[1][1], Mg[2][1], Mg[0][2], Mg[1][2], Mg[2][2]);
+    return { tDust: U(t), uDust: U(0), uCamLy: U(new THREE.Vector3()), uE2G: U(e2g) }; })(); R.dustU = dustU;
+  const starU = () => ({ uUnitToPc: U(1), uExpo: U(0), uOpacity: U(1), uDpr: U(1), uEvolve: U(0), uT: U(0), uFlash: U(1e-6), uVt: U(0), uMcut: U(99), uTgt: U(new THREE.Vector3()), uTgtR: U(0), tDust: dustU.tDust, uDust: dustU.uDust, uCamLy: dustU.uCamLy, uE2G: dustU.uE2G });
   // amas d'étoiles réels : 145 amas globulaires (Harris) et 1 867 amas ouverts (Cantat-Gaudin 2020), en années-lumière
   const cRaw = new Float32Array(b64ToBytes(DATA.CLUSTERS).buffer), cN = cRaw.length / 5, cPos = new Float32Array(cN * 3), cMag = new Float32Array(cN), cCol = new Float32Array(cN * 3);
   for (let i = 0; i < cN; i++) { cPos.set([cRaw[i * 5], cRaw[i * 5 + 1], cRaw[i * 5 + 2]], i * 3); cMag[i] = cRaw[i * 5 + 3]; cCol.set(bvToRgb(cRaw[i * 5 + 4]), i * 3); }
@@ -712,6 +724,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
     camPos.set(Math.cos(F.el) * Math.cos(F.az), Math.cos(F.el) * Math.sin(F.az), Math.sin(F.el)).applyQuaternion(qF).multiplyScalar(CAM_D);
     camera.position.copy(camPos); camera.up.set(0, 0, 1).applyQuaternion(qF); camera.lookAt(0, 0, 0); camera.updateMatrixWorld(true);
     const rMpc = F.R * F.aFac / (MPC * F.cos.a), gc = F.gcRel;
+    { const c = dustU.uCamLy.value.set((F.tg[0] + camPos.x / F.s) / LY, (F.tg[1] + camPos.y / F.s) / LY, (F.tg[2] + camPos.z / F.s) / LY), d = c.length(); dustU.uDust.value = R.dustForce !== undefined ? R.dustForce : d > 30 && d < 60000 ? 1 : 0; R.dustOn = dustU.uDust.value > 0.5; }      /* S5 : près du Soleil, la poussière vue d'ici est celle déjà mesurée : rien à changer */
 
     // --- cosmos (comobile : tout est multiplié par le facteur d'échelle a(t)) ---
     const unitC = MPC * F.cos.a, horizon = F.cos.chiPH === null ? 1e9 : F.cos.chiPH;
