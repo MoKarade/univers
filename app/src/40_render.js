@@ -237,9 +237,10 @@ function initMicro(THREE, scene, camera, R, Q) {
   // --- noyau d'oxygène 16 (R16) : 8 protons et 8 neutrons placés au hasard dans la répartition de charge MESURÉE par diffusion d'électrons,
   //     modèle de l'oscillateur harmonique de de Vries, de Jager et de Vries 1987 : ρ(r) ∝ [1 + α (r/a)²] exp(−(r/a)²), a = 1,833 fm, α = 1,544.
   //     Les nucléons n'ont pas de position fixe : seules la répartition et le rayon sont mesurés. Les centres sont remis à l'échelle pour que leur
-  //     rayon quadratique moyen vaille le rayon des centres de protons, √(2,6991² − 0,8409²) = 2,565 fm (rayon de charge : Angeli et Marinova 2013 ;
-  //     rayon du proton : CODATA 2022), et deux centres restent à plus de 1,0 fm l'un de l'autre (cœur dur des nucléons, ordre de grandeur).
-  const NUC_A = 1.833, NUC_AL = 1.544, NUC_RMS = Math.sqrt(2.6991 * 2.6991 - 0.8409 * 0.8409), nuc = [];
+  //     rayon quadratique moyen vaille le rayon des centres de protons : r² = r_ch² − r_p² − (N/Z) r_n² − 3/(4M²) = 2,6991² − 0,84075² + 0,1161 − 0,0331,
+  //     soit 2,581 fm (r_ch : Angeli et Marinova 2013 ; r_p = RP et r_n² = −0,1161 fm² : CODATA 2022 ; terme de Darwin-Foldy). Au tirage, deux centres restent
+  //     à plus de 1,0 fm l'un de l'autre (cœur dur des nucléons, ordre de grandeur) ; après la remise à l'échelle, environ 0,95 fm.
+  const NUC_A = 1.833, NUC_AL = 1.544, NUC_RMS = Math.sqrt(2.6991 * 2.6991 - RP * RP + 0.1161 - 0.0331), nuc = [];
   { const rhoMax = (() => { let m = 0; for (let r = 0; r < 6; r += 0.01) m = Math.max(m, r * r * (1 + NUC_AL * r * r / (NUC_A * NUC_A)) * Math.exp(-r * r / (NUC_A * NUC_A))); return m; })();
     const pts = []; let guard = 0;
     while (pts.length < 16 && guard++ < 100000) { const r = rng() * 6, w = r * r * (1 + NUC_AL * r * r / (NUC_A * NUC_A)) * Math.exp(-r * r / (NUC_A * NUC_A)); if (rng() * rhoMax > w) continue;
