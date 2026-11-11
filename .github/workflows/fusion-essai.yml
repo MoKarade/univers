@@ -6,6 +6,7 @@ on:
     inputs:
       n: { description: "particules par galaxie", default: "15000" }
       duree: { description: "durée en milliards d'années", default: "1.0" }
+      pas: { description: "pas en millions d'années", default: "1.0" }
   push:
     paths: ["pipeline/fusion/**", ".github/workflows/fusion-essai.yml"]
 
@@ -35,4 +36,4 @@ jobs:
           python -c "import agama, pyfalcon; print('AGAMA et pyfalcon prêts')"
       - name: Essai
         working-directory: pipeline/fusion
-        run: python essai.py "${{ github.event.inputs.n || '15000' }}" "${{ github.event.inputs.duree || '1.0' }}"
+        run: python essai.py "${{ github.event.inputs.n || '15000' }}" "${{ github.event.inputs.duree || '1.0' }}" "${{ github.event.inputs.pas || '1.0' }}"

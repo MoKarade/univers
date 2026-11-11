@@ -12,7 +12,8 @@ import modeles as M
 
 G = M.G
 T_UNIT_GYR = 0.9778                       # kpc/(km/s) en milliards d'années
-DT = 0.001 / T_UNIT_GYR                   # 1 Ma
+DT_MA = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0   # pas en millions d'années
+DT = DT_MA * 0.001 / T_UNIT_GYR
 M31_POS = [-385.352, 623.003, -287.592]   # data3.js, DATA.M31.pos
 M31_VEL = [28.4, -109.8, 41.4]            # 60_app.js, M31_MEAS « Gaia, 2025 »
 M31_SPIN = [-0.44498, -0.76618, -0.46362] # data3.js, DATA.M31.spin
@@ -37,19 +38,19 @@ def main():
     cm = np.sum(p['pos'] * p['m'][:, None], axis=0) / p['m'].sum(); vm = np.sum(p['vel'] * p['m'][:, None], axis=0) / p['m'].sum()
     p['pos'] -= cm; p['vel'] -= vm
     acc, phi = forces(p); e0 = energie(p, phi)
-    steps = int(round(t_gyr / 0.001)); t0 = time.time(); worst = 0.0
+    steps = int(round(t_gyr / (DT_MA * 0.001))); t0 = time.time(); worst = 0.0
     for s in range(steps):
         p['vel'] += 0.5 * DT * acc
         p['pos'] += DT * p['vel']
         acc, phi = forces(p)
         p['vel'] += 0.5 * DT * acc
-        if (s + 1) % 100 == 0:
+        if (s + 1) % int(round(100 / DT_MA)) == 0:
             e = energie(p, phi); worst = max(worst, abs(e / e0 - 1))
-            print(f'  t = {(s + 1) * 0.001:.2f} Ga : dérive d’énergie {100 * (e / e0 - 1):+.3f} %', flush=True)
+            print(f'  t = {(s + 1) * DT_MA * 0.001:.2f} Ga : dérive d’énergie {100 * (e / e0 - 1):+.3f} %', flush=True)
     dt_step = (time.time() - t0) / steps
     N = len(p['m'])
-    full = dt_step * (600000 / N) * 10000 / 3600
-    res = dict(particules=N, duree_ga=t_gyr, derive_max_pourcent=100 * worst, secondes_par_pas=dt_step, estimation_calcul_complet_heures=full)
+    full = dt_step * (600000 / N) * (10.0 / (DT_MA * 0.001)) / 3600
+    res = dict(particules=N, duree_ga=t_gyr, pas_ma=DT_MA, derive_max_pourcent=100 * worst, secondes_par_pas=dt_step, estimation_calcul_complet_heures=full)
     print(json.dumps(res, ensure_ascii=False, indent=1))
     print('essai :', 'PASSE' if worst < 0.01 else 'ÉCHEC', f'(dérive maximale {100 * worst:.3f} %, limite 1 %)')
     sys.exit(0 if worst < 0.01 else 1)
