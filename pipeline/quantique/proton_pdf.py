@@ -58,7 +58,7 @@ def main():
         m, n = integrales(xs, xf)
         rows.append(dict(Q=round(float(Q), 4), lam=float('%.4g' % (HBARC / Q)), mom={k: round(v, 5) for k, v in m.items()}, n={k: round(v, 4) for k, v in n.items()}))
         print(f"Q = {Q:9.2f} GeV  λ = {HBARC / Q:.2e} m  valence u {m['uv']:.3f}  d {m['dv']:.3f}  mer {m['sea']:.3f}  gluons {m['g']:.3f}  somme {sum(m.values()):.4f}  |  u {n['u']:.3f}  d {n['d']:.3f}")
-    out = dict(rows=rows, src='CT18NNLO, membre central (Hou et al. 2021, Phys. Rev. D 103, 014013), via LHAPDF', licence='à vérifier (voir docs)')
+    out = dict(rows=rows, src='CT18NNLO, membre central (Hou et al. 2021, Phys. Rev. D 103, 014013), via LHAPDF', licence='aucune licence écrite pour les grilles (LHAPDF et CT18) ; l'article CT18 est sous CC BY 4.0 ; usage libre avec citation de Hou et al. 2021 et de LHAPDF6 (Buckley et al. 2015)')
     open(DST, 'w', encoding='utf-8', newline='\n').write('/* généré par pipeline/quantique/proton_pdf.py */\nObject.assign(DATA, ' + json.dumps({'PROTON_PDF': out}, ensure_ascii=False, separators=(',', ':')) + ');\n')
 
 

@@ -8,6 +8,6 @@ for (const r of rows) { const m = r.mom, s = m.uv + m.dv + m.sea + m.g; ws = Mat
 check(ws <= 0.01, 'somme des parts d’impulsion = 1 à ' + ws.toFixed(4) + ' près, sur ' + rows.length + ' finesses (de ' + rows[0].lam.toExponential(1) + ' à ' + rows[rows.length - 1].lam.toExponential(1) + ' m)');
 check(wu <= 0.02 && wd <= 0.02, 'compte net : 2 up à ' + wu.toFixed(4) + ' près, 1 down à ' + wd.toFixed(4) + ' près');
 check(rows[rows.length - 1].mom.g > rows[0].mom.g && rows[rows.length - 1].mom.sea > rows[0].mom.sea, 'plus fin : gluons ' + rows[0].mom.g.toFixed(3) + ' → ' + rows[rows.length - 1].mom.g.toFixed(3) + ', paires ' + rows[0].mom.sea.toFixed(3) + ' → ' + rows[rows.length - 1].mom.sea.toFixed(3));
-check(/CT18NNLO \(Hou et al\. 2021, Phys\. Rev\. D 103, 014013\)/.test(A) && /Licence des données/.test(A), 'source et licence citées dans la fiche du proton');
+check(/CT18NNLO \(Hou et al\. 2021, Phys\. Rev\. D 103, 014013\)/.test(A) && /Licence des données', '[^']*CC BY 4\.0/.test(A) && /CC BY 4\.0/.test(DATA.PROTON_PDF.licence), 'source et licence citées, identiques dans la fiche et dans les données');
 check(!/tubeG|NSEA|tubes de gluons/.test(R + A), 'tubes de gluons et paires dessinés à la main retirés');
 if (bad) { console.log('proton : ÉCHEC (' + bad + ')'); process.exit(1); } else console.log('proton : PASSE');

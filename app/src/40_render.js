@@ -268,8 +268,8 @@ function initMicro(THREE, scene, camera, R, Q) {
     return { lam, Q: Math.exp(Math.log(a.Q) + w * Math.log(b.Q / a.Q)), mom: { uv: mix('uv'), dv: mix('dv'), sea: mix('sea'), g: mix('g') }, clamp: '' }; };
   const NPP = big ? 1600 : 800, ppP = new Float32Array(NPP * 3), ppU = new Float32Array(NPP), ppC = new Float32Array(NPP * 3), ppMat = ptMat([1, 1, 1], 4, 'c'), partons = mkPts(ppP, new Float32Array(NPP).fill(1), ppMat, 53, ppC);
   for (let i = 0; i < NPP; i++) { const r = gam(3, RP / Math.sqrt(12)), d = rng.dir(); ppP[i * 3] = d[0] * r; ppP[i * 3 + 1] = d[1] * r; ppP[i * 3 + 2] = d[2] * r; ppU[i] = rng(); }
-  const PPCOL = [[1.0, 0.35, 0.25], [0.35, 0.55, 1.0], [0.3, 0.95, 0.9], [1.0, 0.85, 0.3]]; let ppKey = '';
-  function partonColors(m) { const key = [m.uv, m.dv, m.sea].map(x => x.toFixed(3)).join(); if (key === ppKey) return; ppKey = key; const tot = m.uv + m.dv + m.sea + m.g, c1 = m.uv / tot, c2 = c1 + m.dv / tot, c3 = c2 + m.sea / tot;
+  const PPCOL = [[1.0, 0.2, 0.12], [0.2, 0.4, 1.0], [0.1, 1.0, 0.85], [1.0, 0.85, 0.1]]; let ppKey = '';
+  function partonColors(m) { if (!m) { if (ppKey !== 'gris') { ppKey = 'gris'; for (let i = 0; i < NPP; i++) ppC.set([0.55, 0.55, 0.6], i * 3); partons.geometry.attributes.aC.needsUpdate = true; } return; } const key = [m.uv, m.dv, m.sea].map(x => x.toFixed(3)).join(); if (key === ppKey) return; ppKey = key; const tot = m.uv + m.dv + m.sea + m.g, c1 = m.uv / tot, c2 = c1 + m.dv / tot, c3 = c2 + m.sea / tot;
     for (let i = 0; i < NPP; i++) { const u = ppU[i], c = PPCOL[u < c1 ? 0 : u < c2 ? 1 : u < c3 ? 2 : 3]; ppC[i * 3] = c[0]; ppC[i * 3 + 1] = c[1]; ppC[i * 3 + 2] = c[2]; } partons.geometry.attributes.aC.needsUpdate = true; }
   const QCOL = [[1.0, 0.25, 0.2], [0.25, 1.0, 0.3], [0.3, 0.45, 1.0]], qpos = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], hsh = x => { const s = Math.sin(x * 127.1) * 43758.5453; return s - Math.floor(s); };
   function protonUpdate(t) {
@@ -277,7 +277,7 @@ function initMicro(THREE, scene, camera, R, Q) {
     qpos[1][0] = 0.30 * Math.cos(t * 0.9 + 1) + 0.12; qpos[1][1] = 0.30 * Math.sin(t * 1.1 + 2) - 0.1; qpos[1][2] = 0.24 * Math.sin(t * 0.7);
     qpos[2][0] = -0.05 + 0.26 * Math.sin(t * 0.8 + 4); qpos[2][1] = -0.22 + 0.2 * Math.cos(t * 1.0); qpos[2][2] = 0.3 * Math.cos(t * 0.6 + 1);
     const ph = t / 1.6, sh = Math.floor(ph), mix = smoothstep(0.75, 1, ph - sh), J = [(qpos[0][0] + qpos[1][0] + qpos[2][0]) / 3, (qpos[0][1] + qpos[1][1] + qpos[2][1]) / 3, (qpos[0][2] + qpos[1][2] + qpos[2][2]) / 3];
-    for (let i = 0; i < 3; i++) { const a = QCOL[(i + sh) % 3], b = QCOL[(i + sh + 1) % 3]; qP.set(qpos[i], i * 3); qC[i * 3] = lerp(a[0], b[0], mix); qC[i * 3 + 1] = lerp(a[1], b[1], mix); qC[i * 3 + 2] = lerp(a[2], b[2], mix); }      // les quarks échangent leurs « couleurs » en permanence
+    for (let i = 0; i < 3; i++) { const c = PPCOL[i < 2 ? 0 : 1]; qP.set(qpos[i], i * 3); qC[i * 3] = c[0]; qC[i * 3 + 1] = c[1]; qC[i * 3 + 2] = c[2]; }      /* repères : deux quarks u (rouge), un d (bleu), comme la légende */
     quarks.geometry.attributes.position.needsUpdate = true; quarks.geometry.attributes.aC.needsUpdate = true; return J; }
   // le quark visé, seul, quand on descend plus bas : un point sans taille mesurable
   const q1Mat = ptMat([1.0, 0.5, 0.4], 14, 'a'), q1 = mkPts(new Float32Array(3), new Float32Array([1]), q1Mat, 56);
@@ -320,7 +320,7 @@ function initMicro(THREE, scene, camera, R, Q) {
     // intérieur du proton
     { const v = vis(lr, -18.0, -14.95, 0.3), on = v > 0.01; pCloud.visible = quarks.visible = partons.visible = on;
       if (on) { const J = protonUpdate(t * 1.2); for (const o of [pCloud, quarks, partons]) { o.position.set(CP[0] * FM * s, CP[1] * FM * s, CP[2] * FM * s); o.scale.setScalar(FM * s); }
-        pcMat.uniforms.uOp.value = v * 0.35; pcMat.uniforms.uPx.value = 2.2 * dpr; pcMat.uniforms.uT.value = t; qMat.uniforms.uOp.value = v * 1.6; qMat.uniforms.uPx.value = 16 * dpr; { const P = M.pdfAt(Math.pow(10, lr)); if (P) partonColors(P.mom); } ppMat.uniforms.uOp.value = v * 0.9; ppMat.uniforms.uPx.value = 4 * dpr;
+        pcMat.uniforms.uOp.value = v * 0.35; pcMat.uniforms.uPx.value = 2.2 * dpr; pcMat.uniforms.uT.value = t; qMat.uniforms.uOp.value = v * 1.6; qMat.uniforms.uPx.value = 16 * dpr; { const P = M.pdfAt(Math.pow(10, lr)); if (P) partonColors(P.clamp === 'grossier' ? null : P.mom); } ppMat.uniforms.uOp.value = v * 1.4; ppMat.uniforms.uPx.value = 7 * dpr;
         for (let i = 0; i < 3; i++) setP('q' + i, (CP[0] + qpos[i][0]) * FM, (CP[1] + qpos[i][1]) * FM, (CP[2] + qpos[i][2]) * FM); } }
     { const v = vis(lr, -22.0, -16.9, 0.4); q1.visible = v > 0.01; if (q1.visible) { q1Mat.uniforms.uOp.value = v * 1.5; q1Mat.uniforms.uPx.value = 14 * dpr; } }
     // cercles repères
