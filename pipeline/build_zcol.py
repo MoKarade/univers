@@ -1,7 +1,7 @@
 """S3 : couleur observée des galaxies et des quasars selon leur décalage vers le rouge z.
 
 Pour chaque z, le spectre au repos F_lambda est décalé (lambda_obs = (1+z) lambda_repos), intégré sur
-l'observateur CIE 1931 2° (pipeline/ref/ciexyz31_1.csv, comme pour les étoiles en S1), puis converti en
+l'observateur CIE 1931 2° (pipeline/ref/ciexyz31_1.csv, copie CVRL), puis converti en
 sRGB linéaire, composante la plus forte à 1 (la couleur ne porte que la teinte).
 Le facteur (1+z)^-1 commun du flux par longueur d'onde ne change pas la teinte et n'est pas appliqué ici.
 
@@ -9,7 +9,7 @@ Spectres :
 - Galaxies : modèle Sb de l'atlas Kinney-Calzetti (Kinney et al. 1996, ApJ 467, 38), STScI CDBS grid/kc96,
   1235 à 9940 Å au repos. Un seul type pour toutes les galaxies : leur type n'est pas dans nos catalogues
   (supposé, dit dans la page). La lumière visible reçue (380 nm) vient de 1235 Å au repos jusqu'à z = 2,07 ; au-delà, z est borné.
-- Quasars : spectre moyen SDSS spDR2-029 (première composante, classe QSO), 709 à 7809 Å au repos ; couvert jusqu’à z = 4,35.
+- Quasars : modèle SDSS spDR2-029, classe QSO, première composante principale (positive partout : la forme moyenne), 709 à 7809 Å au repos ; couvert jusqu’à z = 4,35.
 
 Écrit app/gen/data16.js. Lancer depuis la racine du dépôt : python3 pipeline/build_zcol.py
 """
@@ -23,7 +23,7 @@ REF = ROOT / 'pipeline' / 'ref'
 OUT = ROOT / 'app' / 'gen' / 'data16.js'
 N = 64
 ZMAX_GAL, ZMAX_QSO = 2.07, 4.35
-# XYZ -> sRGB linéaire (IEC 61966-2-1, blanc D65), même matrice que pipeline/build_bbcol.py
+# XYZ -> sRGB linéaire (IEC 61966-2-1, blanc D65), norme IEC 61966-2-1
 M = ((3.2406, -1.5372, -0.4986), (-0.9689, 1.8758, 0.0415), (0.0557, -0.2040, 1.0570))
 
 
@@ -107,7 +107,7 @@ def main() -> None:
     cmf = [c for c in cmf if 380 <= c[0] <= 780]          # visible : 380 à 780 nm (en deçà de 380 nm, x+y+z < 0,002 : négligeable)
     gal, qso = read_kc96(REF / 'kc96_sb_template.fits'), read_sdss(REF / 'sdss_spDR2-029_qso.fit')
     data = {'ZCOL': {'n': N, 'zg': ZMAX_GAL, 'zq': ZMAX_QSO, 'gal': table(gal, ZMAX_GAL, cmf), 'qso': table(qso, ZMAX_QSO, cmf),
-                     'src': 'Galaxies : modèle Sb, Kinney et al. 1996 ; quasars : spectre moyen SDSS spDR2-029 ; CIE 1931 2°'}}
+                     'src': 'Galaxies : modèle Sb, Kinney et al. 1996 ; quasars : SDSS spDR2-029, première composante ; CIE 1931 2°'}}
     OUT.write_text('Object.assign(DATA, ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ');\n', encoding='utf-8')
     print('écrit', OUT)
 
