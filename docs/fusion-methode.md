@@ -20,8 +20,8 @@ La page calcule l'orbite d'Andromède avec `mwMass` (20_physics.js, 25_future.js
 |---|---|---|---|---|
 | Voie lactée | NFW, masse d'échelle 5,60 × 10¹¹, r_s = 16 kpc, coupé à 220 kpc : 1,06 × 10¹² M☉ dans 220 kpc [Certain : calcul du modèle de la page] | 6,8 × 10¹⁰ M☉, exponentiel R_d = 2,6 kpc, épaisseur 0,3 kpc (le Miyamoto-Nagai de la page n'a pas de fonction de distribution simple : on garde sa masse) | Hernquist 0,5 × 10¹⁰ M☉, a = 0,5 kpc | Page (`GAL`) ; R_d : Bland-Hawthorn et Gerhard 2016 [Probable] |
 | Andromède | même forme, masse × 1,5, rayons × 1,15 | 1,02 × 10¹¹ M☉, R_d = 3,0 kpc | 0,75 × 10¹⁰ M☉, a = 0,58 kpc | Page (`M31_MASS_RATIO`) |
-| Triangle (M33), corps étendu | Hernquist 2,5 × 10¹¹ M☉, a = 20 kpc | 4,8 × 10⁹ M☉, R_d = 1,4 kpc | — | Patel, Besla et Sohn 2017 [À vérifier] ; Corbelli et al. 2014 [À vérifier] |
-| Grand Nuage, corps étendu | Hernquist 1,8 × 10¹¹ M☉, a = 12 kpc (valeur de la page ; publiées : 1,3 à 2,5 × 10¹¹) | 2,7 × 10⁹ M☉, R_d = 1,5 kpc | — | Page (`LMC_MASS`) ; disque : van der Marel et al. 2002 [À vérifier] |
+| Triangle (M33), corps étendu | Plummer 2,5 × 10¹¹ M☉, rayon d'adoucissement 21 kpc : la plus forte des trois masses testées par Patel, Besla et Sohn 2017 (MNRAS 464, 3825), qui jugent plausible 1,3 à 2,1 × 10¹¹ ; Corbelli et al. 2014 donnent 4,3 × 10¹¹ [Certain : critique de vérité] | 4,8 × 10⁹ M☉ [À vérifier : fourchettes publiées 3,4 à 6,4 × 10⁹], R_d = 1,4 kpc (Regan et Vogel 1994) | — | Patel et al. 2017 ; Corbelli et al. 2014 ; Regan et Vogel 1994 |
+| Grand Nuage, corps étendu | Hernquist 1,8 × 10¹¹ M☉, a = 12 kpc (valeur de la page ; publiées : 1,3 à 2,5 × 10¹¹) | 2,7 × 10⁹ M☉, R_d = 1,5 kpc | — | Page (`LMC_MASS`) ; disque : van der Marel et al. 2002 [Certain] |
 
 Chaque galaxie est d'abord mise à l'équilibre seule (AGAMA : halo et bulbe en fonction de distribution quasi sphérique, disque en quasi-isotherme, dans le potentiel total de la galaxie), puis placée à sa position et sa vitesse de départ.
 
@@ -29,14 +29,14 @@ Chaque galaxie est d'abord mise à l'équilibre seule (AGAMA : halo et bulbe en 
 
 | Corps | Position | Vitesse | Source |
 |---|---|---|---|
-| Andromède | (−385,4 ; 623,0 ; −287,6), 785 kpc | **Retenue : « Gaia, 2025 »** (28,4 ; −109,8 ; 41,4), la mesure par défaut de la page. Les deux autres de la page (Hubble 2012 : 44,1 ; −118,0 ; 3,1 ; Gaia 2021) sont gardées pour des essais | `DATA.M31` (data3.js) ; `M31_MEAS` (60_app.js) [Certain : valeurs du code] ; mouvement propre : Wu et al. 2025 ; van der Marel et al. 2012 ; Salomon et al. 2021 [Probable] |
+| Andromède | (−385,4 ; 623,0 ; −287,6), 785 kpc | **Retenue : « Gaia, 2025 »** (28,4 ; −109,8 ; 41,4) = mouvement propre de Wu et al. 2025 (A&A 701, A265), la mesure par défaut de la page ; vitesse de côté 34 km/s, incertitude d'environ ±30 km/s. Les deux autres de la page, gardées pour des essais : « Hubble, 2012 » = van der Marel et al. 2012 (vitesse de côté 49 km/s) ; « Gaia, 2021 » = Salomon et al. 2021 (76 km/s) [Certain : recalculé par le critique de vérité] | `DATA.M31` (data3.js) ; `M31_MEAS` (60_app.js) [Certain : valeurs du code] ; mouvement propre : Wu et al. 2025 ; van der Marel et al. 2012 ; Salomon et al. 2021 [Probable] |
 | Axe de rotation d'Andromède | `DATA.M31.spin` (−0,445 ; −0,766 ; −0,464) | — | data3.js [Certain : valeur du code] |
 | Grand Nuage | (−1,0 ; −41,0 ; −27,8) | (−57,2 ; −234,5 ; 220,6) | `DATA.LMC` (data4.js) ; Kallivayalil et al. 2013 [Probable] |
 | Triangle | position et vitesse de la page | | `DATA.LGV` (data14.js) ; van der Marel et al. 2019 [Probable] |
 | 38 autres galaxies naines | positions et vitesses de la page | | `DATA.LGV` ; Pace 2024 |
 | Soleil | 8,2 kpc du centre, dans le plan, vitesse circulaire du modèle (230 km/s) | | Page (`GAL.R0`, `GAL.V0`) |
 
-**Incertitude, dite telle quelle dans la page** : Sawala et al. 2025 (Nature Astronomy) trouvent environ une chance sur deux de fusion dans les 10 milliards d'années, en propageant les incertitudes des mesures [Certain, vérifié en R4]. Le calcul ne montre qu'**un** scénario, celui de la vitesse retenue : la page le marque « scénario calculé ». Les deux autres vitesses donnent d'autres dates, ou pas de fusion ; le panneau Chronologie les garde pour l'orbite simple de la page.
+**Incertitude, dite telle quelle dans la page** : Sawala et al. 2025 (Nature Astronomy) trouvent environ une chance sur deux de fusion dans les 10 milliards d'années, en propageant les incertitudes des mesures [Certain, vérifié en R4]. Le calcul ne montre qu'**un** scénario, celui de la vitesse retenue : la page le marque « scénario calculé ». Les deux autres vitesses donnent d'autres dates ; le panneau Chronologie les garde pour l'orbite simple de la page.
 
 ## 4. Traceurs
 
@@ -46,7 +46,7 @@ Le Soleil et les 38 galaxies naines sont des **traceurs sans masse** : ils subis
 
 | | Valeur | Raison |
 |---|---|---|
-| Particules (calcul complet, R9) | ≈ 300 000 : halos 200 000, disques et bulbes 100 000 | Masse d'une particule de halo ≈ 1,6 × 10⁷ M☉, d'étoile ≈ 1 × 10⁶ M☉ (rapport < 20, pratique courante) ; fixé par le budget de temps (§ 6) |
+| Particules (calcul complet, R9) | ≈ 300 000 : halos 200 000, disques et bulbes 100 000 | Masse d'une particule de halo ≈ 1,4 × 10⁷ M☉, d'étoile ≈ 1,9 × 10⁶ M☉ (rapport ≈ 7, sous 20, pratique courante) ; fixé par le budget de temps (§ 6) |
 | Adoucissement | 0,1 kpc (étoiles), 0,4 kpc (halos) | Résolution des disques sans collisions artificielles |
 | Pas de temps | 0,25 Ma, fixe | Fixé par les essais (§ 6) : 1 Ma dérive de 0,5 % par milliard d'années, 0,25 Ma de 0,012 % |
 | Durée | 0 à 10 Ga | La fusion de la page tombe vers 5,85 Ga ; on va jusqu'à ce que le reste se calme |
@@ -57,10 +57,10 @@ Le Soleil et les 38 galaxies naines sont des **traceurs sans masse** : ils subis
 ## 6. Contrôles
 
 - **Essai réduit (fin de R8)** : 15 000 particules par grande galaxie, sur 1 milliard d'années, même code. Fini quand la dérive d'énergie totale est inférieure à 1 % (`pipeline/fusion/essai.py`, tâche GitHub `fusion-essai`).
-  **Résultat (11 novembre 2026, tâche GitHub « Fusion - essai », exécution 43114 et suivantes)** : 30 000 particules, 1 milliard d'années, pas de 1 Ma : dérive maximale **0,52 %** → PASSE. Masse de la Voie lactée échantillonnée : 9,87 × 10¹¹ M☉ (la coupure douce du halo retire une partie des 1,06 × 10¹² de la page) ; vitesse circulaire à 2 R_d : 246 km/s (Voie lactée), 280 km/s (Andromède). Temps : 0,032 s par pas pour 30 000 particules, soit environ 1,8 heure pour le calcul complet si le temps croît comme N [Probable : falcON est en O(N)].
+  **Résultat (11 novembre 2026, tâche GitHub « Fusion - essai », exécution 43114979551)** : 30 000 particules, 1 milliard d'années, pas de 1 Ma : dérive maximale **0,52 %** → PASSE. Masses échantillonnées : Voie lactée 9,87 × 10¹¹ M☉, Andromède 1,483 × 10¹² M☉, soit environ 7 % sous la page (la coupure douce du halo retire une partie des 1,06 × 10¹² et 1,59 × 10¹² de la page) ; à garder en tête en comparant la date de fusion aux 5,85 Ga de la page ; vitesse circulaire à 2 R_d : 246 km/s (Voie lactée), 280 km/s (Andromède). Temps : 0,032 s par pas pour 30 000 particules, soit environ 1,8 heure pour le calcul complet si le temps croît comme N [Probable : falcON est en O(N)].
   **Second essai, pas de 0,25 Ma** (tâche 43115664338) : dérive maximale **0,012 %** sur 1 milliard d'années : la dérive venait du pas. Temps : 0,043 s par pas pour 30 000 particules.
-  **Conséquence pour R9** : pas de 0,25 Ma (dérive attendue environ 0,1 % sur 10 milliards d'années). Avec 600 000 particules, le calcul durerait environ 9,5 heures, au-delà des 6 heures d'une tâche GitHub : le calcul complet prend donc **300 000 particules** (halos 200 000, étoiles 100 000 ; masse d'une particule de halo ≈ 1,6 × 10⁷ M☉, d'étoile ≈ 1 × 10⁶ M☉), soit environ 4,8 heures.
-- **Calcul complet (R9)** : dérive d'énergie inférieure à 1 % sur tout le calcul ; date de la fusion (centres à moins de 10 kpc, puis plus de séparation) comparée aux 5,85 Ga de l'estimation à deux corps de la page et aux valeurs publiées (Sawala et al. 2025 ; van der Marel et al. 2019 : environ 4,5 Ga pour le premier passage [À vérifier]).
+  **Conséquence pour R9** : pas de 0,25 Ma (dérive attendue environ 0,1 % sur 10 milliards d'années [Probable : extrapolation ; l'essai ne couvre que l'approche, galaxies à plus de 600 kpc ; le vrai contrôle est celui de R9]). Avec 600 000 particules, le calcul durerait environ 9,5 heures, au-delà des 6 heures d'une tâche GitHub : le calcul complet prend donc **300 000 particules** (halos 200 000, étoiles 100 000 ; masse d'une particule de halo ≈ 1,4 × 10⁷ M☉, d'étoile ≈ 1,9 × 10⁶ M☉), soit environ 4,8 heures.
+- **Calcul complet (R9)** : dérive d'énergie inférieure à 1 % sur tout le calcul ; date de la fusion (centres à moins de 10 kpc, puis plus de séparation) comparée aux 5,85 Ga de l'estimation à deux corps de la page et aux valeurs publiées (Sawala et al. 2025 ; communiqué de l'ESA 2019 d'après Gaia DR2 : collision dans environ 4,5 Ga).
 
 ## 7. Ce qui reste supposé, et dit
 

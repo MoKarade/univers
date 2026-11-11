@@ -2,7 +2,7 @@
 """Essai réduit de la fusion (fin de R8, docs/fusion-methode.md § 6).
 
 Voie lactée et Andromède, environ 15 000 particules chacune, sur 1 milliard d'années, avec le même code que le calcul
-complet (AGAMA pour l'équilibre, falcON pour la gravité, saute-mouton à pas fixe de 1 Ma). Affiche la dérive
+complet (AGAMA pour l'équilibre, falcON pour la gravité, saute-mouton à pas fixe, 1 Ma par défaut, réglable). Affiche la dérive
 d'énergie totale (fini quand < 1 %) et le temps par pas, d'où une estimation du temps du calcul complet.
 """
 import time, json, sys
@@ -11,6 +11,7 @@ import pyfalcon
 import modeles as M
 
 G = M.G
+N_COMPLET = 300000                         # particules du calcul complet (docs/fusion-methode.md § 5)
 T_UNIT_GYR = 0.9778                       # kpc/(km/s) en milliards d'années
 DT_MA = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0   # pas en millions d'années
 DT = DT_MA * 0.001 / T_UNIT_GYR
@@ -49,7 +50,7 @@ def main():
             print(f'  t = {(s + 1) * DT_MA * 0.001:.2f} Ga : dérive d’énergie {100 * (e / e0 - 1):+.3f} %', flush=True)
     dt_step = (time.time() - t0) / steps
     N = len(p['m'])
-    full = dt_step * (600000 / N) * (10.0 / (DT_MA * 0.001)) / 3600
+    full = dt_step * (N_COMPLET / N) * (10.0 / (DT_MA * 0.001)) / 3600
     res = dict(particules=N, duree_ga=t_gyr, pas_ma=DT_MA, derive_max_pourcent=100 * worst, secondes_par_pas=dt_step, estimation_calcul_complet_heures=full)
     print(json.dumps(res, ensure_ascii=False, indent=1))
     print('essai :', 'PASSE' if worst < 0.01 else 'ÉCHEC', f'(dérive maximale {100 * worst:.3f} %, limite 1 %)')
