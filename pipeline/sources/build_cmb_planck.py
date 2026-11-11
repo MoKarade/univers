@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fond diffus cosmologique de Planck -> app/gen/data16.js (remplace DATA.CMB, la carte WMAP).
+"""Fond diffus cosmologique de Planck -> app/gen/data19.js (remplace DATA.CMB, la carte WMAP).
 
 Source : Planck 2018 (PR3), carte CMB par séparation de composantes SMICA, NSIDE 2048,
 ESA / Planck Collaboration, Planck Legacy Archive, copie IRSA :
@@ -109,7 +109,7 @@ def main(raw):
         'CMB_SRC': 'Planck 2018 (PR3), carte SMICA, ESA et collaboration Planck (A&A 641, A4)',
         'CMB_CHK': {'largeur': LARGEUR, 'hauteur': HAUTEUR, 'correl_wmap': correl},
     }
-    out = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data16.js')
+    out = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data19.js')
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('Object.assign(DATA, ' + json.dumps(payload, ensure_ascii=False, separators=(',', ':')) + ');\n')
     print('écrit', os.path.normpath(out), os.path.getsize(out), 'octets')

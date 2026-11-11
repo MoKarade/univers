@@ -22,13 +22,13 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 ### S1 — Fond diffus de Planck (A3)
 - Avant : carte WMAP 9 ans (ILC), 720 × 360.
 - Après : carte Planck PR3 SMICA, version comblée sur le plan galactique si l'archive la fournit, en coordonnées galactiques ; fiche « Planck 2018, ESA ».
-- Données : `pipeline/sources/build_cmb_planck.py` → `app/gen/data16.js` (`DATA.CMB`, `DATA.CMB_SRC`).
+- Données : `pipeline/sources/build_cmb_planck.py` → `app/gen/data19.js` (`DATA.CMB`, `DATA.CMB_SRC`).
 - Fait : colonne comblée `I_STOKES_INP` ; carte moyennée à NSIDE 512 (6,9′) puis projetée en 2048 × 1024, 880 ko dans la page ; l'ancienne carte WMAP est retirée de la page. Contrôle : corrélation avec WMAP ILC hors du plan galactique 0,971, témoin retourné −0,04 [Certain].
 - Fini quand : test `app/test/lot_s.py` (texture 2048 × 1024, corrélation embarquée > 0,8, capture de la vue « Univers observable ») sur ordinateur et téléphone ; critiques PASSE ; Marc confirme sur son téléphone.
 
 ### S2 — Ondes gravitationnelles (A6)
 - Après : chaque fusion détectée a un événement daté dans la chronologie, avec masses et distance telles que publiées.
-- Données : `pipeline/sources/build_gw.py` → `app/gen/data15.js` (`DATA.GW`), test `pipeline/sources/test_build_gw.py`. Fait : 391 détections des catalogues GWTC officiels, 282 avec masses et distance ; 109 (57 du GWTC-5.0, 52 du GWTC-4.1) n'ont pas encore de paramètres dans l'interface de GWOSC et le disent. Probabilité d'origine astrophysique sous 0,99 : « Probable » (167 détections).
+- Données : `pipeline/sources/build_gw.py` → `app/gen/data18.js` (`DATA.GW`), test `pipeline/sources/test_build_gw.py`. Fait : 391 détections des catalogues GWTC officiels, 282 avec masses et distance ; 109 (57 du GWTC-5.0, 52 du GWTC-4.1) n'ont pas encore de paramètres dans l'interface de GWOSC et le disent. Probabilité d'origine astrophysique sous 0,99 : « Probable » (167 détections).
 - Pas fait : la zone probable sur le ciel (cartes de localisation, une par événement, lourdes). À trancher au branchement.
 - Fini quand : test `app/test/lot_s.py` : une ligne par détection, catégorie masquée par défaut, fiches de GW170817 (17 août 2017, 12 h 41 TU), GW190521 et GW200115 aux valeurs publiées, vue de la Terre au toucher ; critiques PASSE.
 

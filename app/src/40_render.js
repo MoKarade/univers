@@ -55,7 +55,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); gl_Position=pr
     else { float dt=uT-tD; if(sn>0.5){ if(dt<uFlash){ M=-17.0+6.0*dt/uFlash; col=vec3(0.85,0.92,1.0); } else vis=0.0; } else { M=11.0+2.5*log(1.0+dt/200.0)/2.302585; col=vec3(0.8,0.88,1.0); } }
   }
   float dpc=max(length(mv.xyz)*uUnitToPc,1e-7); float m=M+5.0*log(dpc/10.0)/2.302585-uExpo; float f=pow(10.0,-0.4*(m-6.5));
-  float r=min(0.8+0.62*pow(f,0.27),8.5); vA=clamp(pow(f,0.66)*0.6,0.0,1.0)*uOpacity*vis*(1.0-smoothstep(uMcut-0.8,uMcut,m))*step(uTgtR,distance(position+aVel*uVt,uTgt)); vCore=clamp(f/60.0,0.0,1.0); float lum=dot(col,vec3(0.3,0.5,0.2)); vColor=max(mix(vec3(lum),col,1.55),0.0); gl_PointSize=r*4.0*uDpr; }`,
+  float r=min(0.8+0.62*pow(f,0.27),8.5); vA=clamp(pow(f,0.66)*0.6,0.0,1.0)*uOpacity*vis*(1.0-smoothstep(uMcut-0.8,uMcut,m))*step(uTgtR,distance(position+aVel*uVt,uTgt)); vCore=clamp(f/60.0,0.0,1.0); vColor=col; /* couleur du corps noir telle quelle (S1) : plus de saturation gonflée */ gl_PointSize=r*4.0*uDpr; }`,
     f: `varying vec3 vColor; varying float vA; varying float vCore;
 void main(){ vec2 p=gl_PointCoord*2.0-1.0; float d2=dot(p,p); if(d2>1.0) discard; float core=exp(-d2*15.0); float halo=exp(-d2*3.5)*0.16-0.005; vec2 q=abs(p); float spike=(exp(-q.y*26.0)*exp(-q.x*3.2)+exp(-q.x*26.0)*exp(-q.y*3.2))*0.22*vCore*vCore*(1.0-d2);
   gl_FragColor=vec4(mix(vColor,vec3(1.0),core*0.28)*vA*(core*(1.0+3.0*vCore)+max(halo,0.0)*(0.5+vCore)+spike),1.0); }` },
@@ -83,10 +83,12 @@ void main(){ float r=length(position); vec4 mv=modelViewMatrix*vec4(position,1.0
   float pk=min(1.0,Sof(uCR)/Sof(r)*(r*r)/(uCR*uCR)); float lod=clamp((pk-aRnd.x)/(0.25*pk+1e-5),0.0,1.0); float hz=1.0-smoothstep(0.97*uHorizon,uHorizon,r);
   vA=uOpacity*lod*hz*(0.5+0.5*aRnd.y)*smoothstep(0.15,0.9,uAge); vColor=mix(vec3(0.62,0.74,1.0),vec3(1.0,0.86,0.66),fract(aRnd.x*7.31)); gl_PointSize=uMinPx*(2.1+1.3*aRnd.y); }`, f: FRAG_SOFT },
   surv: { v: `attribute float aDist; attribute vec3 aInfo; uniform float uPx,uOpacity,uMinPx,uCR,uHorizon,uAge,uKeep; varying vec3 vColor; varying float vA;
+uniform vec3 uZG[64]; uniform vec3 uZQ[64]; uniform vec2 uZM;
+vec3 zcol(float z,float q){ float u=clamp(log(1.0+z)/mix(uZM.x,uZM.y,q),0.0,1.0)*63.0; int i=int(min(floor(u),62.0)); float f=u-float(i); return q>0.5?mix(uZQ[i],uZQ[i+1],f):mix(uZG[i],uZG[i+1],f); }
 void main(){ float r=aDist; vec4 mv=modelViewMatrix*vec4(position*r,1.0); gl_Position=projectionMatrix*mv; gl_Position.z=0.0;
   float pk=uKeep*min(1.0,pow(r/uCR,1.7)); float lod=clamp((pk-aInfo.y)/(0.3*pk+1e-5),0.0,1.0);
   float hz=1.0-smoothstep(0.97*uHorizon,uHorizon,r); float q=step(1.5,aInfo.z); float ns=1.0-step(0.5,aInfo.z);
-  vec3 cg=mix(vec3(0.76,0.85,1.0),vec3(1.0,0.72,0.46),smoothstep(0.03,0.8,aInfo.x)); vColor=mix(cg,vec3(0.6,0.82,1.0),q);
+  vColor=zcol(aInfo.x,q);      /* S3 : couleur observée calculée selon z (spectre au repos décalé, œil CIE 1931), table DATA.ZCOL */
   vA=uOpacity*lod*hz*smoothstep(0.15,0.9,uAge)*(0.9+0.3*ns); gl_PointSize=uMinPx*(2.5+1.0*ns+0.6*q); if(vA<=0.002) gl_Position=vec4(2.0,2.0,2.0,1.0); }`, f: FRAG_SOFT },
   dots: { v: `attribute vec2 aLook; uniform float uOpacity,uDpr,uZ; uniform vec3 uColor; varying vec3 vColor; varying float vA;
 void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv; if(uZ>0.5) gl_Position.z=0.0; vA=aLook.y*uOpacity; vColor=uColor; gl_PointSize=clamp(aLook.x*1.5,1.0,4.5)*uDpr; }`, f: FRAG_SOFT },
@@ -360,6 +362,7 @@ function createRenderer(canvas, Q, generated) {
   { const lz = Math.log(1 + DATA.SURV_ZMAX), n1 = DATA.SURV_N[0], n2 = n1 + DATA.SURV_N[1];
     for (let i = 0; i < svN; i++) { const lon = sv[i * 3] / 65535 * TAU, lat = (sv[i * 3 + 1] / 65535 - 0.5) * Math.PI, cl = Math.cos(lat); svDir.set([cl * Math.cos(lon), cl * Math.sin(lon), Math.sin(lat)], i * 3); svU[i] = sv[i * 3 + 2] / 65535; svInfo.set([Math.exp(svU[i] * lz) - 1, ((Math.imul(i + 1, 2654435761) >>> 0) / 4294967296), i < n1 ? 0 : i < n2 ? 1 : 2], i * 3); } }
   const survU = { uPx: U(1), uOpacity: U(1), uMinPx: U(1), uCR: U(100), uHorizon: U(14000), uAge: U(13.8), uKeep: U(Q.keep || 1) };
+  const ZC = DATA.ZCOL, zv = a => Array.from({ length: ZC.n }, (_, i) => new THREE.Vector3(a[i * 3], a[i * 3 + 1], a[i * 3 + 2])); survU.uZG = U(zv(ZC.gal)); survU.uZQ = U(zv(ZC.qso)); survU.uZM = U(new THREE.Vector2(Math.log(1 + ZC.zg), Math.log(1 + ZC.zq)));      /* S3 : partagés avec les tuiles de galaxies */
   const surv = pts({ position: [svDir, 3], aDist: [svDist, 1], aInfo: [svInfo, 3] }, mk(SH.surv, survU), 2);
   R.pick = { nPos, nLook, nN, svDir, svDist, svInfo, svN, keep: Q.keep || 1 };
   R.setSurvey = lut => { const K = lut.length - 1; for (let i = 0; i < svN; i++) { const x = svU[i] * K, k = Math.min(x | 0, K - 1); svDist[i] = lut[k] + (lut[k + 1] - lut[k]) * (x - k); } surv.geometry.attributes.aDist.needsUpdate = true; };
@@ -397,7 +400,7 @@ function createRenderer(canvas, Q, generated) {
   sHip.set(new Uint32Array(b64ToBytes(DATA.STARS_HIP).buffer).subarray(0, sN0));
   for (let i = 0; i < sN; i++) { sBv[i] = i < sN0 ? sAux[i * 2 + 1] / 100 - 0.5 : XS[i - sN0].bv; const L = starLife(sMag[i], sBv[i], i, sHip[i]); sLife.set([clamp(L[0], -2e5, 2e5), clamp(L[1], -2e5, 2e5), clamp(L[2], -2e5, 2e5)], i * 3); sFate[i] = L[3]; sMass[i] = L[4]; sCls[i] = L[5]; }
   const vq = new Int16Array(sN * 3), Mg = DATA.M_GAL2ECL; vq.set(new Int16Array(b64ToBytes(DATA.STARS_VEL).buffer).subarray(0, sN0 * 3)); XS.forEach((o, k) => { for (let a = 0; a < 3; a++) vq[(sN0 + k) * 3 + a] = Math.round(20 * (Mg[0][a] * o.v[0] + Mg[1][a] * o.v[1] + Mg[2][a] * o.v[2])); });
-  const K = initStarKin(sPos, sN, DATA.SGRA_GAL.map(x => -x * GAL.R0), vq); R.K = K;
+  const K = initStarKin(sPos, sN, DATA.SGRA_GAL.map(x => -x * GAL.R0), vq); R.K = K; orbInit(K, DATA.SGRA_GAL.map(x => -x * GAL.R0));
   // trajectoire publiée (instant, distance et vitesse du passage) pour chaque étoile frôleuse, ajoutée ou déjà présente
   K.lin = new Uint8Array(sN);
   R.passers = (DATA.PASSERS || []).map(o => { const i = o.i >= 0 ? o.i : sN0 + XS.indexOf(o); K.lin[i] = 1; for (let a = 0; a < 3; a++) { K.p0[i * 3 + a] = o.p[a]; sPos[i * 3 + a] = o.p[a]; K.ve[i * 3 + a] = o.v[a] * KMS_LY_YR; } K.vkms[i] = o.vk; sMass[i] = o.m; if (!DATA.STAR_NAMES[i]) DATA.STAR_NAMES[i] = o.n; return Object.assign({ idx: i }, o); });
@@ -431,7 +434,7 @@ function createRenderer(canvas, Q, generated) {
       T.n += cnt; };
     return tileObj(T, SH.star, 8); };
   R.addGalTile = cap => {
-    const T = { kind: 'gal', rec: 6, cap, n: 0, sent: 0, draw: 0, dir: new Float32Array(cap * 3), dist: new Float32Array(cap), info: new Float32Array(cap * 3), zu: new Float32Array(cap), u: { uPx: U(1), uOpacity: U(1), uMinPx: U(1), uCR: U(100), uHorizon: U(14000), uAge: U(13.8), uKeep: U(1) }, attrs: [['position', 3], ['aDist', 1], ['aInfo', 3]], g: new THREE.BufferGeometry() };
+    const T = { kind: 'gal', rec: 6, cap, n: 0, sent: 0, draw: 0, dir: new Float32Array(cap * 3), dist: new Float32Array(cap), info: new Float32Array(cap * 3), zu: new Float32Array(cap), u: { uPx: U(1), uOpacity: U(1), uMinPx: U(1), uCR: U(100), uHorizon: U(14000), uAge: U(13.8), uKeep: U(1), uZG: survU.uZG, uZQ: survU.uZQ, uZM: survU.uZM }, attrs: [['position', 3], ['aDist', 1], ['aInfo', 3]], g: new THREE.BufferGeometry() };
     dynAttr(T.g, 'position', T.dir, 3); dynAttr(T.g, 'aDist', T.dist, 1); dynAttr(T.g, 'aInfo', T.info, 3); T.P = { svDir: T.dir, svDist: T.dist, svInfo: T.info };
     const lz = Math.log(1 + DATA.SURV_ZMAX), seed = R.tiles.length * 7919 + 13;
     const dOf = x => { const lut = R.survLut; if (!lut) return 0; const K = lut.length - 1, y = x * K, k = Math.min(y | 0, K - 1); return lut[k] + (lut[k + 1] - lut[k]) * (y - k); };
@@ -839,7 +842,8 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
 
     const sol = F.sol, d = F.days;
     const orb = F.orb, mg = sol.moonGeo, sc3 = (p, k) => [p[0] * k, p[1] * k, p[2] * k];
-    const posOf = k => k === 'sun' ? ZERO : k === 'earth' ? sc3(sol.earth, orb) : k === 'moon' ? [sol.earth[0] * orb + mg[0], sol.earth[1] * orb + mg[1], sol.earth[2] * orb + mg[2]] : sc3(sol.planets[k].pos, orb);
+    const oP = k => (F.orbP && F.orbP[k]) || orb;      /* R5 : Mercure et Vénus ont leur propre facteur d'orbite (spirale calculée) */
+    const posOf = k => k === 'sun' ? ZERO : k === 'earth' ? sc3(sol.earth, oP('earth')) : k === 'moon' ? [sol.earth[0] * oP('earth') + mg[0], sol.earth[1] * oP('earth') + mg[1], sol.earth[2] * oP('earth') + mg[2]] : sc3(sol.planets[k].pos, oP(k));
     for (const b of BODIES) {
       const o = bodies[b.key], pa = posOf(b.key);
       o.pos[0] = pa[0] * AU; o.pos[1] = pa[1] * AU; o.pos[2] = pa[2] * AU;
@@ -874,7 +878,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
       const m = orbits[k], st = sol.planets[k], u = m.userData.u, body = k === 'emb' ? bodies.earth : bodies[k];
       const close = fadeIn(lr, Math.log10(st.a * AU) - 2.6, Math.log10(st.a * AU) - 1.7);
       m.visible = oOrb * close > 0.004 && !F.eng[k === 'emb' ? 'earth' : k]; if (!m.visible) continue;
-      place(m, [st.pos[0] * AU * orb, st.pos[1] * AU * orb, st.pos[2] * AU * orb], AU * orb, F);
+      const ok = oP(k === 'emb' ? 'earth' : k); place(m, [st.pos[0] * AU * ok, st.pos[1] * AU * ok, st.pos[2] * AU * ok], AU * ok, F);
       const b = st.a * Math.sqrt(1 - st.e * st.e); u.uP.value.set(st.P[0] * st.a, st.P[1] * st.a, st.P[2] * st.a); u.uQ.value.set(st.Q[0] * b, st.Q[1] * b, st.Q[2] * b);
       u.uE0.value = st.E; u.uWidth.value = 0.85 * dpr; u.uViewport.value.set(R.w, R.h); u.uOpacity.value = oOrb * close * lerp(0.5, 0.85, 1 - body.vis) * 0.62;
     }

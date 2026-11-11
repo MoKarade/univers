@@ -16,16 +16,21 @@ const vnorm = v => { const l = vlen(v) || 1; return [v[0] / l, v[1] / l, v[2] / 
 const vcross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const eqToEcl = v => { const c = Math.cos(EPS_J2000), s = Math.sin(EPS_J2000); return [v[0], c * v[1] + s * v[2], -s * v[1] + c * v[2]]; };
 
-/** Couleur d'une étoile à partir de son indice B−V (corps noir approché), adoucie vers le blanc comme la voit l'œil. */
-function bvToRgb(bv) {
-  bv = clamp(bv, -0.4, 2.0);
-  const T = 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62)), t = T / 100;
-  let r, g, b;
-  if (t <= 66) { r = 255; g = 99.4708025861 * Math.log(t) - 161.1195681661; b = t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307; }
-  else { r = 329.698727446 * Math.pow(t - 60, -0.1332047592); g = 288.1221695283 * Math.pow(t - 60, -0.0755148492); b = 255; }
-  const f = x => Math.pow(clamp(x, 0, 255) / 255, 2.2) * 0.72 + 0.28;
-  return [f(r), f(g), f(b)];
+/** Température d'une étoile à partir de son indice B−V : formule de Ballesteros 2012 (EPL 97, 34008). Indice absent : couleur du Soleil. */
+function bvToTeff(bv) {
+  bv = clamp(Number.isFinite(bv) ? bv : 0.656, -0.4, 2.0);
+  return 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62));
 }
+
+/** Couleur d'un corps noir à la température T (K), en sRGB linéaire, composante la plus forte à 1.
+ *  Table DATA.BBCOL : loi de Planck intégrée sur l'observateur CIE 1931 (pipeline/build_bbcol.py), interpolée en log T. */
+function bbRgb(T) {
+  const B = DATA.BBCOL, n = B.n, u = clamp(Math.log(T / B.t0) / Math.log(B.t1 / B.t0), 0, 1) * (n - 1), i = Math.min(Math.floor(u), n - 2), f = u - i, a = B.rgb;
+  return [0, 1, 2].map(k => a[i * 3 + k] * (1 - f) + a[(i + 1) * 3 + k] * f);
+}
+
+/** Couleur d'une étoile à partir de son indice B−V : température (Ballesteros 2012), puis couleur du corps noir vue par l'œil standard (CIE 1931). */
+function bvToRgb(bv) { return bbRgb(bvToTeff(bv)); }
 
 /* ---- formats français ---- */
 const NBSP = '\u00a0', NNBSP = '\u202f';

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ondes gravitationnelles détectées -> app/gen/data15.js (clé DATA.GW).
+"""Ondes gravitationnelles détectées -> app/gen/data18.js (clé DATA.GW).
 
 Source : GWOSC, Gravitational-Wave Open Science Center (LIGO, Virgo, KAGRA),
 https://gwosc.org/eventapi/json/allevents/ (téléchargé dans RAW/gwosc_allevents.json).
@@ -89,7 +89,7 @@ def main(raw):
     for cat in CATALOGUES:
         print('  %-20s %d' % (cat, sum(1 for r in sel if r['cat'] == cat)))
     payload = {'GW': sel, 'GW_SRC': 'GWOSC, catalogues GWTC (LIGO, Virgo, KAGRA), https://gwosc.org'}
-    out = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data15.js')
+    out = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data18.js')
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('Object.assign(DATA, ' + json.dumps(payload, ensure_ascii=False, separators=(',', ':')) + ');\n')
     print('écrit', os.path.normpath(out), os.path.getsize(out), 'octets')

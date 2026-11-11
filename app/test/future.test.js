@@ -1,6 +1,6 @@
 const fs = require('fs'), vm = require('vm'), path = require('path'), root = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(root, f), 'utf8'); global.atob = s => Buffer.from(s, 'base64').toString('binary');
-vm.runInThisContext((rd('gen/data.js') + rd('gen/data2.js') + rd('gen/ephem.js') + rd('gen/data3.js') + rd('src/20_physics.js') + rd('src/30_gen.js').split('/* ====')[1].replace(/^/, '/* ====') + rd('src/25_future.js')).replace(/^const /gm, 'var '));
+vm.runInThisContext((rd('gen/data.js') + rd('gen/data2.js') + rd('gen/ephem.js') + rd('gen/data3.js') + rd('src/20_physics.js') + rd('src/30_gen.js').split('/* ====')[1].replace(/^/, '/* ====') + rd('src/25_future.js') + rd('src/26_orbits.js')).replace(/^const /gm, 'var '));
 console.log('--- Soleil');
 for (const t of [0, 1.1, 5.42, 7.0, 7.5, 7.587, 7.59, 7.7, 7.72, 7.75, 8.72, 20]) { const s = sunState(t); console.log('  +%s Ga : %s | L=%s R=%s (%s UA) T=%s K M=%s', t, s.phase, +s.L.toPrecision(3), +s.R.toPrecision(3), (s.R * R_SUN_AU).toFixed(3), Math.round(s.T), s.M.toFixed(3)); }
 console.log('  engloutissement (Ga depuis aujourd\'hui) : Mercure %s, Vénus %s, Terre %s, Mars %s', engulfTime(0.387).toFixed(4), engulfTime(0.723).toFixed(4), engulfTime(1.0).toFixed(4), engulfTime(1.524));
