@@ -8,6 +8,10 @@ on:
       n: { description: "particules en tout", default: "300000" }
       milieu: { description: "fin du premier morceau (Ga)", default: "5.0" }
       fin: { description: "fin du calcul (Ga)", default: "10.0" }
+  # essai court de reprise par morceaux sur les branches de travail (6 000 particules, 0 → 0,1 → 0,2 Ga)
+  push:
+    branches: ["r9-*"]
+    paths: ["pipeline/fusion/calcul.py", "pipeline/fusion/modeles.py", ".github/workflows/fusion-calcul.yml"]
 
 permissions:
   contents: read
@@ -30,7 +34,7 @@ jobs:
           python -m pip install --no-build-isolation git+https://github.com/GalacticDynamics-Oxford/pyfalcon.git
       - name: Calcul, premier morceau
         working-directory: pipeline/fusion
-        run: python calcul.py 0 "${{ inputs.milieu }}" "${{ inputs.n }}"
+        run: python calcul.py 0 "${{ inputs.milieu || '0.1' }}" "${{ inputs.n || '6000' }}"
       - uses: actions/upload-artifact@v4
         with: { name: fusion-morceau1, path: pipeline/fusion/sortie, retention-days: 7 }
   morceau2:
@@ -53,7 +57,7 @@ jobs:
         with: { name: fusion-morceau1, path: pipeline/fusion/sortie }
       - name: Calcul, second morceau
         working-directory: pipeline/fusion
-        run: python calcul.py "${{ inputs.milieu }}" "${{ inputs.fin }}" "${{ inputs.n }}"
+        run: python calcul.py "${{ inputs.milieu || '0.1' }}" "${{ inputs.fin || '0.2' }}" "${{ inputs.n || '6000' }}"
       - name: Bilan
         working-directory: pipeline/fusion/sortie
         run: |
