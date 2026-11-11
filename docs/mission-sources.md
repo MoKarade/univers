@@ -23,14 +23,14 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 - Avant : carte WMAP 9 ans (ILC), 720 × 360.
 - Après : carte Planck PR3 SMICA, version comblée sur le plan galactique si l'archive la fournit, en coordonnées galactiques ; fiche « Planck 2018, ESA ».
 - Données : `pipeline/sources/build_cmb_planck.py` → `app/gen/data16.js` (`DATA.CMB`, `DATA.CMB_SRC`).
-- Fait (données) : colonne comblée `I_STOKES_INP` utilisée ; écart-type hors du plan galactique (|b| > 30°) : 105,4 µK, ordre de grandeur attendu pour le fond diffus [Probable] ; image 2048 × 1024, 880 ko dans la page (contre une carte WMAP 720 × 360).
-- Fini quand : capture à l'écran à l'horizon cosmique ; critiques PASSE.
+- Fait : colonne comblée `I_STOKES_INP` ; carte moyennée à NSIDE 512 (6,9′) puis projetée en 2048 × 1024, 880 ko dans la page ; l'ancienne carte WMAP est retirée de la page. Contrôle : corrélation avec WMAP ILC hors du plan galactique 0,971, témoin retourné −0,04 [Certain].
+- Fini quand : test `app/test/lot_s.py` (texture 2048 × 1024, corrélation embarquée > 0,8, capture de la vue « Univers observable ») sur ordinateur et téléphone ; critiques PASSE ; Marc confirme sur son téléphone.
 
 ### S2 — Ondes gravitationnelles (A6)
 - Après : chaque fusion détectée a un événement daté dans la chronologie, avec masses et distance telles que publiées.
-- Données : `pipeline/sources/build_gw.py` → `app/gen/data15.js` (`DATA.GW`). Fait : 391 événements des catalogues GWTC officiels, 282 avec masses et distance ; les 161 du GWTC-5.0 n'ont pas encore de paramètres dans l'interface de GWOSC et le disent.
+- Données : `pipeline/sources/build_gw.py` → `app/gen/data15.js` (`DATA.GW`), test `pipeline/sources/test_build_gw.py`. Fait : 391 détections des catalogues GWTC officiels, 282 avec masses et distance ; 109 (57 du GWTC-5.0, 52 du GWTC-4.1) n'ont pas encore de paramètres dans l'interface de GWOSC et le disent. Probabilité d'origine astrophysique sous 0,99 : « Probable » (167 détections).
 - Pas fait : la zone probable sur le ciel (cartes de localisation, une par événement, lourdes). À trancher au branchement.
-- Fini quand : test `ondes` : nombre d'événements affichés égal à celui du fichier ; GW170817 porte sa date (17 août 2017, 12:41:04 UTC) ; critiques PASSE.
+- Fini quand : test `app/test/lot_s.py` : une ligne par détection, catégorie masquée par défaut, fiches de GW170817 (17 août 2017, 12 h 41 TU), GW190521 et GW200115 aux valeurs publiées, vue de la Terre au toucher ; critiques PASSE.
 
 ### S3 — Méthode de mesure des distances (A1)
 - Après : la fiche de chaque galaxie de Cosmicflows-4 dit comment sa distance a été mesurée (Céphéides, TRGB, Tully-Fisher, plan fondamental, supernova, fluctuations de brillance de surface…), avec l'incertitude.

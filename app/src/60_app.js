@@ -953,15 +953,20 @@
   function evCross(a, b) { if (a === b || !EVL.length) return; const lo = Math.min(a, b), hi = Math.max(a, b); let i0 = 0, i1 = EVL.length, best = null, n = 0; while (i0 < i1) { const m = (i0 + i1) >> 1; if (EVL[m].t <= lo) i0 = m + 1; else i1 = m; }
     for (let i = i0; i < EVL.length && EVL[i].t <= hi; i++) { const e = EVL[i]; if (!evShown(e) || e.now) continue; n++; if (!best || e.imp < best.imp) best = e; }
     if (!best || (S.sel && S.sel.ev === best)) return; if (n > 2 && best.imp > 1) return; if (evtE && !evtEl.hidden && performance.now() - evtT < 1500 && best.imp >= evtE.imp) return; evToast(best); }
-  /* Ondes gravitationnelles détectées (GWOSC, catalogues GWTC) : une ligne par détection, valeurs telles que publiées.
-     GW150914 et GW170817 ont déjà leur propre événement dans « Ciel observé et exploration ». */
-  function gwEvents(dyn) { const G = DATA.GW || [], dup = { GW150914: 1, GW170817: 1 }, src = 'GWOSC (LIGO, Virgo, KAGRA), catalogue ';
-    const mass = q => sig(q[0], 2) + NBSP + 'masses solaires', rng = (q, f) => q[1] !== null && q[2] !== null ? ' (entre ' + f(q[1]) + ' et ' + f(q[2]) + ')' : '';
-    for (const g of G) { if (dup[g.n]) continue; let d;
-      if (g.m1 && g.m2) d = 'Fusion de deux objets compacts de ' + mass(g.m1) + ' et ' + mass(g.m2) + '.' + (g.dl ? ' Distance de luminosité : ' + fmtDist(g.dl[0] * MPC) + rng(g.dl, x => fmtDist(x * MPC)) + '.' : '');
-      else d = 'Détection publiée. Masses et distance pas encore disponibles dans l’interface de GWOSC.';
-      if (g.pa !== null && g.pa < 1) d += ' Probabilité d’origine astrophysique : ' + Math.round(g.pa * 100) + NBSP + '%.';
-      dyn.push([g.t.slice(0, 16), 'O', 3, 'Onde gravitationnelle ' + g.n, d, 'C', src + g.cat, '', { sim: 'Détection réelle. Sa position sur le ciel n’est pas affichée : les zones de localisation ne sont pas encore chargées.' }]); } }
+  /* Ondes gravitationnelles détectées (GWOSC, catalogues GWTC) : une ligne par détection, valeurs et intervalles tels que publiés.
+     Certitude : « Certain » si la probabilité d'origine astrophysique publiée est d'au moins 0,99 (ou non publiée, détections
+     des premiers catalogues), « Probable » en dessous. La vue montre la Terre, où le signal est enregistré. */
+  const GW_SUR = 0.99;
+  function gwEvents(dyn) { const G = DATA.GW || [], src = 'GWOSC (LIGO, Virgo, KAGRA), catalogue ';
+    const ms = x => sig(x, 2), rng = (q, f) => q[1] !== null && q[2] !== null ? ' (entre ' + f(q[1]) + ' et ' + f(q[2]) + ')' : '';
+    const pct = p => p >= 0.995 ? 'plus de 99' + NBSP + '%' : Math.round(p * 100) + NBSP + '%';
+    for (const g of G) { const sure = g.pa === null || g.pa >= GW_SUR; let n, d;
+      if (g.m1 && g.m2) { n = 'Fusion de ' + ms(g.m1[0]) + ' et ' + ms(g.m2[0]) + ' masses solaires';
+        d = g.n + ' : fusion de deux objets compacts, l’un de ' + ms(g.m1[0]) + NBSP + 'masses solaires' + rng(g.m1, ms) + ', l’autre de ' + ms(g.m2[0]) + rng(g.m2, ms) + '.'
+          + (g.dl ? ' Distance tirée de l’affaiblissement du signal (distance de luminosité, ce n’est pas le trajet de la lumière) : ' + fmtDist(g.dl[0] * MPC) + rng(g.dl, x => fmtDist(x * MPC)) + '.' : ''); }
+      else { n = 'Onde gravitationnelle ' + g.n; d = 'Détection publiée. Masses et distance pas encore disponibles dans l’interface de GWOSC.'; }
+      if (!sure) d += ' Probabilité d’origine astrophysique : ' + pct(g.pa) + '.';
+      dyn.push([g.t.slice(0, 16), 'O', 3, n, d, sure ? 'C' : 'P', src + g.cat, 'e', { sim: 'Détection réelle. Sa position sur le ciel n’est pas affichée : les zones de localisation ne sont pas encore chargées.' }]); } }
   function buildEvents() { const O = S.orbit, C = S.cosmo, p = O.peri[0], L10 = Math.log10, dyn = []; if (!OO.el) oortInit();
     dyn.push([0, 'H', 1, 'Aujourd’hui', 'L’instant présent, à l’ouverture de la page.', 'C', 'Horloge de l’appareil', 's', { now: true, sp: 20 / 365.25 }]);
     dyn.push([EV_AC[0], 'G', 2, 'Alpha du Centaure au plus près du Soleil', 'Le système d’étoiles le plus proche passe à ' + sig(EV_AC[1], 2) + ' années-lumière, puis s’éloigne.', 'C', 'Calculé ici d’après la position et la vitesse mesurées (Hipparcos, Gaia)', 'n', { sp: 2500, lead: 9000 }]);
