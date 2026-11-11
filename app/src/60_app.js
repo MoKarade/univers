@@ -467,8 +467,8 @@
   const fmtTimes = x => x >= 1e9 ? sig(x / 1e9, 2) + NBSP + 'milliards de fois' : x >= 1e6 ? sig(x / 1e6, 2) + NBSP + 'millions de fois' : x >= 100 ? nf(Number(x.toPrecision(2)), 0) + NBSP + 'fois' : sig(x, 2) + NBSP + 'fois';
   const inTime = y => (y >= 0 ? 'dans ' : 'il y a ') + fmtYears(Math.abs(y));
   function lookbackGyr(z) { const C = S.cosmo, a = 1 / (1 + z); let hi = 0; while (hi < C.n - 1 && C.t[hi + 1] <= 1e-9) hi++; let lo = hi; while (lo > 0 && C.a[lo - 1] < C.a[lo] && C.a[lo] > a) lo--; if (C.a[lo] > a) return -C.t[lo]; const f = (a - C.a[lo]) / Math.max(C.a[lo + 1] - C.a[lo], 1e-12); return -(C.t[lo] + clamp(f, 0, 1) * (C.t[lo + 1] - C.t[lo])); }
-  /* état d'une étoile à la date affichée, d'après les durées de vie estimées par la page (starLife) : même règle que l'affichage des points */
-  function starState(L, fate) { const t = F.tMyr; if (t < L[0]) return 'pas encore née (âge estimé)'; if ((fate === 1 || fate === 3) && t > L[2] + F.flash) return 'a explosé en supernova (estimé)'; return null; }
+  /* état d'une étoile à la date affichée selon starLife : un modèle statistique (place dans la vie tirée au hasard), pas une prédiction étoile par étoile ; le repère le dit. Même règle que l'affichage des points */
+  function starState(L, fate) { const t = F.tMyr; if (t < L[0]) return 'pas encore née d’après un modèle statistique (âge réel inconnu)'; if ((fate === 1 || fate === 3) && t > L[2] + F.flash) return 'explosée d’après un modèle statistique (âge réel inconnu)'; return null; }
   function selStar(i) {
     const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i], L = [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]], fate = st.fate[i];
     const get = () => [sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY]; if (!Rr.keyStars.includes(i)) Rr.keyStars.push(i);
@@ -669,7 +669,7 @@
     return best ? best() : null;
   }
   /* R2 : repère de l'objet suivi (anneau, nom, état à la date affichée), à toutes les échelles. Objet suivi : le centre du zoom (R1),
-     sinon l'astre suivi s'il n'est pas le Soleil. Hors de l'écran, le repère reste au bord, du côté de l'objet. */
+     sinon l'astre suivi s'il n'est pas le Soleil. Hors du champ, le repère reste au bord, du côté de l'objet ; derrière la caméra, il est masqué. */
   const SS_BORN = -4.567e9;      /* âge du système solaire : 4,567 milliards d'années (Connelly et al. 2012, inclusions CAI) */
   function bodyState(k) { if (S.ty < SS_BORN) return 'pas encore formée'; const p = k === 'moon' ? 'earth' : k; if (!F.eng[p]) return null;
     return p === 'mercury' || p === 'venus' ? 'engloutie par le Soleil (calculé)' : 'sort inconnu'; }
@@ -678,7 +678,7 @@
   const FOL = $('follow'), folSc = [0, 0, 0]; let folKey = '';
   function updateFollow() { const fi = microOn() ? null : followInfo(), q = fi && fi.pos && isFinite(fi.pos[0]) ? Rr.project(fi.pos, F, folSc) : null;
     F.followOn = !!q; if (!q) { if (!FOL.hidden) FOL.hidden = true; return; }
-    const W = Rr.cssW, H = Rr.cssH, x = clamp(q[0], 18, W - 18), y = clamp(q[1], 18, H - 18), key = fi.name + '|' + (fi.st || '');
+    const W = Rr.cssW, H = Rr.cssH, x = clamp(q[0], 18, W - 18), y = clamp(q[1], 18, H - (hudBox.bar || 0) - 56)      /* nom et état restent au-dessus de la barre du temps */, key = fi.name + '|' + (fi.st || '');
     if (key !== folKey) { folKey = key; FOL.querySelector('b').textContent = fi.name; const sm = FOL.querySelector('small'); sm.textContent = fi.st || ''; sm.hidden = !fi.st; FOL.classList.toggle('gone', !!fi.st); }
     FOL.classList.toggle('edge', x !== q[0] || y !== q[1]); FOL.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; if (FOL.hidden) FOL.hidden = false; }
   /* R1 : l'objet touché devient le centre du zoom (molette, pincement, boutons, barre), sans changer l'échelle. Un événement de la chronologie
