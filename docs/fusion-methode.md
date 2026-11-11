@@ -57,6 +57,8 @@ Le Soleil et les 38 galaxies naines sont des **traceurs sans masse** : ils subis
 ## 6. Contrôles
 
 - **Essai réduit (fin de R8)** : 15 000 particules par grande galaxie, sur 1 milliard d'années, même code. Fini quand la dérive d'énergie totale est inférieure à 1 % (`pipeline/fusion/essai.py`, tâche GitHub `fusion-essai`).
+  **Résultat (11 novembre 2026, tâche GitHub « Fusion - essai », exécution 43114 et suivantes)** : 30 000 particules, 1 milliard d'années, pas de 1 Ma : dérive maximale **0,52 %** → PASSE. Masse de la Voie lactée échantillonnée : 9,87 × 10¹¹ M☉ (la coupure douce du halo retire une partie des 1,06 × 10¹² de la page) ; vitesse circulaire à 2 R_d : 246 km/s (Voie lactée), 280 km/s (Andromède). Temps : 0,032 s par pas pour 30 000 particules, soit environ 1,8 heure pour le calcul complet si le temps croît comme N [Probable : falcON est en O(N)].
+  **Conséquence pour R9** : la dérive croît régulièrement (environ 0,5 % par milliard d'années) ; sur 10 milliards d'années elle dépasserait 1 %. Le calcul complet utilise donc un pas de 0,25 Ma (dérive attendue divisée par environ 16 si elle vient du pas, à vérifier sur un second essai), ce qui porte l'estimation à environ 7 heures : au-delà des 6 heures permises, le calcul est découpé en deux tâches enchaînées (reprise depuis un instantané).
 - **Calcul complet (R9)** : dérive d'énergie inférieure à 1 % sur tout le calcul ; date de la fusion (centres à moins de 10 kpc, puis plus de séparation) comparée aux 5,85 Ga de l'estimation à deux corps de la page et aux valeurs publiées (Sawala et al. 2025 ; van der Marel et al. 2019 : environ 4,5 Ga pour le premier passage [À vérifier]).
 
 ## 7. Ce qui reste supposé, et dit
