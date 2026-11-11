@@ -46,9 +46,9 @@ Le Soleil et les 38 galaxies naines sont des **traceurs sans masse** : ils subis
 
 | | Valeur | Raison |
 |---|---|---|
-| Particules (calcul complet, R9) | ≈ 600 000 : halos 400 000, disques et bulbes 200 000 | Masse d'une particule de halo ≈ 8 × 10⁶ M☉, d'étoile ≈ 5 × 10⁵ M☉ (rapport < 20, pratique courante) |
+| Particules (calcul complet, R9) | ≈ 300 000 : halos 200 000, disques et bulbes 100 000 | Masse d'une particule de halo ≈ 1,6 × 10⁷ M☉, d'étoile ≈ 1 × 10⁶ M☉ (rapport < 20, pratique courante) ; fixé par le budget de temps (§ 6) |
 | Adoucissement | 0,1 kpc (étoiles), 0,4 kpc (halos) | Résolution des disques sans collisions artificielles |
-| Pas de temps | 1 Ma, fixe | Un tour au centre d'un disque dure plus de 50 Ma [Probable] |
+| Pas de temps | 0,25 Ma, fixe | Fixé par les essais (§ 6) : 1 Ma dérive de 0,5 % par milliard d'années, 0,25 Ma de 0,012 % |
 | Durée | 0 à 10 Ga | La fusion de la page tombe vers 5,85 Ga ; on va jusqu'à ce que le reste se calme |
 | Budget de calcul | moins de 6 heures sur une machine de GitHub (ubuntu, 4 cœurs) ; contrôlé par l'essai réduit (temps par pas mesuré) | Contrainte du lot |
 | Images clés | toutes les 20 Ma (500 images) : 30 000 étoiles affichées, positions en entiers 16 bits relatifs au centre de masse, plus les centres des galaxies et les traceurs | |
@@ -58,7 +58,8 @@ Le Soleil et les 38 galaxies naines sont des **traceurs sans masse** : ils subis
 
 - **Essai réduit (fin de R8)** : 15 000 particules par grande galaxie, sur 1 milliard d'années, même code. Fini quand la dérive d'énergie totale est inférieure à 1 % (`pipeline/fusion/essai.py`, tâche GitHub `fusion-essai`).
   **Résultat (11 novembre 2026, tâche GitHub « Fusion - essai », exécution 43114 et suivantes)** : 30 000 particules, 1 milliard d'années, pas de 1 Ma : dérive maximale **0,52 %** → PASSE. Masse de la Voie lactée échantillonnée : 9,87 × 10¹¹ M☉ (la coupure douce du halo retire une partie des 1,06 × 10¹² de la page) ; vitesse circulaire à 2 R_d : 246 km/s (Voie lactée), 280 km/s (Andromède). Temps : 0,032 s par pas pour 30 000 particules, soit environ 1,8 heure pour le calcul complet si le temps croît comme N [Probable : falcON est en O(N)].
-  **Conséquence pour R9** : la dérive croît régulièrement (environ 0,5 % par milliard d'années) ; sur 10 milliards d'années elle dépasserait 1 %. Le calcul complet utilise donc un pas de 0,25 Ma (dérive attendue divisée par environ 16 si elle vient du pas, à vérifier sur un second essai), ce qui porte l'estimation à environ 7 heures : au-delà des 6 heures permises, le calcul est découpé en deux tâches enchaînées (reprise depuis un instantané).
+  **Second essai, pas de 0,25 Ma** (tâche 43115664338) : dérive maximale **0,012 %** sur 1 milliard d'années : la dérive venait du pas. Temps : 0,043 s par pas pour 30 000 particules.
+  **Conséquence pour R9** : pas de 0,25 Ma (dérive attendue environ 0,1 % sur 10 milliards d'années). Avec 600 000 particules, le calcul durerait environ 9,5 heures, au-delà des 6 heures d'une tâche GitHub : le calcul complet prend donc **300 000 particules** (halos 200 000, étoiles 100 000 ; masse d'une particule de halo ≈ 1,6 × 10⁷ M☉, d'étoile ≈ 1 × 10⁶ M☉), soit environ 4,8 heures.
 - **Calcul complet (R9)** : dérive d'énergie inférieure à 1 % sur tout le calcul ; date de la fusion (centres à moins de 10 kpc, puis plus de séparation) comparée aux 5,85 Ga de l'estimation à deux corps de la page et aux valeurs publiées (Sawala et al. 2025 ; van der Marel et al. 2019 : environ 4,5 Ga pour le premier passage [À vérifier]).
 
 ## 7. Ce qui reste supposé, et dit
