@@ -349,7 +349,7 @@
     S._tap = (x, y) => tap(x, y);
     function tap(x, y) { const now = performance.now(), dbl = now - lastTap[0] < 380 && Math.hypot(x - lastTap[1], y - lastTap[2]) < 26; lastTap = [now, x, y]; let best = null, bd = 30; for (const b of BODIES) { const o = Rr.bodies[b.key]; if (!o.screen) continue; const d = Math.hypot(o.screen[0] - x, o.screen[1] - y) - Math.min(o.px, 200); if (d < bd) { bd = d; best = b.key; } } if (best) { select(null); if (best !== S.focus) focusBody(best); return; }
       const hl = labelAt(x, y); if (hl && hl.body) { select(null); if (hl.body !== S.focus) focusBody(hl.body); return; }      // toucher un nom revient à toucher l'objet
-      const o = hl ? pickAt(hl.x, hl.y) : pickAt(x, y); select(o); if (o && dbl) goThere(o); }      // deux fois de suite : on y va
+      const o = hl ? pickAt(hl.x, hl.y) : pickAt(x, y); select(o); centerOn(o); if (o && dbl) goThere(o); }      /* toucher : l'objet devient le centre du zoom, sans changer l'échelle ; deux fois de suite : on y va */
     window.addEventListener('keydown', e => {
       if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
       if (e.key === ' ') { if (e.target && e.target.tagName === 'BUTTON') return; e.preventDefault(); S.playing = !S.playing; syncPlay(); }
@@ -369,7 +369,7 @@
   $('b-now').addEventListener('click', () => { S.ty = 0; S.lastTy = 0; S.T1 = S.T2 = 0; S.beltYears = 0; S.hit = null; });
   $('card-back').addEventListener('click', () => { select(null); goStop(STOPS[1]); });
   $('card-close').addEventListener('click', () => select(null));
-  $('card-center').addEventListener('click', () => { if (S.center) { S.center = null; renderCard(); } else goThere(S.sel); });
+  $('card-center').addEventListener('click', () => goThere(S.sel));      /* « Y aller » : l'objet est déjà le centre, le bouton règle l'échelle */
   const panels = { chrono: [$('p-chrono'), $('b-chrono')], cosmo: [$('p-cosmo'), $('b-cosmo')], view: [$('p-view'), $('b-view')], about: [$('p-about'), $('b-about')], find: [$('p-find'), $('b-find')] };
   let openKey = null;
   function openPanel(k) { openKey = openKey === k ? null : k; for (const n in panels) { const on = n === openKey; panels[n][0].hidden = !on; panels[n][1].setAttribute('aria-expanded', on); } if (openKey === 'cosmo') { drawChart(); drawRot(); refreshCosmo(); } if (openKey === 'chrono') evScroll(); }
@@ -666,6 +666,9 @@
     if (V.surv > 0.25) { const P = Rr.pick, k = MPC * F.cos.a, cr = Rr.survCR; for (let i = 0; i < P.svN; i++) { const r = P.svDist[i], pk = P.keep * Math.min(1, Math.pow(r / cr, 1.7)); if (pk - P.svInfo[i * 3 + 1] < 0.1 * pk) continue; const d = dpx(F.gcRel[0] + P.svDir[i * 3] * r * k, F.gcRel[1] + P.svDir[i * 3 + 1] * r * k, F.gcRel[2] + P.svDir[i * 3 + 2] * r * k); if (d < bd) { bd = d; best = () => survPlus(selSurv(i), Rr.pick, i); } } }
     return best ? best() : null;
   }
+  /* R1 : l'objet touché devient le centre du zoom (molette, pincement, boutons, barre), sans changer l'échelle. Un événement de la chronologie
+     n'a pas de position : il ne devient pas un centre. Fermer la fiche (select(null)) rend le centre en douceur (S.ck, 0,9 s). */
+  function centerOn(o) { if (!o || o.isEvent) return; const p = o.get(); if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) return; S.center = o; renderCard(); }
   function select(o) { S.sel = o; if (!o) S.center = null; if (o && o.exoI !== undefined) setExoSystem(o.exoI, o.exoC ? o.get : null); Rr.setSelOrbit(o && o.orbit ? o.orbit : null); renderCard(); }
   function renderCard() {
     const sel = S.sel, body = !sel && (S.focus !== 'sun' || S.logR < 10.7) ? BODY[S.focus] : null, card = $('card'), mic = !sel && microOn() && S.logR < 3.2 ? microLevel(S.logR) : null;
@@ -677,7 +680,7 @@
       : body.key === 'moon' ? [['Distance à la Terre', nf(Math.round(vlen(sol.moonGeo) * AU / 1e5) * 100, 0) + NBSP + 'km'], ['Orbite', 'de 363 300 à 405 500 km en moyenne'], ['Excentricité', '0,055'], ['Un tour de la Terre', '27,3 jours'], ['Vitesse sur l’orbite', '1,02 km/s en moyenne']].concat(factRows('moon'), [['Retour de la même phase', 'tous les 29,5 jours'], ['S’éloigne de la Terre de', '3,8 cm par an']]) : planetRows(body.key).concat(factRows(body.key), F.eng[body.key] ? [['État à cette date', 'engloutie par le Soleil']] : []); }
     const keep = innerWidth < 600 ? 4 : 7, many = rows.length > keep + 1, shown = many && !S.more ? rows.slice(0, keep) : rows, dl = $('card-dl'), top = dl.scrollTop; $('card-more').hidden = !many; if (many) $('card-more').textContent = S.more ? 'Moins de détails' : 'Plus de détails (' + (rows.length - keep) + ')';
     $('card-title').hidden = !sel && !(mic && mic.rows); dl.innerHTML = shown.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join(''); dl.scrollTop = top;
-    $('card-center').hidden = !sel; $('card-close').hidden = !sel; $('card-back').hidden = !!sel; $('card-center').textContent = S.center ? 'Ne plus suivre' : sel && sel.isEvent ? 'Revoir' : 'Y aller';
+    $('card-center').hidden = !sel; $('card-close').hidden = !sel; $('card-back').hidden = !!sel; $('card-center').textContent = sel && sel.isEvent ? 'Revoir' : 'Y aller';
     if (card.hidden) card.hidden = false;
   }
 
@@ -1310,6 +1313,10 @@
     F.selPos = S.sel ? S.sel.get() : null; if (F.selPos && !isFinite(F.selPos[0])) F.selPos = null;
     S.ck = clamp(S.ck + (S.center ? dt : -dt) / 0.9, 0, 1); if (S.center) S.cpos = S.center.get();
     if (S.ck > 0 && S.cpos) { const k = ease(S.ck); for (let i = 0; i < 3; i++) F.tg[i] = lerp(F.tg[i], S.cpos[i], k); }
+    /* passage d'un centre à un autre (toucher un second objet) : glissement en 0,9 s au lieu d'un saut */
+    if (S.center !== S.cWas) { if (S.center && S.cWas && S.lastTg) S.cbl = { from: S.lastTg, t0: wall }; S.cWas = S.center; }
+    if (S.cbl) { const k = ease(clamp((wall - S.cbl.t0) / (reduced ? 0.001 : 0.9), 0, 1)); for (let i = 0; i < 3; i++) F.tg[i] = lerp(S.cbl.from[i], F.tg[i], k); if (k >= 1) S.cbl = null; }
+    S.lastTg = [F.tg[0], F.tg[1], F.tg[2]];
     F.aFac = S.opts.comoving ? Math.pow(cs.a, smoothstep(22.6, 23.6, S.logR)) : 1;
     { const Rm = Math.max(R, 150); F.R = Rm; F.logR = Math.max(S.logR, Math.log10(150)); F.s = Rr.viewUnits / (Rm * F.aFac); F.lrT = S.logR; F.sT = Rr.viewUnits / R; } /* le décor astronomique se fige à 150 m du sol ; l'infiniment petit utilise l'échelle vraie (lrT, sT) */ F.az = S.az; F.el = S.el; F.frameMix = smoothstep(17.8, 19.9, S.logR);
     F.T1 = S.T1; F.T2 = S.T2; F.dmMix = S.dmMix; F.Dn = Math.min(cs.D / D_FID, 1.75); F.age = C.tBang !== null ? S.ty / 1e9 - C.tBang : 99;
@@ -1327,7 +1334,7 @@
     requestAnimationFrame(step);
   }
   setSpeed(S.speed); syncPlay(); syncSliders();
-  window.__U = { TL, onLost, OO, selStar, LGO, FATE_P, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
+  window.__U = { centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, FATE_P, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
   if (!reduced) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
   requestAnimationFrame(now => { last = now; step(now); requestAnimationFrame(() => { $('loader').classList.add('out'); setTimeout(() => $('loader').remove(), 1000); if (!reduced && !S.resumed) { S.anim = { t0: performance.now() / 1000 + 0.3, dur: 5.5, l0: S.logR, l1: STOPS[1].logR, a0: S.az, a1: S.az + 0.5, e0: S.el, e1: 0.6 }; } showRail(); }); });
 })();
