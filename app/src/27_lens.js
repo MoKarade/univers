@@ -5,9 +5,11 @@
    trou noir a le paramètre d'impact b = r sin ψ / √(1 − 2/r). On suit ce rayon à rebours jusqu'à l'infini
    et on rend l'angle Δφ balayé autour du trou noir (−1 s'il tombe dedans : l'ombre).
    Équation de l'orbite des photons : (du/dφ)² = 1/b² − u²(1 − 2u), avec u = 1/r.
+   Valable pour r > 3 (hors de la sphère des photons) ; la page coupe l'image en deçà de LENS_RMIN.
    -------------------------------------------------------------------------- */
 const LENS_N = 1200;                 /* pas d'intégration (écart au développement publié < 2 % du second ordre) */
 const LENS_MAXPHI = 4 * Math.PI;     /* au-delà de deux tours, la valeur est plafonnée (anneaux trop fins pour l'écran) */
+const LENS_RMIN = 3.1;               /* en deçà, hors du domaine du calcul : image coupée, « inconnu » */
 const GM_C2_SUN = 1476.625;          /* GM☉/c² en mètres */
 
 /** ∫ du / √F(u) de ua à u0, où F s'annule en u0 (point de rebroussement) : changement u = u0(1 − w²), sans singularité. */
@@ -28,14 +30,29 @@ function lensDphi(r, psi) {
   return Math.min(lensTurnInt(F, uo, u0) + lensTurnInt(F, 0, u0), LENS_MAXPHI);
 }
 
-/** Table de Δφ pour n angles ψ de 0 à π, vue depuis la distance r (en M). */
-function lensLut(r, n) { const T = new Float32Array(n); for (let i = 0; i < n; i++) T[i] = lensDphi(r, i / (n - 1) * Math.PI); return T; }
+/** Rayon angulaire de l'ombre vu depuis r : b = √27 M. */
+const lensPsiC = r => Math.asin(Math.min(1, Math.sqrt(27) * Math.sqrt(1 - 2 / r) / r));
 
-/** Codage pour une texture 8 bits : Δφ / LENS_MAXPHI sur 16 bits (rouge, vert), ombre dans le bleu. */
-function lensLutBytes(T) {
-  const B = new Uint8Array(T.length * 4);
-  for (let i = 0; i < T.length; i++) { if (T[i] < 0) { B[i * 4 + 2] = 255; continue; } const q = Math.round(Math.min(T[i], LENS_MAXPHI) / LENS_MAXPHI * 65535); B[i * 4] = q >> 8; B[i * 4 + 1] = q & 255; B[i * 4 + 3] = 255; }
-  return B;
+/** Table pour le shader : n angles ψ = ψc + e^l, l régulier de l0 à l1 (dense près du bord de l'ombre, à toutes les échelles) ;
+ *  on garde la déviation α = Δφ − (π − ψ), petite loin du trou noir, pour qu'elle reste précise. */
+function lensLut(r, n) {
+  const psiC = lensPsiC(r), l0 = Math.log(1e-6 * Math.max(psiC, 1e-9)), l1 = Math.log(Math.PI - psiC), a = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const psi = psiC + Math.exp(l0 + i / (n - 1) * (l1 - l0)), d = lensDphi(r, psi); a[i] = d < 0 ? 0 : d - (Math.PI - psi); }
+  return { psiC, l0, l1, alpha: a, n };
 }
-/** Décodage (le même calcul est fait dans le shader final). */
-const lensDecode = (B, i) => (B[i * 4] * 256 + B[i * 4 + 1]) / 65535 * LENS_MAXPHI;
+
+/** Lecture de la table, comme le shader final (40_render.js, lensed) : −1 dans l'ombre. */
+function lensLookup(T, psi) {
+  if (psi <= T.psiC) return -1;
+  const x = Math.min(Math.max((Math.log(psi - T.psiC) - T.l0) / (T.l1 - T.l0), 0), 1) * (T.n - 1), i = Math.min(Math.floor(x), T.n - 2), f = x - i;
+  return (Math.PI - psi) + T.alpha[i] * (1 - f) + T.alpha[i + 1] * f;
+}
+
+/** Direction d'où vient la lumière vue dans la direction v (unitaire), le trou noir étant dans la direction c (unitaire) :
+ *  s = cos Δφ · r̂ + sin Δφ · t̂, r̂ = −c (du trou noir vers la caméra), t̂ dans le plan (v, c). Même calcul que le shader. */
+function lensSource(T, v, c) {
+  const cp = v[0] * c[0] + v[1] * c[1] + v[2] * c[2], x = [v[1] * c[2] - v[2] * c[1], v[2] * c[0] - v[0] * c[2], v[0] * c[1] - v[1] * c[0]], sp = Math.hypot(x[0], x[1], x[2]);
+  const d = lensLookup(T, Math.atan2(sp, cp)); if (d < 0) return null;
+  const t = [0, 1, 2].map(k => (v[k] + cp * -c[k]) / Math.max(sp, 1e-12));
+  return [0, 1, 2].map(k => Math.cos(d) * -c[k] + Math.sin(d) * t[k]);
+}
