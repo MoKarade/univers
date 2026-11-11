@@ -8,6 +8,8 @@ molette change l'échelle d'un coup, rien ne bouge entre deux crans), l'objet do
 demi-largeur de l'écran du centre. Le zoom doit couvrir les six puissances de dix, ou s'arrêter exactement sur la
 borne connue : surface de l'objet si son rayon est connu, sinon 10^6,6 m (LMIN) ; 10^26,95 m (LMAX) vers l'extérieur.
 
+R2 : à chaque cran, le repère de l'objet suivi (#follow) doit être affiché sur l'objet, à 3 px près.
+
 Les planètes (Lune, Jupiter) sont des astres « suivis » (focusBody, code inchangé par R1) : on zoome autour d'elles.
 
 Second contrôle, « saut » : avec les animations normales, on centre A (Sirius), on ferme la fiche, puis 0,3 s après
@@ -43,13 +45,15 @@ OBJETS = [
 ]
 
 # Projection à l'écran de la position d'un objet (même calcul que pickAt dans 60_app.js).
-PROJ = """(() => { const U = window.__U, F = U.F, R = U.Rr, p = window.__P();
+PROJ = r"""(() => { const U = window.__U, F = U.F, R = U.Rr, p = window.__P();
   if (!p || !isFinite(p[0])) return null;
   const PM = new THREE.Matrix4().multiplyMatrices(R.camera.projectionMatrix, R.camera.matrixWorldInverse), e = PM.elements;
   const X = (p[0] - F.tg[0]) * F.s, Y = (p[1] - F.tg[1]) * F.s, Z = (p[2] - F.tg[2]) * F.s, w = e[3] * X + e[7] * Y + e[11] * Z + e[15];
   if (w <= 0) return { behind: true, lr: U.S.logR };
   const sx = ((e[0] * X + e[4] * Y + e[8] * Z + e[12]) / w * 0.5 + 0.5) * R.cssW, sy = (0.5 - (e[1] * X + e[5] * Y + e[9] * Z + e[13]) / w * 0.5) * R.cssH;
-  return { off: Math.hypot(sx - R.cssW / 2, sy - R.cssH / 2) / (R.cssW / 2), x: sx, y: sy, lr: U.S.logR, name: U.S.center ? U.S.center.name : U.S.focus }; })()"""
+  const fe = document.getElementById('follow'), mt = /translate\(([-\d.]+)px,\s*([-\d.]+)px/.exec(fe.style.transform || ''),
+    mk = !fe.hidden && mt ? Math.hypot(+mt[1] - Math.min(Math.max(sx, 18), R.cssW - 18), +mt[2] - Math.min(Math.max(sy, 18), R.cssH - (document.getElementById('time').offsetHeight + 12) - 56)) : 999;      /* R2 : repère affiché et posé sur l'objet */
+  return { mark: mk, off: Math.hypot(sx - R.cssW / 2, sy - R.cssH / 2) / (R.cssW / 2), x: sx, y: sy, lr: U.S.logR, name: U.S.center ? U.S.center.name : U.S.focus }; })()"""
 LMIN, LMAX = 6.6, 26.95
 
 
@@ -110,6 +114,8 @@ def zoom(pg, sens, kind):
         if m is None or m.get('behind'):
             return False, 9.9, l0, before, 'objet derrière la caméra ou sans position'
         worst = max(worst, m['off'])
+        if not os.environ.get('U_TEMOIN') and m['mark'] > 3:      # R2 : le repère doit être là, à 3 px près, à chaque cran
+            return False, worst, l0, m['lr'], f"repère absent ou décalé de {m['mark']:.0f} px" 
         if abs(m['lr'] - before) < 1e-3: break      # le zoom est borné
     l1 = pg.evaluate('__U.S.logR')
     if sens > 0: bound = LMAX

@@ -261,7 +261,7 @@
   const PLN = { mars: 'Mars', jupiter: 'Jupiter', saturn: 'Saturne', uranus: 'Uranus', neptune: 'Neptune', pluto: 'Pluton' };
   function selMoon(k) { const m = KO[k]; if (m.kind === 'exo') return selExoPlanet(k); if (m.kind === 'sstar') { const o = selSStar(k); if (m.prec) { const r0 = o.rows; o.rows = () => r0().concat([['Précession relativiste', 'son orbite tourne de 12 minutes d’arc à chaque tour, comme le prévoit la relativité générale (mesure GRAVITY, 2020)']]); } return o; } if (m.kind === 'probe') return selProbe(k);
     const per = TAU / m.nr, a = m.aAU, b = a * Math.sqrt(1 - m.e * m.e), cen = () => cenOf(m.p), get = () => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]];
-    return { name: m.n, sub: 'Lune de ' + PLN[m.p], get, orbit: { e: m.e, P: m.P.map(x => x * a), Q: m.Q.map(x => x * b), c: cen }, rows: () => { const c = cen(), p = get(), d = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
+    return { name: m.n, exist: () => !m.off ? null : S.ty < -4.5e9 ? 'pas encore formée' : 'sort inconnu', sub: 'Lune de ' + PLN[m.p], get, orbit: { e: m.e, P: m.P.map(x => x * a), Q: m.Q.map(x => x * b), c: cen }, rows: () => { const c = cen(), p = get(), d = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
       return [['Distance à ' + PLN[m.p], nf(Math.round(d / 1e5) * 100, 0) + NBSP + 'km'], ['Orbite', 'de ' + nf(Math.round(m.a * (1 - m.e) / 100) * 100, 0) + ' à ' + nf(Math.round(m.a * (1 + m.e) / 100) * 100, 0) + NBSP + 'km'], ['Un tour de sa planète', fmtDays(per)], ['Vitesse sur l’orbite', sig(TAU * m.a / (per * 86400), 3) + NBSP + 'km/s'], ['Diamètre', (m.small ? 'environ ' : '') + nf(m.d, m.d < 100 ? 1 : 0) + NBSP + 'km'], ['Excentricité', sig(m.e, 2)], ['Découverte', m.disc],
         ['La lumière de sa planète l’atteint en', fmtLight(d)], ['Suivi', 'position fiable à quelques degrés près pendant un an autour d’aujourd’hui ; au-delà, seule l’orbite reste juste']]; } }; }
   function selSStar(k) { const m = KO[k], a = m.aAU, b = a * Math.sqrt(1 - m.e * m.e), cen = () => cenOf('sgra'), get = () => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], vm = TAU * a / m.per * 4.74047;
@@ -271,7 +271,7 @@
         ['Source', 'orbite ajustée sur 25 ans de mesures (Gillessen et al. 2017)']].concat(skyRow(p)); } }; }
   function selProbe(k) { const m = KO[k], get = () => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], pth = () => { const xy = solveKO(m, F.jd), r0 = Math.hypot(xy[0], xy[1]), hOf = r => Math.acosh(Math.max((r / m.aAU + 1) / m.e, 1)), H0 = hOf(0.25 * r0), H1 = hOf(3 * r0), o = new Float32Array(257 * 3);
       for (let i = 0; i <= 256; i++) { const H = H0 + (H1 - H0) * i / 256, x = m.aAU * (m.e - Math.cosh(H)), y = m.aAU * Math.sqrt(m.e * m.e - 1) * Math.sinh(H); o[i * 3] = m.P[0] * x + m.Q[0] * y; o[i * 3 + 1] = m.P[1] * x + m.Q[1] * y; o[i * 3 + 2] = m.P[2] * x + m.Q[2] * y; } return o; };
-    return { name: m.n, sub: 'Sonde spatiale lancée en ' + m.launch + ', en route vers l’espace interstellaire', get, orbit: { pts: m.tab && F.jd < m.tab.jd1 ? tabPath(m) : pth(), c: () => [0, 0, 0] }, rows: () => { const p = get(), r = vlen(p) / AU, ea = bodyPosM('earth'), dE = Math.hypot(p[0] - ea[0], p[1] - ea[1], p[2] - ea[2]), v = m.tab && F.jd < m.tab.jd1 && m.tv ? m.tv : 29.7847 * Math.sqrt(2 / Math.max(r, 1e-6) + 1 / m.aAU);
+    return { name: m.n, exist: () => m.off ? 'pas encore lancée' : null, sub: 'Sonde spatiale lancée en ' + m.launch + ', en route vers l’espace interstellaire', get, orbit: { pts: m.tab && F.jd < m.tab.jd1 ? tabPath(m) : pth(), c: () => [0, 0, 0] }, rows: () => { const p = get(), r = vlen(p) / AU, ea = bodyPosM('earth'), dE = Math.hypot(p[0] - ea[0], p[1] - ea[1], p[2] - ea[2]), v = m.tab && F.jd < m.tab.jd1 && m.tv ? m.tv : 29.7847 * Math.sqrt(2 / Math.max(r, 1e-6) + 1 / m.aAU);
       return m.off ? [['Suivi', (m.tab ? 'pas encore lancée à cette date' : 'trajectoire non reconstituée avant ' + m.from + ' (survols de planètes)')]] : [['Distance au Soleil', sig(r, 4) + NBSP + 'UA'], ['Distance à la Terre', sig(dE / AU, 4) + NBSP + 'UA'], ['Son signal radio met', fmtLight(dE)], ['Vitesse', sig(v, 3) + NBSP + 'km/s'], ['Elle s’éloigne chaque année de', sig(v * 0.210949, 3) + NBSP + 'UA'],
         ['Atteindra une année-lumière', 'dans ' + fmtYears(Math.max(63241 - r, 0) / (v * 0.210949)) + ' environ'], ['Suivi', 'trajectoire du JPL, valable depuis ' + m.from + ' (dernier survol de planète)']].concat(skyRow([p[0] - ea[0], p[1] - ea[1], p[2] - ea[2]])); } }; }
   { const P = Rr.BHS.pos, want = [['Cygnus X-1', 'Cygnus X-1'], ['Gaia BH1', 'Gaia BH1'], ['Gaia BH3', 'Gaia BH3'], ['V404 Cyg', 'V404 Cygni'], ['A0620-00', 'A0620-00']];
@@ -467,10 +467,12 @@
   const fmtTimes = x => x >= 1e9 ? sig(x / 1e9, 2) + NBSP + 'milliards de fois' : x >= 1e6 ? sig(x / 1e6, 2) + NBSP + 'millions de fois' : x >= 100 ? nf(Number(x.toPrecision(2)), 0) + NBSP + 'fois' : sig(x, 2) + NBSP + 'fois';
   const inTime = y => (y >= 0 ? 'dans ' : 'il y a ') + fmtYears(Math.abs(y));
   function lookbackGyr(z) { const C = S.cosmo, a = 1 / (1 + z); let hi = 0; while (hi < C.n - 1 && C.t[hi + 1] <= 1e-9) hi++; let lo = hi; while (lo > 0 && C.a[lo - 1] < C.a[lo] && C.a[lo] > a) lo--; if (C.a[lo] > a) return -C.t[lo]; const f = (a - C.a[lo]) / Math.max(C.a[lo + 1] - C.a[lo], 1e-12); return -(C.t[lo] + clamp(f, 0, 1) * (C.t[lo + 1] - C.t[lo])); }
+  /* état d'une étoile à la date affichée selon starLife : un modèle statistique (place dans la vie tirée au hasard), pas une prédiction étoile par étoile ; le repère le dit. Même règle que l'affichage des points */
+  function starState(L, fate) { const t = F.tMyr; if (t < L[0]) return 'pas encore née d’après un modèle statistique (âge réel inconnu)'; if ((fate === 1 || fate === 3) && t > L[2] + F.flash) return 'explosée d’après un modèle statistique (âge réel inconnu)'; return null; }
   function selStar(i) {
     const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i], L = [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]], fate = st.fate[i];
     const get = () => [sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY]; if (!Rr.keyStars.includes(i)) Rr.keyStars.push(i);
-    return { exoI: STAREXO[i] >= 0 ? STAREXO[i] : undefined, exoC: true, lr: STAREXO[i] >= 0 ? exoLr(STAREXO[i]) : undefined, name: DATA.STAR_NAMES[i] || (hip ? 'HIP ' + hip : 'Étoile sans nom'), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
+    return { exoI: STAREXO[i] >= 0 ? STAREXO[i] : undefined, exoC: true, lr: STAREXO[i] >= 0 ? exoLr(STAREXO[i]) : undefined, name: DATA.STAR_NAMES[i] || (hip ? 'HIP ' + hip : 'Étoile sans nom'), exist: () => starState(L, fate), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
       const d = vlen(get()), t = F.tMyr, sn = fate === 1 || fate === 3, lum = Math.pow(10, 0.4 * (4.83 - MV));
       const fut = fate === 4 || (!sn && t >= L[2]) ? 'naine blanche qui refroidit' : sn && t >= L[2] ? 'a explosé en supernova' : sn ? 'supernova ' + inTime((L[2] - t) * 1e6) : t < L[1] ? 'géante rouge ' + inTime((L[1] - t) * 1e6) + ', puis naine blanche' : 'naine blanche ' + inTime((L[2] - t) * 1e6);
       return [['Distance', fmtDist(d)], ['Éclat', fmtTimes(lum) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(st.mass[i], 2) + NBSP + 'fois le Soleil'], ['Vitesse', Rr.K.vkms[i] > 0 ? sig(Rr.K.vkms[i], 3) + NBSP + 'km/s par rapport au Soleil' : 'non mesurée'], ['Avenir estimé', fut]].concat(passRows(i), starExtra(get(), kvOf(Rr.K, i), MV, bv), STAREXO[i] >= 0 ? [['Planètes connues', EXOP[STAREXO[i]] + ' : « Y aller » pour les voir tourner autour de l’étoile']].concat(exoRows(STAREXO[i])) : []); } };
@@ -569,7 +571,7 @@
   }
   function selStar2(i) {
     const st = Rr.star2, sp = st.pos, MV = st.mag[i], bv = st.bv[i], L = [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]], fate = st.fate[i], get = () => [sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY];
-    return { name: 'Étoile du catalogue Gaia', sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
+    return { name: 'Étoile du catalogue Gaia', exist: () => starState(L, fate), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
       const d = vlen(get()), t = F.tMyr, sn = fate === 1 || fate === 3, lum = Math.pow(10, 0.4 * (4.83 - MV));
       const fut = fate === 4 || (!sn && t >= L[2]) ? 'naine blanche qui refroidit' : sn && t >= L[2] ? 'a explosé en supernova' : sn ? 'supernova ' + inTime((L[2] - t) * 1e6) : t < L[1] ? 'géante rouge ' + inTime((L[1] - t) * 1e6) + ', puis naine blanche' : 'naine blanche ' + inTime((L[2] - t) * 1e6);
       return [['Distance', fmtDist(d)], ['Éclat', fmtTimes(lum) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(st.mass[i], 2) + NBSP + 'fois le Soleil'], ['Vitesse', sig(st.K.vkms[i], 3) + NBSP + 'km/s par rapport au Soleil'], ['Avenir estimé', fut]].concat(starExtra(get(), kvOf(st.K, i), MV, bv)); } };
@@ -625,7 +627,7 @@
   }
   function selLG(c) {
     const g = c.g, get = () => add3(F.gcRel, c.c, KPC);
-    return { name: g.n, sub: c.own ? 'Grande galaxie spirale du Groupe local' : 'Galaxie du Groupe local', get, rows: () => { const r = [['Distance', fmtDist(vlen(get()))]]; { const mv = c.own ? -21.0 : g.mv; if (mv !== undefined && mv < 0) r.push(['Éclat', bigMass(Math.pow(10, 0.4 * (4.83 - mv)))]); }      // Andromède : magnitude absolue −21,0 (McConnachie 2012)
+    return { name: g.n, exist: () => c.gone ? 'fondue dans une autre galaxie (calculé)' : null, sub: c.own ? 'Grande galaxie spirale du Groupe local' : 'Galaxie du Groupe local', get, rows: () => { const r = [['Distance', fmtDist(vlen(get()))]]; { const mv = c.own ? -21.0 : g.mv; if (mv !== undefined && mv < 0) r.push(['Éclat', bigMass(Math.pow(10, 0.4 * (4.83 - mv)))]); }      // Andromède : magnitude absolue −21,0 (McConnachie 2012)
       if (c.own) { const O = S.orbit, p = O.peri[0]; r.push(['Vitesse', 'radiale ' + nf(Math.round(O.vr), 0).replace('-', '−') + NBSP + 'km/s, transverse ' + nf(Math.round(O.vt), 0) + NBSP + 'km/s']); if (p) r.push(['Au plus près', 'dans ' + fmtYears(p[0] * 1e9) + ', à ' + fmtDist(Number((p[1] * KPC).toPrecision(2)))]); r.push(['Fusion', O.tMerge ? 'dans ' + fmtYears(O.tMerge * 1e9) + ' (scénario calculé)' : 'pas avant 14 milliards d’années dans ce scénario']); }
       lgExtra(g, r, c.own || MAG.c.indexOf(c) >= 0);
       if (c.own) r.push(['Décalage mesuré', 'vers le bleu, z = −0,0010 : elle se rapproche du Soleil à 301 km/s']);
@@ -666,6 +668,19 @@
     if (V.surv > 0.25) { const P = Rr.pick, k = MPC * F.cos.a, cr = Rr.survCR; for (let i = 0; i < P.svN; i++) { const r = P.svDist[i], pk = P.keep * Math.min(1, Math.pow(r / cr, 1.7)); if (pk - P.svInfo[i * 3 + 1] < 0.1 * pk) continue; const d = dpx(F.gcRel[0] + P.svDir[i * 3] * r * k, F.gcRel[1] + P.svDir[i * 3 + 1] * r * k, F.gcRel[2] + P.svDir[i * 3 + 2] * r * k); if (d < bd) { bd = d; best = () => survPlus(selSurv(i), Rr.pick, i); } } }
     return best ? best() : null;
   }
+  /* R2 : repère de l'objet suivi (anneau, nom, état à la date affichée), à toutes les échelles. Objet suivi : le centre du zoom (R1),
+     sinon l'astre suivi s'il n'est pas le Soleil. Hors du champ, le repère reste au bord, du côté de l'objet ; derrière la caméra, il est masqué. */
+  const SS_BORN = -4.567e9;      /* âge du système solaire : 4,567 milliards d'années (Connelly et al. 2012, inclusions CAI) */
+  function bodyState(k) { if (S.ty < SS_BORN) return 'pas encore formée'; const p = k === 'moon' ? 'earth' : k; if (!F.eng[p]) return null;
+    return p === 'mercury' || p === 'venus' ? 'engloutie par le Soleil (calculé)' : 'sort inconnu'; }
+  function followInfo() { const o = S.center; if (o) return { name: o.name, pos: o.get(), st: o.exist ? o.exist() : null };
+    if (S.focus !== 'sun') return { name: BODY[S.focus].name, pos: bodyPosM(S.focus), st: bodyState(S.focus) }; return null; }
+  const FOL = $('follow'), folSc = [0, 0, 0]; let folKey = '';
+  function updateFollow() { const fi = microOn() ? null : followInfo(), q = fi && fi.pos && isFinite(fi.pos[0]) ? Rr.project(fi.pos, F, folSc) : null;
+    F.followOn = !!q; if (!q) { if (!FOL.hidden) FOL.hidden = true; return; }
+    const W = Rr.cssW, H = Rr.cssH, x = clamp(q[0], 18, W - 18), y = clamp(q[1], 18, H - (hudBox.bar || 0) - 56)      /* nom et état restent au-dessus de la barre du temps */, key = fi.name + '|' + (fi.st || '');
+    if (key !== folKey) { folKey = key; FOL.querySelector('b').textContent = fi.name; const sm = FOL.querySelector('small'); sm.textContent = fi.st || ''; sm.hidden = !fi.st; FOL.classList.toggle('gone', !!fi.st); }
+    FOL.classList.toggle('edge', x !== q[0] || y !== q[1]); FOL.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; if (FOL.hidden) FOL.hidden = false; }
   /* R1 : l'objet touché devient le centre du zoom (molette, pincement, boutons, barre), sans changer l'échelle. Un événement de la chronologie
      n'a pas de position : il ne devient pas un centre. Fermer la fiche (select(null)) rend le centre en douceur (S.ck, 0,9 s). */
   function centerOn(o) { if (!o || o.isEvent) return; const p = o.get(); if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) return; S.center = o; renderCard(); }
@@ -1284,7 +1299,6 @@
     sol = solarSystemAt(T_NOW + (S.ty + S.solOff) / 100, sol);
     const C = S.cosmo, cs = cosmoAt(C, S.ty / 1e9, F.cos);
     const tG = S.ty / 1e9, ss = sunState(tG, SS); F.sun = ss; F.sunCol = tempRgb(ss.T); F.orb = 1 / ss.M; F.eng.mercury = tG >= ENG.mercury; F.eng.venus = tG >= ENG.venus; F.eng.earth = tG >= ENG.earth; for (const k in FATE_P) F.eng[k] = tG >= FATE_P[k]; F.sysK = fadeOut(tG, 38, 42); F.ringsGone = tG > FATE.rings;
-    { const fk = S.focus === 'moon' ? 'earth' : S.focus; if (fk !== 'sun' && F.eng[fk] && !S.anim) { select(null); goStop(STOPS[1]); } }      // l'astre suivi n'existe plus : retour à la vue d'ensemble
     F.ty = S.ty; F.tMyr = S.ty / 1e6; F.tEff = S.T1 + S.T2 * (oSunNo / oSunDM); if (S.playing) F.flash = Math.max(3e-7, 1.3 * S.speed / YEAR_S / 1e6); else if (!F.flash) F.flash = 3e-7;
     if (orbitDirty) { orbitDirty = false; if (!S.m31V) S.m31V = M31_MEAS[0][1]; const O = S.orbit = andromedaOrbit(S.cosmo, S.vt, S.m31V); andromedaAt(O, 0, m31r0); lgStart(); S.dyn = null; S.tOn = null;
       for (let i = Math.round(-O.t0 / O.dt); i < O.n; i++) if (Math.hypot(O.r[i * 3], O.r[i * 3 + 1], O.r[i * 3 + 2]) < 150) { S.tOn = Math.max(0.02, O.t0 + i * O.dt - 0.35); break; }
@@ -1310,7 +1324,7 @@
     S.curFo = fo;
     const wF = fadeOut(S.logR, 13.4, 14.4), wG = smoothstep(2, 50, R / (1000 * LY));
     for (let i = 0; i < 3; i++) F.tg[i] = fo[i] * wF + F.gcRel[i] * wG;
-    F.selPos = S.sel ? S.sel.get() : null; if (F.selPos && !isFinite(F.selPos[0])) F.selPos = null;
+    F.selPos = S.sel && S.sel !== S.center ? S.sel.get() : null;      /* l'objet sélectionné et suivi porte le repère de R2 (updateFollow) au lieu de l'anneau 3D */ if (F.selPos && !isFinite(F.selPos[0])) F.selPos = null;
     const ck0 = S.ck; S.ck = clamp(S.ck + (S.center ? dt : -dt) / 0.9, 0, 1); if (S.center) S.cpos = S.center.get();
     if (S.ck > 0 && S.cpos) { const k = ease(S.ck); for (let i = 0; i < 3; i++) F.tg[i] = lerp(F.tg[i], S.cpos[i], k); }
     /* nouveau centre alors que la vue est encore (même en partie) tirée vers l'ancien : glissement en 0,9 s au lieu d'un saut.
@@ -1323,7 +1337,7 @@
     F.T1 = S.T1; F.T2 = S.T2; F.dmMix = S.dmMix; F.Dn = Math.min(cs.D / D_FID, 1.75); F.age = C.tBang !== null ? S.ty / 1e9 - C.tBang : 99;
     F.sunAlive = smoothstep(-4.6e9, -4.57e9, S.ty); F.jd = JD_NOW + S.ty * 365.25; F.jdM = JD_NOW + (S.ty + (S.moonOff || 0)) * 365.25; F.jdS = JD_NOW + (S.ty + (S.sOff || 0)) * 365.25; F.sol = sol; updateMoons(); updateConst(); F.constOn = S.constOn; F.skyOn = S.skyOn !== false && !S.lite; updatePhotos(); updateNear(); updateEpoch(); updateOort(); F.days = (JD_NOW - JD_J2000) + (S.ty + (S.solOff || 0)) * 365.25; F.stepYears = Math.min(stepY, S.capS || stepY); F.beltYears = S.beltYears; F.wall = wall;
     if (surveyDirty) { surveyDirty = false; Rr.setSurvey(surveyLut(S.cosmo)); }
-    Rr.update(F); updateLabels(); Rr.render(wall, 1.0);
+    Rr.update(F); updateLabels(); updateFollow(); Rr.render(wall, 1.0);
     $('thumb').style.bottom = railF(S.logR) * 100 + '%'; drawTape();
     if (now - hudT > 110) { hudT = now; hud(); }
     tilesTick(dt * 1000);

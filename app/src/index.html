@@ -31,6 +31,13 @@ body{height:100%; margin:0; background:var(--scene); color:var(--on-scene); font
 .lb.k-body{font-style:normal; font-weight:500; pointer-events:auto; cursor:pointer}
 .lb.k-region{letter-spacing:.07em; color:var(--on-scene-dim)}
 .lb.k-here{font:500 12.5px/1 var(--sans); color:var(--amber)}
+/* R2 : repère de l'objet suivi. Anneau centré sur l'objet, nom et état dessous. Au bord de l'écran quand l'objet est hors champ. */
+#follow{position:fixed; left:0; top:0; pointer-events:none; z-index:2; will-change:transform}
+#follow i{position:absolute; left:-15px; top:-15px; width:30px; height:30px; border:1.5px solid var(--amber); border-radius:50%; box-shadow:0 0 6px rgba(0,0,0,.8)}
+#follow b{position:absolute; left:0; top:20px; transform:translateX(-50%); white-space:nowrap; font:500 12.5px/1 var(--sans); color:var(--amber); text-shadow:0 0 5px #000,0 0 2px #000}
+#follow small{position:absolute; left:0; top:37px; transform:translateX(-50%); white-space:nowrap; font:400 12px/1 var(--sans); color:var(--on-scene); background:rgba(0,0,0,.55); padding:3px 6px; border-radius:3px}
+#follow.gone i{border-style:dashed}
+#follow.edge i{border-width:2.5px}
 .lb.k-hz{font:400 12px/1 var(--sans); color:var(--on-scene-dim); padding-left:0; transform-origin:50% 100%}
 #top{position:fixed; left:0; top:0; padding:calc(16px + env(safe-area-inset-top,0px)) 16px 0 20px; max-width:min(540px,calc(100% - 64px)); pointer-events:none; text-shadow:0 1px 10px rgba(0,0,0,.9),0 0 2px rgba(0,0,0,.9)}
 #place{font:500 clamp(26px,5.2vw,38px)/1.04 var(--serif); letter-spacing:-.012em; margin:0}
@@ -160,6 +167,7 @@ dt{color:var(--ink-dim)} dd{margin:0; text-align:right; font-weight:500}
 <body>
 <canvas id="gl" tabindex="0" aria-label="Simulation de l’univers en trois dimensions. Glissez pour tourner, molette ou pincement pour changer d’échelle."></canvas>
 <div id="labels"></div>
+<div id="follow" hidden aria-hidden="true"><i></i><b></b><small hidden></small></div>
 <header id="top">
   <h1 id="place">Système solaire</h1>
   <p id="field"></p>
