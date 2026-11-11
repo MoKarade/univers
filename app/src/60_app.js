@@ -147,12 +147,12 @@
   function syncNav() { const b = $('n-back'); if (b) b.disabled = !NAVH.length; }
   function pushHist() { const now = performance.now(); if (now - histT < 80) return; histT = now; NAVH.push({ lr: S.anim ? S.anim.l1 : S.logR, az: S.az, el: S.el, focus: S.focus, center: S.center, sel: S.sel }); if (NAVH.length > 40) NAVH.shift(); syncNav(); }
   function goBack() { const h = NAVH.pop(); if (!h) return; histT = performance.now(); select(h.sel); goTo(h.lr, { az: h.az, el: h.el, focus: h.focus, noHist: true }); S.center = h.center; renderCard(); syncNav(); }
-  function goHome() { pushHist(); select(null); const st = STOPS[1]; goTo(st.logR, { az: st.az, el: st.el, focus: 'sun', speed: st.speed, noHist: true }); }
+  function goHome() { pushHist(); select(null); zoffReset(); const st = STOPS[1]; goTo(st.logR, { az: st.az, el: st.el, focus: 'sun', speed: st.speed, noHist: true }); }
   function goLr(o) { if (o.lr) return o.lr; if (o.orbit && o.orbit.P) return clamp(Math.log10(Math.hypot(o.orbit.P[0], o.orbit.P[1], o.orbit.P[2]) * AU * 2.4), 6.6, 15.6); const d = vlen(o.get()); return d < 1e14 ? 12.4 : d < 3e16 ? 15.6 : d < 1e19 ? 16.4 : d < 1.2e21 ? 18.9 : d < 4e22 ? 21.6 : d < 1.5e24 ? 22.6 : 24.3; }
   function flyTo(o, lrWanted) { const ph = photoNear(o), lr = ph ? clamp(Math.log10(ph.half * 1.05), 19.0, 23.8) : (lrWanted || goLr(o)), opt = { focus: 'sun', noHist: true }; o.isGal = !!ph;
     if (ph) { const p = o.get(), d = vlen(p) || 1, ae = Rr.azelFrom([-p[0] / d, -p[1] / d, -p[2] / d], smoothstep(17.8, 19.9, lr)); opt.az = ae[0]; opt.el = ae[1]; }      // on arrive du côté du Soleil : la galaxie apparaît comme sur les photos
     if (!ph && o.exoI !== undefined) { const sy = exoSys(o.exoI), p0 = sy.list[sy.list.length - 1]; if (p0) { const h = vnorm(vcross(p0.P, p0.Q)), d = vnorm([0.82 * p0.P[0] + 0.57 * h[0], 0.82 * p0.P[1] + 0.57 * h[1], 0.82 * p0.P[2] + 0.57 * h[2]]), ae = Rr.azelFrom(d, 0); opt.az = ae[0]; opt.el = ae[1]; } }
-    goTo(lr, opt); S.center = o; renderCard(); }
+    goTo(lr, opt); zoffReset(); S.center = o; renderCard(); }
   function goThere(o) { if (!o) return; if (o.isEvent) { o.go(); return; } pushHist(); if (S.sel !== o) select(o); flyTo(o); }
   function stepZoom(dir) {      // +1 : reculer (voir plus large) ; −1 : avancer (voir de plus près)
     const cur = S.anim ? S.anim.l1 : S.logR;
@@ -171,8 +171,8 @@
     if (o.focus) setFocus(o.focus, Math.max(0.8, dur * 0.55));
     if (o.speed && S.playing) setSpeed(o.speed);
   }
-  const goStop = (st, instant) => { if (st.micro) { S.center = null; if (S.sel) select(null); } goTo(st.logR, { az: st.az, el: st.el, focus: st.focus || (S.focus !== 'sun' ? 'sun' : null), speed: st.speed, instant }); };
-  function focusBody(key) { if (key === 'sun') return goStop(STOPS[1]); goTo(Math.log10(BODY[key].focusR), { focus: key, speed: 3600 }); }
+  const goStop = (st, instant) => { zoffReset(); if (st.micro) { S.center = null; if (S.sel) select(null); } goTo(st.logR, { az: st.az, el: st.el, focus: st.focus || (S.focus !== 'sun' ? 'sun' : null), speed: st.speed, instant }); };
+  function focusBody(key) { zoffReset(); if (key === 'sun') return goStop(STOPS[1]); goTo(Math.log10(BODY[key].focusR), { focus: key, speed: 3600 }); }
 
   /* ---- étiquettes ---- */
   const LB = [], labelsEl = $('labels'); Rr.keyStars = DATA.STAR_LABELS.map(l => l.i);
@@ -333,6 +333,24 @@
     const up = () => { down = false; }; hit.addEventListener('pointerup', up); hit.addEventListener('pointercancel', up); }
 
   /* ---- commandes sur la scène ---- */
+  /* R3 : sans objet touché, la molette vise le point sous le curseur et le pincement le milieu des doigts. Ce point W (m, repère du Soleil)
+     reste fixe à l'écran : la cible de la caméra glisse de (W − cible)(1 − k), k étant le rapport d'échelle. W est l'objet sous le point
+     s'il y en a un à 8 px près (planète, étoile, galaxie… même recherche que le toucher), sinon le point du plan de visée. Le décalage
+     (S.zoff) s'annule, en glissant, sur « Accueil », un arrêt de la barre, ou quand on touche un objet. */
+  let zAnc = null;
+  function zoffReset() { zAnc = null; if (!S.zoff) return; S.zoff = null; if (S.lastTg) S.cbl = { from: S.lastTg, t0: performance.now() / 1000 }; }
+  function anchorAt(x, y) { const now = performance.now();
+    if (zAnc && now - zAnc.t < 400 && Math.hypot(x - zAnc.x, y - zAnc.y) < 3) { zAnc.t = now; return zAnc.W; }      /* même geste : même point */
+    let W = null; const sc = [0, 0, 0];
+    for (const b of BODIES) { const o = Rr.bodies[b.key]; if (o.screen && Math.hypot(o.screen[0] - x, o.screen[1] - y) < Math.min(o.px, 200) + 6) { W = bodyPosM(b.key); break; } }
+    if (!W) { const p = pickAt(x, y, true); if (p && Rr.project(p, F, sc) && Math.hypot(sc[0] - x, sc[1] - y) < 8) W = p; }
+    if (!W) { const c = Rr.camPos, v = new THREE.Vector3(x / Rr.cssW * 2 - 1, 1 - y / Rr.cssH * 2, 0.5).unproject(Rr.camera), dir = v.sub(c).normalize(), n = c.clone().normalize(), dn = dir.dot(n);
+      if (Math.abs(dn) < 1e-6) return null; const t = -c.dot(n) / dn; W = [(c.x + t * dir.x) / F.s + F.tg[0], (c.y + t * dir.y) / F.s + F.tg[1], (c.z + t * dir.z) / F.s + F.tg[2]]; }
+    zAnc = { x, y, t: now, W }; return W; }
+  function zoomAt(dl, x, y) { const l0 = S.logR, l1 = clampZoom(l0 + dl); S.anim = null; S.logR = l1;
+    if (S.center || microOn() || (S.focus !== 'sun' && l0 < 14.4) || !(l1 !== l0) || !F.s) return;      /* objet touché ou astre suivi : le zoom reste centré sur lui (R1) */
+    const W = anchorAt(x, y); if (!W || !isFinite(W[0])) return; const k = Math.pow(10, l1 - l0), z = S.zoff || [0, 0, 0];
+    for (let i = 0; i < 3; i++) { const dz = (W[i] - F.tg[i]) * (1 - k); z[i] += dz; F.tg[i] += dz; } S.zoff = z; F.s /= k; }      /* F.tg et F.s suivent tout de suite : plusieurs crans dans la même image restent justes */
   { const ptrs = new Map(); let pinch = 0, moved = 0, t0 = 0, lastTap = [0, 0, 0];
     const dist = () => { const p = [...ptrs.values()]; return Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]); };
     canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); if (ptrs.size === 1) { moved = 0; t0 = performance.now(); } else { moved = 99; pinch = dist(); } canvas.classList.add('drag'); });
@@ -340,11 +358,11 @@
       const p = ptrs.get(e.pointerId); if (!p) return;
       const dx = e.clientX - p[0], dy = e.clientY - p[1]; p[0] = e.clientX; p[1] = e.clientY;
       if (ptrs.size === 1) { moved += Math.abs(dx) + Math.abs(dy); if (moved > 5) { if (S.anim) { S.anim.a0 = S.anim.a1 = S.az; S.anim.e0 = S.anim.e1 = S.el; } S.az -= dx * 0.0055; S.el = clamp(S.el + dy * 0.0055, -1.52, 1.52); if (S.anim) { S.anim.a0 = S.anim.a1 = S.az; S.anim.e0 = S.anim.e1 = S.el; } } }
-      else if (ptrs.size === 2) { const d = dist(); if (pinch > 0 && d > 0) { S.anim = null; S.logR = clampZoom(S.logR - Math.log10(d / pinch) * 1.15); } pinch = d; }
+      else if (ptrs.size === 2) { const d = dist(), q = [...ptrs.values()]; if (pinch > 0 && d > 0) zoomAt(-Math.log10(d / pinch) * 1.15, (q[0][0] + q[1][0]) / 2, (q[0][1] + q[1][1]) / 2); pinch = d; }      /* R3 : pincement vers le milieu des deux doigts */
     });
     const up = e => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (ptrs.size === 0) { canvas.classList.remove('drag'); if (e.type === 'pointerup' && moved < 6 && performance.now() - t0 < 450) tap(e.clientX, e.clientY); } pinch = 0; };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-    canvas.addEventListener('wheel', e => { e.preventDefault(); S.anim = null; S.logR = clampZoom(S.logR + e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1)); /* l'infiniment petit couvre 40 puissances de dix : la molette y va plus vite */ }, { passive: false });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 40 puissances de dix : la molette y va plus vite */ }, { passive: false });
     function labelAt(x, y) { for (const b of placed) if (b[4] && x >= b[0] - 5 && x <= b[1] + 5 && y >= b[2] - 5 && y <= b[3] + 5) { const L = b[4]; if (L.micro) return null; if (L.body) return { body: L.body }; const p = L.get(), q = [0, 0, 0]; if (p && isFinite(p[0]) && Rr.project(p, F, q)) return { x: q[0], y: q[1] }; } return null; }
     S._tap = (x, y) => tap(x, y);
     function tap(x, y) { const now = performance.now(), dbl = now - lastTap[0] < 380 && Math.hypot(x - lastTap[1], y - lastTap[2]) < 26; lastTap = [now, x, y]; let best = null, bd = 30; for (const b of BODIES) { const o = Rr.bodies[b.key]; if (!o.screen) continue; const d = Math.hypot(o.screen[0] - x, o.screen[1] - y) - Math.min(o.px, 200); if (d < bd) { bd = d; best = b.key; } } if (best) { select(null); if (best !== S.focus) focusBody(best); return; }
@@ -640,32 +658,33 @@
   function selSurv(i, PP) { const P = PP || Rr.pick, z = P.svInfo[i * 3], kind = P.svInfo[i * 3 + 2], get = () => add3(F.gcRel, [P.svDir[i * 3], P.svDir[i * 3 + 1], P.svDir[i * 3 + 2]], P.svDist[i] * MPC * F.cos.a);
     return { name: kind > 1.5 ? 'Quasar' : 'Galaxie', sub: kind > 1.5 ? 'Noyau de galaxie très lumineux, relevé SDSS ou DESI' : kind > 0.5 ? 'Galaxie d’un relevé profond (6dF, 2dF, SDSS ou DESI)' : 'Galaxie du relevé 2MRS', get, rows: () => { const d = P.svDist[i] * MPC * F.cos.a, v = F.cos.Hkms * d / MPC;
       return [['Décalage vers le rouge', 'z = ' + sig(z, 3)], ['Distance à cet instant', fmtDist(d)], ['Sa lumière a voyagé', fmtYears(lookbackGyr(z) * 1e9)], ['S’éloigne à', v > 299792 ? sig(v / 299792.458, 3) + NBSP + 'fois la vitesse de la lumière : c’est l’espace qui s’étire' : nf(Math.round(v / 10) * 10, 0) + NBSP + 'km/s']]; } }; }
-  function pickAt(x, y) { if (S.logR < 3) return null;      // dans l'infiniment petit, on ne sélectionne pas les astres restés derrière le fond
+  function pickAt(x, y, posOnly) { if (S.logR < 3) return null; let bp = null, lx = 0, ly = 0, lz = 0;      /* posOnly (R3) : rend la position (m) de l'objet sous le point, sans ouvrir de fiche */      // dans l'infiniment petit, on ne sélectionne pas les astres restés derrière le fond
    
     PM.multiplyMatrices(Rr.camera.projectionMatrix, Rr.camera.matrixWorldInverse);
     const W = Rr.cssW, H = Rr.cssH, s = F.s, tg = F.tg, cam = Rr.camPos, V = Rr.vis; let best = null, bd = 24, X = 0, Y = 0, Z = 0;
-    const dpx = (mx, my, mz) => { X = (mx - tg[0]) * s; Y = (my - tg[1]) * s; Z = (mz - tg[2]) * s; const w = pe[3] * X + pe[7] * Y + pe[11] * Z + pe[15]; if (w <= 0.01) return 1e9;
+    const dpx = (mx, my, mz) => { lx = mx; ly = my; lz = mz; X = (mx - tg[0]) * s; Y = (my - tg[1]) * s; Z = (mz - tg[2]) * s; const w = pe[3] * X + pe[7] * Y + pe[11] * Z + pe[15]; if (w <= 0.01) return 1e9;
       return Math.hypot(((pe[0] * X + pe[4] * Y + pe[8] * Z + pe[12]) / w * 0.5 + 0.5) * W - x, (0.5 - (pe[1] * X + pe[5] * Y + pe[9] * Z + pe[13]) / w * 0.5) * H - y); };
     const appMag = M => M + 5 * Math.log10(Math.max(Math.hypot(X - cam.x, Y - cam.y, Z - cam.z) * Rr.unitToPc, 1e-7) / 10);
-    for (const tag of ['AST', 'TNO']) if ((tag === 'AST' ? Rr.beltVis : Rr.kuiperVis) > 0.3) { const B = Rr[tag], k = AU * F.orb; for (let i = 0; i < B.count; i++) { const d = dpx(B.pos[i * 3] * k, B.pos[i * 3 + 1] * k, B.pos[i * 3 + 2] * k) - 3; if (d < bd) { bd = d; best = () => orbPlus(selBody(tag, i)); } } }
-    if (V.stars > 0.25) { const st = Rr.star, sp = Rr.starPos, t = F.tMyr; for (let i = 0; i < st.N; i++) { const d = dpx(sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY); if (d < bd) { const f = st.fate[i]; if (t < st.life[i * 3] || ((f === 1 || f === 3) && t > st.life[i * 3 + 2] + F.flash)) continue; if (appMag(st.mag[i]) - Rr.expo < 9.3) { bd = d; best = () => selStar(i); } } } }
-    if (V.stars > 0.25) { const st = Rr.star2, sp = st.pos, t = F.tMyr; for (let i = 0; i < st.N; i++) { const d = dpx(sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY); if (d < bd) { const f = st.fate[i]; if (t < st.life[i * 3] || ((f === 1 || f === 3) && t > st.life[i * 3 + 2] + F.flash)) continue; if (appMag(st.mag[i]) - Rr.expo < 9.3) { bd = d; best = () => selStar2(i); } } } }
-    if (Rr.comVis > 0.3) { const B = Rr.COM, k = AU * F.orb; for (let i = 0; i < B.N; i++) { const d = dpx(B.pos[i * 3] * k, B.pos[i * 3 + 1] * k, B.pos[i * 3 + 2] * k) - 4; if (d < bd) { bd = d; best = () => orbPlus(selComet(i)); } } }
-    if (Rr.exoVis > 0.3) { const P = Rr.EXO.pos; for (let i = 0; i < Rr.EXO.N; i++) { const d = dpx(P[i * 3] * LY, P[i * 3 + 1] * LY, P[i * 3 + 2] * LY) - 3; if (d < bd) { bd = d; best = () => selExo(i); } } }
-    if (Rr.psrVis > 0.3) { const P = Rr.PSR.pos; for (let i = 0; i < Rr.PSR.N; i++) { const d = dpx(P[i * 3] * LY, P[i * 3 + 1] * LY, P[i * 3 + 2] * LY) - 3; if (d < bd) { bd = d; best = () => selPsr(i); } } }
+    for (const tag of ['AST', 'TNO']) if ((tag === 'AST' ? Rr.beltVis : Rr.kuiperVis) > 0.3) { const B = Rr[tag], k = AU * F.orb; for (let i = 0; i < B.count; i++) { const d = dpx(B.pos[i * 3] * k, B.pos[i * 3 + 1] * k, B.pos[i * 3 + 2] * k) - 3; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => orbPlus(selBody(tag, i)); } } }
+    if (V.stars > 0.25) { const st = Rr.star, sp = Rr.starPos, t = F.tMyr; for (let i = 0; i < st.N; i++) { const d = dpx(sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY); if (d < bd) { const f = st.fate[i]; if (t < st.life[i * 3] || ((f === 1 || f === 3) && t > st.life[i * 3 + 2] + F.flash)) continue; if (appMag(st.mag[i]) - Rr.expo < 9.3) { bd = d; bp = [lx, ly, lz]; best = () => selStar(i); } } } }
+    if (V.stars > 0.25) { const st = Rr.star2, sp = st.pos, t = F.tMyr; for (let i = 0; i < st.N; i++) { const d = dpx(sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY); if (d < bd) { const f = st.fate[i]; if (t < st.life[i * 3] || ((f === 1 || f === 3) && t > st.life[i * 3 + 2] + F.flash)) continue; if (appMag(st.mag[i]) - Rr.expo < 9.3) { bd = d; bp = [lx, ly, lz]; best = () => selStar2(i); } } } }
+    if (Rr.comVis > 0.3) { const B = Rr.COM, k = AU * F.orb; for (let i = 0; i < B.N; i++) { const d = dpx(B.pos[i * 3] * k, B.pos[i * 3 + 1] * k, B.pos[i * 3 + 2] * k) - 4; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => orbPlus(selComet(i)); } } }
+    if (Rr.exoVis > 0.3) { const P = Rr.EXO.pos; for (let i = 0; i < Rr.EXO.N; i++) { const d = dpx(P[i * 3] * LY, P[i * 3 + 1] * LY, P[i * 3 + 2] * LY) - 3; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selExo(i); } } }
+    if (Rr.psrVis > 0.3) { const P = Rr.PSR.pos; for (let i = 0; i < Rr.PSR.N; i++) { const d = dpx(P[i * 3] * LY, P[i * 3 + 1] * LY, P[i * 3 + 2] * LY) - 3; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selPsr(i); } } }
     if (V.stars > 0.25 && Math.abs(S.ty) < 3e6) for (const T of Rr.tiles) if (T.kind === 'star') { const sp = T.pos, vl = T.vel, kv = S.ty * 2 * KMS_LY_YR;
-      const scan = (i0, i1) => { for (let i = i0; i < i1; i++) { const j = i * 3, d = dpx((sp[j] + vl[j] * kv) * LY, (sp[j + 1] + vl[j + 1] * kv) * LY, (sp[j + 2] + vl[j + 2] * kv) * LY); if (d < bd && appMag(T.mag[i]) - Rr.expo < 9.3) { bd = d; best = () => selStarT(T, i); } } };
+      const scan = (i0, i1) => { for (let i = i0; i < i1; i++) { const j = i * 3, d = dpx((sp[j] + vl[j] * kv) * LY, (sp[j + 1] + vl[j + 1] * kv) * LY, (sp[j + 2] + vl[j + 2] * kv) * LY); if (d < bd && appMag(T.mag[i]) - Rr.expo < 9.3) { bd = d; bp = [lx, ly, lz]; best = () => selStarT(T, i); } } };
       if (T.leaves) { for (const L of T.leaves) if (L.dc) scan(L.a, L.a + L.dc); } else scan(0, T.draw); }
-    if (V.surv > 0.25) for (const T of Rr.tiles) if (T.kind === 'gal') { const k = MPC * F.cos.a, cr = Rr.survCR, kp = Rr.keep2 * Rr.pick.keep; for (let i = 0; i < T.draw; i++) { const r = T.dist[i], pk = kp * Math.min(1, Math.pow(r / cr, 1.7)); if (pk - T.info[i * 3 + 1] < 0.1 * pk) continue; const d = dpx(F.gcRel[0] + T.dir[i * 3] * r * k, F.gcRel[1] + T.dir[i * 3 + 1] * r * k, F.gcRel[2] + T.dir[i * 3 + 2] * r * k); if (d < bd) { bd = d; best = () => survPlus(selSurv(i, T.P), T.P, i); } } }
-    if (Rr.astVis > 0.3) for (const T of Rr.tiles) if (T.kind === 'ast') { const k = AU * (F.orb || 1), dt = F.jd - T.epoch, P = T.pos, Q = T.q, el = T.el; for (let i = 0; i < T.n; i++) { const j = i * 3, e = el[j], E = keplerE(wrapPi(el[j + 1] + el[j + 2] * dt), e), x = Math.cos(E) - e, y = Math.sin(E), d = dpx((P[j] * x + Q[j] * y) * k, (P[j + 1] * x + Q[j + 1] * y) * k, (P[j + 2] * x + Q[j + 2] * y) * k) - 2; if (d < bd) { bd = d; best = () => selAstT(T, i); } } }
-    for (const t of kSets) if (t.vis > 0.3) for (const k of t.idx) { if (KO[k].off) continue; const d = dpx(kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]) - 5; if (d < bd) { bd = d; best = () => selMoon(k); } }
-    if (Rr.bhsVis > 0.3) { const P = Rr.BHS.pos; for (let i = 0; i < Rr.BHS.N; i++) { const d = dpx(P[i * 3] * LY, P[i * 3 + 1] * LY, P[i * 3 + 2] * LY) - 6; if (d < bd) { bd = d; best = () => selBHS(i); } } }
-    if (Rr.bhmVis > 0.3) { const P = Rr.BHM.pos, k = MPC * F.cos.a; for (let i = 0; i < Rr.BHM.N; i++) { const d = dpx(F.gcRel[0] + P[i * 3] * k, F.gcRel[1] + P[i * 3 + 1] * k, F.gcRel[2] + P[i * 3 + 2] * k) - 6; if (d < bd) { bd = d; best = () => selBHM(i); } } }
-    if (S.logR > 17.6 && S.logR < 22.2) { const d = dpx(F.gcRel[0], F.gcRel[1], F.gcRel[2]) - 8; if (d < bd) { bd = d; best = () => selSgrA(); } }
-    if (V.clusters > 0.25) { const c = Rr.clu; for (let i = 0; i < c.N; i++) { const d = dpx(c.pos[i * 3] * LY, c.pos[i * 3 + 1] * LY, c.pos[i * 3 + 2] * LY); if (d < bd && appMag(c.mag[i]) - Rr.expoC < 9.5) { bd = d; best = () => selCluster(i); } } }
-    if (V.lg > 0.12) for (const c of G.lg.centers) { if (c.gone) continue; const d = dpx(F.gcRel[0] + c.c[0] * KPC, F.gcRel[1] + c.c[1] * KPC, F.gcRel[2] + c.c[2] * KPC) - 5; if (d < bd) { bd = d; best = () => selLG(c); } }
-    if (V.near > 0.25) { const P = Rr.pick, k = MPC * F.cos.a; for (let i = 0; i < P.nN; i++) { const d = dpx(F.gcRel[0] + P.nPos[i * 3] * k, F.gcRel[1] + P.nPos[i * 3 + 1] * k, F.gcRel[2] + P.nPos[i * 3 + 2] * k) - 2; if (d < bd) { bd = d; best = () => selNear(i); } } }
-    if (V.surv > 0.25) { const P = Rr.pick, k = MPC * F.cos.a, cr = Rr.survCR; for (let i = 0; i < P.svN; i++) { const r = P.svDist[i], pk = P.keep * Math.min(1, Math.pow(r / cr, 1.7)); if (pk - P.svInfo[i * 3 + 1] < 0.1 * pk) continue; const d = dpx(F.gcRel[0] + P.svDir[i * 3] * r * k, F.gcRel[1] + P.svDir[i * 3 + 1] * r * k, F.gcRel[2] + P.svDir[i * 3 + 2] * r * k); if (d < bd) { bd = d; best = () => survPlus(selSurv(i), Rr.pick, i); } } }
+    if (V.surv > 0.25) for (const T of Rr.tiles) if (T.kind === 'gal') { const k = MPC * F.cos.a, cr = Rr.survCR, kp = Rr.keep2 * Rr.pick.keep; for (let i = 0; i < T.draw; i++) { const r = T.dist[i], pk = kp * Math.min(1, Math.pow(r / cr, 1.7)); if (pk - T.info[i * 3 + 1] < 0.1 * pk) continue; const d = dpx(F.gcRel[0] + T.dir[i * 3] * r * k, F.gcRel[1] + T.dir[i * 3 + 1] * r * k, F.gcRel[2] + T.dir[i * 3 + 2] * r * k); if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => survPlus(selSurv(i, T.P), T.P, i); } } }
+    if (Rr.astVis > 0.3) for (const T of Rr.tiles) if (T.kind === 'ast') { const k = AU * (F.orb || 1), dt = F.jd - T.epoch, P = T.pos, Q = T.q, el = T.el; for (let i = 0; i < T.n; i++) { const j = i * 3, e = el[j], E = keplerE(wrapPi(el[j + 1] + el[j + 2] * dt), e), x = Math.cos(E) - e, y = Math.sin(E), d = dpx((P[j] * x + Q[j] * y) * k, (P[j + 1] * x + Q[j + 1] * y) * k, (P[j + 2] * x + Q[j + 2] * y) * k) - 2; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selAstT(T, i); } } }
+    for (const t of kSets) if (t.vis > 0.3) for (const k of t.idx) { if (KO[k].off) continue; const d = dpx(kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]) - 5; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selMoon(k); } }
+    if (Rr.bhsVis > 0.3) { const P = Rr.BHS.pos; for (let i = 0; i < Rr.BHS.N; i++) { const d = dpx(P[i * 3] * LY, P[i * 3 + 1] * LY, P[i * 3 + 2] * LY) - 6; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selBHS(i); } } }
+    if (Rr.bhmVis > 0.3) { const P = Rr.BHM.pos, k = MPC * F.cos.a; for (let i = 0; i < Rr.BHM.N; i++) { const d = dpx(F.gcRel[0] + P[i * 3] * k, F.gcRel[1] + P[i * 3 + 1] * k, F.gcRel[2] + P[i * 3 + 2] * k) - 6; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selBHM(i); } } }
+    if (S.logR > 17.6 && S.logR < 22.2) { const d = dpx(F.gcRel[0], F.gcRel[1], F.gcRel[2]) - 8; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selSgrA(); } }
+    if (V.clusters > 0.25) { const c = Rr.clu; for (let i = 0; i < c.N; i++) { const d = dpx(c.pos[i * 3] * LY, c.pos[i * 3 + 1] * LY, c.pos[i * 3 + 2] * LY); if (d < bd && appMag(c.mag[i]) - Rr.expoC < 9.5) { bd = d; bp = [lx, ly, lz]; best = () => selCluster(i); } } }
+    if (V.lg > 0.12) for (const c of G.lg.centers) { if (c.gone) continue; const d = dpx(F.gcRel[0] + c.c[0] * KPC, F.gcRel[1] + c.c[1] * KPC, F.gcRel[2] + c.c[2] * KPC) - 5; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selLG(c); } }
+    if (V.near > 0.25) { const P = Rr.pick, k = MPC * F.cos.a; for (let i = 0; i < P.nN; i++) { const d = dpx(F.gcRel[0] + P.nPos[i * 3] * k, F.gcRel[1] + P.nPos[i * 3 + 1] * k, F.gcRel[2] + P.nPos[i * 3 + 2] * k) - 2; if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => selNear(i); } } }
+    if (V.surv > 0.25) { const P = Rr.pick, k = MPC * F.cos.a, cr = Rr.survCR; for (let i = 0; i < P.svN; i++) { const r = P.svDist[i], pk = P.keep * Math.min(1, Math.pow(r / cr, 1.7)); if (pk - P.svInfo[i * 3 + 1] < 0.1 * pk) continue; const d = dpx(F.gcRel[0] + P.svDir[i * 3] * r * k, F.gcRel[1] + P.svDir[i * 3 + 1] * r * k, F.gcRel[2] + P.svDir[i * 3 + 2] * r * k); if (d < bd) { bd = d; bp = [lx, ly, lz]; best = () => survPlus(selSurv(i), Rr.pick, i); } } }
+    if (posOnly) return bp;
     return best ? best() : null;
   }
   /* R2 : repère de l'objet suivi (anneau, nom, état à la date affichée), à toutes les échelles. Objet suivi : le centre du zoom (R1),
@@ -683,7 +702,7 @@
     FOL.classList.toggle('edge', x !== q[0] || y !== q[1]); FOL.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; if (FOL.hidden) FOL.hidden = false; }
   /* R1 : l'objet touché devient le centre du zoom (molette, pincement, boutons, barre), sans changer l'échelle. Un événement de la chronologie
      n'a pas de position : il ne devient pas un centre. Fermer la fiche (select(null)) rend le centre en douceur (S.ck, 0,9 s). */
-  function centerOn(o) { if (!o || o.isEvent) return; const p = o.get(); if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) return; S.center = o; renderCard(); }
+  function centerOn(o) { if (!o || o.isEvent) return; const p = o.get(); if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) return; zoffReset(); S.center = o; renderCard(); }
   function select(o) { S.sel = o; if (!o) S.center = null; if (o && o.exoI !== undefined) setExoSystem(o.exoI, o.exoC ? o.get : null); Rr.setSelOrbit(o && o.orbit ? o.orbit : null); renderCard(); }
   function renderCard() {
     const sel = S.sel, body = !sel && (S.focus !== 'sun' || S.logR < 10.7) ? BODY[S.focus] : null, card = $('card'), mic = !sel && microOn() && S.logR < 3.2 ? microLevel(S.logR) : null;
@@ -1327,6 +1346,7 @@
     F.selPos = S.sel && S.sel !== S.center ? S.sel.get() : null;      /* l'objet sélectionné et suivi porte le repère de R2 (updateFollow) au lieu de l'anneau 3D */ if (F.selPos && !isFinite(F.selPos[0])) F.selPos = null;
     const ck0 = S.ck; S.ck = clamp(S.ck + (S.center ? dt : -dt) / 0.9, 0, 1); if (S.center) S.cpos = S.center.get();
     if (S.ck > 0 && S.cpos) { const k = ease(S.ck); for (let i = 0; i < 3; i++) F.tg[i] = lerp(F.tg[i], S.cpos[i], k); }
+    if (S.zoff && !S.center) for (let i = 0; i < 3; i++) F.tg[i] += S.zoff[i];      /* R3 : décalage du zoom vers un point */
     /* nouveau centre alors que la vue est encore (même en partie) tirée vers l'ancien : glissement en 0,9 s au lieu d'un saut.
        Couvre le passage direct A → B, A → (fiche fermée) → B en moins de 0,9 s, et le retour en arrière (goBack). */
     if (S.center !== S.cWas) { if (S.center && S.lastTg && (S.cWas || ck0 > 0)) S.cbl = { from: S.lastTg, t0: wall }; S.cWas = S.center; }
@@ -1349,7 +1369,7 @@
     requestAnimationFrame(step);
   }
   setSpeed(S.speed); syncPlay(); syncSliders();
-  window.__U = { centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, FATE_P, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
+  window.__U = { zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, FATE_P, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
   if (!reduced) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
   requestAnimationFrame(now => { last = now; step(now); requestAnimationFrame(() => { $('loader').classList.add('out'); setTimeout(() => $('loader').remove(), 1000); if (!reduced && !S.resumed) { S.anim = { t0: performance.now() / 1000 + 0.3, dur: 5.5, l0: S.logR, l1: STOPS[1].logR, a0: S.az, a1: S.az + 0.5, e0: S.el, e1: 0.6 }; } showRail(); }); });
 })();
