@@ -23,6 +23,8 @@ La page calcule l'orbite d'Andromède avec `mwMass` (20_physics.js, 25_future.js
 | Triangle (M33), corps étendu | Plummer 2,5 × 10¹¹ M☉, rayon d'adoucissement 21 kpc : la plus forte des trois masses testées par Patel, Besla et Sohn 2017 (MNRAS 464, 3825), qui jugent plausible 1,3 à 2,1 × 10¹¹ ; Corbelli et al. 2014 donnent 4,3 × 10¹¹ [Certain : critique de vérité] | 4,8 × 10⁹ M☉ [À vérifier : fourchettes publiées 3,4 à 6,4 × 10⁹], R_d = 1,4 kpc (Regan et Vogel 1994) | — | Patel et al. 2017 ; Corbelli et al. 2014 ; Regan et Vogel 1994 |
 | Grand Nuage, corps étendu | Hernquist 1,8 × 10¹¹ M☉, a = 12 kpc (valeur de la page ; publiées : 1,3 à 2,5 × 10¹¹) | 2,7 × 10⁹ M☉, R_d = 1,5 kpc | — | Page (`LMC_MASS`) ; disque : van der Marel et al. 2002 [Certain] |
 
+Note : le Plummer du Triangle est écrit dans `modeles.py` en R9 (l'essai n'utilise que la Voie lactée et Andromède).
+
 Chaque galaxie est d'abord mise à l'équilibre seule (AGAMA : halo et bulbe en fonction de distribution quasi sphérique, disque en quasi-isotherme, dans le potentiel total de la galaxie), puis placée à sa position et sa vitesse de départ.
 
 ## 3. Positions et vitesses de départ (aujourd'hui, repère galactocentrique de la page, kpc et km/s)
