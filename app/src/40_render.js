@@ -222,8 +222,13 @@ function initMicro(THREE, scene, camera, R, Q) {
       tv.copy(H2).applyQuaternion(tq); m4.makeScale(1.1 * s, 1.1 * s, 1.1 * s).setPosition(x + tv.x, y + tv.y, z + tv.z); hM.setMatrixAt(2 * i + 1, m4); }
     oM.instanceMatrix.needsUpdate = true; hM.instanceMatrix.needsUpdate = true; }
 
-  // --- nuage d'électrons de la molécule centrale : 10 électrons, densité approchée par des orbitales de Slater (charges effectives de Clementi et Raimondi)
-  const NE = big ? 36000 : 15000, eP = new Float32Array(NE * 3), ePh = new Float32Array(NE);
+  // --- nuage d'électrons de la molécule centrale (R14) : 10 électrons. Points tirés selon la densité CALCULÉE par chimie quantique
+  //     (Hartree-Fock, base aug-cc-pVTZ, PySCF : gen/water_qm.js, pipeline/quantique/eau_pyscf.py), dans le repère de la molécule, puis tournés
+  //     comme la molécule centrale. Sans ces données, repli sur l'ancien modèle approché (orbitales de Slater).
+  const WQ = typeof DATA !== 'undefined' && DATA.WATER_QM ? DATA.WATER_QM.eau : null, WQP = WQ ? new Int16Array(Uint8Array.from(atob(WQ.pts), c => c.charCodeAt(0)).buffer) : null;
+  const NE = WQP ? WQ.n : big ? 36000 : 15000, eP = new Float32Array(NE * 3), ePh = new Float32Array(NE);
+  if (WQP) { const q0 = mol[0].q; for (let i = 0; i < NE; i++) { tv.set(WQP[i * 3] * WQ.q_A, WQP[i * 3 + 1] * WQ.q_A, WQP[i * 3 + 2] * WQ.q_A).applyQuaternion(q0); eP[i * 3] = tv.x; eP[i * 3 + 1] = tv.y; eP[i * 3 + 2] = tv.z; ePh[i] = rng(); } }
+  else
   { const b = hw1.clone().add(hw2).normalize(), nrm = hw1.clone().cross(hw2).normalize(), c54 = Math.cos(54.75 * DEG), s54 = Math.sin(54.75 * DEG);
     const LOB = [hw1.clone().normalize(), hw2.clone().normalize(), b.clone().multiplyScalar(-c54).addScaledVector(nrm, s54), b.clone().multiplyScalar(-c54).addScaledVector(nrm, -s54)];
     for (let i = 0; i < NE; i++) { const u = rng(); let cx = 0, cy = 0, cz = 0, r, d;

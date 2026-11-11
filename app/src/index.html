@@ -55,7 +55,7 @@ body{height:100%; margin:0; background:var(--scene); color:var(--on-scene); font
 #find-q{width:100%; box-sizing:border-box; margin:10px 0 8px; padding:9px 10px; font:inherit; color:inherit; background:rgba(128,140,170,.12); border:1px solid rgba(128,140,170,.5); border-radius:8px}
 #find-res{display:flex; flex-direction:column; gap:4px} #find-res button{text-align:left; padding:8px 10px; border-radius:8px; border:1px solid rgba(128,140,170,.3); background:transparent; color:inherit; font:inherit; cursor:pointer} #find-res button small{opacity:.65; margin-left:8px}
 @media (max-width:720px){ #p-find{top:calc(92px + env(safe-area-inset-top,0px)); bottom:auto; max-height:52%} }
-#card dl{margin:0 0 9px; gap:3px 12px; font-size:13px; max-height:38vh; overflow-y:auto; overscroll-behavior:contain}
+#card dl{margin:0 0 9px; gap:3px 12px; font-size:13px; max-height:max(120px, min(38vh, calc(100vh - 560px))); overflow-y:auto; overscroll-behavior:contain}      /* la fiche s'arrête au-dessus de l'échelle */
 #card dt{color:var(--on-scene-dim)} #card dd{text-align:left; font-weight:400}
 .cbtn{display:flex; flex-wrap:wrap; gap:6px}
 .events{list-style:none; margin:10px 0 0; padding:0; display:grid; gap:4px}
