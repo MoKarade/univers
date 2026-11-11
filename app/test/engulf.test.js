@@ -23,4 +23,10 @@ for (const [n, p] of [['Mercure', me], ['Vénus', ve]]) {
   for (let k = 0; k <= 60; k++) { const f = tideAt(p, tm + (p.tEng - tm) * k / 60); if (f > prev + 1e-9) mono = false; prev = f; }
   check(frames >= 30 && mono, n + ' : orbite qui se resserre sur ' + Math.round(frames) + ' images à vitesse normale, sans remonter (au plus haut : ' + mx.toFixed(3) + ' fois l’actuelle)');
 }
+// SUN_TRACK contre la table 1 de Schröder et Smith 2008 (âge, L, T, R, M) : chaque point publié doit y être
+const TABLE1 = [['ZAMS', 0.00, 0.70, 5596, 0.89, 1.000], ['aujourd’hui', 4.58, 1.00, 5774, 1.00, 1.000], ['MS:hottest', 7.13, 1.26, 5820, 1.11, 1.000], ['MS:final', 10.00, 1.84, 5751, 1.37, 1.000],
+  ['RGB:tip', 12.17, 2730, 2602, 256, 0.668], ['ZA-He', 12.17, 53.7, 4667, 11.2, 0.668], ['AGB:tip', 12.30, 2090, 3200, 149, 0.546], ['AGB:tip-TP', 12.30, 4170, 3467, 179, 0.544]];
+for (const [n, ...v] of TABLE1) { const row = SUN_TRACK.find(r => Math.abs(r[0] - v[0]) < 0.0051 && Math.abs(r[1] - v[1]) <= 1e-9 * v[1] + 1e-9 && r[2] === v[2] && r[3] === v[3] && r[4] === v[4]);
+  check(!!row, 'table 1, ' + n + ' : présent dans SUN_TRACK' + (row ? ' (âge ' + row[0] + ')' : '')); }
+console.log('       marge de 1,00 UA : engloutie ' + ((TIP - e1.tEng) * 1e3).toFixed(3) + ' Ma avant le sommet, sur une montée de ' + ((TIP - (10.0 - SUN_NOW)) * 1e3).toFixed(0) + ' Ma (publié : environ 0,5 Ma avant)');
 if (bad) { console.log('engloutissement : ÉCHEC (' + bad + ')'); process.exit(1); } else console.log('engloutissement : PASSE');

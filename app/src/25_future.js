@@ -19,7 +19,7 @@ const SUN_TRACK = [
   [0.00, 0.70, 5596, 0.89, 1.000], /* * naissance */ [4.58, 1.00, 5774, 1.00, 1.000], /* * aujourd'hui */ [7.13, 1.26, 5820, 1.11, 1.000], /* * */ [10.00, 1.84, 5751, 1.37, 1.000], /* * fin de séquence principale */
   /* de 10,00 à 12,167 : branche des géantes rouges tirée de DATA.SUN_RGB (pipeline/build_sun_rgb.py : forme MIST, ancrages et perte de masse de Schröder et Smith 2008) */
   [12.167, 2730, 2602, 256, 0.668], /* * sommet de la branche des géantes rouges */ [12.1675, 53.7, 4667, 11.2, 0.668], /* * fusion de l'hélium */
-  [12.27, 62, 4600, 12.4, 0.665], [12.293, 520, 3700, 56, 0.62], [12.30, 2090, 3200, 149, 0.546], /* * sommet de la branche asymptotique */
+  [12.27, 62, 4600, 12.4, 0.665], [12.293, 520, 3700, 56, 0.62], [12.30, 2090, 3200, 149, 0.546], /* * sommet de la branche asymptotique */ [12.3001, 4170, 3467, 179, 0.544], /* * pic du dernier pulse thermique (« AGB:tip-TP », âge 12,30 à l'arrondi de la table) */
   [12.3003, 2000, 8000, 23.3, 0.542], [12.3006, 1500, 30000, 1.43, 0.541], [12.301, 300, 100000, 0.058, 0.5405], [12.31, 0.88, 50000, 0.0125, 0.5405],
   [12.40, WD_L(0.1), WD_T(WD_L(0.1)), 0.0125, 0.5405], /* raccord à la loi de Mestel ; au-delà, voir sunState */
 ];
@@ -47,7 +47,10 @@ function engulfTime(a0) {
      q = m / M, t_f = (M R² / L)^(1/3), λ₂ = 0,019 α^(4/3), α = 2,0 pour log g ≥ 1,94, réduit linéairement à 1,67 à log g = 0 ;
    - frottement dans l'atmosphère étendue (Ostriker 1999 ; leurs éq. 5-6) : F = 3 · 4π ρ (G m / c_s)², c_s = 8 km/s,
      dΛ/dt = −F a, avec ρ = 4×10⁻⁹ kg/m³ à 5×10⁶ km de la surface et une hauteur d'échelle de 5×10⁶ km (leur § 4.3).
-   La planète est engloutie quand a ≤ R. Le Soleil (L, R, T, M) vient de SUN_TRACK (points publiés de la table 1, interpolés).
+   La planète est engloutie quand a ≤ R. Le Soleil (L, R, T, M) vient de sunState : points publiés de la table 1 et, sur la branche des géantes rouges,
+   la trajectoire DATA.SUN_RGB (forme du modèle MIST v1.2, Choi et al. 2016, ancrée sur le sommet publié, rayon calé sur la masse publiée au sommet).
+   α : l'article écrit « α = 2.0 for log g < 1.94, reduced to 1.67 at log g = 0.0 » ; seule lecture cohérente, retenue ici : 2,0 au-dessus de log g = 1,94,
+   puis réduction linéaire jusqu'à 1,67 à log g = 0 ; au sommet (log g ≈ −0,55) on retrouve λ₂ ≈ 0,038 publié.
    Rend une table [temps (Ga depuis aujourd'hui), a/a0] et la date d'engloutissement (Infinity si la planète survit).
    -------------------------------------------------------------------------- */
 const TIDE = { G: 6.674e-11, MS: 1.98847e30, RS: 6.957e8, LS: 3.828e26, AU: 1.495978707e11, YR: 3.15576e7 };
