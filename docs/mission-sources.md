@@ -24,7 +24,7 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 - Après : carte Planck PR3 SMICA, version comblée sur le plan galactique si l'archive la fournit, en coordonnées galactiques ; fiche « Planck 2018, ESA ».
 - Données : `pipeline/sources/build_cmb_planck.py` → `app/gen/data16.js` (`DATA.CMB`, `DATA.CMB_SRC`).
 - Fait (données) : colonne comblée `I_STOKES_INP` utilisée ; écart-type hors du plan galactique (|b| > 30°) : 105,4 µK, ordre de grandeur attendu pour le fond diffus [Probable] ; image 2048 × 1024, 880 ko dans la page (contre une carte WMAP 720 × 360).
-- Fini quand : ; capture à l'écran à l'horizon cosmique ; critiques PASSE.
+- Fini quand : capture à l'écran à l'horizon cosmique ; critiques PASSE.
 
 ### S2 — Ondes gravitationnelles (A6)
 - Après : chaque fusion détectée a un événement daté dans la chronologie, avec masses et distance telles que publiées.
