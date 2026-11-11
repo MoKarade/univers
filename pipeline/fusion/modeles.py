@@ -35,6 +35,8 @@ def galaxie(nom, nh, nd, nb, k_mass=1.0, k_r=1.0, halo='nfw', mh=None, ah=None, 
         rho0 = MS_NFW * k_mass / (4 * math.pi * (RS * k_r) ** 3)
         ph = agama.Potential(type='Spheroid', densityNorm=rho0, gamma=1, beta=3, alpha=1, scaleRadius=RS * k_r,
                              outerCutoffRadius=RCUT * k_r, cutoffStrength=4)
+    elif halo == 'plummer':
+        ph = agama.Potential(type='Plummer', mass=mh, scaleRadius=ah)
     else:   # Hernquist
         ph = agama.Potential(type='Dehnen', gamma=1, mass=mh, scaleRadius=ah)
     md = MD * k_mass if md is None else md
