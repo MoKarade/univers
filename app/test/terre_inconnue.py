@@ -41,6 +41,11 @@ def main():
                 print(f"{'PASSE' if ok else 'ÉCHEC'}  {label} : Terre dessinée {st['earth']}, à {st['ratio']:.3f} fois son orbite actuelle (élargie), pas de panneau")
             else:
                 ok = not st['earth'] and not st['moon'] and all(r in st['notice'] for r in REFS)
+                pg.evaluate("__U.S.anim = null; __U.S.logR = 14.0"); frames(pg)
+                far = pg.evaluate(STATE)['notice']
+                ok = ok and not far.startswith('Sort de la Terre')
+                print(f"       au-dessus de 10^13,5 m : panneau « {far[:40]} » (attendu : pas le panneau de la Terre)")
+                pg.evaluate("__U.goStop(__U.STOPS[1], true)"); frames(pg)
                 print(f"{'PASSE' if ok else 'ÉCHEC'}  {label} : Terre dessinée {st['earth']}, Lune {st['moon']} ; panneau : « {st['notice'][:90]}… »")
             bad += 0 if ok else 1
         pg.evaluate("__U.focusBody('earth')"); pg.wait_for_function('!__U.S.anim', timeout=180000); frames(pg)
