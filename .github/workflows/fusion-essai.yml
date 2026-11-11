@@ -27,8 +27,12 @@ jobs:
         with: { python-version: "3.11" }
       - name: Logiciels (AGAMA, pyfalcon)
         run: |
-          python -m pip install --quiet numpy setuptools wheel
-          python -m pip install --no-build-isolation agama pyfalcon < /dev/null
+          sudo apt-get install -y -qq libgsl-dev > /dev/null
+          python -m pip install --quiet numpy scipy setuptools wheel
+          git clone --depth 1 https://github.com/GalacticDynamics-Oxford/Agama.git /tmp/agama
+          (cd /tmp/agama && python setup.py install --yes > /tmp/agama.log 2>&1 || (tail -40 /tmp/agama.log; exit 1))
+          python -m pip install --no-build-isolation pyfalcon
+          python -c "import agama, pyfalcon; print('AGAMA et pyfalcon prêts')"
       - name: Essai
         working-directory: pipeline/fusion
         run: python essai.py "${{ github.event.inputs.n || '15000' }}" "${{ github.event.inputs.duree || '1.0' }}"
