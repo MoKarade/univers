@@ -105,7 +105,9 @@ function orbInit(K, sunGal0) {
 /** À chaque image, avant le dessin. on : false quand la matière noire a été retirée (le temps affiché n'est plus le temps réel) ;
  *  far : plus de 2 Ma d'aujourd'hui (en deçà, les étoiles vont en ligne droite et rien n'est demandé).
  *  Choisit aussi, une fois pour l'image, entre orbite calculée et épicycles, avec un écart de bascule pour éviter le scintillement. */
+let ORB_DM_ON = true;            /* faux quand la matière noire a été retirée (temps effectif) : décidé par la page, pas par le Worker */
 function orbRequest(K, tEff, on, far) {
+  ORB_DM_ON = on;
   const O = K && K.orb; if (!O) return;
   O.on = on; O.far = far; O.want = tEff;
   const lag = O.res ? Math.abs(O.res.t - tEff) : Infinity;
@@ -139,7 +141,7 @@ function starOrbSun(K, tEff, out) {
  *  à toute date. Points de contrôle tous les 100 Ma. Matière noire retirée : épicycles, comme avant. */
 const SUN_ORB = { X: null, V: null, t: 0, cps: new Map() };
 function sunOrbAt(K, tEff, out) {
-  if (K && K.orb && !K.orb.on) { epicyclePos(K.sun, 0, tEff, out, 0); return out; }
+  if (!ORB_DM_ON && K) { epicyclePos(K.sun, 0, tEff, out, 0); return out; }
   const S = SUN_ORB, P = orbParams();
   if (!S.X) { S.X = Float64Array.from(DATA.SGRA_GAL.map(x => -x * GAL.R0)); S.V = Float64Array.from(SUN_UVW); S.t = 0; S.cps.set(0, [S.X.slice(), S.V.slice()]); }
   const goal = Math.round(tEff / ORB_DT) * ORB_DT;
