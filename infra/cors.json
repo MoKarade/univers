@@ -1,0 +1,1 @@
+[{ "origin": ["https://PROJET.web.app", "https://PROJET.firebaseapp.com"], "method": ["GET", "HEAD"], "responseHeader": ["Content-Type", "Content-Length", "Range", "Authorization"], "maxAgeSeconds": 3600 }]

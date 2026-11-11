@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>L’univers, du Soleil à l’horizon cosmique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+  --scene:#02030a; --on-scene:#e9edf5; --on-scene-dim:#a3acc0; --rail:rgba(233,237,245,.34);
+  --amber:#f2b56b; --ice:#9cc4ff; --orchid:#c98be0; --indigo:#8391e6;
+  --panel:rgba(243,244,248,.93); --ink:#141826; --ink-dim:#535d72; --line:rgba(20,24,38,.16); --track:rgba(20,24,38,.22); --fill:#141826; --fill-ink:#f3f4f8; --curve:#3b5bd6; --warm:#b56a12;
+  --bar-h:120px;
+  --sans:'Jost','Avenir Next','Century Gothic','Segoe UI',system-ui,sans-serif; --serif:'Newsreader','Iowan Old Style','Palatino Linotype',Georgia,serif;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){ color-scheme:dark;
+  --panel:rgba(9,12,24,.8); --ink:#e9edf5; --ink-dim:#a3acc0; --line:rgba(233,237,245,.15); --track:rgba(233,237,245,.24); --fill:#e9edf5; --fill-ink:#0a0d18; --curve:#9cc4ff; --warm:#f2b56b; } }
+:root[data-theme="dark"]{ color-scheme:dark;
+  --panel:rgba(9,12,24,.8); --ink:#e9edf5; --ink-dim:#a3acc0; --line:rgba(233,237,245,.15); --track:rgba(233,237,245,.24); --fill:#e9edf5; --fill-ink:#0a0d18; --curve:#9cc4ff; --warm:#f2b56b; }
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%; scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%; margin:0; background:var(--scene); color:var(--on-scene); font:400 15px/1.4 var(--sans); overflow:hidden; -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%; overscroll-behavior:none}
+#gl{position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; outline:none; cursor:grab}
+#gl.drag{cursor:grabbing}
+#labels{position:fixed; inset:0; pointer-events:none; overflow:hidden}
+.lb{position:absolute; left:0; top:0; white-space:nowrap; font:italic 400 13.5px/1 var(--serif); color:var(--on-scene); text-shadow:0 0 5px #000,0 0 2px #000,0 0 12px rgba(0,0,0,.8); padding:5px 6px 5px 10px; opacity:0; visibility:hidden}
+.lb.k-body{font-style:normal; font-weight:500; pointer-events:auto; cursor:pointer}
+.lb.k-region{letter-spacing:.07em; color:var(--on-scene-dim)}
+.lb.k-here{font:500 12.5px/1 var(--sans); color:var(--amber)}
+.lb.k-hz{font:400 12px/1 var(--sans); color:var(--on-scene-dim); padding-left:0; transform-origin:50% 100%}
+#top{position:fixed; left:0; top:0; padding:calc(16px + env(safe-area-inset-top,0px)) 16px 0 20px; max-width:min(540px,calc(100% - 64px)); pointer-events:none; text-shadow:0 1px 10px rgba(0,0,0,.9),0 0 2px rgba(0,0,0,.9)}
+#place{font:500 clamp(26px,5.2vw,38px)/1.04 var(--serif); letter-spacing:-.012em; margin:0}
+#field{margin:7px 0 0; font-size:14.5px; font-variant-numeric:tabular-nums}
+#prov{margin:2px 0 0; font-size:12.5px; color:var(--on-scene-dim); max-width:38ch}
+#notice{margin:10px 0 0; padding:7px 11px; border-left:2px solid var(--amber); background:rgba(6,8,18,.66); font-size:13px; max-width:40ch; pointer-events:auto}
+#card{margin:12px 0 0; pointer-events:auto; max-width:40ch; padding:10px 12px 11px; background:rgba(6,8,18,.66); border-left:2px solid var(--ice); text-shadow:none}
+#card h2{font:500 21px/1.1 var(--serif); margin:0 0 3px}
+#card p{margin:0 0 7px; font-size:13px; color:var(--on-scene-dim)}
+#nav{position:fixed; right:calc(56px + env(safe-area-inset-right,0px)); bottom:calc(var(--bar-h) + 22px + env(safe-area-inset-bottom,0px)); display:flex; gap:6px; pointer-events:auto}
+#nav .nb{width:42px; min-height:42px; font-size:20px; font-weight:600; background:rgba(10,14,28,.92); color:#fff; border-color:rgba(233,237,245,.65)} #nav .nb:disabled{opacity:.45; cursor:default}
+#hint{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(var(--bar-h) + 74px + env(safe-area-inset-bottom,0px)); max-width:min(440px,calc(100% - 40px)); padding:10px 14px; border-radius:10px; background:rgba(6,8,18,.86); border:1px solid rgba(233,237,245,.3); color:var(--on-scene); font-size:13px; line-height:1.4; cursor:pointer; z-index:5}
+#find-res h3{margin:12px 0 6px; font:600 12.5px/1.2 var(--sans)} #find-res .chips{display:flex; flex-wrap:wrap; gap:6px} #find-res .chips button{padding:7px 11px; border-radius:999px}
+#findp{margin:8px 0 0} #b-find{pointer-events:auto}
+#find-q{width:100%; box-sizing:border-box; margin:10px 0 8px; padding:9px 10px; font:inherit; color:inherit; background:rgba(128,140,170,.12); border:1px solid rgba(128,140,170,.5); border-radius:8px}
+#find-res{display:flex; flex-direction:column; gap:4px} #find-res button{text-align:left; padding:8px 10px; border-radius:8px; border:1px solid rgba(128,140,170,.3); background:transparent; color:inherit; font:inherit; cursor:pointer} #find-res button small{opacity:.65; margin-left:8px}
+@media (max-width:720px){ #p-find{top:calc(92px + env(safe-area-inset-top,0px)); bottom:auto; max-height:52%} }
+#card dl{margin:0 0 9px; gap:3px 12px; font-size:13px; max-height:38vh; overflow-y:auto; overscroll-behavior:contain}
+#card dt{color:var(--on-scene-dim)} #card dd{text-align:left; font-weight:400}
+.cbtn{display:flex; flex-wrap:wrap; gap:6px}
+.events{list-style:none; margin:10px 0 0; padding:0; display:grid; gap:4px}
+.ev{display:grid; gap:1px; width:100%; text-align:left; background:none; border:0; border-left:2px solid var(--line); padding:6px 4px 6px 10px; color:inherit; font:400 13.5px/1.3 var(--sans); cursor:pointer}
+.ev b{font-weight:600; font-variant-numeric:tabular-nums} .ev span{color:var(--ink-dim)}
+.ev:hover{border-left-color:var(--curve)}
+#rail{position:fixed; right:calc(0px + env(safe-area-inset-right,0px)); top:46%; transform:translateY(-50%); height:min(60%,540px); width:210px; pointer-events:none}
+#rail .hit{position:absolute; right:0; top:-14px; bottom:-14px; width:46px; pointer-events:auto; touch-action:none; cursor:ns-resize}
+#rail .track{position:absolute; right:22px; top:0; bottom:0; width:1px; background:var(--rail)}
+#rail .tick{position:absolute; right:18px; width:9px; height:1px; background:var(--rail); transform:translateY(.5px)}
+#rail .tick b{position:absolute; right:14px; top:-7px; font:400 10.5px/1 var(--sans); color:var(--on-scene-dim); opacity:.75; white-space:nowrap}
+#thumb{position:absolute; right:11px; width:23px; height:3px; margin-bottom:-1.5px; background:var(--amber); border-radius:2px; box-shadow:0 0 10px var(--amber); pointer-events:none}
+#rail .stop{position:absolute; right:0; display:flex; flex-direction:row-reverse; align-items:center; gap:9px; margin-bottom:-15px; height:30px; padding:0 18px 0 8px; background:none; border:0; color:var(--on-scene-dim); font:400 12.5px/1 var(--sans); cursor:pointer; pointer-events:auto; text-shadow:0 0 6px #000,0 0 2px #000}
+#rail .stop::before{content:''; width:9px; height:9px; border-radius:50%; border:1px solid currentColor; background:var(--scene); flex:none}
+#rail .stop.on{color:var(--on-scene)}
+#rail .stop.on::before{background:var(--amber); border-color:var(--amber)}
+#rail .stop:hover{color:var(--on-scene)}
+#scale{position:fixed; left:20px; bottom:calc(var(--bar-h) + 26px + env(safe-area-inset-bottom,0px)); font-size:12.5px; line-height:1.3; pointer-events:none; text-shadow:0 0 6px #000,0 0 2px #000; font-variant-numeric:tabular-nums}
+#scale-bar{height:6px; border:1px solid var(--on-scene); border-top:0; margin-bottom:5px; min-width:30px}
+#scale-light{color:var(--on-scene-dim)}
+#time{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + env(safe-area-inset-bottom,0px)); width:min(900px,calc(100% - 20px)); background:var(--panel); color:var(--ink); -webkit-backdrop-filter:blur(16px) saturate(1.3); backdrop-filter:blur(16px) saturate(1.3); border:1px solid var(--line); border-radius:16px; padding:10px 12px; display:grid; grid-template-columns:auto minmax(150px,1.1fr) minmax(170px,1.3fr) auto; grid-template-areas:"tl tl tl tl" "play date speed btns"; gap:8px 16px; align-items:center}
+.g-play{grid-area:play; display:flex; gap:6px}
+.g-date{grid-area:date; min-width:0}
+.g-speed{grid-area:speed; display:grid; grid-template-columns:1fr auto; gap:0 10px; align-items:center; font-size:12.5px; color:var(--ink-dim)}
+.g-speed input{grid-column:1/-1}
+.g-btns{grid-area:btns; display:flex; gap:6px}
+#date{font:500 16px/1.2 var(--sans); font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+#age{font-size:12.5px; color:var(--ink-dim); font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+#speed-out{font-variant-numeric:tabular-nums; color:var(--ink); white-space:nowrap}
+.btn{appearance:none; -webkit-appearance:none; border:1px solid var(--line); background:transparent; color:inherit; font:500 13.5px/1 var(--sans); padding:0 12px; min-height:38px; border-radius:10px; cursor:pointer; white-space:nowrap}
+.btn:hover{border-color:var(--ink-dim)}
+.btn[aria-pressed="true"],.btn[aria-expanded="true"]{background:var(--fill); color:var(--fill-ink); border-color:var(--fill)}
+.btn.ic{width:40px; padding:0; display:inline-grid; place-items:center}
+.btn.ic svg{width:16px; height:16px; fill:currentColor}
+.btn.sm{min-height:32px; font-size:12.5px; background:rgba(6,8,18,.66); color:var(--on-scene); border-color:rgba(233,237,245,.3)}
+:focus-visible{outline:2px solid var(--ice); outline-offset:2px}
+input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:26px; background:transparent; margin:0; cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px; background:var(--track); border-radius:2px}
+input[type=range]::-moz-range-track{height:2px; background:var(--track); border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--fill); margin-top:-7px; border:0}
+input[type=range]::-moz-range-thumb{width:16px; height:16px; border-radius:50%; background:var(--fill); border:0}
+.panel{position:fixed; left:16px; top:calc(176px + env(safe-area-inset-top,0px)); width:352px; max-height:calc(100% - 176px - var(--bar-h) - 34px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); overflow:auto; overscroll-behavior:contain; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:16px; padding:14px 16px 18px; -webkit-backdrop-filter:blur(18px) saturate(1.3); backdrop-filter:blur(18px) saturate(1.3); font-size:14px}
+.panel[hidden]{display:none}
+.ph{display:flex; align-items:center; justify-content:space-between; margin-bottom:4px}
+.panel h2{font:500 23px/1.1 var(--serif); margin:0}
+.panel h3{font:600 13.5px/1.2 var(--sans); margin:20px 0 8px}
+.panel p{margin:6px 0}
+.lead{color:var(--ink-dim); max-width:44ch}
+.hint{font-size:12.5px; color:var(--ink-dim); margin:4px 0 0}
+.x{width:34px; min-height:34px; font-size:20px; border-color:transparent}
+.presets{display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 8px}
+.presets .btn{min-height:32px; font-size:12.5px; padding:0 10px}
+.sl{display:grid; grid-template-columns:1fr auto; gap:0 8px; margin-top:8px}
+.sl input{grid-column:1/-1}
+.sl output{font-variant-numeric:tabular-nums; font-weight:500}
+.sl .hint{grid-column:1/-1; margin:0}
+canvas.plot{display:block; width:100%; height:auto; touch-action:none; border-radius:8px}
+#chart{cursor:ew-resize}
+dl{display:grid; grid-template-columns:auto 1fr; gap:5px 14px; margin:12px 0 0; font-variant-numeric:tabular-nums}
+dt{color:var(--ink-dim)} dd{margin:0; text-align:right; font-weight:500}
+.compo{display:flex; height:12px; border-radius:6px; overflow:hidden; background:var(--track)}
+.compo i{display:block; height:100%}
+.leg{list-style:none; margin:8px 0 0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; font-size:12.5px; font-variant-numeric:tabular-nums}
+.leg li::before{content:''; display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:6px; background:var(--c)}
+.ck{display:flex; gap:9px; align-items:flex-start; margin:10px 0 0; cursor:pointer; line-height:1.3}
+.ck input{width:17px; height:17px; margin:1px 0 0; accent-color:var(--curve); flex:none}
+.about h3:first-of-type{margin-top:10px}
+.about ul{margin:4px 0; padding-left:18px} .about li{margin:3px 0}
+.about a{color:inherit}
+#loader{position:fixed; inset:0; background:var(--scene); display:grid; place-content:center; justify-items:center; gap:16px; text-align:center; padding:24px; transition:opacity .9s ease; z-index:10}
+#loader.out{opacity:0; pointer-events:none}
+#loader h2{font:500 clamp(28px,6vw,44px)/1.05 var(--serif); margin:0; letter-spacing:-.012em}
+#loader p{margin:0; color:var(--on-scene-dim); font-size:14px; max-width:34ch}
+#lbar{width:min(260px,60vw); height:2px; background:rgba(233,237,245,.16); overflow:hidden; border-radius:2px}
+#lbar i{display:block; height:100%; width:0; background:var(--amber); transition:width .2s linear}
+.g-tl{grid-area:tl; display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:center; min-width:0}
+#tape{position:relative; height:46px; border-radius:10px; border:1px solid var(--line); overflow:hidden; touch-action:none; cursor:ew-resize; -webkit-user-select:none; user-select:none; color:var(--ink); outline-offset:2px}
+#tape canvas{position:absolute; left:0; top:0; width:100%; height:100%; display:block}
+#evt{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(var(--bar-h) + 76px + env(safe-area-inset-bottom,0px)); width:max-content; max-width:min(560px,calc(100% - 24px)); padding:9px 14px; border-radius:12px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font:400 13.5px/1.35 var(--sans); text-align:left; cursor:pointer; -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); z-index:6}
+#evt[hidden]{display:none} #evt b{font-weight:600; display:block} #evt small{display:block; color:var(--ink-dim); font-size:12px}
+.tgo label{display:block; font-size:12.5px; color:var(--ink-dim); margin:10px 0 4px} .tgo .row{display:flex; gap:6px}
+#t-date{flex:1; min-width:0; height:38px; border-radius:10px; border:1px solid var(--line); background:transparent; color:inherit; padding:0 10px; font:400 14px var(--sans)}
+.chips{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px} .chips .btn{height:30px; padding:0 10px; font-size:12.5px} .chips .btn[aria-pressed="false"]{opacity:.42}
+.eh{font:600 11.5px/1.2 var(--sans); letter-spacing:.05em; text-transform:uppercase; color:var(--ink-dim); margin:12px 0 2px; padding-left:2px}
+.ev.maj span{color:var(--ink)} .ev.cur{border-left-color:var(--curve); background:rgba(127,127,127,.14)}
+@media (max-width:900px){
+  #time{grid-template-columns:auto 1fr auto; grid-template-areas:"tl tl tl" "play date btns" "speed speed speed"}
+  #rail .tick b{display:none}
+}
+@media (max-width:620px){
+  body{font-size:14.5px}
+  #time{grid-template-columns:auto 1fr; grid-template-areas:"tl tl" "play date" "speed speed" "btns btns"; padding:9px 10px; gap:6px 10px}
+  .g-btns .btn{flex:1; padding:0 6px; font-size:13px}
+  #rail{width:180px}
+  #rail .stop span{opacity:0; transition:opacity .25s; pointer-events:none}
+  #rail.show .stop span{opacity:1}
+  #rail .stop{padding-right:17px; pointer-events:none}
+  #rail.show .stop{pointer-events:auto}
+  #scale{left:14px}
+  #top{padding-left:14px}
+  .panel{left:8px; right:8px; width:auto; top:auto; bottom:calc(var(--bar-h) + 20px + env(safe-area-inset-bottom,0px)); max-height:44%}
+}
+@media (max-height:520px){ #rail{height:52%} .panel{top:calc(96px + env(safe-area-inset-top,0px)); max-height:calc(100% - 96px - var(--bar-h) - 30px)} #prov{display:none} }
+#events{max-height:min(46vh,430px); overflow:auto; overscroll-behavior:contain; position:relative; padding-right:4px}
+@media (max-width:620px){ #events{max-height:27vh} #age{white-space:normal !important} #card{max-height:calc(100vh - var(--bar-h) - 280px); overflow:auto; overscroll-behavior:contain} }
+@media (prefers-reduced-motion:reduce){ #loader{transition:none} }
+</style>
+</head>
+<body>
+<canvas id="gl" tabindex="0" aria-label="Simulation de l’univers en trois dimensions. Glissez pour tourner, molette ou pincement pour changer d’échelle."></canvas>
+<div id="labels"></div>
+<header id="top">
+  <h1 id="place">Système solaire</h1>
+  <p id="field"></p>
+  <p id="prov"></p>
+  <p id="findp"><button class="btn sm" id="b-find" aria-expanded="false" aria-controls="p-find">Aller à…</button></p>
+  <p id="notice" role="status" hidden></p>
+  <section id="card" hidden><h2 id="card-title"></h2><p id="card-sub"></p><dl id="card-dl"></dl><div class="cbtn"><button class="btn sm" id="card-more" hidden>Plus de détails</button><button class="btn sm" id="card-center">Centrer la vue dessus</button><button class="btn sm" id="card-back">Revenir au système solaire</button><button class="btn sm" id="card-close">Fermer</button></div></section>
+</header>
+<nav id="rail" aria-label="Échelles"><div class="track"></div><div id="ticks"></div><div id="thumb"></div><div class="hit" id="rail-hit"></div></nav>
+<nav id="nav" aria-label="Déplacements"><button class="btn ic nb" id="n-back" aria-label="Revenir à la vue précédente" title="Vue précédente" disabled>←</button><button class="btn ic nb" id="n-home" aria-label="Revenir au système solaire" title="Système solaire">⌂</button><button class="btn ic nb" id="n-out" aria-label="Reculer d’un cran" title="Reculer d’un cran">−</button><button class="btn ic nb" id="n-in" aria-label="Avancer d’un cran" title="Avancer d’un cran">+</button></nav>
+<div id="hint" hidden>Glisser pour tourner. Pincer ou molette pour changer d’échelle. Toucher un objet ou son nom pour ouvrir sa fiche, deux fois pour y aller. En bas à droite : retour, système solaire, reculer, avancer.</div>
+<div id="scale"><div id="scale-bar"></div><div id="scale-len"></div><div id="scale-light"></div></div>
+<button type="button" id="evt" hidden></button>
+<footer id="time">
+  <div class="g-tl">
+    <button class="btn ic" id="t-prev" aria-label="Événement précédent" title="Événement précédent"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2h2v12h-2zM14 2.2v11.6L6 8z"/></svg></button>
+    <div id="tape" tabindex="0" role="slider" aria-label="Frise du temps : glisser pour remonter ou avancer dans le temps"><canvas id="tape-cv"></canvas></div>
+    <button class="btn ic" id="t-next" aria-label="Événement suivant" title="Événement suivant"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.5 2h2v12h-2zM2 2.2v11.6L10 8z"/></svg></button>
+  </div>
+  <div class="g-play">
+    <button class="btn ic" id="b-play" aria-label="Mettre le temps en pause"><svg viewBox="0 0 16 16" aria-hidden="true"><path id="i-play" d="M3 1.5h3.5v13H3zM9.5 1.5H13v13H9.5z"/></svg></button>
+    <button class="btn ic" id="b-dir" aria-pressed="false" aria-label="Remonter le temps"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.5 2 1 8l6.5 6V9.6C10.6 9.6 13 10.5 15 13c-.6-4.2-3.1-7-7.5-7.4z"/></svg></button>
+  </div>
+  <div class="g-date"><div id="date"></div><div id="age"></div></div>
+  <div class="g-speed"><label for="speed">Vitesse du temps</label><output id="speed-out" for="speed"></output><input type="range" id="speed" min="0" max="1000" step="1" value="400"></div>
+  <div class="g-btns">
+    <button class="btn" id="b-now">Aujourd’hui</button>
+    <button class="btn" id="b-chrono" aria-expanded="false" aria-controls="p-chrono">Chronologie</button>
+    <button class="btn" id="b-cosmo" aria-expanded="false" aria-controls="p-cosmo">Cosmologie</button>
+    <button class="btn" id="b-view" aria-expanded="false" aria-controls="p-view">Affichage</button>
+  </div>
+</footer>
+<aside class="panel" id="p-chrono" hidden aria-label="Chronologie">
+  <div class="ph"><h2>Chronologie</h2><button class="btn ic x" data-close aria-label="Fermer">×</button></div>
+  <p class="lead">Touchez un événement pour y assister. Chaque fiche donne la source de la date et son degré de certitude.</p>
+  <div class="tgo"><label for="t-date">Aller à une date</label><div class="row"><input type="text" id="t-date" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="20/07/1969 · 1054 · −66 Ma · dans 5 Ga"><button class="btn" id="t-go" type="button">Y aller</button></div><p class="hint" id="t-msg"></p></div>
+  <ol class="events" id="events"></ol>
+  <h3>Catégories affichées</h3>
+  <div class="chips" id="ev-cats"></div>
+  <h3>Vitesse du temps, par seconde</h3>
+  <div class="chips" id="t-speeds"></div>
+  <h3>Et si Andromède allait plus ou moins vite de côté ?</h3>
+  <div class="sl"><label for="s-vt">Vitesse transverse d’Andromède</label><output id="o-vt"></output><input type="range" id="s-vt" min="0" max="160" step="1"></div>
+  <div class="presets" id="vt-meas"></div>
+  <p class="hint" id="vt-hint"></p>
+</aside>
+<aside class="panel" id="p-cosmo" hidden aria-label="Cosmologie">
+  <div class="ph"><h2>Cosmologie</h2><button class="btn ic x" data-close aria-label="Fermer">×</button></div>
+  <p class="lead">Changez ce que contient l’univers : son histoire et son destin sont recalculés par les équations de Friedmann.</p>
+  <div class="presets" id="presets"></div>
+  <div class="sl"><label for="s-om">Matière, ordinaire et noire</label><output id="o-om"></output><input type="range" id="s-om" min="0" max="3" step="0.005"></div>
+  <div class="sl"><label for="s-ol">Énergie noire</label><output id="o-ol"></output><input type="range" id="s-ol" min="0" max="2" step="0.005"></div>
+  <div class="sl"><label for="s-h0">Constante de Hubble</label><output id="o-h0"></output><input type="range" id="s-h0" min="50" max="90" step="0.1"></div>
+  <div class="sl"><label for="s-w">Nature de l’énergie noire, w</label><output id="o-w"></output><input type="range" id="s-w" min="-2" max="-0.34" step="0.01"><p class="hint" id="w-hint"></p></div>
+  <h3>Taille de l’univers au fil du temps</h3>
+  <canvas class="plot" id="chart" width="640" height="260" role="img" aria-label="Courbe du facteur d’échelle de l’univers en fonction du temps"></canvas>
+  <p class="hint">Glissez sur la courbe pour voyager dans le temps.</p>
+  <dl id="readout"></dl>
+  <h3>Contenu de l’univers à cet instant</h3>
+  <div class="compo" id="compo"></div><ul class="leg" id="compo-leg"></ul>
+  <label class="ck"><input type="checkbox" id="c-hz" checked><span>Afficher les horizons cosmiques</span></label>
+  <label class="ck"><input type="checkbox" id="c-com"><span>Suivre l’expansion : les galaxies restent en place, c’est l’échelle qui change</span></label>
+  <label class="ck"><input type="checkbox" id="c-sim"><span>Toile simulée : remplace les galaxies observées par une toile générée, pour voir les structures se former</span></label>
+  <p class="hint" id="sim-msg" role="status"></p>
+  <h3>Matière noire dans la galaxie</h3>
+  <label class="ck"><input type="checkbox" id="c-dm" checked><span>Halo de matière noire</span></label>
+  <canvas class="plot" id="rot" width="640" height="210" role="img" aria-label="Vitesse de rotation de la Voie lactée selon la distance au centre, avec et sans matière noire"></canvas>
+  <p class="hint">Vitesse de rotation selon la distance au centre, en milliers d’années-lumière. Sans halo, les étoiles lointaines tourneraient bien moins vite que ce qu’on mesure.</p>
+</aside>
+<aside class="panel" id="p-view" hidden aria-label="Affichage">
+  <div class="ph"><h2>Affichage</h2><button class="btn ic x" data-close aria-label="Fermer">×</button></div>
+  <label class="ck"><input type="checkbox" id="c-lab" checked><span>Noms</span></label>
+  <label class="ck"><input type="checkbox" id="c-orb" checked><span>Orbites</span></label>
+  <label class="ck"><input type="checkbox" id="c-const" checked><span>Figures des constellations</span></label>
+  <label class="ck"><input type="checkbox" id="c-sky" checked><span>Voie lactée photographiée en fond de ciel</span></label>
+  <label class="ck"><input type="checkbox" id="c-real"><span>Tailles réelles des astres</span></label>
+  <p class="hint">Par défaut, le Soleil, les planètes et les galaxies du Groupe local sont grossis pour rester visibles. Les distances, elles, sont toujours réelles.</p>
+  <label class="ck"><input type="checkbox" id="c-lite"><span>Rendu allégé</span></label>
+  <p class="hint">À cocher si l’animation saccade.</p>
+  <h3>Données détaillées</h3>
+  <p class="hint" id="tile-status"></p>
+  <p><button class="btn" id="b-tiles" hidden>Charger les données détaillées</button></p>
+  <h3>Commandes</h3>
+  <p class="hint">Glisser : tourner. Molette ou pincement : changer d’échelle. Toucher un objet ou son nom : ouvrir sa fiche ; deux fois de suite : y aller. Boutons en bas à droite : vue précédente, système solaire, reculer, avancer. Espace : pause.</p>
+  <p><button class="btn" id="b-about" aria-expanded="false" aria-controls="p-about">Ce qui est vrai ici</button></p>
+</aside>
+<aside class="panel" id="p-find" hidden aria-label="Recherche">
+  <div class="ph"><h2>Aller à</h2><button class="btn ic x" data-close aria-label="Fermer">×</button></div>
+  <input id="find-q" type="search" placeholder="Chercher un nom : Titan, Halley, M87…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Nom de l’objet">
+  <div id="find-res"></div>
+  <p class="hint">Planètes, lunes, sondes, astéroïdes, comètes, étoiles nommées, étoiles à planètes, pulsars, trous noirs, amas et galaxies proches.</p>
+</aside>
+<aside class="panel about" id="p-about" hidden aria-label="À propos">
+  <div class="ph"><h2>Ce qui est vrai ici</h2><button class="btn ic x" data-close aria-label="Fermer">×</button></div>
+  <p class="lead">Tout ce qui a été mesuré est placé d’après les mesures. Le reste est calculé, ou généré quand personne ne peut l’observer.</p>
+  <h3>Mesuré</h3>
+  <ul>
+    <li><span id="n-stars"></span> étoiles : position, éclat, couleur et vitesse (Hipparcos, puis Gaia jusqu’à la magnitude 9,5).</li>
+    <li><span id="n-bodies"></span> astéroïdes et objets lointains, dont Pluton, Éris et Sedna.</li>
+    <li><span id="n-comets"></span> comètes, <span id="n-exo"></span> étoiles à planètes connues (points verts) et <span id="n-psr"></span> pulsars (points violets).</li>
+    <li>30 lunes, de Mars à Pluton, sur leur orbite réelle (JPL Horizons). Leur position est fiable à quelques degrés près pendant un an autour d’aujourd’hui.</li>
+    <li>Le fond de ciel, près du Soleil, est un vrai panorama photographique de la Voie lactée (ESO/S. Brunier, licence CC BY 4.0). Les surfaces des planètes et de la Lune viennent de Solar System Scope (CC BY 4.0), d’après les données de la NASA.</li>
+    <li>Le nuage d’Oort est un modèle (il n’a jamais été observé directement), mais il obéit à la gravité : chaque comète suit son orbite autour du Soleil, et toute étoile du catalogue qui passe à moins de 2 années-lumière la dévie. Le calcul utilise l’approximation habituelle pour ce problème : un coup de vitesse au moment du passage.</li>
+    <li>Rotation des galaxies : les quatre galaxies à disque du Groupe local tournent autour de leur axe mesuré, à leur vitesse mesurée (Voie lactée, Andromède, Triangle : Corbelli et al. 2014 ; Grand Nuage de Magellan : van der Marel et Kallivayalil 2014 ; axes : Andrae et Jahnke 2011). Le dessin de leurs bras est un schéma. Les autres galaxies sont dessinées sans structure, ou seulement en photo autour d’aujourd’hui : leur rotation n’est pas montrée.</li>
+    <li>Galaxies naines du Groupe local : 39 galaxies, dont le Triangle, suivent une orbite calculée d’après leur vitesse mesurée (Local Volume Database, Pace 2024), sous l’attraction de la Voie lactée, d’Andromède et du Grand Nuage de Magellan. Les autres n’ont pas de déplacement mesuré dans le ciel : elles restent en place, ou suivent Andromède. Au-delà de quelques milliards d’années, ces orbites ne sont qu’indicatives.</li>
+    <li>L’infiniment petit : en plongeant vers la Terre, le zoom continue dans une gouttelette d’eau, jusqu’à la longueur de Planck. Mesuré : géométrie de la molécule d’eau, rayon de Bohr, rayon du proton et longueur de Planck (CODATA 2022), rayon du noyau d’oxygène (Angeli et Marinova 2013), limite de taille des quarks (ZEUS 2016). Modèle : arrangement des molécules et des nucléons, détail du nuage d’électrons, intérieur du proton. Entre 10⁻²⁰ et 10⁻³⁵ m, rien n’est connu : seuls des repères sont affichés.</li>
+    <li>Étoiles qui frôlent le Soleil : les 41 rencontres sans réserve de l’étude de Bailer-Jones (2022, Gaia DR3, 61 étoiles à moins d’un parsec), plus l’étoile de Scholz (Dupuy et al. 2019). L’instant, la distance et la vitesse de chaque passage sont ceux publiés ; le côté du passage est déduit du mouvement actuel. Les 20 rencontres marquées douteuses ou binaires dans l’étude figurent dans la chronologie comme contestées et ne sont pas simulées.</li>
+    <li>Une chronologie de 180 événements réels, du Big Bang à l’avenir lointain : chaque fiche donne la date, sa source et son degré de certitude. Les survols des sondes Voyager, Pioneer et New Horizons suivent leurs trajectoires réelles (JPL Horizons) ; les éclipses sont calculées à partir des positions de la Terre et de la Lune. Les âges géologiques suivent l’échelle internationale (ICS, version 2023).</li>
+    <li>De près, chacune de ces 943 galaxies est reconstruite en volume à partir de sa photo : le disque est remis à plat d’après son inclinaison et son orientation mesurées sur l’image, puis peuplé de points selon l’éclat réel. Ce que la photo ne dit pas est supposé : l’épaisseur, la face cachée, et lequel des deux bords est le plus proche de nous.</li>
+    <li>Les vraies photos de 943 galaxies (Groupe local, galaxies proches, hôtes de trous noirs) : en s’approchant d’une galaxie, son image réelle s’affiche à plat, telle qu’on la voit depuis la Terre. Images des relevés Legacy Survey (couleur) et DSS (noir et blanc).</li>
+    <li>Les planètes de 4 829 étoiles, sur leur orbite mesurée (NASA Exoplanet Archive). La taille, la forme et la durée de chaque orbite sont réelles ; son orientation sur le ciel n’est jamais mesurée, elle est donc arbitraire.</li>
+    <li>Les figures des 88 constellations, tracées entre étoiles réelles, et une recherche par nom (bouton « Chercher un objet »).</li>
+    <li>5 sondes spatiales (Voyager 1 et 2, Pioneer 10 et 11, New Horizons) sur leur trajectoire calculée par le JPL, valable depuis leur dernier survol de planète.</li>
+    <li>39 étoiles en orbite autour du trou noir central, sur leur orbite mesurée (Gillessen et al. 2017). Pour les voir : clique le centre de la galaxie, centre la vue dessus, puis zoome.</li>
+    <li><span id="n-bh"></span> trous noirs (points orange) : ceux de masse stellaire connus dans la Voie lactée, Sagittarius A* au centre, et les trous noirs supermassifs mesurés au cœur d’autres galaxies.</li>
+    <li><span id="n-clusters"></span> amas d’étoiles de la Voie lactée.</li>
+    <li><span id="n-near"></span> galaxies proches, à distance mesurée.</li>
+    <li><span id="n-surv"></span> galaxies et quasars, placés d’après leur décalage vers le rouge.</li>
+    <li>Le fond diffus cosmologique : carte du ciel du satellite WMAP.</li>
+    <li>La surface des planètes et de la Lune, couleurs légèrement renforcées.</li>
+  </ul>
+  <h3>Calculé</h3>
+  <ul>
+    <li>Planètes : séries VSOP87. Écart avec l’éphéméride DE440 du JPL, entre 1851 et 2149 : 1 seconde d’arc au plus de Mercure à Saturne, 1,6 pour Uranus, 2,5 pour Neptune.</li>
+    <li>Lune : théorie de Meeus. Écart avec DE440 : 7 secondes d’arc au plus, 9 km en distance.</li>
+    <li>Petits corps : lois de Kepler, à partir des orbites du JPL de juin 2026. Écart avec JPL Horizons en novembre 2026 : moins de 1 seconde d’arc pour les objets lointains, de 3 à 12 pour les gros astéroïdes. Il grandit au fil des années.</li>
+    <li>Expansion : équations de Friedmann, paramètres Planck 2018. La distance de chaque galaxie est recalculée quand vous changez les curseurs.</li>
+    <li>Rotation de la galaxie : bulbe, disque et halo de matière noire, 230 km/s au niveau du Soleil.</li>
+    <li>Avenir du Soleil : modèle de Schröder et Smith (2008). Géante rouge 256 fois plus grande dans 7,59 milliards d’années, puis naine blanche.</li>
+    <li>Mouvement des étoiles : vitesses mesurées, en ligne droite sur 3 millions d’années, puis sur leur orbite dans la galaxie. Le calcul retrouve le passage de Gliese 710 dans 1,29 million d’années.</li>
+    <li>Données détaillées : environ 6 millions d’étoiles Gaia de plus (jusqu’à la magnitude 12,85) , 5,1 millions de galaxies et quasars et 123 000 astéroïdes sont disponibles. Les sept premiers fichiers, dont celui des astéroïdes, sont téléchargés après le démarrage, automatiquement sur ordinateur, à la demande sur téléphone (panneau Affichage). Ces étoiles avancent en ligne droite à leur vitesse mesurée ; au-delà de quelques millions d’années, elles ne sont plus affichées.</li>
+    <li>Grand Nuage de Magellan : orbite calculée à partir de sa vitesse mesurée. La date de son absorption par la Voie lactée dépend fortement de sa masse, mal connue : de 2,7 à plus de 7 milliards d’années selon les estimations ; une valeur médiane est retenue.</li>
+    <li>Comètes : orbites sans l’attraction des planètes ; leur position peut s’écarter de la réalité de quelques dixièmes de degré, et leurs retours d’un an environ.</li>
+    <li>Andromède : trajectoire calculée à partir de sa position et de sa vitesse mesurées, avec la gravité des deux halos, l’énergie noire et le frottement entre halos. Quand elle passe à moins de 500 000 années-lumière, les étoiles des deux galaxies sont simulées une à une : chacune subit l’attraction des deux galaxies, mais pas celle des autres étoiles.</li>
+  </ul>
+  <h3>Généré</h3>
+  <ul>
+    <li>L’aspect de la Voie lactée et des galaxies proches : personne ne les a vues de l’extérieur. Leur forme suit les mesures.</li>
+    <li>Le nuage d’Oort, jamais observé directement.</li>
+    <li>La toile simulée, en option dans « Cosmologie ».</li>
+    <li>La vie de chaque étoile : son type et sa masse sont estimés d’après son éclat et sa couleur, mais son âge est tiré au hasard. C’est un modèle statistique, pas une prédiction étoile par étoile.</li>
+  </ul>
+  <h3>Limites</h3>
+  <ul>
+    <li>Une zone sans galaxies est le plus souvent une zone non cartographiée : la Voie lactée cache une bande du ciel, et les relevés profonds n’en couvrent qu’une partie.</li>
+    <li>Les distances tirées du décalage vers le rouge étirent les amas en « doigts » pointés vers nous.</li>
+    <li>On voit l’univers à un instant donné, partout à la fois. Un télescope, lui, voit le passé des objets lointains.</li>
+    <li>À plus de 3 000 ans d’aujourd’hui, les planètes ne sont plus qu’indicatives.</li>
+    <li>Des mesures récentes laissent penser que l’énergie noire pourrait varier dans le temps. Rien n’est tranché : ici elle est constante, sauf si vous changez w.</li>
+  </ul>
+  <h3>Sources</h3>
+  <p class="hint">Éphémérides : VSOP87 (Bretagnon et Francou) et Meeus, via PyMeeus, contrôlées avec JPL DE440. Petits corps : JPL Small-Body Database. Étoiles : HYG Database 4.1 (D. Nash, CC BY-SA 4.0). Amas : Harris 1997, Cantat-Gaudin et al. 2020. Galaxies : McConnachie 2012, Karachentsev et al. 2013, 2MRS, 6dFGS, 2dFGRS, SDSS DR17 et DR16Q, DESI DR1 (NOIRLab Astro Data Lab). Catalogues obtenus par VizieR et SIMBAD (CDS, Strasbourg). Fond diffus : WMAP 9 ans (NASA). Cosmologie : Planck 2018. Textures : Solar System Scope, CC BY 4.0. Soleil : Schröder et Smith 2008. Andromède : mouvements propres de Wu et al. 2025, van der Marel et al. 2012 et Salomon et al. 2021. Étoiles faibles : Gaia DR3 (ESA). Comètes : JPL. Étoiles à planètes : NASA Exoplanet Archive. Pulsars : catalogue ATNF. Nuages de Magellan : Kallivayalil et al. 2013. Trous noirs : BlackCAT (Corral-Santana et al. 2016), van den Bosch 2016, Gaia, Event Horizon Telescope. Planètes, Lune et Soleil : fiches de la NASA (NSSDCA). Lunes et sondes : JPL Horizons. Étoiles du centre galactique : Gillessen et al. 2017. Constellations : limites de Roman 1987. Amas : Harris. Galaxies proches : McConnachie 2012, Karachentsev et al. 2013. Galaxies en flux : DESI DR1, SDSS DR16Q, 2dFGRS, 6dFGS. Rendu : three.js.</p>
+</aside>
+<div id="loader"><h2>L’univers se met en place</h2><div id="lbar"><i></i></div><p id="lmsg">Chargement des étoiles</p></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.149.0/three.min.js" integrity="sha512-6p9lGA4Cm89KiwN1CixiOVQU2H9e13LeYoN6/Hj/qoUhtrMW5vNiqQz9Z96Z7/I8u89ghL6SPBz9na5HFVzF3g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+/*__DATA__*/
+</script>
+<script>
+"use strict";
+/*__JS__*/
+</script>
+</body>
+</html>

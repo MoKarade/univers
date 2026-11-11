@@ -1,0 +1,7 @@
+# Page construite par app/build.py : régénérée à chaque construction
+dist/
+__pycache__/
+*.pyc
+# Clé Firebase : jamais dans le dépôt
+*service-account*.json
+cle.json

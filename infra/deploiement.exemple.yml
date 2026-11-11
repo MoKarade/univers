@@ -1,0 +1,18 @@
+# Trame, non exécutée. À adapter aux contrôles du dépôt.
+name: deployer
+on: { push: { branches: [main] } }
+jobs:
+  deployer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: python3 app/build.py
+      - run: for f in app/test/*.test.js; do node "$f" || exit 1; done
+      - run: sed "s/__AUTHORIZED_EMAIL__/${AUTHORIZED_EMAIL}/" infra/storage.rules.tpl > infra/storage.rules
+        env: { AUTHORIZED_EMAIL: "${{ secrets.AUTHORIZED_EMAIL }}" }
+      - run: echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/cle.json"
+        env: { FIREBASE_SERVICE_ACCOUNT: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" }
+      - run: npx --yes firebase-tools@13 deploy --only hosting,storage --project "${{ vars.FIREBASE_PROJECT_ID }}" --config infra/firebase.json
+        env: { GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/cle.json" }
