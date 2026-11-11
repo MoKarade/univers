@@ -17,15 +17,16 @@ const SUN_NOW = 4.58, R_SUN_AU = 695700 / 149597870.7;
 const WD_K = 8.8e-3 * (12 / 14) * Math.pow(0.5405, 5 / 7), WD_L = t => Math.pow(t / WD_K, -7 / 5), WD_T = L => 5772 * Math.pow(L / (0.0125 * 0.0125), 0.25);
 const SUN_TRACK = [
   [0.00, 0.70, 5596, 0.89, 1.000], /* * naissance */ [4.58, 1.00, 5774, 1.00, 1.000], /* * aujourd'hui */ [7.13, 1.26, 5820, 1.11, 1.000], /* * */ [10.00, 1.84, 5751, 1.37, 1.000], /* * fin de séquence principale */
-  [11.00, 2.30, 5400, 1.75, 1.000], [11.60, 2.90, 4900, 2.40, 0.999], [11.90, 9.0, 4600, 4.8, 0.995], [12.05, 45, 4200, 12.8, 0.985], [12.12, 240, 3700, 38, 0.95], [12.155, 1000, 3100, 110, 0.85],
+  /* de 10,00 à 12,167 : branche des géantes rouges tirée de DATA.SUN_RGB (pipeline/build_sun_rgb.py : forme MIST, ancrages et perte de masse de Schröder et Smith 2008) */
   [12.167, 2730, 2602, 256, 0.668], /* * sommet de la branche des géantes rouges */ [12.1675, 53.7, 4667, 11.2, 0.668], /* * fusion de l'hélium */
   [12.27, 62, 4600, 12.4, 0.665], [12.293, 520, 3700, 56, 0.62], [12.30, 2090, 3200, 149, 0.546], /* * sommet de la branche asymptotique */
   [12.3003, 2000, 8000, 23.3, 0.542], [12.3006, 1500, 30000, 1.43, 0.541], [12.301, 300, 100000, 0.058, 0.5405], [12.31, 0.88, 50000, 0.0125, 0.5405],
   [12.40, WD_L(0.1), WD_T(WD_L(0.1)), 0.0125, 0.5405], /* raccord à la loi de Mestel ; au-delà, voir sunState */
 ];
 const SUN_PHASES = [[10.0, 'étoile de la séquence principale'], [11.6, 'sous-géante'], [12.167, 'géante rouge'], [12.27, 'géante en fusion d’hélium'], [12.3003, 'géante asymptotique'], [12.31, 'naine blanche en formation'], [1e9, 'naine blanche']];
+let SUN_RGB_C = null; const SUN_RGB_T = () => SUN_RGB_C || (SUN_RGB_C = [SUN_TRACK[3]].concat(DATA.SUN_RGB.map(r => [r[0], r[1], r[2], r[3], r[4]]), [SUN_TRACK[4]]));      /* fin de séquence principale, montée calculée, sommet publié */
 function sunState(tGyr, o) {
-  o = o || {}; const age = SUN_NOW + tGyr, T = SUN_TRACK; let i = 1;
+  o = o || {}; const age = SUN_NOW + tGyr; const T = age > 10.0 && age < 12.167 && typeof DATA !== 'undefined' && DATA.SUN_RGB ? SUN_RGB_T() : SUN_TRACK; let i = 1;
   if (age <= T[0][0]) i = 1; else if (age >= T[T.length - 1][0]) i = T.length - 1; else while (T[i][0] < age) i++;
   const a = T[i - 1], b = T[i], f = clamp((age - a[0]) / (b[0] - a[0]), 0, 1);
   o.age = age; o.L = Math.exp(lerp(Math.log(a[1]), Math.log(b[1]), f)); o.T = Math.exp(lerp(Math.log(a[2]), Math.log(b[2]), f)); o.R = Math.exp(lerp(Math.log(a[3]), Math.log(b[3]), f)); o.M = lerp(a[4], b[4], f);
