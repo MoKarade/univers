@@ -3,7 +3,7 @@ import os, sys
 root = os.path.dirname(os.path.abspath(__file__))
 rd = lambda p: open(os.path.join(root, p), encoding='utf-8').read()
 html = rd('src/index.html')
-js = '\n'.join(rd('src/' + f) for f in ['20_physics.js', '25_future.js', '30_gen.js', '40_render.js', '60_app.js'])
+js = '\n'.join(rd('src/' + f) for f in ['20_physics.js', '25_future.js', '27_lens.js', '30_gen.js', '40_render.js', '60_app.js'])
 import json
 _d2 = rd('gen/data2.js'); _o = json.loads(_d2[len('Object.assign(DATA, '):_d2.rindex(');')])
 for _k in ('STARS_GEO', 'STARS_AUX', 'STAR_LABELS', 'STARS_N'): _o.pop(_k, None)

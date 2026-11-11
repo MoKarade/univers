@@ -117,3 +117,10 @@ Les formats binaires des fichiers en flux sont définis par leur décodeur (`loa
 - Mission 1 : la page sur Firebase, chargée par zone, avec les données actuelles. Détail dans `docs/mission-lot1.md`.
 - Mission 2 : 100 puis 500 millions d'étoiles, une vingtaine de millions de galaxies, tous les astéroïdes. Les gros traitements devront tourner dans le nuage, par lots.
 - Mission 3 : toutes les étoiles Gaia ayant une distance estimée, 10 000 photos de galaxies en haute définition, surfaces plus fines.
+
+## Lumière déviée par les trous noirs (S6, 11 novembre 2026)
+- `app/src/27_lens.js` : pour un trou noir sans rotation (Schwarzschild), chaque rayon de vue est suivi à rebours jusqu'à l'infini (équation de l'orbite des photons, intégrée numériquement) ; table de 512 angles recalculée quand la distance change.
+- `40_render.js` (`R.lensUpdate`, passe finale) : quand la caméra est à moins de 3000 GM/c² de Sagittarius A* (4,3 millions de masses solaires, valeur de la page) ou de M87* (6,5 milliards, EHT 2019), chaque pixel prend la lumière venant de sa direction déviée : ombre, anneau de photons, images doubles. Source dans l'image : l'image elle-même ; source hors de l'image : une vue tout autour (cube 128 ou 256 pixels, refaite quand la caméra, l'échelle ou la date bougent), moins fine.
+- Tests : `app/test/lens.test.js` (trajet droit sans masse ; déviation en champ faible conforme au développement publié jusqu'au second ordre ; ombre à b = √27 M ; M87* : 39,7 microsecondes d'arc, anneau EHT 42 ± 3). À l'écran (rendu logiciel) : ombre vue de 60 M de 85 pixels de rayon pour 82 calculés.
+- Supposé et dit dans les fiches : pas de rotation (non mesurée de façon sûre). Pas de disque d'accrétion (aucun n'est dessiné dans la page). Les étiquettes et repères restent à leur position non déviée.
+- Coût : une passe finale plus lourde, et six rendus de plus quand la vue tout autour doit être refaite. Fluidité sur téléphone non mesurée.

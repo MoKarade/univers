@@ -145,7 +145,14 @@ void main(){ vec3 c=texture2D(tMap,vUv).rgb*0.2270270; c+=(texture2D(tMap,vUv+uD
   final: `uniform sampler2D tMap,tB1,tB2; uniform float uBloom,uExposure,uTime; uniform vec2 uRes; varying vec2 vUv;
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
 float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
-void main(){ vec3 c=texture2D(tMap,vUv).rgb; c+=uBloom*(texture2D(tB1,vUv).rgb*0.55+texture2D(tB2,vUv).rgb*0.75);
+uniform float uLens,uFlip; uniform samplerCube tCube; uniform sampler2D tLut; uniform vec3 uBH; uniform vec2 uTanF; uniform mat3 uRot;
+float lutAt(float i){ vec4 t=texture2D(tLut,vec2((i+0.5)/512.0,0.5)); return t.b>0.5?-1.0:(t.r*65280.0+t.g*255.0)/65535.0*12.566370614; }
+vec3 lensed(){ vec3 v=normalize(vec3((vUv*2.0-1.0)*uTanF,-1.0)); float cp=clamp(dot(v,uBH),-1.0,1.0), x=acos(cp)/3.14159265*511.0, i0=floor(x);      /* S6 : rayon suivi à rebours autour du trou noir (27_lens.js) */
+  float d0=lutAt(i0), d1=lutAt(min(i0+1.0,511.0)); if(d0<0.0||d1<0.0) return vec3(0.0); float dp=mix(d0,d1,x-i0);
+  vec3 rc=-uBH; vec3 t=(v+cp*rc)/sqrt(max(1.0-cp*cp,1e-12)); vec3 s=cos(dp)*rc+sin(dp)*t;
+  if(s.z<-1e-4){ vec2 q=(s.xy/(-s.z))/uTanF*0.5+0.5; if(q.x>0.0&&q.x<1.0&&q.y>0.0&&q.y<1.0) return texture2D(tMap,q).rgb+uBloom*(texture2D(tB1,q).rgb*0.55+texture2D(tB2,q).rgb*0.75); }      /* source dans l'image : l'image elle-même, nette */
+  vec3 w=uRot*s; return textureCube(tCube,vec3(uFlip*w.x,w.y,w.z)).rgb; }      /* source hors de l'image (derrière, sur les côtés) : vue tout autour, moins fine */
+void main(){ vec3 c=uLens>0.5?lensed():texture2D(tMap,vUv).rgb+uBloom*(texture2D(tB1,vUv).rgb*0.55+texture2D(tB2,vUv).rgb*0.75);
   c=aces(c*uExposure); c*=1.0-0.42*smoothstep(0.35,0.95,length(vUv-0.5)*1.25);
   c=pow(c,vec3(1.0/2.2)); c+=(hash(gl_FragCoord.xy+fract(uTime)*91.7)-0.5)/255.0; gl_FragColor=vec4(c,1.0); }`,
 };
@@ -666,7 +673,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
   const mBright = fsMat(SH.bright), mBlur = fsMat(SH.blur), mFinal = fsMat(SH.final);
   mBright.uniforms = { tMap: U(null), uTexel: U(new THREE.Vector2()), uThresh: U(1.0) };
   mBlur.uniforms = { tMap: U(null), uDir: U(new THREE.Vector2()) };
-  mFinal.uniforms = { tMap: U(null), tB1: U(null), tB2: U(null), uBloom: U(1), uExposure: U(1), uTime: U(0), uRes: U(new THREE.Vector2(1, 1)) };
+  mFinal.uniforms = { tMap: U(null), tB1: U(null), tB2: U(null), uBloom: U(1), uExposure: U(1), uTime: U(0), uRes: U(new THREE.Vector2(1, 1)), uLens: U(0), uFlip: U(1), tCube: U(null), tLut: U(null), uBH: U(new THREE.Vector3(0, 0, -1)), uTanF: U(new THREE.Vector2(1, 1)), uRot: U(new THREE.Matrix3()) };
   const fsMesh = new THREE.Mesh(quad, mFinal); fsMesh.frustumCulled = false; fsScene.add(fsMesh);
   let rtMain, rtA, rtB, rtC, rtD;
   const mkRT = (w, h, depth, type) => new THREE.WebGLRenderTarget(Math.max(2, w | 0), Math.max(2, h | 0), { type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: depth, stencilBuffer: false });
@@ -890,7 +897,33 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
     v3.set(m[0] * F.sT, m[1] * F.sT, m[2] * F.sT).applyMatrix4(camera.matrixWorldInverse); if (-v3.z <= 0.05) return null;
     v3.applyMatrix4(camera.projectionMatrix); out[0] = (v3.x * 0.5 + 0.5) * R.cssW; out[1] = (0.5 - v3.y * 0.5) * R.cssH; out[2] = 0; return out;
   };
+  /* ---- S6 : lentille d'un trou noir (Sagittarius A*, M87*) quand la caméra en est à moins de LENS_RON fois GM/c² ---- */
+  const LENS_RON = 3000, lensBH = [0, 0, 0], lensCam = [0, 0, 0], lensDir = new THREE.Vector3();
+  let lensRT = null, lensCam3 = null, lensTex = null, lensR = 0, lensTick = 0;
+  R.lens = { on: false, name: null, r: 0, dirty: true, key: null };
+  const lensM87 = DATA.BHM.names.indexOf('M87');
+  function lensCandidates(F) {
+    const out = [{ name: 'Sagittarius A*', pos: F.gcRel, M: Math.pow(10, DATA.SGRA_LOGM || 6.63) }], i = lensM87;
+    if (i >= 0) { const k = MPC * F.cos.a, p = R.BHM.pos; out.push({ name: 'M87*', pos: [F.gcRel[0] + p[i * 3] * k, F.gcRel[1] + p[i * 3 + 1] * k, F.gcRel[2] + p[i * 3 + 2] * k], M: 6.5e9 });      /* M87* : masse de l'EHT 2019, comme sa fiche */ }
+    return out;
+  }
+  R.lensUpdate = F => {
+    const L = R.lens; L.on = false; if (!F || !F.gcRel || !isGL2) return;
+    for (let c = 0; c < 3; c++) lensCam[c] = F.tg[c] + camPos.getComponent(c) / F.s;
+    let best = null; for (const b of lensCandidates(F)) { const r = Math.hypot(b.pos[0] - lensCam[0], b.pos[1] - lensCam[1], b.pos[2] - lensCam[2]) / (GM_C2_SUN * b.M); if (!best || r < best.r) best = Object.assign({ r }, b); }
+    if (R.lensForceR) best.r = R.lensForceR;      /* crochet de test */
+    if (!best || best.r > LENS_RON || best.r < 6) return;
+    L.on = true; L.name = best.name; L.r = best.r;
+    { const key = [lensCam[0], lensCam[1], lensCam[2], F.ty, F.s], k0 = L.key, rm = best.r * GM_C2_SUN * best.M; if (!k0 || key[3] !== k0[3] || key[4] !== k0[4] || Math.hypot(key[0] - k0[0], key[1] - k0[1], key[2] - k0[2]) > 0.002 * rm) { L.key = key; L.dirty = true; } }      /* vue tout autour refaite seulement si la caméra, l'échelle ou la date ont bougé */
+    if (!lensRT) { L.dirty = true; lensRT = new THREE.WebGLCubeRenderTarget(R.w > 1200 ? 256 : 128, { type: rtType, format: THREE.RGBAFormat, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }); lensCam3 = new THREE.CubeCamera(0.01, 2e7, lensRT); lensTex = new THREE.DataTexture(new Uint8Array(512 * 4), 512, 1, THREE.RGBAFormat); lensTex.minFilter = lensTex.magFilter = THREE.NearestFilter; }
+    if (Math.abs(best.r / (lensR || 1) - 1) > 0.003) { lensTex.image.data.set(lensLutBytes(lensLut(best.r, 512))); lensTex.needsUpdate = true; lensR = best.r; }
+    for (let c = 0; c < 3; c++) lensBH[c] = (best.pos[c] - F.tg[c]) * F.s;
+    lensDir.set(lensBH[0] - camPos.x, lensBH[1] - camPos.y, lensBH[2] - camPos.z).normalize().transformDirection(camera.matrixWorldInverse);
+    const f = mFinal.uniforms, t = Math.tan(FOV * DEG / 2); f.uBH.value.copy(lensDir); f.uTanF.value.set(t * camera.aspect, t); f.uRot.value.setFromMatrix4(camera.matrixWorld); f.tLut.value = lensTex; f.tCube.value = lensRT.texture;
+  };
   R.render = (wall, exposure) => {
+    if (R.lens.on && R.lens.dirty && (lensTick++ % 8 === 0)) { lensCam3.position.copy(camPos); lensCam3.update(renderer, scene); R.lens.dirty = false; }      /* le ciel tout autour (sources hors de l’image), une image sur huit : six rendus en plus */
+    mFinal.uniforms.uLens.value = R.lens.on ? 1 : 0;
     renderer.setRenderTarget(rtMain); renderer.clear(); renderer.render(scene, camera);
     if (R.bloom) {
       mBright.uniforms.tMap.value = rtMain.texture; mBright.uniforms.uTexel.value.set(1 / R.w, 1 / R.h); mBright.uniforms.uThresh.value = R.hdr ? 1.0 : 0.72; pass(mBright, rtA);
