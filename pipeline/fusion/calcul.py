@@ -49,7 +49,8 @@ def construire(n_total):
     # traceurs sans masse : le Soleil, puis les naines (sauf le Triangle, qui a ses particules)
     tr = [('Soleil', ci['sun']['pos'], ci['sun']['vel'])] + [(d['name'], d['pos'], d['vel']) for d in ci['dwarfs'] if 'Triangle' not in d['name']]
     p['pos'] = np.concatenate([p['pos'], np.array([t[1] for t in tr], float)]); p['vel'] = np.concatenate([p['vel'], np.array([t[2] for t in tr], float)])
-    p['m'] = np.concatenate([p['m'], np.zeros(len(tr))]); p['eps'] = np.concatenate([p['eps'], np.full(len(tr), 0.1)])
+    p['m'] = np.concatenate([p['m'], np.full(len(tr), 1.0)]);      # 1 M☉ : falcON refuse les masses nulles (NaN) ; attraction négligeable devant 10⁶ M☉ par particule
+    p['eps'] = np.concatenate([p['eps'], np.full(len(tr), 0.1)])
     p['kind'] = np.concatenate([p['kind'], np.full(len(tr), 9, dtype=np.int8)]); gid = np.concatenate([gid, np.full(len(tr), -1, dtype=np.int8)])
     # repère du centre de masse (les traceurs n'ont pas de masse)
     m = p['m'][:, None]; cm = (p['pos'] * m).sum(0) / m.sum(); vm = (p['vel'] * m).sum(0) / m.sum()
