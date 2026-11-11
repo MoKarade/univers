@@ -125,3 +125,11 @@ Les formats binaires des fichiers en flux sont définis par leur décodeur (`loa
 - Les étoiles Gaia en flux gardent les épicycles ; leur fiche dit « orbite approchée ». Matière noire retirée : épicycles partout (le temps affiché n'y est plus le temps réel).
 - Mesuré : épicycles contre calcul pas à pas, écart médian 150 pc à 50 Ma, 2,3 kpc à 1 Ga (`app/test/orbits_measure.js`). Tour du Soleil : 229 Ma (rayon guide 8,67 kpc). Énergie conservée à 0,01 % pour 99,9 % des étoiles sur 1 Ga. Tests : `app/test/orbits.test.js`.
 - Pas vérifié : comparaison avec un logiciel de référence (galpy) ; fluidité sur téléphone (rendu logiciel seulement) ; le saut visible (environ 250 pc à +200 Ma) quand le calcul remplace l'approximation après un saut dans le temps.
+
+## Couleur des galaxies lointaines (S3, 11 novembre 2026)
+- Avant : les galaxies des relevés passaient du blanc bleuté à l'orange selon z par une rampe choisie à la main ; les quasars avaient une couleur fixe.
+- Après : `pipeline/build_zcol.py` décale un vrai spectre au repos de (1+z) et l'intègre sur l'œil CIE 1931 : galaxies, modèle Sb de l'atlas Kinney-Calzetti (Kinney et al. 1996) ; quasars, première composante principale du modèle SDSS spDR2-029 (positive partout : la forme moyenne). Table `DATA.ZCOL` (`app/gen/data16.js`), lue par le shader `surv` (`zcol`) pour les galaxies embarquées et en flux. Fiche : ligne « Couleur ».
+- Supposé, et dit dans la fiche : toutes les galaxies ont le spectre d'une spirale Sb (leur type n'est pas dans nos catalogues). Au-delà de z = 2,07 (galaxies) et 4,35 (quasars), le spectre manque dans le visible : couleur du bord.
+- Pas appliqué : l'assombrissement de Tolman, (1+z)⁻⁴, ne concerne que les objets résolus ; les galaxies des relevés sont des points de taille fixe, et les galaxies photographiées sont à z < 0,03 (moins de 12 %). Pas pris en compte : l'absorption par le gaz intergalactique devant les quasars lointains (forêt Lyman-α) au-delà de ce que contient le spectre moyen [À vérifier].
+- Incertain : vers z = 2, la couleur (rose-lavande) vient de la partie ultraviolette du modèle Sb, mesurée par IUE avec une grande incertitude [À vérifier].
+- Tests : `app/test/zcol.test.js` (Hα et Lyα à leur longueur d'onde, vert des quasars vers z = 3,3, rougissement des galaxies, recherche du shader).
