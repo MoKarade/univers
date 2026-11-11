@@ -1,7 +1,7 @@
 // S1 — couleur des étoiles : corps noir de Planck vu par l'observateur standard CIE 1931 (2°).
 // Références indépendantes du code testé :
 //  - l'illuminant A de la CIE est, par définition, un corps noir à 2856 K : x = 0,44757 ; y = 0,40745 ;
-//  - l'approximation publiée du lieu de Planck de Kim et al. 2002 (US 7 024 034), valable de 1667 à 25 000 K.
+//  - l'approximation publiée du lieu de Planck de Kim et al. 2002, valable de 1667 à 25 000 K.
 const fs = require('fs'), vm = require('vm'), path = require('path'), root = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(root, f), 'utf8'); global.atob = s => Buffer.from(s, 'base64').toString('binary');
 vm.runInThisContext((rd('gen/data.js') + rd('gen/data15.js') + rd('src/20_physics.js') + rd('src/30_gen.js')).replace(/^const /gm, 'var '));
@@ -33,6 +33,18 @@ for (const T of [2000, 3000, 4000, 5772, 10000, 20000]) { const a = xyOf(T), b =
 /* ---- 3. la table de la page (DATA.BBCOL) suit l'intégration directe ---- */
 { let worst = 0, wT = 0; for (let T = 3000; T <= 25000; T *= 1.037) { const a = bbRgb(T), b = refRgb(T); for (let k = 0; k < 3; k++) { const e = Math.abs(a[k] - b[k]); if (e > worst) { worst = e; wT = T; } } }
   check(worst < 0.01, `table de la page contre intégration directe, 3000 à 25 000 K : écart maximal ${worst.toFixed(4)} (à ${wT.toFixed(0)} K)`); }
+
+/* ---- 3b. chaîne complète contre références indépendantes : lieu de Planck de Kim et al. 2002 (xy),
+   puis définition de sRGB par ses primaires et son blanc D65 (IEC 61966-2-1), matrice recalculée ici ---- */
+const inv3 = m => { const [a, b, c] = m, d = a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+  return [[(b[1] * c[2] - b[2] * c[1]) / d, (a[2] * c[1] - a[1] * c[2]) / d, (a[1] * b[2] - a[2] * b[1]) / d], [(b[2] * c[0] - b[0] * c[2]) / d, (a[0] * c[2] - a[2] * c[0]) / d, (a[2] * b[0] - a[0] * b[2]) / d], [(b[0] * c[1] - b[1] * c[0]) / d, (a[1] * c[0] - a[0] * c[1]) / d, (a[0] * b[1] - a[1] * b[0]) / d]]; };
+const xyz = ([x, y]) => [x / y, 1, (1 - x - y) / y], mv = (m, v) => m.map(r => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+const P = [xyz([0.64, 0.33]), xyz([0.30, 0.60]), xyz([0.15, 0.06])], Pm = [[P[0][0], P[1][0], P[2][0]], [P[0][1], P[1][1], P[2][1]], [P[0][2], P[1][2], P[2][2]]];
+const S = mv(inv3(Pm), xyz([0.3127, 0.3290])), RGB2XYZ = Pm.map(r => r.map((v, k) => v * S[k])), XYZ2RGB = inv3(RGB2XYZ);
+for (const T of [3200, 4000, 5772, 7000, 10000, 20000]) {
+  const v = mv(XYZ2RGB, xyz(kim(T))).map(u => Math.max(u, 0)), m = Math.max(...v), ref = v.map(u => u / m), q = bbRgb(T), d = Math.max(...q.map((u, k) => Math.abs(u - ref[k])));
+  check(d < 0.01, `${T} K : couleur de la page contre Kim + définition sRGB, écart ${d.toFixed(4)}`); }
+check(DATA.BBCOL.rgb.length === DATA.BBCOL.n * 3 && DATA.BBCOL.rgb.every(v => Number.isFinite(v) && v >= 0 && v <= 1), `table de la page : ${DATA.BBCOL.rgb.length} valeurs, toutes finies entre 0 et 1`);
 
 /* ---- 4. la couleur des étoiles passe par la température (Ballesteros 2012) puis le corps noir ---- */
 { const T = bvToTeff(0.656); check(Math.abs(T - 5772) < 150, `Soleil, B−V = 0,656 : ${T.toFixed(0)} K (mesuré : 5772 K)`); }
