@@ -299,7 +299,7 @@
   addLabel('Centre galactique', '', 1.2, 19.9, 21.6, () => F.gcRel);
   addLabel('Voie lactée', 'here', 0, 21.85, 23.55, () => F.gcRel);
   for (const c of G.lg.centers) { const g = c.g, l = Math.log10(Math.max(vlen(c.c), 20) * KPC); addLabel(g.n, '', g.p, g.p >= 5 ? Math.max(l - 0.3, 21.05) : l - 0.85, g.p >= 5 ? Math.max(l + 0.45, 21.6) : g.p === 4 ? l + 0.5 : g.p === 3 ? l + 0.75 : 23.85, () => add3(F.gcRel, c.c, KPC), { gate: () => (c.gone || (F.dyn && g.p >= 3) ? 0 : 1) }); }
-  if (DATA.LANIAKEA) addLabel('Laniakea', '', 0.5, 23.95, 25.4, () => add3(F.gcRel, DATA.LANIAKEA.attracteur, MPC * F.cos.a));      /* placé sur l'attracteur publié (Dupuy et Courtois 2023), au cœur du bassin */
+  if (DATA.LANIAKEA) addLabel('Laniakea', '', 0.5, 24.45, 25.4, () => add3(F.gcRel, DATA.LANIAKEA.attracteur, MPC * F.cos.a));      /* placé sur l'attracteur publié (Dupuy et Courtois 2023), au cœur du bassin */
   for (const f of DATA.FAR) { const l = Math.log10(f.d * MPC); addLabel(f.n, f.k === 'void' ? 'region' : '', f.p, l - 0.75, l + [1.25, 0.9, 0.65, 0.45][f.p - 1], () => add3(F.gcRel, f.pos, MPC * F.cos.a)); }
   addLabel('Groupe local', 'here', 0, 23.85, 25.45, () => F.gcRel);
   addLabel('Nous sommes ici', 'here', 0, 25.75, 27.2, () => F.gcRel);
@@ -1287,7 +1287,7 @@
     : lr < 21.75 ? (F.dyn && F.dyn.rep ? 'Étoiles du calcul complet de la fusion (300 000 particules qui s’attirent toutes), une image tous les 20 millions d’années ; le Triangle et le Grand Nuage y sont dispersés. Scénario.' : F.dyn && F.dyn.tail ? 'Après 10 milliards d’années : les étoiles du calcul complet continuent dans une galaxie résultante simplifiée (les deux halos de la page) ; ce changement de modèle la resserre d’environ 20 %.' : 'Aspect généré, forme guidée par les mesures. Soleil et amas d’étoiles à leur vraie place.')
     : lr < 23.6 ? (S.opts.realSize || Rr.galExag < 1.05 ? 'Galaxies à leur position mesurée. Leur aspect est généré.' : 'Galaxies à leur position mesurée, grossies pour rester visibles. Leur aspect est généré.')
     : S.opts.simWeb ? 'Toile simulée. Les amas nommés sont à leur vraie place.'
-    : lr < LOG.MPC + 3.3 ? 'Galaxies réellement observées. Les zones vides ne sont pas encore cartographiées.' + (Rr.lania && Rr.lania.visible ? ' Points bleus : frontière de Laniakea, notre superamas (Cosmicflows-4).' : '')
+    : lr < LOG.MPC + 3.3 ? 'Galaxies réellement observées. Les zones vides ne sont pas encore cartographiées.' + (Rr.lania && Rr.lania.visible ? ' Voile bleu : frontière de Laniakea, notre superamas (Cosmicflows-4).' : '')
     : 'Quasars observés, fond diffus mesuré par Planck, limites calculées.';
   const EARTH_TXT = 'Sort de la Terre inconnu : engloutie par le Soleil géant selon Schröder et Smith 2008 et Rasio et al. 1996, pourrait survivre selon Rybicki et Denis 2001. À partir du moment où les marées commencent à resserrer son orbite, la Terre et la Lune ne sont plus dessinées.';
   const SYS_END_TXT = 'Inconnu : des étoiles de passage défont le système solaire. Dans les simulations de Zink, Batygin et Adams (2020), l’instabilité se déclenche environ 30 milliards d’années après la mort du Soleil (vers 38 milliards d’années d’ici), puis les éjections s’étalent sur environ 10 milliards d’années ; la dernière planète part en moyenne 100 milliards d’années après la mort du Soleil. L’ordre et les dates de chaque planète ne sont pas connus : plus aucune n’est dessinée.';

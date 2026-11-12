@@ -40,6 +40,10 @@ const FRAG_SOFT = `varying vec3 vColor; varying float vA;
 void main(){ vec2 p=gl_PointCoord*2.0-1.0; float d2=dot(p,p); if(d2>1.0) discard; gl_FragColor=vec4(vColor*vA*(exp(-d2*4.2)-0.015),1.0); }`;
 
 const SH = {
+  /* voile : surface vue par la tranche plus lumineuse que de face (comme une bulle), additif, sans profondeur */
+  shell: { v: `varying float vRim; void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv;
+  float c=abs(dot(normalize(normalMatrix*normal),normalize(-mv.xyz))); vRim=pow(1.0-c,3.0); }`,
+    f: `uniform vec3 uColor; uniform float uOpacity; varying float vRim; void main(){ gl_FragColor=vec4(uColor*uOpacity*(0.012+0.3*vRim),1.0); }` },
   star: { v: `attribute float aMag; attribute vec3 aCol; attribute vec3 aLife; attribute float aFate; attribute vec3 aVel; uniform float uUnitToPc,uExpo,uOpacity,uDpr,uEvolve,uT,uFlash,uVt,uMcut,uTgtR; uniform vec3 uTgt; varying vec3 vColor; varying float vA; varying float vCore;
 uniform float uDust,uAk; uniform vec3 uCamLy; uniform mat3 uE2G;
 ${dustGlsl()}void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); gl_Position=projectionMatrix*mv; gl_Position.z=0.0;
@@ -96,6 +100,8 @@ void main(){ float r=aDist; vec4 mv=modelViewMatrix*vec4(position*r,1.0); gl_Pos
   vA=uOpacity*lod*hz*smoothstep(0.15,0.9,uAge)*(0.9+0.3*ns); gl_PointSize=uMinPx*(2.5+1.0*ns+0.6*q); if(vA<=0.002) gl_Position=vec4(2.0,2.0,2.0,1.0); }`, f: FRAG_SOFT },
   dots: { v: `attribute vec2 aLook; uniform float uOpacity,uDpr,uZ; uniform vec3 uColor; varying vec3 vColor; varying float vA;
 void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv; if(uZ>0.5) gl_Position.z=0.0; vA=aLook.y*uOpacity; vColor=uColor; gl_PointSize=clamp(aLook.x*1.5,1.0,4.5)*uDpr; }`, f: FRAG_SOFT },
+  dotsC: { v: `attribute vec2 aLook; attribute vec3 aCol; uniform float uOpacity,uDpr; varying vec3 vColor; varying float vA;
+void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv; vA=aLook.y*uOpacity; vColor=aCol; gl_PointSize=clamp(aLook.x*1.5,1.0,4.5)*uDpr; }`, f: FRAG_SOFT },
   orbit: { v: `attribute float aU; attribute float aSide; uniform vec3 uP,uQ; uniform float uE0,uWidth; uniform vec2 uViewport; varying float vU; varying float vSide;
 vec3 rel(float dE){ float sh=sin(0.5*dE); return uP*(-2.0*sin(uE0+0.5*dE)*sh)+uQ*(2.0*cos(uE0+0.5*dE)*sh); }
 void main(){ float dE=-aU*6.2831853; vec4 c0=projectionMatrix*modelViewMatrix*vec4(rel(dE),1.0); vec4 c1=projectionMatrix*modelViewMatrix*vec4(rel(dE-0.012),1.0);
@@ -555,11 +561,17 @@ void main(){ float e=aEl.x; float M=mod(aEl.y+aEl.z*uT,6.2831853); float E=M+e*s
   const COM = decodeComets(); R.COM = COM; const cometU = dotsU([0.6, 0.92, 1.0]), comets = pts({ position: [COM.pos, 3], aLook: [COM.look, 2] }, mk(SH.dots, cometU, { depthTest: true }), 46);
   const fpos = k => new Float32Array(b64ToBytes(DATA[k]).buffer), mkLook = (n, s, a) => { const l = new Float32Array(n * 2); for (let i = 0; i < n; i++) { l[i * 2] = s; l[i * 2 + 1] = a; } return l; };
   R.EXO = { N: DATA.EXO_N, pos: fpos('EXO_POS') }; R.PSR = { N: DATA.PSR_N, pos: fpos('PSR_POS') };
-  const exoU = dotsU([0.42, 1.0, 0.6]), exo = pts({ position: [R.EXO.pos, 3], aLook: [mkLook(R.EXO.N, 1.9, 0.85), 2] }, mk(SH.dots, exoU), 9);
+  /* étoiles à planètes : la couleur de l'étoile (température mesurée, NASA Exoplanet Archive), gris si elle est inconnue. Un vert de repère
+     faisait ressortir les champs des relevés (le trait vers le Cygne est le champ du télescope Kepler), pas des étoiles. */
+  const exoCol = new Float32Array(R.EXO.N * 3); for (let i = 0; i < R.EXO.N; i++) { const T = +((DATA.EXO_ST && DATA.EXO_ST[i]) || '').split('~')[2]; exoCol.set(T > 0 ? bbRgb(T) : [0.62, 0.62, 0.62], i * 3); }
+  const exoU = dotsU([1, 1, 1]), exo = pts({ position: [R.EXO.pos, 3], aLook: [mkLook(R.EXO.N, 1.7, 0.8), 2], aCol: [exoCol, 3] }, mk(SH.dotsC, exoU), 9);
   /* Laniakea (A2) : cellules de bord du bassin d'attraction de la Voie lactée (Dupuy et Courtois 2023, champ de vitesses
      Cosmicflows-4), en Mpc comobiles, écliptique J2000, comme les galaxies proches. Pipeline : pipeline/sources/build_laniakea.py */
-  const LK = DATA.LANIAKEA, lkPos = LK ? new Float32Array(b64ToBytes(LK.pos).buffer) : new Float32Array(0), lkU = dotsU([0.35, 0.85, 1.0]);
-  const lania = pts({ position: [lkPos, 3], aLook: [mkLook(lkPos.length / 3, 2.4, 0.8), 2] }, mk(SH.dots, lkU), 4); R.lania = lania;
+  const LK = DATA.LANIAKEA, lkU = { uColor: U(new THREE.Color(0.4, 0.72, 1.0)), uOpacity: U(0) }, lkGeo = new THREE.BufferGeometry();
+  if (LK) { const q = new Int16Array(b64ToBytes(LK.pos).buffer), p = new Float32Array(q.length); for (let i = 0; i < q.length; i++) p[i] = q[i] * LK.q;      /* sommets en Mpc comobiles */
+    lkGeo.setAttribute('position', new THREE.BufferAttribute(p, 3)); lkGeo.setIndex(new THREE.BufferAttribute(new Uint16Array(b64ToBytes(LK.tri).buffer), 1)); lkGeo.computeVertexNormals(); }
+  /* surface lisse de la frontière, et non des points : vus de loin, les points dessinaient la grille des cellules de 7,8 Mpc/h */
+  const lania = new THREE.Mesh(lkGeo, mk(SH.shell, lkU, { side: THREE.DoubleSide })); lania.frustumCulled = false; lania.renderOrder = 4; lania.visible = false; scene.add(lania); R.lania = lania;
   const psrU = dotsU([0.8, 0.62, 1.0]), psr = pts({ position: [R.PSR.pos, 3], aLook: [mkLook(R.PSR.N, 1.9, 0.85), 2] }, mk(SH.dots, psrU), 9);
   // trous noirs : stellaires dans la Voie lactée (années-lumière), supermassifs au centre d'autres galaxies (Mpc)
   const f32 = s => new Float32Array(b64ToBytes(s).buffer);
@@ -768,9 +780,9 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
     const oNear = sim ? 0 : fadeIn(lr, 22.3, 22.9) * fadeOut(lr, 24.7, 25.3) * smoothstep(0.3, 1.2, F.age);
     near.visible = oNear > 0.003;
     if (near.visible) { place(near, gc, unitC, F); nearU.uPx.value = px; nearU.uOpacity.value = oNear; nearU.uMinPx.value = minPx * 1.35; nearU.uMaxPx.value = maxPx; nearU.uFloor.value = 0.55; nearU.uBigPx.value = Math.min(maxPx, 0.1 * R.halfMin); nearU.uStarCap.value = 2.4 * dpr; }
-    const oLk = sim ? 0 : fadeIn(lr, 23.8, 24.2) * fadeOut(lr, 25.3, 25.8) * smoothstep(0.3, 1.2, F.age);
-    lania.visible = oLk > 0.003 && lkPos.length > 0;
-    if (lania.visible) { place(lania, gc, unitC, F); lkU.uOpacity.value = oLk; lkU.uDpr.value = dpr; }
+    const oLk = sim ? 0 : fadeIn(lr, 24.45, 24.85) * fadeOut(lr, 25.3, 25.8) * smoothstep(0.3, 1.2, F.age);
+    lania.visible = oLk > 0.003 && !!LK;
+    if (lania.visible) { place(lania, gc, unitC, F); lkU.uOpacity.value = oLk; }
     const oLm = fadeIn(lr, 22.6, 23.2) * fadeOut(lr, LOG.MPC + 2.9, LOG.MPC + 3.5) * smoothstep(0.3, 1.2, F.age);
     landmarks.visible = sim && oLm > 0.003;
     if (landmarks.visible) { place(landmarks, gc, unitC, F); lmU.uPx.value = px; lmU.uOpacity.value = oLm * 0.9; lmU.uMinPx.value = minPx * 1.7; lmU.uMaxPx.value = maxPx; lmU.uFloor.value = 0.5; lmU.uBigPx.value = Math.min(maxPx, 0.1 * R.halfMin); lmU.uStarCap.value = 2.4 * dpr; }

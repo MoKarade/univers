@@ -114,7 +114,7 @@ def main():
 
         # A2 : frontière de Laniakea (Dupuy et Courtois 2023), visible aux grandes échelles seulement
         lk = pg.evaluate("DATA.LANIAKEA ? [DATA.LANIAKEA.n, DATA.LANIAKEA.r_eq_mpc_h] : null")
-        check(bool(lk) and lk[0] == 2898 and abs(lk[1] - 77) < 1, 'Laniakea : %s points de frontière, rayon équivalent (Mpc/h)' % lk)
+        check(bool(lk) and lk[0] == 9820 and abs(lk[1] - 77) < 1, 'Laniakea : %s sommets de la surface de frontière, rayon équivalent (Mpc/h)' % lk)
         # positions : attracteur publié [-62, -8, 39] Mpc/h (Dupuy et Courtois 2023) et centre du bassin [-28,4, -36, 94,4] Mpc/h,
         # distances divisées par h = 0,674 : 109,9 et 155,6 Mpc
         dd = pg.evaluate("[Math.hypot(...DATA.LANIAKEA.attracteur), Math.hypot(...DATA.LANIAKEA.centre)]")
