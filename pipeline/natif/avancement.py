@@ -6,7 +6,7 @@ Dossier C:\\dev\\Univers-PC\\avancement\\ : un fichier NOM.txt (UTF-8) par tâch
 terminé, échec), detail=. Les valeurs sont LUES dans les journaux des calculs (aucune estimation).
 Usage : python avancement.py   (s'arrête seul quand toutes les tâches sont terminées ou en échec)
 """
-import datetime as dt, glob, os, re, time
+import datetime as dt, glob, os, re, sys, time
 
 DOSSIER = r'C:\dev\Univers-PC\avancement'
 NATIF = r'C:\tmp\natif'
@@ -72,9 +72,21 @@ def chaos():
     return etat
 
 
+def convertir_fusion(d):
+    """Dès que le calcul a écrit un nouveau paquet d'images (fusion.json plus récent), refait les fichiers que l'appli lit."""
+    import subprocess
+    js, cb = os.path.join(d, 'fusion.json'), os.path.join(d, 'fusion_centres.bin')
+    if not os.path.exists(js) or (os.path.exists(cb) and os.path.getmtime(cb) >= os.path.getmtime(js)): return
+    ici = os.path.dirname(os.path.abspath(__file__))
+    for args in ([os.path.join(ici, 'fusion_bin.py'), d, cb + '.tmp'], [os.path.join(ici, 'fusion_particules.py'), d]):
+        subprocess.run([sys.executable, '-I'] + args, capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if os.path.exists(cb + '.tmp'): os.replace(cb + '.tmp', cb)
+
+
 def fusion():
     j = os.path.join(NATIF, 'fusion-toutes', 'journal.txt')
     if not os.path.exists(j): return 'terminé'
+    convertir_fusion(os.path.join(NATIF, 'fusion-toutes'))
     lignes = open(j, encoding='utf-8', errors='replace').read().splitlines()
     t = 0.0
     for l in reversed(lignes):
