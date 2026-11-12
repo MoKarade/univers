@@ -158,14 +158,15 @@ def main():
     t_to = float(args[1])
     if not reprise and float(args[0]) == 0:
         if os.path.exists(dpath):
-            z = np.load(dpath); p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']
-            meta = json.loads(str(z['meta']))
+            with np.load(dpath) as z:
+                p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; meta = json.loads(str(z['meta']))
         else:
             p, gid, show, meta = construire(int(args[2]) if len(args) > 2 else 300000)
         meta.update(t=[], centres=[], traceurs_pos=[], energie=[], e0=None, fusion_ga=None, fichiers=[])
         t = 0.0; debut = True
     else:
-        z = np.load(spath); p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; t = float(z['t'])
+        with np.load(spath) as z:      # fermé tout de suite : sous Windows, un fichier ouvert ne peut pas être remplacé
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; t = float(z['t'])
         meta = json.load(open(jpath, encoding='utf-8')); debut = False
         if not reprise: assert abs(t - float(args[0])) < 1e-6, (t, args[0])
     S = Carte(p) if gpu else Processeur(p)
