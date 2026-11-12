@@ -376,8 +376,11 @@ struct Sim {
             }
         }
         // Galaxies nommées (galaxies_noms.tsv : nom, x, y, z en années-lumière, genre, priorité).
-        std::ifstream gf(galaxiesPath);
-        while (std::getline(gf, line)) {
+        // Puis, s'il est à côté, galaxies_cf4.tsv : 55 637 galaxies à distance mesurée (Cosmicflows-4, noms OpenNGC),
+        // écrit par pipeline/natif/galaxies_cf4.py ; priorité 9 : nom montré seulement de près ou au survol.
+        const std::string cf4Path = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "galaxies_cf4.tsv";
+        for (const std::string& path : {galaxiesPath, cf4Path})
+        for (std::ifstream gf(path); std::getline(gf, line);) {
             std::vector<std::string> cols;
             size_t from = 0;
             for (size_t tab; (tab = line.find('\t', from)) != std::string::npos; from = tab + 1) cols.push_back(line.substr(from, tab - from));

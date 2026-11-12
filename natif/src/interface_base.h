@@ -394,6 +394,11 @@ bool labelWanted(const Sim& sim, const Camera& cam, int i, float w, float h, dou
     if (b.kind == Kind::Planet && sim.dist > 0.05) return false;
     if (b.kind == Kind::Probe) return sim.dist < 0.3;
     if (b.kind == Kind::Asteroid) return sim.dist < 0.05;
+    if (b.kind == Kind::Galaxy && b.priority >= 9) {      // Cosmicflows-4 (55 637) : seulement quand on est tout près
+        const Vec3 p = sim.position(i);
+        const Vec3 d{p.x - cam.pos.x, p.y - cam.pos.y, p.z - cam.pos.z};
+        return std::sqrt(dot(d, d)) < 3.0e6;
+    }
     if (b.kind == Kind::Galaxy && (sim.dist < 2.0e4 || sim.dist > 3.0e9 || (b.priority > 1 && sim.dist < 1.5e6))) return false;
     if (b.kind == Kind::Planet) {      // un nom par planète seulement quand elle se détache de son astre parent
         double qx = 0, qy = 0;
