@@ -46,6 +46,7 @@ constexpr int kLunesConnues[10] = {0, 0, 0, 1, 2, 115, 293, 29, 16, 5};
 constexpr int kPlanetesConnues = 9;                       // 8 planètes et Pluton (UAI)
 constexpr double kAsteroidesConnus = 1580289;              // JPL SBDB, requête sb-kind=a du 12/11/2026
 constexpr double kCometesConnues = 4088;                   // JPL SBDB, requête sb-kind=c du 12/11/2026
+constexpr int kSondesSortie = 5;                           // NASA : Pioneer 10 et 11, Voyager 1 et 2, New Horizons (sortie du système solaire)
 constexpr double kObjets10pc = 540;                        // Reylé et al. 2021, A&A 650 A201 : étoiles, naines brunes, exoplanètes
 constexpr double kSourcesGaiaDr3 = 1811709771;             // ESA, Gaia DR3 (cosmos.esa.int/web/gaia/dr3)
 constexpr double kEtoilesVoieLacteeMin = 1.0e11, kEtoilesVoieLacteeMax = 4.0e11;   // NASA Goddard (Blueshift) : estimation
@@ -65,6 +66,7 @@ struct Comptes {
     int planetes = 0;                  // planètes et Pluton présents
     int lunes[10] = {};                // lunes présentes, par code NAIF du système (la Lune : indice 3)
     uint64_t asteroides = 0;
+    int sondes = 0;                    // sondes dont la trajectoire réelle est chargée
     uint64_t etoiles = 0;
     uint64_t etoilesCatalogue[3] = {}; // principal (HYG / Hipparcos), Gaia embarqué, Gaia en flux
     uint64_t etoiles10pc = 0;
@@ -127,6 +129,7 @@ Comptes compter(const SimT& sim, uint64_t galaxiesReleves) {
             const int systeme = b.naif == 301 ? 3 : b.naif / 100;
             if (systeme >= 0 && systeme < 10) ++c.lunes[systeme];
         }
+        if (b.kind == K::Probe) ++c.sondes;
         if (b.kind == K::Galaxy && b.natureText.rfind("centre", 0) != 0) {
             const double d = std::sqrt(b.fixedPos.x * b.fixedPos.x + b.fixedPos.y * b.fixedPos.y + b.fixedPos.z * b.fixedPos.z);
             if (d > 0 && d < kRayonGroupeLocalLy) ++c.galaxiesGroupeLocal;
@@ -188,8 +191,8 @@ inline std::string sur(double present, double connu) { return entier(present) + 
 inline Echelle systemeSolaire(const Comptes& c) {
     Echelle e;
     e.nom = "Système solaire";
-    const double present = c.planetes + lunesPresentes(c) + double(c.asteroides);
-    const double connu = kPlanetesConnues + lunesConnues() + kAsteroidesConnus + kCometesConnues;
+    const double present = c.planetes + lunesPresentes(c) + double(c.asteroides) + c.sondes;
+    const double connu = kPlanetesConnues + lunesConnues() + kAsteroidesConnus + kCometesConnues + kSondesSortie;
     e.part = present / connu;
     e.complet = pourcent(e.part) + " des objets connus (" + entier(present) + " sur " + entier(connu) + ")";
     e.precision = "planètes et Soleil < 1 mm ; astéroïdes 25 000 à 93 000 km";
@@ -199,16 +202,20 @@ inline Echelle systemeSolaire(const Comptes& c) {
         {"Lunes", sur(lunesPresentes(c), lunesConnues()), Nature::Mesure, "JPL, Planetary Satellite Discovery Circumstances, 12/11/2026"},
         {"Astéroïdes", sur(double(c.asteroides), kAsteroidesConnus), Nature::Mesure, "JPL Small-Body Database, 12/11/2026"},
         {"Comètes", sur(0, kCometesConnues), Nature::Mesure, "JPL Small-Body Database, 12/11/2026"},
+        {"Sondes qui quittent le système solaire", sur(c.sondes, kSondesSortie), Nature::Mesure, "NASA (Pioneer 10 et 11, Voyager 1 et 2, New Horizons)"},
         {"Écart des planètes et du Soleil", "< 1 mm ; Terre 3,5 m ; Lune 282 m", Nature::Mesure, "essai_ephem contre JPL Horizons, 112 valeurs de 1650 à 2026"},
         {"Écart des lunes", "14 lunes < 1 mm ; Triton 255 km", Nature::Mesure, "essai_ephem contre JPL Horizons"},
+        {"Écart des sondes", "0,7 km au plus (survols compris)", Nature::Mesure, "essai_sondes contre JPL Horizons, 8 dates"},
         {"Écart des astéroïdes", "25 000 à 93 000 km après 154 jours", Nature::Mesure, "asteroides.py --controle contre JPL Horizons (3 astéroïdes)"},
         {"Planètes et lunes, 1550 à 2650", "positions lues dans les fichiers de la NASA, ajustés aux mesures", Nature::Calcule, "DE440, jup365, sat441…"},
+        {"Sondes", "trajectoires du JPL reconstruites d'après le suivi radio, puis prolongées par calcul (Pioneer : contact perdu)", Nature::Calcule, "JPL Horizons (sondes.bin)"},
         {"Astéroïdes", "position calculée ici d'après l'orbite mesurée, sans l'attraction des planètes", Nature::Calcule, "équation de Kepler"},
     };
     e.manques = {
         entier(lunesConnues() - lunesPresentes(c)) + " lunes : les fichiers légers du NAIF n'en contiennent pas ; les 5 grandes lunes d'Uranus sont dans un fichier de 5,6 Go",
         entier(kAsteroidesConnus - double(c.asteroides)) + " astéroïdes du JPL pas encore chargés",
         "Les " + entier(kCometesConnues) + " comètes du JPL",
+        "Les autres sondes (en orbite autour des planètes, en route) : pas encore chargées",
         "Orbites des astéroïdes : ajouter l'attraction des planètes (écart actuel jusqu'à 93 000 km en 154 jours)",
         "Mesurer l'écart de Triton avec un fichier plus récent (255 km aujourd'hui)",
     };

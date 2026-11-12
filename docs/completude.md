@@ -26,6 +26,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 | Lunes connues | 460 + la Lune (Jupiter 115, Saturne 293, Uranus 29, Neptune 16, Mars 2, Pluton 5) | JPL, [Planetary Satellite Discovery Circumstances](https://ssd.jpl.nasa.gov/sats/discovery.html), lu le 12/11/2026 |
 | Astéroïdes | 1 580 289 | JPL SBDB, requête `sb-kind=a` du 12/11/2026 |
 | Comètes | 4 088 | JPL SBDB, requête `sb-kind=c` du 12/11/2026 |
+| Sondes qui quittent le système solaire | 5 (Pioneer 10 et 11, Voyager 1 et 2, New Horizons) | NASA |
 | Objets à moins de 10 pc | 540 (étoiles, naines brunes, exoplanètes) | Reylé et al. 2021, [A&A 650, A201](https://arxiv.org/abs/2104.14972) |
 | Sources Gaia DR3 | 1 811 709 771 | [ESA, Gaia DR3](https://www.cosmos.esa.int/web/gaia/dr3) |
 | Étoiles de la Voie lactée | 100 à 400 milliards (estimation) | NASA Goddard, Blueshift |
@@ -36,7 +37,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 
 | Échelle | Présent | Précision | Mesuré ou calculé |
 |---|---|---|---|
-| Système solaire | 7,8 % (9 planètes et Pluton, 16 lunes sur 461, 123 530 astéroïdes sur 1 580 289, 0 comète) | planètes < 1 mm, Lune 282 m, Triton 255 km, astéroïdes 25 000 à 93 000 km après 154 jours | éphémérides de la NASA ; astéroïdes calculés ici |
+| Système solaire | 7,8 % (9 planètes et Pluton, 16 lunes sur 461, 123 530 astéroïdes sur 1 580 289, 0 comète, 5 sondes sur 5) | planètes < 1 mm, Lune 282 m, Triton 255 km, sondes 0,7 km au plus, astéroïdes 25 000 à 93 000 km après 154 jours | éphémérides de la NASA ; astéroïdes calculés ici |
 | Étoiles voisines | 87 % (470 sur 540) | arrondi du fichier : pas de 198 UA à 10 pc | positions mesurées ; 41 149 étoiles sans vitesse radiale |
 | Voie lactée | 0,34 % de Gaia DR3 ; 0,0015 à 0,0062 % de l'estimation | distance à mieux que 20 % (Gaia) | positions mesurées ; galaxie elle-même non dessinée |
 | Groupe local | 62 % (70 sur 113) | erreur par galaxie non gardée | mesuré aujourd'hui ; calculé dans le temps profond |
@@ -47,6 +48,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 Système solaire
 - 445 lunes : absentes des fichiers légers du NAIF ; les 5 grandes lunes d'Uranus sont dans un fichier de 5,6 Go.
 - 1 456 759 astéroïdes et les 4 088 comètes du JPL.
+- Les autres sondes (en orbite autour des planètes, en route).
 - Attraction des planètes sur les astéroïdes (écart actuel jusqu'à 93 000 km en 154 jours).
 - Triton : mesurer l'écart avec un fichier plus récent.
 

@@ -47,17 +47,21 @@ int main(int argc, char** argv) {
         std::string ignored;
         spk.add(dir + "/" + f, ignored);
     }
+    std::vector<sondes::Probe> probes;
+    verifie(sondes::load(dir + "/sondes.bin", probes), "sondes.bin lu");
     Sim sim;
+    sim.probes = &probes;
     sim.stars = &stars;
     sim.spk = &spk;
     sim.asteroidCount = 123530;      // en-tête de asteroides.bin (lu par asteroides.h dans l'appli)
     sim.loadBodies(dir + "/etoiles_noms.tsv", dir + "/galaxies_noms.tsv", dir + "/planetes.tsv", dir + "/lunes.tsv");
 
     const Comptes c = compter(sim, 5566702);      // en-tête de galaxies.bin (lu par galaxies.h dans l'appli)
-    std::printf("planètes %d, lunes %d, étoiles %llu, à moins de 10 pc %llu, doublons %llu, sans vitesse radiale %llu, Groupe local %d\n",
-                c.planetes, lunesPresentes(c), (unsigned long long)c.etoiles, (unsigned long long)c.etoiles10pc,
+    std::printf("sondes %d, planètes %d, lunes %d, étoiles %llu, à moins de 10 pc %llu, doublons %llu, sans vitesse radiale %llu, Groupe local %d\n",
+                c.sondes, c.planetes, lunesPresentes(c), (unsigned long long)c.etoiles, (unsigned long long)c.etoiles10pc,
                 (unsigned long long)c.doublons10pc, (unsigned long long)c.principalSansVitesseRadiale, c.galaxiesGroupeLocal);
     verifie(c.planetes == 9, "8 planètes et Pluton");
+    verifie(c.sondes == 5, "5 sondes : Pioneer 10 et 11, Voyager 1 et 2, New Horizons");
     verifie(c.lunes[3] == 1 && c.lunes[4] == 2 && c.lunes[5] == 4 && c.lunes[6] == 7 && c.lunes[7] == 0 && c.lunes[8] == 1 && c.lunes[9] == 1,
             "lunes par système : Terre 1, Mars 2, Jupiter 4, Saturne 7, Uranus 0 (fichier absent), Neptune 1, Pluton 1");
     verifie(c.etoiles == 6153611, "6 153 611 étoiles");
