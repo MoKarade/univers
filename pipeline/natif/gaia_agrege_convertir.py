@@ -7,8 +7,7 @@ Chaque case (pixel HEALPix de niveau 7 × tranche de parallaxe d'un dixième de 
 - lumière : somme des flux G mesurés × (d / 10 pc)², rangée en magnitude absolue ; couleur : BP-RP moyen pondéré par le flux ;
 - taille : côté du pixel à cette distance (la case est un morceau de ciel épais d'un dixième de décade en parallaxe) ;
 - incertitude : erreur relative moyenne de la parallaxe, pondérée par le flux (gardée dans le fichier).
-Les cases dont l'erreur moyenne dépasse 100 % (parallaxe plus petite que son erreur) n'ont pas de distance utilisable :
-elles rejoignent la lumière « ciel seul » (distance inconnue), comme les sources sans parallaxe. Cette lumière n'est
+Seules les sources dont la parallaxe vaut plus de 5 fois son erreur sont placées en volume ; les autres rejoignent la lumière « ciel seul » (distance inconnue), comme les sources sans parallaxe. Cette lumière n'est
 montrée que vue du voisinage du Soleil, là où seule la direction compte.
 
 Format gaia_agrege.bin (petit-boutiste) : en-tête 64 octets (« UNIVGAG1 », nombre de cases 3D (u64), nombre de pixels du
@@ -29,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gaia_convertir as gc
 
 NIVEAU = 7
-ERREUR_MAX = 1.0
+ERREUR_MAX = 0.2      # par construction (gaia_agreger.py : parallaxe > 5 erreurs) ; garde-fou
 
 
 def lire(dossier, nom, parts=1024):
