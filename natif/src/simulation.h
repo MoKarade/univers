@@ -6,6 +6,7 @@
 #include "galaxie_orbites.h"
 #include "groupe_local.h"
 #include "lune.h"
+#include "sondes.h"
 #include "systeme_solaire.h"
 
 namespace {
@@ -22,13 +23,14 @@ constexpr double kLinearLimitYears = 3.0e6;      // au-delà, la ligne droite ne
 // [Approximation assumée : appliquée à toute date ; l'écart réel a varié de quelques dizaines de secondes par siècle.]
 constexpr double kTdbMinusUtc = 69.184;
 
-enum class Kind { Sun, Star, Planet, Galaxy };
+enum class Kind { Sun, Star, Planet, Galaxy, Probe };
 
 // Un astre que l'on peut suivre, chercher, nommer à l'écran.
 struct Body {
     std::string name;
     Kind kind = Kind::Star;
     int64_t star = -1;          // étoile : numéro dans le catalogue
+    int probe = -1;             // sonde : son rang dans le fichier des trajectoires
     int naif = 0;               // planète : code du corps dans les éphémérides de la NASA (clé de sa carte et de son orientation)
     int posNaif = 0;            // code utilisé pour sa position : le centre de la planète quand un fichier de lunes le donne
     int parent = -1;            // lune : numéro de l'astre autour duquel elle tourne (pour le tracé de l'orbite)
@@ -132,6 +134,16 @@ struct Sim {
                 if (r.naif == eph::kEarth) earth = i;
             }
             add(kMoon, earth);
+            // Sondes : trajectoires réelles (sondes.bin). Montrées seulement aux dates où le JPL donne leur position.
+            for (size_t k = 0; probes && k < probes->size(); ++k) {
+                Body p;
+                p.name = (*probes)[k].name;
+                p.kind = Kind::Probe;
+                p.probe = static_cast<int>(k);
+                p.parent = 0;
+                p.natureText = "sonde spatiale";
+                bodies.push_back(p);
+            }
             // Lunes des autres planètes (lunes.tsv : code NAIF, nom, code du centre de la planète, rayon moyen en km).
             std::ifstream mf(moonsPath);
             std::string ml;
@@ -238,9 +250,19 @@ struct Sim {
         planetValid.assign(bodies.size(), 0);
         planetComputed.assign(bodies.size(), 0);
         for (size_t i = 0; i < bodies.size(); ++i) {
+            if (bodies[i].kind == Kind::Probe) {      // sonde : sa trajectoire réelle, ou rien hors des dates fournies
+                double pos[3], vel[3];
+                if (probes && (*probes)[static_cast<size_t>(bodies[i].probe)].at(2451545.0 + years * 365.25 + kTdbMinusUtc / 86400.0, pos, vel)) {
+                    planetPos[i] = {pos[0] / kLyInKm, pos[1] / kLyInKm, pos[2] / kLyInKm};
+                    planetValid[i] = 1;
+                }
+                continue;
+            }
             if (bodies[i].kind != Kind::Planet) continue;
-            planetValid[i] = planetAt(bodies[i].posNaif, years, planetPos[i]) ? 1 : 0;
-            if (!planetValid[i] && bodies[i].parent == 0) ephemValid = false;      // une planète sans position : hors de la plage de de440.bsp
+            // Le centre de la planète vient du fichier de ses lunes, dont la plage de dates est plus courte que celle de
+            // de440.bsp : hors de cette plage, on revient au centre de masse planète + lunes, toujours donné par de440.bsp.
+            planetValid[i] = (planetAt(bodies[i].posNaif, years, planetPos[i]) || planetAt(bodies[i].naif, years, planetPos[i])) ? 1 : 0;
+            if (bodies[i].naif == eph::kEarth && !planetValid[i]) ephemValid = false;      // la Terre sans position : hors de la plage de de440.bsp
         }
         if (ephemValid || !outer) return;
         // Hors de la plage de la NASA : positions calculées (gravité mutuelle partie de l'état DE440 aux bornes, puis table
@@ -289,6 +311,7 @@ struct Sim {
     // complet de la rencontre avec Andromède (phys::fusion::Rejeu). Le repère reste celui d'aujourd'hui, attaché au centre
     // de la Voie lactée : l'origine est l'endroit où se trouve le Soleil aujourd'hui par rapport à ce centre.
     const phys::fusion::Rejeu* replay = nullptr;
+    const std::vector<sondes::Probe>* probes = nullptr;      // trajectoires réelles des sondes (JPL Horizons) ; à poser avant loadBodies
     std::vector<int> replayRef;          // par astre : -1 aucun ; 100 + g : centre de la galaxie g du calcul ; k >= 0 : traceur k ; -2 : centre de la Voie lactée
     std::vector<Vec3> galPos;            // position de chaque galaxie à la date courante
     std::vector<char> galValid;
@@ -359,7 +382,7 @@ struct Sim {
     // le Soleil, tant que le système solaire est suivi (10 millions d'années) ; une galaxie, si sa position est connue.
     bool visible(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
-        if (b.kind == Kind::Planet) return planetValid[static_cast<size_t>(i)] != 0;
+        if (b.kind == Kind::Planet || b.kind == Kind::Probe) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return std::fabs(years - kStartYears) <= 1.0e7;
         return !deepTime();
@@ -369,7 +392,7 @@ struct Sim {
     Vec3 position(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return {0, 0, 0};
-        if (b.kind == Kind::Planet) return planetPos[static_cast<size_t>(i)];
+        if (b.kind == Kind::Planet || b.kind == Kind::Probe) return planetPos[static_cast<size_t>(i)];
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galPos.size() && galValid[static_cast<size_t>(i)] ? galPos[static_cast<size_t>(i)] : b.fixedPos;
         const double k = years * kKmsToLyPerYear;      // étoile : ligne droite à la vitesse mesurée
         return {stars->x()[b.star] + stars->vel(0)[b.star] * k, stars->y()[b.star] + stars->vel(1)[b.star] * k, stars->z()[b.star] + stars->vel(2)[b.star] * k};
@@ -386,7 +409,7 @@ struct Sim {
     // en UA et la phase d'une sphère mate (loi de Lambert) [approximation assumée de la vraie courbe de phase].
     double apparentMag(int i, Vec3 from) const {
         const Body& b = bodies[static_cast<size_t>(i)];
-        if (b.kind == Kind::Galaxy) return 99.0;      // éclat des galaxies : pas dans les données pour l'instant
+        if (b.kind == Kind::Galaxy || b.kind == Kind::Probe) return 99.0;      // éclat des galaxies et des sondes : pas dans les données
         const Vec3 p = position(i), d = p - from;
         const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
         if (b.kind == Kind::Planet) {
@@ -525,6 +548,7 @@ struct Sim {
     }
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
         if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return 1.0e3;
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Probe) return 1.0e-10;      // environ 1 000 km
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }
     static constexpr double kMaxDist = 9.0e10;      // un peu plus que la distance des objets les plus lointains (z = 7)

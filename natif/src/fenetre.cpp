@@ -105,7 +105,10 @@ int runWindow(const WindowOptions& opt) {
             std::string ignored;
             spk.add(dataDir + "/" + f, ignored);
         }
+    std::vector<sondes::Probe> probes;
+    const bool hasProbes = sondes::load(dataDir + "/sondes.bin", probes);      // facultatif
     Sim sim;
+    sim.probes = hasProbes ? &probes : nullptr;
     sim.stars = &stars;
     sim.spk = hasSpk ? &spk : nullptr;
     // Système solaire hors de la plage de la NASA : préparé dans un fil à part (quelques dizaines de secondes), branché
