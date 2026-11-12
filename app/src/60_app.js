@@ -356,8 +356,11 @@
     zAnc = { x, y, t: now, W }; return W; }
   /* R12 : vitesse de zoom constante par puissance de dix, sauf dans les étendues où rien ne change à l'écran : traversées trois fois plus vite, et le panneau le dit.
      Étendues repérées par mesure (écart moyen entre deux images successives, un quart de puissance de dix d'écart, inférieur à 3 sur 255 : docs/r12-zoom.md). */
-  const ZFAST = [{ lo: -8.0, hi: -4.5, txt: 'Traversée rapide : de 30 micromètres à 10 nanomètres, l’eau liquide paraît la même. Rien de nouveau avant les molécules.' },
-    { lo: -13.4, hi: -12.2, txt: 'Traversée rapide : entre les électrons et le noyau, rien. Presque tout l’atome est vide.' },
+  const ZFAST = [{ lo: 3.3, hi: 5.5, txt: 'Traversée rapide : de 300 km à 2 km d’altitude, la simulation n’a pas d’image plus fine du sol ; rien ne change à l’écran.' },
+    { lo: 0.5, hi: 2.0, txt: 'Traversée rapide : entre 100 m et 3 m, rien n’est dessiné, faute de donnée réelle à cette finesse.' },
+    { lo: -2.3, hi: 0.0, txt: 'Traversée rapide : de 1 m à 5 mm, la gouttelette approche sans rien montrer de nouveau.' },
+    { lo: -8.0, hi: -4.5, txt: 'Traversée rapide : de 30 micromètres à 10 nanomètres, l’eau liquide paraît la même. Rien de nouveau avant les molécules.' },
+    { lo: -13.4, hi: -12.6, txt: 'Traversée rapide : entre les électrons et le noyau, rien. Presque tout l’atome est vide.' },
     { lo: -19.3, hi: -17.2, txt: 'Traversée rapide : le quark reste un point, rien de nouveau jusqu’à la limite du connu.' }], ZFAST_K = 3;
   const zFast = lr => microOn() ? ZFAST.find(z => lr > z.lo && lr < z.hi) || null : null;
   function zoomAt(dl, x, y) { if (zFast(S.logR)) dl *= ZFAST_K; const l0 = S.logR, l1 = clampZoom(l0 + dl); S.anim = null; S.logR = l1;

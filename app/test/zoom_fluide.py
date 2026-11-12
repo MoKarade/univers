@@ -39,14 +39,14 @@ def main():
     with sync_playwright() as p:
         b, pg = page(p, 2)
         pg.mouse.move(640, 400); steps = {}
-        for lr in [9.0, 3.0, -2.0, -10.5, -15.0, -6.0, -12.8, -18.0]:
+        for lr in [9.0, 2.5, -3.0, -10.5, -15.0, 4.5, 1.2, -1.0, -6.0, -12.8, -18.0]:
             pg.evaluate(f"__U.S.anim = null; __U.S.logR = {lr}"); frames(pg, 2)
             pg.mouse.wheel(0, -100); frames(pg, 2)
             steps[lr] = (lr - pg.evaluate('__U.S.logR'), pg.evaluate("document.getElementById('notice').hidden ? '' : document.getElementById('notice').textContent"))
-        base = [steps[k][0] for k in (9.0, 3.0, -2.0, -10.5, -15.0)]
+        base = [steps[k][0] for k in (9.0, 2.5, -3.0, -10.5, -15.0)]
         check(max(base) - min(base) < 1e-6 and base[0] > 0, 'même cran de molette, hors étendues vides : ' + ', '.join(f'{d:.3f}' for d in base) + ' puissance de dix')
-        fast = [steps[k] for k in (-6.0, -12.8, -18.0)]
-        check(all(abs(d / base[0] - 3) < 0.01 and 'Traversée rapide' in t for d, t in fast), 'étendues vides (eau, vide de l’atome, quark) : trois fois plus vite et « Traversée rapide » affiché : ' + ', '.join(f'{d:.3f}' for d, _ in fast))
+        fast = [steps[k] for k in (4.5, 1.2, -1.0, -6.0, -12.8, -18.0)]
+        check(all(abs(d / base[0] - 3) < 0.01 and 'Traversée rapide' in t for d, t in fast), 'étendues vides (au-dessus de la Terre, près de la surface, approche de la goutte, eau, vide de l’atome, quark) : trois fois plus vite et « Traversée rapide » affiché : ' + ', '.join(f'{d:.3f}' for d, _ in fast))
         pg.evaluate("document.getElementById('c-fps').click()"); pg.wait_for_timeout(2500)
         txt = pg.evaluate("[document.getElementById('fps').hidden, document.getElementById('fps').textContent]")
         check(not txt[0] and re.match(r'^\d+ images/s$', txt[1]), f'compteur coché : « {txt[1]} »')

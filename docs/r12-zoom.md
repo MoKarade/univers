@@ -197,4 +197,6 @@ Colonne « écart » : écart moyen (sur 255) entre l’image et la précédente
 | -19.75 | 15 | 1.17 | Inconnu |
 | -20.0 | 14 | 1.11 | Inconnu |
 
-Étendues retenues comme vides : 10^-8,0 à 10^-4,5 m (eau liquide), 10^-13,4 à 10^-12,2 m (vide de l’atome), 10^-19,3 à 10^-17,2 m (quark). D’autres étendues calmes existent (au-dessus de la surface de la Terre, Terre et Lune) mais la Terre y reste visible et change de taille : non comptées comme vides.
+Étendues retenues comme vides (écart sous 3 sur tout l’intervalle), traversées trois fois plus vite avec un message « Traversée rapide » : 10^5,5 à 10^3,3 m (au-dessus de la Terre : fond uni, pas d’image plus fine du sol), 10^2 à 10^0,5 m (près de la surface : rien n’est dessiné), 10^0 à 10^-2,3 m (approche de la gouttelette), 10^-4,5 à 10^-8,0 m (eau liquide), 10^-12,6 à 10^-13,4 m (vide de l’atome), 10^-17,2 à 10^-19,3 m (quark). Écarts calmes non retenus : Terre et Lune (10^10,25 à 10^8,25 m) et confins du système solaire, où des astres restent visibles et bougent.
+
+Boules des molécules : allégées, pas remplacées. En niveaux 0 et 1 (téléphones), chaque boule a moins de facettes (12 × 8 au lieu de 20 × 14), même ombrage : environ trois fois moins de triangles (206 136 contre 638 040 à 10^-9,25 m, mesuré par app/test/zoom_fluide.py). Effet en images par seconde sur un vrai téléphone : inconnu tant que Marc n’a pas lu le compteur.
