@@ -285,6 +285,12 @@ int runWindow(const WindowOptions& opt) {
         outerThread.join();
         if (outerReady) sim.outer = &outer;
         sim.refreshEphemeris();
+        if (!opt.target.empty())      // l'astre demandé n'avait pas encore de position : on le suit maintenant
+            for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
+                if (sim.bodies[static_cast<size_t>(i)].name == opt.target && sim.visible(i)) {
+                    sim.follow(i);
+                    if (opt.dist > 0) sim.dist = opt.dist;
+                }
     }
     auto last = std::chrono::steady_clock::now();
     const auto start = last;
