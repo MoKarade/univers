@@ -40,6 +40,14 @@ RELEVES = {
     # --- Micro-ondes : Planck, 3e publication (PR3, 2018), cartes de la mission complète. Unités de l'archive de l'ESA
     # (Planck Legacy Archive) : K_CMB de 30 à 353 GHz, MJy/sr à 545 et 857 GHz. Sous 217 GHz, c'est surtout le fond
     # diffus cosmologique (valeurs autour de zéro, d'où l'échelle linéaire) ; au-dessus, la poussière de la Galaxie.
+    'cmb': dict(      # ajouté le 12/11/2026 (demande de Marc : toutes les données récupérées) ; fichier déjà sur le PC pour la page
+        hips='', bande='micro-ondes', libelle='Fond diffus cosmologique (Planck SMICA)',
+        mesure="Écart de température du fond diffus cosmologique, la plus vieille lumière (380 000 ans après le Big Bang), "
+               "une fois retirées la Galaxie et les autres sources par la méthode SMICA",
+        unite='K_CMB', resolution_arcmin=5.0, longueur_onde='1 à 10 mm',
+        reference='Planck Collaboration 2020, A&A 641, A4 (PR3, séparation de composantes) ; Planck Legacy Archive (ESA), copie IRSA',
+        couverture_publiee='tout le ciel (bande de la Galaxie moins sûre : masque de confiance publié)', echelle='lin',
+        fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/component-maps/cmb/COM_CMB_IQU-smica_2048_R3.00_full.fits']),
     'planck30': dict(
         hips='CDS/P/PLANCK/R3/LFI30', bande='micro-ondes', libelle='Micro-ondes 30 GHz (Planck)',
         mesure="Brillance du ciel à 30 GHz (surtout synchrotron et fond cosmologique)",
