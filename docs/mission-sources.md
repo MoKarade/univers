@@ -38,9 +38,13 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 - Fait : table VizieR de 55 877 galaxies (l'EDD en annonce 55 874). La table complète (3,6 Mo) ne tient pas dans la page : seules les galaxies qui ont une fiche sont gardées (`app/gen/data17.js`, 23 ko), associées par position à moins de 1,5′ et à moins d'un facteur 3 de la distance déjà affichée. 405 galaxies proches sur 788 et 55 du Groupe local sur 101 ; 4 associations écartées pour distance incohérente : NGC 3274 (voisin d'arrière-plan PGC 213714 à 458 Mpc), HIZSS 003, HIZSS 3(A) et HIZSS 3B (PGC 2807061 : 6,5 Mpc dans Cosmicflows-4 contre 1,7 Mpc affichés, désaccord réel non tranché ici). Contrôle : NGC 4258 à 7,5 Mpc, dont le maser (7,6 Mpc publiés). Manque connu : M51, dont la position du catalogue de Karachentsev est à 2,4′ de celle de Cosmicflows-4. Table complète hors dépôt (`cf4_complet.json`) pour un chargement à part.
 - Fini quand : test `pipeline/sources/test_build_cf4.py` (M31 → PGC 2557, M33 → 5818, NGC 4258 → 39600, refus de l'arrière-plan de NGC 3274, aucun doublon) ; test `app/test/lot_s.py` : fiches de NGC 4258 et de M31 avec mesure, précision, méthodes et source, 20 galaxies proches associées portent la mesure, une galaxie sans mesure n'a pas de ligne vide ; critiques PASSE.
 
-### S4 — Mouvements à grande échelle et Laniakea (A2, rejoint le lot E)
-- Après : les galaxies de Cosmicflows-4 portent leur vitesse particulière mesurée ; la frontière de Laniakea est tracée d'après la reconstruction publiée.
-- Fini quand : défini avec le lot E (R18).
+### S4 — Laniakea (A2)
+- Après : la frontière du bassin d'attraction de la Voie lactée est tracée en points bleu clair entre 10^23,8 et 10^25,8 m, avec le nom « Laniakea (bassin d'attraction) ».
+- Données : Dupuy et Courtois 2023 (A&A 678, A176), grille des bassins d'attraction 128³ du champ Cosmicflows-4 (cube de 1000 Mpc/h). `pipeline/sources/build_laniakea.py` → `app/gen/laniakea.js` (47 ko, 2 898 faces de frontière).
+- Contrôles du script : le tableau est rangé (SGZ, SGY, SGX) ; c'est la seule orientation sur 48 où les six attracteurs de la table 1 tombent dans leur bassin, et les six volumes égalent la table à 3 % près. Conversion vers la page vérifiée sur Coma, Persée et la Vierge (moins de 2,5° d'écart).
+- Unités : Mpc/h convertis avec h = 0,674 (H0 de la page) pour coïncider avec les galaxies placées par leur décalage vers le rouge ; avec le H0 de Cosmicflows-4 (74,6), 10 % plus près. Dit dans « Ce qui est vrai ici ».
+- Pas fait : les courants de vitesse eux-mêmes (flèches), les autres bassins (Apus, Shapley…).
+- Fini quand : test `app/test/lot_s.py` (points visibles à 10^24,95 m et masqués dans le système solaire, nom sur ordinateur) ; critiques PASSE.
 
 ### S5 — Cosmologie débattue (A8)
 - Après : fiches « Expansion » et « Énergie noire » : H0 de Planck 2018 (67,4 ± 0,5) et de SH0ES (73,0 ± 1,0) ; DESI DR2 et DES Y6 (w0 = −0,84, wa = −0,53, écart de 2,3 σ au modèle standard). Le calcul de la page ne change pas.

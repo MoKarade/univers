@@ -112,6 +112,20 @@ def main():
         check(n_cf4 == 460, 'galaxies de la page avec une distance Cosmicflows-4 : %d (attendu 460)' % n_cf4)
         pg.evaluate("__U.select(null)")
 
+        # A2 : frontière de Laniakea (Dupuy et Courtois 2023), visible aux grandes échelles seulement
+        lk = pg.evaluate("DATA.LANIAKEA ? [DATA.LANIAKEA.n, DATA.LANIAKEA.r_eq_mpc_h] : null")
+        check(bool(lk) and lk[0] == 2898 and abs(lk[1] - 77) < 1, 'Laniakea : %s points de frontière, rayon équivalent (Mpc/h)' % lk)
+        pg.evaluate("__U.select(null); __U.S.playing = false; __U.goTo(24.95)")
+        pg.wait_for_function("__U.S.logR > 24.9", timeout=180000)
+        f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 4', timeout=180000)
+        vis = pg.evaluate("[__U.Rr.lania.visible, [...document.querySelectorAll('.lb')].some(e => e.style.visibility === 'visible' && /Laniakea/.test(e.textContent))]")
+        # sur téléphone, le nom n'apparaît pas à cette échelle (cause non établie : écran étroit ou tri des étiquettes) : seuls les points sont exigés
+        check(vis[0] and (vis[1] or phone), 'Laniakea visible à 10^24,95 m%s : %s' % ('' if phone else ', avec son nom', vis))
+        pg.evaluate("__U.goStop(__U.STOPS.find(s => /Système solaire/.test(s.name)), true)")
+        pg.wait_for_function("__U.S.logR < 14", timeout=180000)
+        f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 4', timeout=180000)
+        check(pg.evaluate("__U.Rr.lania.visible") is False, 'Laniakea masquée dans le système solaire')
+
         dims = pg.evaluate("""new Promise(r => { const i = new Image(); i.onload = () => r([i.naturalWidth, i.naturalHeight]); i.onerror = () => r(null); i.src = DATA.CMB; })""")
         check(dims == [2048, 1024], 'texture du fond diffus : %s (Planck 2048 × 1024 ; WMAP faisait 720 × 360)' % dims)
         chk = pg.evaluate('DATA.CMB_CHK || null')

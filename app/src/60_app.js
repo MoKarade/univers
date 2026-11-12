@@ -291,6 +291,7 @@
   addLabel('Centre galactique', '', 1.2, 19.9, 21.6, () => F.gcRel);
   addLabel('Voie lactée', 'here', 0, 21.85, 23.55, () => F.gcRel);
   for (const c of G.lg.centers) { const g = c.g, l = Math.log10(Math.max(vlen(c.c), 20) * KPC); addLabel(g.n, '', g.p, g.p >= 5 ? Math.max(l - 0.3, 21.05) : l - 0.85, g.p >= 5 ? Math.max(l + 0.45, 21.6) : g.p === 4 ? l + 0.5 : g.p === 3 ? l + 0.75 : 23.85, () => add3(F.gcRel, c.c, KPC), { gate: () => (c.gone || (F.dyn && g.p >= 3) ? 0 : 1) }); }
+  if (DATA.LANIAKEA) addLabel('Laniakea (bassin d’attraction)', 'region', 1, 23.95, 25.4, () => add3(F.gcRel, DATA.LANIAKEA.centre, MPC * F.cos.a));
   for (const f of DATA.FAR) { const l = Math.log10(f.d * MPC); addLabel(f.n, f.k === 'void' ? 'region' : '', f.p, l - 0.75, l + [1.25, 0.9, 0.65, 0.45][f.p - 1], () => add3(F.gcRel, f.pos, MPC * F.cos.a)); }
   addLabel('Groupe local', 'here', 0, 23.85, 25.45, () => F.gcRel);
   addLabel('Nous sommes ici', 'here', 0, 25.75, 27.2, () => F.gcRel);
