@@ -4,10 +4,13 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
+#include <fstream>
 
 namespace phys {
 
 namespace {
+bool empreinte(const SourceDe440& de440, double out[18]);      // plus bas
 
 constexpr std::array<int, nb::kN> kCodes = {kMercure, kVenus, kTerreLune, kMars, kJupiter, kSaturne, kUranus, kNeptune, kPluton, kCeres, kVesta, kPallas, kHygie};
 constexpr double kKmS = kAuKm / kJourS;      // UA/jour -> km/s
@@ -28,6 +31,7 @@ std::array<double, 3> sunVel(const nb::State& s) {
 
 bool SystemeSolaire::construire(const SourceDe440& de440, double ansDirects) {
     avant_.clear(); apres_.clear();
+    if (!empreinte(de440, empreinte_)) return false;
     for (int side = 0; side < 2; side++) {
         const double jdB = side ? kDe440Fin : kDe440Debut;
         // Les quatre astéroïdes ne sont pas dans DE440 : ils viennent du calcul parti de JPL Horizons au 10/11/2026.
@@ -77,6 +81,49 @@ bool SystemeSolaire::construire(const SourceDe440& de440, double ansDirects) {
         nb::Integrator it(s); cps.push_back(it.state());
         for (long k = 1; k <= n; k++) { it.advanceTo(jdB + dir * k * kPasReprise); cps.push_back(it.state()); }
     }
+    debutDirect_ = kDe440Debut - (avant_.size() - 1) * kPasReprise;
+    finDirect_ = kDe440Fin + (apres_.size() - 1) * kPasReprise;
+    ansDirects_ = ansDirects;
+    return true;
+}
+
+namespace {
+constexpr char kMagicReserve[8] = {'U', 'N', 'I', 'V', 'S', 'S', 'R', '1'};
+// Empreinte des fichiers DE440 : Soleil, Terre-Lune et Jupiter aux deux bornes (km).
+bool empreinte(const SourceDe440& de440, double out[18]) {
+    int k = 0;
+    for (const double jd : {kDe440Debut, kDe440Fin})
+        for (const int c : {kSoleil, kTerreLune, kJupiter}) {
+            Vec3 p, v; if (!de440(c, jd, p, v)) return false;
+            out[k++] = p.x; out[k++] = p.y; out[k++] = p.z;
+        }
+    return true;
+}
+}  // namespace
+
+bool SystemeSolaire::sauver(const std::string& chemin) const {
+    if (avant_.empty() || apres_.empty() || empreinte_[0] == 0) return false;
+    const std::string tmp = chemin + ".tmp";
+    {
+        std::ofstream f(tmp, std::ios::binary);
+        const double tete[4] = {ansDirects_, nbody_donnees::kJd0, (double)avant_.size(), (double)apres_.size()};
+        f.write(kMagicReserve, 8); f.write((const char*)tete, sizeof tete); f.write((const char*)empreinte_, sizeof empreinte_);
+        for (const auto* c : {&avant_, &apres_}) f.write((const char*)c->data(), (std::streamsize)(c->size() * sizeof(nb::State)));
+        if (!f) return false;
+    }
+    std::remove(chemin.c_str());
+    return std::rename(tmp.c_str(), chemin.c_str()) == 0;
+}
+
+bool SystemeSolaire::chargerReserve(const std::string& chemin, const SourceDe440& de440, double ansDirects) {
+    std::ifstream f(chemin, std::ios::binary);
+    char m[8]; double tete[4], emp[18], ici[18];
+    if (!f.read(m, 8) || std::memcmp(m, kMagicReserve, 8) != 0 || !f.read((char*)tete, sizeof tete) || !f.read((char*)emp, sizeof emp)) return false;
+    if (tete[0] != ansDirects || tete[1] != nbody_donnees::kJd0 || !empreinte(de440, ici)) return false;
+    for (int k = 0; k < 18; k++) if (std::fabs(emp[k] - ici[k]) > 1e-6) return false;      // autres fichiers DE440 : réserve refusée
+    std::vector<nb::State> av((size_t)tete[2]), ap((size_t)tete[3]);
+    if (!f.read((char*)av.data(), (std::streamsize)(av.size() * sizeof(nb::State))) || !f.read((char*)ap.data(), (std::streamsize)(ap.size() * sizeof(nb::State)))) return false;
+    avant_ = std::move(av); apres_ = std::move(ap); std::memcpy(empreinte_, emp, sizeof emp); ansDirects_ = ansDirects;
     debutDirect_ = kDe440Debut - (avant_.size() - 1) * kPasReprise;
     finDirect_ = kDe440Fin + (apres_.size() - 1) * kPasReprise;
     return true;

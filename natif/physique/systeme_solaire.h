@@ -31,6 +31,12 @@ public:
     // Prépare les états de départ aux deux bornes de DE440 et construit les points de reprise sur `ansDirects` années de
     // chaque côté (environ 0,2 s par siècle). À appeler une fois, éventuellement depuis un fil à part, avant toute requête.
     bool construire(const SourceDe440& de440, double ansDirects = 20000.0);
+    // Réserve sur disque des points de reprise (environ 3 Mo) : construire() coûte une quinzaine de secondes ; chargerReserve()
+    // le remplace en quelques millisecondes. La réserve n'est acceptée que si elle a été faite avec le même `ansDirects`,
+    // le même départ des astéroïdes et les mêmes fichiers DE440 (positions de contrôle relues aux deux bornes) ; sinon
+    // false, et l'appli appelle construire() puis sauver().
+    bool sauver(const std::string& chemin) const;
+    bool chargerReserve(const std::string& chemin, const SourceDe440& de440, double ansDirects = 20000.0);
     // Charge la table des orbites sur des millions d'années (facultatif). false si le fichier manque ou est illisible.
     bool chargerTable(const std::string& chemin);
 
@@ -58,6 +64,7 @@ private:
     nb::LongTable table_;
     static constexpr double kPas = nbody_donnees::kDtDays, kPasReprise = 1826 * kPas;      // ≈ 20 ans, multiple exact du pas : tout le calcul reste sur la même grille de dates
     bool etatDirect(double jd, nb::State& s) const;
+    double ansDirects_ = 0, empreinte_[18] = {};
     // État sur la grille (borne + k pas de 4 jours) le plus proche de jd du côté de la borne, depuis le point de reprise voisin.
     bool grille(double jd, nb::State& s) const;
     static void finir(nb::State& s, double jd) { nb::Integrator it(s); it.advanceTo(jd, kPas); s = it.state(); }      // dernier pas partiel, sur une copie

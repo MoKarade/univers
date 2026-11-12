@@ -148,7 +148,9 @@ int runWindow(const WindowOptions& opt) {
                 v = {w.x, w.y, w.z};
                 return true;
             };
-            if (outer.construire(source, 20000.0)) {
+            // Réserve sur disque (quelques millisecondes) ; sinon le calcul (une quinzaine de secondes), gardé pour la fois suivante.
+            const std::string reserve = dataDir + "/reserve_systeme_solaire.bin";
+            if (outer.chargerReserve(reserve, source, 20000.0) || (outer.construire(source, 20000.0) && (outer.sauver(reserve), true))) {
                 outer.chargerTable(dataDir + "/orbites_planetes.bin");      // facultatif : au-delà de ±20 000 ans
                 outerReady = true;
             }

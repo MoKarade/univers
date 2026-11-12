@@ -142,3 +142,10 @@ target_link_libraries(precalcul_clones PRIVATE volk univers_physique)
 target_compile_options(precalcul_clones PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(precalcul_clones PRIVATE -static)
 add_dependencies(precalcul_clones shaders)
+
+# Temps très rapide hors de la plage de la NASA : les planètes restent visibles (sans fenêtre).
+add_executable(essai_temps_rapide src/essai_temps_rapide.cpp src/stb_impl.cpp)
+target_include_directories(essai_temps_rapide PRIVATE ${stb_SOURCE_DIR})
+target_link_libraries(essai_temps_rapide PRIVATE volk imgui univers_physique)
+target_compile_options(essai_temps_rapide PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_temps_rapide PRIVATE -static)
