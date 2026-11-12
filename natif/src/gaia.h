@@ -101,6 +101,11 @@ public:
     // de lumière de la feuille, étalé sur la taille de la feuille à l'écran (résumé des feuilles de gaia.bin).
     float fluxMin = 3e-5f;
     uint32_t restPoints = 0;      // points de lumière cumulée à la dernière image
+    // Lumière additionnée des autres sources Gaia (gaia_agrege.bin, facultatif, à côté de gaia.bin) : cases placées à
+    // leur distance, et lumière sans distance (« ciel seul ») montrée seulement près du Soleil.
+    uint32_t cellCount = 0, skyCount = 0;
+    static constexpr double kSkyOnlyRadiusLy = 100.0;
+    static constexpr uint32_t kCellSpread = 8;      // même valeur que SPREAD dans gaia_agrege.vert
 
     bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
         if (!openGaia(path, file_)) return false;
@@ -133,6 +138,7 @@ public:
                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         }
         for (int i = 0; i < kRing; ++i) check(vkMapMemory(g.dev, indirect_[i].mem, 0, VK_WHOLE_SIZE, 0, &mapped_[i]), "dessins indirects");
+        loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
         createPipeline(g, hdrFormat);
         ready = true;
         return true;
@@ -156,6 +162,19 @@ public:
             vkCmdBindVertexBuffers(cmd, 0, 1, &rest_[ring_].buf, &off);
             vkCmdDraw(cmd, restPoints, 1, 0, 0);
         }
+        if (cellCount + skyCount > 0) {
+            PushConstants pa = pc;
+            pa.par[3] = static_cast<float>(cam.tanHalf);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, aggPipeline_);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &aggSet_, 0, nullptr);
+            vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
+            if (cellCount) vkCmdDraw(cmd, cellCount, kCellSpread, 0, 0);      // kCellSpread points par case (gaia_agrege.vert)
+            if (skyCount && std::sqrt(dot(cam.pos, cam.pos)) < kSkyOnlyRadiusLy) {
+                pa.camLo[3] = 1.0f;
+                vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
+                vkCmdDraw(cmd, skyCount, 1, cellCount, 0);
+            }
+        }
         if (n > 0) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &set_, 0, nullptr);
@@ -169,6 +188,9 @@ public:
         if (!ready) return;
         vkDestroyPipeline(g.dev, pipeline_, nullptr);
         if (restPipeline_) vkDestroyPipeline(g.dev, restPipeline_, nullptr);
+        if (aggPipeline_) vkDestroyPipeline(g.dev, aggPipeline_, nullptr);
+        if (aggVs_) vkDestroyShaderModule(g.dev, aggVs_, nullptr);
+        if (cellCount + skyCount) destroy(g, cells_);
         if (restVs_) vkDestroyShaderModule(g.dev, restVs_, nullptr);
         for (int i = 0; i < kRing && file_.bins; ++i) {
             vkUnmapMemory(g.dev, rest_[i].mem);
@@ -199,8 +221,31 @@ private:
     void* restMapped_[kRing]{};
     float lut_[256][3]{};
     int ring_ = 0;
-    VkPipeline pipeline_{}, restPipeline_{};
-    VkShaderModule restVs_{};
+    VkPipeline pipeline_{}, restPipeline_{}, aggPipeline_{};
+    VkShaderModule restVs_{}, aggVs_{};
+    Buffer cells_;
+    VkDescriptorSet aggSet_{};
+
+    void loadAggregate(const Gpu& g, const std::string& path) {
+        std::ifstream f(path, std::ios::binary | std::ios::ate);
+        if (!f) return;
+        const auto size = static_cast<size_t>(f.tellg());
+        char head[64];
+        f.seekg(0);
+        f.read(head, 64);
+        if (!f || std::memcmp(head, "UNIVGAG1", 8) != 0) return;
+        uint64_t nc = 0;
+        uint32_t ns = 0;
+        std::memcpy(&nc, head + 8, 8);
+        std::memcpy(&ns, head + 16, 4);
+        if (size < 64 + (nc + ns) * 32) return;
+        std::vector<char> data((nc + ns) * 32);
+        f.read(data.data(), static_cast<std::streamsize>(data.size()));
+        if (!f) return;
+        cells_ = uploadStorage(g, data.data(), data.size());
+        cellCount = static_cast<uint32_t>(nc);
+        skyCount = ns;
+    }
     VkPipelineLayout layout_{};
     VkDescriptorSetLayout setLayout_{};
     VkDescriptorPool pool_{};
@@ -294,9 +339,9 @@ private:
         dl.bindingCount = 3;
         dl.pBindings = binds;
         check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &setLayout_), "agencement Gaia");
-        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
+        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6};
         VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-        dp.maxSets = 1;
+        dp.maxSets = 2;
         dp.poolSizeCount = 1;
         dp.pPoolSizes = &ps;
         check(vkCreateDescriptorPool(g.dev, &dp, nullptr, &pool_), "réserve Gaia");
@@ -316,6 +361,13 @@ private:
             w[i].pBufferInfo = &infos[i];
         }
         vkUpdateDescriptorSets(g.dev, 3, w, 0, nullptr);
+        if (cellCount + skyCount) {      // même agencement : 0 = cases, 1 = vitesses (inutiles), 2 = couleurs
+            check(vkAllocateDescriptorSets(g.dev, &da, &aggSet_), "jeu Gaia (lumière additionnée)");
+            const VkDescriptorBufferInfo agg{cells_.buf, 0, VK_WHOLE_SIZE};
+            for (auto& x : w) x.dstSet = aggSet_;
+            w[0].pBufferInfo = &agg;
+            vkUpdateDescriptorSets(g.dev, 3, w, 0, nullptr);
+        }
 
         vs_ = shader(g, "gaia.vert.spv");
         fs_ = shader(g, "etoiles.frag.spv");      // même tache ronde que les étoiles du catalogue principal
@@ -376,6 +428,12 @@ private:
         pci.pDynamicState = &ds;
         pci.layout = layout_;
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_), "pipeline Gaia");
+        if (cellCount + skyCount) {
+            aggVs_ = shader(g, "gaia_agrege.vert.spv");
+            stages[0].module = aggVs_;
+            check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &aggPipeline_), "pipeline Gaia (lumière additionnée)");
+            stages[0].module = vs_;
+        }
         if (!file_.bins) return;
         // Lumière cumulée des étoiles sautées : un point par feuille, sommets ordinaires (8 flottants).
         restVs_ = shader(g, "gaia_reste.vert.spv");
