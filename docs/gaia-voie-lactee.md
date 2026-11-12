@@ -105,3 +105,32 @@ Corrections :
 - en volume, seules les sources dont la parallaxe vaut plus de 5 fois son erreur (distance à mieux que 20 %), source par
   source sur le serveur : 93,8 millions de sources, 3 181 655 cases, 30,3 % de cette lumière. Les 1,61 milliard d'autres
   sont « ciel seul » (vues du Soleil, sans profondeur) : rien n'est placé à une distance mal mesurée.
+
+### Les étoiles Gaia sur leur orbite, à toute date (12 novembre 2026, 20 h UTC)
+
+- `gaia.vert` : même mouvement que les étoiles du catalogue principal (`orbite_galactique.glsl` du fil natif) : ligne droite
+  mesurée, raccordée sans seuil à l'orbite calculée autour de la Galaxie. Plus de coupure à 3 Ma.
+- 72,4 millions d'étoiles n'ont pas de vitesse radiale mesurée : elle compte pour nulle (l'étoile ne s'éloigne ni ne
+  s'approche du Soleil au départ). C'est une supposition sur l'évolution, dite à l'écran ; l'état présent reste mesuré.
+- Feuilles de l'arbre : chacune suit l'orbite de son centre (vitesse moyenne de ses étoiles) et sa boîte grandit de
+  100 km/s × temps (dispersion, marge large), jusqu'à couvrir la Galaxie ; la lumière sautée suit sa feuille.
+- Lumière additionnée (`gaia_agrege.bin`) : sans vitesses, montrée seulement à moins de 3 Ma des mesures.
+- Lueur de la Voie lactée : décalée de l'opposé du chemin du Soleil (`orbite::decalageSoleil`), la barre tourne.
+- Mesuré (carte partagée avec l'appli de Marc et la fusion) : 57 images/s aujourd'hui, 58 à +50 Ma, 21 à +230 Ma (vue de
+  60 000 al, toutes les étoiles dessinées une fois dispersées). Captures : C:	mp
+atif\essai-mw\orbites_4dates.png.
+
+### Orbites exactes des étoiles Gaia (12 novembre 2026, 20 h 30 UTC)
+
+- `natif/src/gaia_orbites.h` : le shader du fil natif `orbites_pas.comp` (potentiel complet avec la barre, saut de
+  grenouille, sous-pas par étoile) appliqué aux 98 278 356 étoiles Gaia + le Soleil, EN PLACE (un seul état : 3,15 Go sur
+  la carte ; les états de départ, 3,15 Go, restent en mémoire vive pour revenir à aujourd'hui). États de départ calculés
+  dans un fil à part au chargement (6,0 s mesurées).
+- `gaia.vert` : entre deux pas d'un million d'années, prolongement au second ordre (x + h v + h² a / 2) ; raccord sans
+  seuil avec la ligne droite mesurée ; épicycles tant que le calcul exact n'a pas rattrapé la date.
+- Contrôle (`essai_gaia --orbites-exactes --date 1e8`) [Certain] : après 99 Ma, 20 000 étoiles comparées au calcul en double
+  précision de la bibliothèque de physique : écart médian 0,008 pc, 99ᵉ centile 0,05 pc, maximum 192 pc (une orbite
+  chaotique près du centre, où simple et double précision divergent).
+- Coût mesuré (carte partagée avec l'appli de Marc et la fusion) : 27 ms par pas d'un million d'années pour les 98 M.
+  À 10 Ma par seconde, environ 27 % de la carte. Non fait : n'avancer que les feuilles visibles (proposition 2).
+- Écart connu : la lueur de la Voie lactée suit encore le Soleil des épicycles (orbite::decalageSoleil), pas le Soleil exact.

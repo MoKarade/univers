@@ -8,6 +8,8 @@
 // directement dans des tampons de stockage (16 octets par étoile ; la vitesse, 8 octets, n'est lue que si le temps bouge).
 #pragma once
 #include "commun.h"
+#include "orbite_galactique.h"
+#include "gaia_orbites.h"
 
 namespace {
 
@@ -91,6 +93,16 @@ Buffer uploadStorage(const Gpu& g, const void* data, VkDeviceSize size) {
     return dst;
 }
 
+// Constantes des étoiles Gaia : celles de toutes les étoiles, plus l'orbite exacte (gaia_orbites.h). 128 octets.
+struct GaiaPush {
+    PushConstants base;
+    uint32_t sun;        // rang du Soleil dans les états d'orbite
+    float frac;          // part du pas d'un million d'années écoulée depuis l'état
+    float exact;         // 1 : orbite exacte (états calculés à jour) ; 0 : épicycles
+    float pad;
+};
+static_assert(sizeof(GaiaPush) == 128, "constantes Gaia : 128 octets");
+
 class GaiaRenderer {
 public:
     bool ready = false;
@@ -105,7 +117,8 @@ public:
     // leur distance, et lumière sans distance (« ciel seul ») montrée seulement près du Soleil.
     uint32_t cellCount = 0, skyCount = 0;
     static constexpr double kSkyOnlyRadiusLy = 100.0;
-    static constexpr uint32_t kCellSpread = 8;      // même valeur que SPREAD dans gaia_agrege.vert
+    static constexpr uint32_t kCellSpread = 8;
+    static constexpr double kAggregateYears = 3.0e6;      // lumière additionnée montrée à moins de 3 millions d'années des mesures      // même valeur que SPREAD dans gaia_agrege.vert
 
     bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
         if (!openGaia(path, file_)) return false;
@@ -115,6 +128,19 @@ public:
         count = file_.n;
         stars_ = uploadStorage(g, file_.stars, file_.n * 16);
         velocities_ = uploadStorage(g, file_.velocities, file_.n * 8);
+        // Centre et vitesse moyenne de chaque feuille : la feuille suit l'orbite de son centre quand le temps avance.
+        centre_.resize(file_.leafCount);
+        meanVel_.resize(file_.leafCount);
+        shift_.assign(file_.leafCount, Vec3{0, 0, 0});
+        for (uint32_t i = 0; i < file_.leafCount; ++i) {
+            const GaiaLeaf& L = file_.leaves[i];
+            centre_[i] = {0.5 * (L.mn[0] + L.mx[0]), 0.5 * (L.mn[1] + L.mx[1]), 0.5 * (L.mn[2] + L.mx[2])};
+            double v[3] = {0, 0, 0};
+            const auto* q = reinterpret_cast<const int16_t*>(file_.velocities) + L.first * 4;
+            for (uint32_t j = 0; j < L.n; ++j)
+                for (int a = 0; a < 3; ++a) v[a] += q[j * 4 + a];
+            meanVel_[i] = {v[0] * 0.05 / std::max(1u, L.n), v[1] * 0.05 / std::max(1u, L.n), v[2] * 0.05 / std::max(1u, L.n)};
+        }
         // Couleur de chaque pas BP-RP : corps noir de la température du fichier, vu par l'observateur CIE (commun.h).
         std::array<float, 256 * 4> colors{};
         for (int i = 0; i < 256; ++i) {
@@ -139,6 +165,7 @@ public:
         }
         for (int i = 0; i < kRing; ++i) check(vkMapMemory(g.dev, indirect_[i].mem, 0, VK_WHOLE_SIZE, 0, &mapped_[i]), "dessins indirects");
         loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
+        orbits_.create(g, file_.stars, file_.velocities, file_.n);      // orbites exactes : états de départ calculés dans un fil à part
         createPipeline(g, hdrFormat);
         ready = true;
         return true;
@@ -148,7 +175,9 @@ public:
     void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, double years) {
         if (!ready) return;
         const double since = years - (static_cast<double>(file_.epoch) - 2000.0);      // années depuis les mesures de Gaia
-        const PushConstants pc = pushConstants(cam, exposure, height, since);
+        PushConstants pc = pushConstants(cam, exposure, height, since);
+        pc.par[3] = static_cast<float>(since / 1.0e9);      // orbite autour de la Galaxie (gaia.vert)
+        const GaiaPush gp{pc, orbits_.count - 1, orbits_.fraction(since), orbits_.readyToDraw() ? 1.0f : 0.0f, 0.0f};
         const uint32_t n = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
                                         file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
@@ -162,7 +191,8 @@ public:
             vkCmdBindVertexBuffers(cmd, 0, 1, &rest_[ring_].buf, &off);
             vkCmdDraw(cmd, restPoints, 1, 0, 0);
         }
-        if (cellCount + skyCount > 0) {
+        // Lumière additionnée : sans vitesses, elle n'existe qu'au présent mesuré (à moins de kAggregateYears des mesures).
+        if (cellCount + skyCount > 0 && std::fabs(since) < kAggregateYears) {
             PushConstants pa = pc;
             pa.par[3] = static_cast<float>(cam.tanHalf);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, aggPipeline_);
@@ -178,14 +208,23 @@ public:
         if (n > 0) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &set_, 0, nullptr);
-            vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+            vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(gp), &gp);
             vkCmdDrawIndirect(cmd, indirect_[ring_].buf, 0, n, sizeof(VkDrawIndirectCommand));
         }
         ring_ = (ring_ + 1) % kRing;
     }
 
+    // Avance les orbites exactes vers la date montrée (budget : pas d'un million d'années au plus). Hors d'une passe de dessin,
+    // avant draw. years : années depuis J2000,0. Sans cet appel, les étoiles suivent les épicycles (comme avant).
+    void advance(const Gpu& g, VkCommandBuffer cmd, double years, long budget) {
+        if (ready) orbits_.advance(g, cmd, years - (static_cast<double>(file_.epoch) - 2000.0), budget);
+    }
+    long orbitLagSteps() const { return orbits_.lagSteps; }
+    const GaiaOrbits& orbits() const { return orbits_; }
+
     void release(const Gpu& g) {
         if (!ready) return;
+        orbits_.release(g);
         vkDestroyPipeline(g.dev, pipeline_, nullptr);
         if (restPipeline_) vkDestroyPipeline(g.dev, restPipeline_, nullptr);
         if (aggPipeline_) vkDestroyPipeline(g.dev, aggPipeline_, nullptr);
@@ -214,7 +253,12 @@ public:
 private:
     static constexpr int kRing = 4;      // plus que le nombre d'images en vol : la carte ne lit jamais une liste en cours d'écriture
     static constexpr double kMaxSpeedKms = 1000.0;      // borne des vitesses du fichier (pour élargir les feuilles quand le temps bouge)
+    static constexpr double kDispersionKms = 100.0;     // écart des vitesses dans une feuille, une fois sur orbite (marge large)
+    static constexpr double kMaxGrowLy = 1.5e5;         // au-delà, la feuille couvre la Galaxie entière
+    std::vector<Vec3> centre_, meanVel_, shift_;
+    double shiftYears_ = 0;
     GaiaFile file_;
+    GaiaOrbits orbits_;
     Buffer stars_, velocities_, colors_, indirect_[kRing];
     void* mapped_[kRing]{};
     Buffer rest_[kRing];
@@ -257,7 +301,15 @@ private:
     uint32_t selectLeaves(const Camera& cam, float exposure, double since, uint32_t height, VkDrawIndirectCommand* out, float* rest) {
         const double pxPerRad = height / (2.0 * cam.tanHalf);
         const double mLim = 2.5 * std::log10(static_cast<double>(exposure) / fluxMin);      // magnitude apparente la plus faible dessinée
-        const double grow = kMaxSpeedKms * std::fabs(since) * kKmsToLyPerYear;
+        // Feuilles déplacées avec le temps : chacune suit l'orbite de son centre (vitesse moyenne de ses étoiles) ; sa boîte
+        // grandit de l'écart des vitesses (ligne droite : borne des vitesses ; orbite : dispersion du disque).
+        const double w = orbite::poidsOrbite(since);
+        const double grow = std::min(((1.0 - w) * kMaxSpeedKms + w * kDispersionKms) * std::fabs(since) * kKmsToLyPerYear, kMaxGrowLy);
+        if (w > 1e-9 && since != shiftYears_) {
+            for (uint32_t i = 0; i < file_.leafCount; ++i) shift_[i] = orbite::deplacement(centre_[i], meanVel_[i], since);
+            shiftYears_ = since;
+        }
+        const bool moved = w > 1e-9;
         const double tx = cam.tanHalf * cam.aspect * 1.02, ty = cam.tanHalf * 1.02;      // 2 % de marge : les points ont une taille
         const Vec3 planes[4] = {{cam.fwd.x * tx - cam.right.x, cam.fwd.y * tx - cam.right.y, cam.fwd.z * tx - cam.right.z},
                                 {cam.fwd.x * tx + cam.right.x, cam.fwd.y * tx + cam.right.y, cam.fwd.z * tx + cam.right.z},
@@ -268,8 +320,9 @@ private:
         restPoints = 0;
         for (uint32_t i = 0; i < file_.leafCount; ++i) {
             const GaiaLeaf& L = file_.leaves[i];
-            const double lo[3] = {L.mn[0] - grow - cam.pos.x, L.mn[1] - grow - cam.pos.y, L.mn[2] - grow - cam.pos.z};
-            const double hi[3] = {L.mx[0] + grow - cam.pos.x, L.mx[1] + grow - cam.pos.y, L.mx[2] + grow - cam.pos.z};
+            const Vec3 o = moved ? shift_[i] : Vec3{0, 0, 0};
+            const double lo[3] = {L.mn[0] + o.x - grow - cam.pos.x, L.mn[1] + o.y - grow - cam.pos.y, L.mn[2] + o.z - grow - cam.pos.z};
+            const double hi[3] = {L.mx[0] + o.x + grow - cam.pos.x, L.mx[1] + o.y + grow - cam.pos.y, L.mx[2] + o.z + grow - cam.pos.z};
             bool inside = true;
             for (const Vec3& p : planes) {      // coin le plus avancé du côté intérieur du plan
                 const double s = (p.x > 0 ? hi[0] : lo[0]) * p.x + (p.y > 0 ? hi[1] : lo[1]) * p.y + (p.z > 0 ? hi[2] : lo[2]) * p.z;
@@ -292,7 +345,7 @@ private:
                     else b = m;
                 }
                 take = a;
-                if (rest && take < L.n) addRest(i, L, cam, absLim, dPc, pxPerRad, rest);
+                if (rest && take < L.n) addRest(i, L, cam, absLim, dPc, pxPerRad, rest, o);
             }
             if (take == 0) continue;
             out[k++] = {take, 1, static_cast<uint32_t>(L.first), 0};
@@ -303,7 +356,7 @@ private:
 
     // Lumière des étoiles de la feuille i plus faibles que absLim : somme des tranches de magnitude (la tranche coupée
     // compte au prorata de la part de sa largeur sous la limite), en un point au centre de lumière de la feuille.
-    void addRest(uint32_t i, const GaiaLeaf& L, const Camera& cam, double absLim, double dPc, double pxPerRad, float* rest) {
+    void addRest(uint32_t i, const GaiaLeaf& L, const Camera& cam, double absLim, double dPc, double pxPerRad, float* rest, Vec3 o) {
         const float* s = file_.summaries + static_cast<size_t>(i) * (4 + 2 * file_.bins);
         const float* lum = s + 4;
         const float* col = lum + file_.bins;
@@ -322,9 +375,9 @@ private:
         const double sizePx = ext / (dPc * 3.2615638) * pxPerRad;
         if (sizePx > 512.0) return;      // feuille trop grande à l'écran : sa lumière sautée, étalée, n'est pas rendue (part mesurée : docs/gaia-voie-lactee.md)
         float* v = rest + restPoints * 8;
-        v[0] = static_cast<float>(s[0] - cam.pos.x);
-        v[1] = static_cast<float>(s[1] - cam.pos.y);
-        v[2] = static_cast<float>(s[2] - cam.pos.z);
+        v[0] = static_cast<float>(s[0] + o.x - cam.pos.x);
+        v[1] = static_cast<float>(s[1] + o.y - cam.pos.y);
+        v[2] = static_cast<float>(s[2] + o.z - cam.pos.z);
         v[3] = static_cast<float>(-2.5 * std::log10(sum));
         const int ci = colW > 0 ? static_cast<int>(std::lround(colSum / colW)) : 255;
         for (int a = 0; a < 3; ++a) v[4 + a] = lut_[std::clamp(ci, 0, 255)][a];
@@ -333,13 +386,13 @@ private:
     }
 
     void createPipeline(const Gpu& g, VkFormat fmt) {
-        VkDescriptorSetLayoutBinding binds[3];
-        for (uint32_t i = 0; i < 3; ++i) binds[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+        VkDescriptorSetLayoutBinding binds[4];      // 3 : états des orbites exactes
+        for (uint32_t i = 0; i < 4; ++i) binds[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        dl.bindingCount = 3;
+        dl.bindingCount = 4;
         dl.pBindings = binds;
         check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &setLayout_), "agencement Gaia");
-        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6};
+        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8};
         VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         dp.maxSets = 2;
         dp.poolSizeCount = 1;
@@ -350,9 +403,10 @@ private:
         da.descriptorSetCount = 1;
         da.pSetLayouts = &setLayout_;
         check(vkAllocateDescriptorSets(g.dev, &da, &set_), "jeu Gaia");
-        const VkDescriptorBufferInfo infos[3] = {{stars_.buf, 0, VK_WHOLE_SIZE}, {velocities_.buf, 0, VK_WHOLE_SIZE}, {colors_.buf, 0, VK_WHOLE_SIZE}};
-        VkWriteDescriptorSet w[3];
-        for (uint32_t i = 0; i < 3; ++i) {
+        const VkDescriptorBufferInfo infos[4] = {{stars_.buf, 0, VK_WHOLE_SIZE}, {velocities_.buf, 0, VK_WHOLE_SIZE}, {colors_.buf, 0, VK_WHOLE_SIZE},
+                                                 {orbits_.state.buf, 0, VK_WHOLE_SIZE}};
+        VkWriteDescriptorSet w[4];
+        for (uint32_t i = 0; i < 4; ++i) {
             w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
             w[i].dstSet = set_;
             w[i].dstBinding = i;
@@ -360,13 +414,13 @@ private:
             w[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             w[i].pBufferInfo = &infos[i];
         }
-        vkUpdateDescriptorSets(g.dev, 3, w, 0, nullptr);
+        vkUpdateDescriptorSets(g.dev, 4, w, 0, nullptr);
         if (cellCount + skyCount) {      // même agencement : 0 = cases, 1 = vitesses (inutiles), 2 = couleurs
             check(vkAllocateDescriptorSets(g.dev, &da, &aggSet_), "jeu Gaia (lumière additionnée)");
             const VkDescriptorBufferInfo agg{cells_.buf, 0, VK_WHOLE_SIZE};
             for (auto& x : w) x.dstSet = aggSet_;
             w[0].pBufferInfo = &agg;
-            vkUpdateDescriptorSets(g.dev, 3, w, 0, nullptr);
+            vkUpdateDescriptorSets(g.dev, 4, w, 0, nullptr);
         }
 
         vs_ = shader(g, "gaia.vert.spv");
@@ -378,7 +432,7 @@ private:
         stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         stages[1].module = fs_;
         stages[1].pName = "main";
-        const VkPushConstantRange pcr{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants)};
+        const VkPushConstantRange pcr{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GaiaPush)};
         VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         li.setLayoutCount = 1;
         li.pSetLayouts = &setLayout_;

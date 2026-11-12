@@ -323,3 +323,10 @@ des sources Gaia à distance moins sûre (fil Gaia), texte qui dit à chaque éc
 - Contrôle (`essai_orbite`) : constantes de la carte graphique = bibliothèque de physique ; ligne droite exacte à 1 000 ans ; aucun saut de −1 à +1 milliard d'années ; écart avec le calcul exact du fil physique pour des étoiles du disque : 0,012 kpc à 10 millions d'années, 1,5 kpc (7 degrés) à 100 millions, 51 degrés à 1 milliard ; orbite allongée : méthode inadaptée (10 kpc à 100 millions d'années).
 - Reste : les 98 millions d'étoiles Gaia (fil Gaia, même fichier .glsl) ; calcul exact étoile par étoile sur la carte graphique (recommandation du fil physique) ; textes de l'interface.
 - `--cible` accepte les noms sans accents.
+
+## Orbites exactes sur la carte graphique (12 novembre 2026)
+
+- Pourquoi : les épicycles ne tiennent qu'une dizaine de millions d'années (fil physique, 20 000 vraies étoiles : 1,1 kpc d'écart médian à 100 millions d'années). Marc veut le vrai placement.
+- Fait : `natif/shaders/orbites_pas.comp` (port fidèle de Potentiel::acc avec la barre et du saut de grenouille, sous-pas par étoile, pas de 1 million d'années), `natif/src/orbites_gpu.h` (deux états sur la carte, 64 pas par image pour rattraper une date, retour arrière par pas inversés), `natif/shaders/etoiles_orbite.vert` (courbe de Hermite entre les deux états, raccord à la ligne droite mesurée, monde centré sur le Soleil). Côté processeur, `ExactOrbits` (simulation.h) fait le même calcul en double pour le Soleil et les étoiles nommées (noms, point visé, déplacement du centre de la Galaxie).
+- Contrôle (`univers.exe … --controle-orbites`, 20 000 étoiles relues sur la carte, comparées au calcul en double) : médiane 0,0006 pc à 10 millions d'années, 0,008 pc à 100 millions, 0,058 pc à 500 millions (99e centile 0,25 pc) ; 0,008 pc à −100 millions. Critère du fil physique (médiane sous 1 pc, 99e centile sous 10 pc) : PASSE.
+- État : appliqué aux étoiles de etoiles.bin (catalogue principal quand Gaia est chargé). Les étoiles de gaia.bin suivent encore les épicycles : au fil Gaia de brancher le même shader.

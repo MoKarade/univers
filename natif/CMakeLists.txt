@@ -38,7 +38,7 @@ find_program(GLSLANG glslang REQUIRED)
 set(SPV_DIR ${CMAKE_BINARY_DIR}/spv)
 file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
-foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag)
+foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp ciel_bandes.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet -I${CMAKE_SOURCE_DIR}/shaders ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
     DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl VERBATIM)
@@ -127,3 +127,10 @@ add_executable(essai_epicycles src/essai_epicycles.cpp)
 target_link_libraries(essai_epicycles PRIVATE volk univers_physique)
 target_compile_options(essai_epicycles PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(essai_epicycles PRIVATE -static)
+
+# Contrôle sans fenêtre du ciel par bande (ciel_bandes.h) : carte mesurée d'une longueur d'onde, image hors écran.
+add_executable(essai_ciel src/essai_ciel.cpp)
+target_link_libraries(essai_ciel PRIVATE volk)
+target_compile_options(essai_ciel PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_ciel PRIVATE -static)
+add_dependencies(essai_ciel shaders)

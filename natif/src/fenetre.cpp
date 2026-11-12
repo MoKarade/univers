@@ -10,7 +10,9 @@
 #include <imgui_impl_win32.h>
 
 #include "asteroides.h"
+#include "ciel_bandes.h"
 #include "fenetre.h"
+#include "orbites_gpu.h"
 #include "fusion_points.h"
 #include "gaia.h"
 #include "galaxies.h"
@@ -241,6 +243,16 @@ int runWindow(const WindowOptions& opt) {
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
     sr.create(g, stars, HdrTarget::kFormat, gaiaOk);
+    // Ciel dans une autre lumière (radio, infrarouge, X…) : cartes mesurées ciel_NOM.bin, une à la fois (fil longueurs d'onde).
+    SkyBandRenderer sky;
+    sky.create(g, HdrTarget::kFormat);
+    const std::vector<SkyBandInfo> skyBands = listSkyBands(dataDir);
+    for (const SkyBandInfo& b : skyBands) sim.skyBandLabels.push_back(b.label);
+    sim.skyBandInfos = &skyBands;
+    int skyLoaded = -1;
+    if (opt.skyBand >= 0) sim.skyBand = opt.skyBand;
+    OrbitGpu orbits;      // orbite exacte de chaque étoile, calculée sur la carte graphique
+    orbits.create(g, stars, sr, HdrTarget::kFormat);
     PlanetPoints planets;
     planets.create(g);
     GalaxyFile galaxyFile;
@@ -389,6 +401,12 @@ int runWindow(const WindowOptions& opt) {
             galaxyScaleAt = sim.years;
             sim.cosmologyDirty = false;
         }
+        if (sim.skyBand != skyLoaded) {      // changement de lumière : charger la carte (0,2 à 0,5 s), ou revenir au visible
+            if (sim.skyBand >= static_cast<int>(skyBands.size())) sim.skyBand = -1;
+            if (sim.skyBand >= 0) sky.load(g, skyBands[static_cast<size_t>(sim.skyBand)].path);
+            skyLoaded = sim.skyBand;
+        }
+        sim.skyLegend = sim.skyBand >= 0 ? sky.legend(std::sqrt(dot(cam.pos, cam.pos))) : std::vector<std::string>{};
         fusionPoints.update(sim, cam, pc.par[0]);
         spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
@@ -421,28 +439,33 @@ int runWindow(const WindowOptions& opt) {
         // 1. Les étoiles, en grande dynamique.
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        // Orbites exactes : la carte rattrape la date montrée (tout d'un coup pendant un contrôle, 64 pas par image sinon).
+        orbits.advance(cmd, sim.years, test ? 1000000 : 64);
+        const bool skyOnly = sim.skyBand >= 0 && sky.loaded;
+        gaia.advance(g, cmd, sim.years, test ? 1000000 : 1);      // étoiles Gaia : 27 ms par pas (mesure du fil Gaia) ; épicycles pendant le rattrapage
+        sim.orbitLagSteps = std::max(orbits.lagSteps, gaia.orbitLagSteps());
         beginPass(cmd, hdr.view, sc.extent);
-        galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
-        if (!sim.deepTime()) {      // état mesuré : montré à moins de 3 millions d'années d'aujourd'hui
+        if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
+        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
+        if (!skyOnly && sim.starShare() > 0) {      // étoiles Gaia sur leur orbite calculée ; part qui baisse quand le calcul de la fusion prend le relais
             // Même facteur d'éclat pour la lueur de la Galaxie et pour les étoiles : la lueur est le complément exact des
             // étoiles dessinées (fil Gaia) ; le facteur revient à 1 entre 3 000 et 30 000 années-lumière (Sim::brightnessBoost).
-            milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
-            gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
+            milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
+            gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
         }
-        if (sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
+        if (!skyOnly && sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
             PushConstants orbiting = pc;
             orbiting.par[0] *= static_cast<float>(sim.starShare());
-            orbiting.par[3] = static_cast<float>(sim.years / 1.0e9);      // depuis J2000, date des positions du catalogue
-            sr.draw(cmd, orbiting, sc.extent.width, sc.extent.height);
+            orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years));      // années depuis J2000, date des positions
         }
-        if (fusionPoints.count) {
+        if (!skyOnly && fusionPoints.count) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
             still.par[2] = 0;
             sr.bind(cmd, still, sc.extent.width, sc.extent.height);
             fusionPoints.draw(cmd);
         }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
-                       sc.extent.width, sc.extent.height, asteroids.ready ? static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);
+                       sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // cachés dans une autre lumière : on ne les voit qu'en lumière visible
         // (l'ordre compte : après les astéroïdes, le dessin des étoiles n'est plus lié ; les planètes le relient)
         sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
         planets.draw(cmd);
@@ -533,6 +556,30 @@ int runWindow(const WindowOptions& opt) {
     asteroids.release(g);
     galaxies.release(g);
     spheres.release(g);
+    if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
+        const uint32_t n = std::min<uint32_t>(20000, orbits.count);
+        const std::vector<float> got = orbits.readBack(g, n);
+        std::vector<phys::Vec3> p0(n), v0(n);
+        for (uint32_t k = 0; k < n; ++k) {
+            p0[k] = {orbits.initial[k * 8], orbits.initial[k * 8 + 1], orbits.initial[k * 8 + 2]};
+            v0[k] = {orbits.initial[k * 8 + 4], orbits.initial[k * 8 + 5], orbits.initial[k * 8 + 6]};
+        }
+        phys::galaxie::Orbites ref(p0, v0);
+        ref.avance(static_cast<double>(orbits.stepLo) * 1.0e-3);
+        std::vector<double> err(n);
+        for (uint32_t k = 0; k < n; ++k) {
+            const phys::Vec3 r = ref.position(k);
+            const double dx = got[k * 8] - r.x, dy = got[k * 8 + 1] - r.y, dz = got[k * 8 + 2] - r.z;
+            err[k] = std::sqrt(dx * dx + dy * dy + dz * dz) * 1000.0;      // parsecs
+        }
+        std::sort(err.begin(), err.end());
+        const double med = err[n / 2], p99 = err[n * 99 / 100];
+        const bool ok = med < 1.0 && p99 < 10.0;
+        std::printf("orbites sur la carte graphique, pas %ld (%.0f millions d'annees), %u etoiles : ecart avec le calcul en double precision : mediane %.4f pc, 99e centile %.3f pc, maximum %.2f pc -> %s\n",
+                    orbits.stepLo, static_cast<double>(orbits.stepLo), n, med, p99, err[n - 1], ok ? "PASSE" : "ECHEC");
+    }
+    orbits.release(g);
+    sky.release(g);
     sr.release(g);
     hdr.release(g);
     final.release(g);
