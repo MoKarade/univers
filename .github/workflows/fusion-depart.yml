@@ -6,9 +6,10 @@ name: Fusion - conditions de départ
 on:
   workflow_dispatch:
     inputs:
-      n: { description: "particules en tout", default: "3000000" }
+      n: { description: "particules en tout (fusion) ou du disque (voie_lactee)", default: "3000000" }
+      modele: { description: "fusion ou voie_lactee", default: "fusion" }
   push:
-    branches: ["appli-pc"]
+    branches: ["appli-pc", "natif-precalcul"]
     paths: [".github/workflows/fusion-depart.yml"]
 
 permissions:
@@ -17,7 +18,7 @@ permissions:
 jobs:
   depart:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
@@ -31,6 +32,12 @@ jobs:
           (cd /tmp/agama && python setup.py install --yes > /tmp/agama.log 2>&1 || (tail -40 /tmp/agama.log; exit 1))
       - name: Tirage
         working-directory: pipeline/fusion
-        run: python calcul.py depart "${{ inputs.n || '3000000' }}"
+        # Sur natif-precalcul (poussée) : la Voie lactée seule à 5 M de particules dans le disque (bras et barre).
+        run: |
+          if [ "${{ inputs.modele || (github.ref_name == 'natif-precalcul' && 'voie_lactee' || 'fusion') }}" = voie_lactee ]; then
+            python calcul.py depart_vl "${{ inputs.n || '5000000' }}"
+          else
+            python calcul.py depart "${{ inputs.n || '3000000' }}"
+          fi
       - uses: actions/upload-artifact@v4
         with: { name: fusion-depart, path: pipeline/fusion/sortie/depart.npz, retention-days: 30 }

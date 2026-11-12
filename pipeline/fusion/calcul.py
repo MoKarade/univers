@@ -36,6 +36,29 @@ EQ2GAL = np.array([[-0.0548755604, -0.8734370902, -0.4838350155],      # équato
                    [-0.8676661490, -0.1980763734, 0.4559837762]])
 
 
+def construire_voie_lactee(n_disque):
+    """Voie lactée seule, très résolue, pour que les bras et la barre naissent de sa propre gravité (option 1 de Marc,
+    12/11/2026). Même modèle que dans le calcul de la fusion ; halo, disque et bulbe vivants dans le rapport 1 : 1 : 0,1 ;
+    adoucissement réduit comme N^(-1/3) par rapport au calcul à 300 000 (Fujii et al. 2011 : au moins 1 M de particules
+    dans le disque pour que les bras ne soient pas noyés dans le bruit)."""
+    import modeles as M
+    ci = json.load(open(os.path.join(HERE, 'conditions.json'), encoding='utf-8'))
+    k_eps = (36000 / n_disque) ** (1 / 3)
+    mw = M.galaxie('Voie lactée', n_disque, n_disque, n_disque // 10, k_eps=k_eps)
+    p = M.placer(mw, [0, 0, -1], [0, 0, 0], [0, 0, 0])
+    gid = np.zeros(len(p['m']), dtype=np.int8)
+    tr = [('Soleil', ci['sun']['pos'], ci['sun']['vel'])]
+    p['pos'] = np.concatenate([p['pos'], np.array([t[1] for t in tr], float)]); p['vel'] = np.concatenate([p['vel'], np.array([t[2] for t in tr], float)])
+    p['m'] = np.concatenate([p['m'], np.full(len(tr), 1.0)]); p['eps'] = np.concatenate([p['eps'], np.full(len(tr), 0.1)])
+    p['kind'] = np.concatenate([p['kind'], np.full(len(tr), 9, dtype=np.int8)]); gid = np.concatenate([gid, np.full(len(tr), -1, dtype=np.int8)])
+    m = p['m'][:, None]; cm = (p['pos'] * m).sum(0) / m.sum(); vm = (p['vel'] * m).sum(0) / m.sum()
+    p['pos'] -= cm; p['vel'] -= vm
+    show = np.where((p['kind'] > 0) & (p['kind'] < 9))[0][:1]      # remplacé par --toutes
+    meta = dict(galaxies=['mw'], traceurs=[t[0] for t in tr], cm0=cm.tolist(), vm0=vm.tolist(), affichees=[1], quantum_kpc=Q, pas_ma=DT_MA,
+                image_ma=KF_MA, vitesse_m31=None, modele='Voie lactée seule (bras et barre)', adoucissement_facteur=k_eps)
+    return p, gid, show, meta
+
+
 def construire(n_total):
     import modeles as M      # AGAMA : seulement pour tirer les conditions de départ
     ci = json.load(open(os.path.join(HERE, 'conditions.json'), encoding='utf-8'))
@@ -158,8 +181,8 @@ def main():
         if a.startswith('--sortie='): OUT = a.split('=', 1)[1]
     os.makedirs(OUT, exist_ok=True)
     jpath, spath, dpath = os.path.join(OUT, 'fusion.json'), os.path.join(OUT, 'etat.npz'), os.path.join(OUT, 'depart.npz')
-    if args[0] == 'depart':      # conditions de départ seules (AGAMA) : python calcul.py depart <N>
-        p, gid, show, meta = construire(int(args[1]))
+    if args[0] in ('depart', 'depart_vl'):      # conditions de départ seules (AGAMA) : python calcul.py depart <N> | depart_vl <N disque>
+        p, gid, show, meta = construire(int(args[1])) if args[0] == 'depart' else construire_voie_lactee(int(args[1]))
         np.savez_compressed(dpath, gid=gid, show=show, meta=json.dumps(meta, ensure_ascii=False), **p)
         print('départ écrit :', len(p['m']), 'particules'); return
     reprise = args[0] == 'reprise'      # python calcul.py reprise <a_Ga> : repart du dernier instantané
@@ -197,8 +220,8 @@ def main():
         for sel in star_idx: cs.append(centre(pos[sel], p['m'][sel]).round(3).tolist())
         meta['t'].append(round(t, 4)); meta['centres'].append(cs); meta['traceurs_pos'].append(pos[trac].round(3).tolist())
         e = S.energie(phi); meta['energie'].append(e / meta['e0'] - 1)
-        d = math.dist(cs[0], cs[1])
-        if meta['fusion_ga'] is None and d < 10 and t > 1: meta['fusion_ga'] = round(t, 3)
+        d = math.dist(cs[0], cs[1]) if len(cs) > 1 else 0.0      # Voie lactée seule : pas de séparation
+        if len(cs) > 1 and meta['fusion_ga'] is None and d < 10 and t > 1: meta['fusion_ga'] = round(t, 3)
         if meta['fusion_ga'] is not None and d > 30: meta['fusion_ga'] = None      # séparés de nouveau : pas encore la fusion
         frames.append(np.clip(np.round(pos[show] / Q), -32767, 32767).astype(np.int16))
         print(f'  t = {t:6.3f} Ga | séparation des centres {d:7.1f} kpc | dérive d’énergie {100 * meta["energie"][-1]:+.3f} % | {time.time() - t0:6.0f} s', flush=True)
