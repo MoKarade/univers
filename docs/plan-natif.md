@@ -103,4 +103,4 @@ charges demande à Vulkan [Certain : lu par le programme].
   [À faire : reprendre les tables CIE de la page (S1) pour une couleur identique.]
 - Pas fait : la fenêtre et la caméra libre, le mouvement propre (vitesses déjà dans le fichier), la poussière,
   les étoiles frôleuses éteintes en double (`isPasser`).
-- Durée mesurée : N0 et N1 hors écran, de la décision de Marc à ce point, environ 35 minutes de travail.
+- Durée mesurée : N0 et N1 hors écran, de la décision de Marc à ce point, environ 30 minutes de travail (14 h 10 à 14 h 37 UTC).

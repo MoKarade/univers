@@ -26,7 +26,7 @@ find_program(GLSLANG glslang REQUIRED)
 set(SPV_DIR ${CMAKE_BINARY_DIR}/spv)
 file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
-foreach(S essai.vert essai.frag etoiles.vert etoiles.frag)
+foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
     DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} VERBATIM)
@@ -41,9 +41,9 @@ target_compile_options(essai_vulkan PRIVATE -Wall -Wextra -Wno-missing-field-ini
 target_link_options(essai_vulkan PRIVATE -static)
 add_dependencies(essai_vulkan shaders)
 
-add_executable(univers src/univers.cpp)
+add_executable(univers src/univers.cpp src/fenetre.cpp)
 target_link_libraries(univers PRIVATE volk)
-target_compile_definitions(univers PRIVATE SPV_DIR="${SPV_DIR}" NOMINMAX WIN32_LEAN_AND_MEAN)
-target_compile_options(univers PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+target_compile_definitions(univers PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_options(univers PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(univers PRIVATE -static)
 add_dependencies(univers shaders)
