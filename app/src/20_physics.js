@@ -144,7 +144,7 @@ const VSOP_KEYS = ['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'n
 function solarSystemAt(T, st, dtSec) {
   st = st || { planets: {}, moon: [0, 0, 0], earth: [0, 0, 0], M: new Array(9), tmp: [0, 0, 0], e: [0, 0, 0], m: [0, 0, 0] };
   const Tt = T + (dtSec === undefined ? deltaT(T) : dtSec) / (DAY_S * 36525);
-  for (const k of PLANET_KEYS) st.planets[k] = planetState(k, Tt, st.planets[k]);
+  st.long = false; for (const k of PLANET_KEYS) { const q = typeof NB_LONG !== 'undefined' && NB_LONG ? nbLongState(k, Tt, st.planets[k]) : null; if (q) { st.planets[k] = q; st.long = true; } else { if (st.planets[k]) st.planets[k].long = false; st.planets[k] = planetState(k, Tt, st.planets[k]); } }      /* G2 : orbites calculées sur des millions d'années (21_nbody.js), sinon éléments moyens */
   const mLow = moonGeo(Tt), emb = st.planets.emb.pos, aT = Math.abs(Tt);
   let earth = [emb[0] - mLow[0] * MOON_MASS_FRACTION, emb[1] - mLow[1] * MOON_MASS_FRACTION, emb[2] - mLow[2] * MOON_MASS_FRACTION], mg = mLow;
   st.precise = aT < 40 && !!DATA.VSOP;
