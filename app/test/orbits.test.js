@@ -37,22 +37,22 @@ check(K.gx0 && K.gx0.length === N * 3 && Number.isFinite(K.gx0[0]), `état initi
   vm.createContext(ctx); vm.runInContext(String(orbAcc) + String(orbEnergy) + String(orbSub) + String(orbSteps) + '(' + orbWorkerMain.toString() + ')();', ctx);
   const n = 50, X = Float64Array.from(K.gx0.subarray(0, n * 3)), V = Float64Array.from(K.gv0.subarray(0, n * 3));
   ctx.onmessage({ data: { init: true, P, n, X, V } }); ctx.onmessage({ data: { goto: 0.25 } });
-  const r = msgs.pop(), Xr = Float64Array.from(K.gx0.subarray(0, n * 3)), Vr = Float64Array.from(K.gv0.subarray(0, n * 3)), S50 = orbSub(P, Xr, Vr, n); orbSteps(P, Xr, Vr, n, ORB_DT, 250, S50);
+  const r = msgs.pop(), Xr = Float64Array.from(K.gx0.subarray(0, n * 3)), Vr = Float64Array.from(K.gv0.subarray(0, n * 3)), S50 = orbSub(P, Xr, Vr, n); orbSteps(P, Xr, Vr, n, ORB_DT, 250, S50, 0);
   let d = 0; for (let k = 0; k < n * 3; k++) d = Math.max(d, Math.abs(r.pos[k] - Xr[k]));
   check(Math.abs(r.t - 0.25) < 1e-9 && d < 1e-4, `Worker : réponse à +250 Ma, écart au calcul direct ${(d * 1e3).toFixed(4)} pc`);
-  ctx.onmessage({ data: { goto: -0.1 } }); const r2 = msgs.pop(); const Xb = Float64Array.from(K.gx0.subarray(0, n * 3)), Vb = Float64Array.from(K.gv0.subarray(0, n * 3)); orbSteps(P, Xb, Vb, n, -ORB_DT, 100, S50);
+  ctx.onmessage({ data: { goto: -0.1 } }); const r2 = msgs.pop(); const Xb = Float64Array.from(K.gx0.subarray(0, n * 3)), Vb = Float64Array.from(K.gv0.subarray(0, n * 3)); orbSteps(P, Xb, Vb, n, -ORB_DT, 100, S50, 0);
   let d2 = 0; for (let k = 0; k < n * 3; k++) d2 = Math.max(d2, Math.abs(r2.pos[k] - Xb[k]));
   check(Math.abs(r2.t + 0.1) < 1e-9 && d2 < 1e-3, `Worker : retour à −100 Ma depuis le point de contrôle de départ, écart ${(d2 * 1e3).toFixed(4)} pc`); }
 
 /* 4. Branchement : sans résultat, épicycles ; avec résultat, orbite calculée prolongée au second ordre ; bascule avec écart */
 { const g = [0, 0, 0], e = [0, 0, 0]; starOrbPos(K, 7, 0.3, g); epicyclePos(K.epi, 70, 0.3, e, 0); check(g.every((v, k) => v === e[k]), 'sans résultat calculé : position identique aux épicycles (aucun changement pour les vieux navigateurs)');
   const n1 = N + 1, X = new Float64Array(n1 * 3), V = new Float64Array(n1 * 3); X.set(K.gx0); V.set(K.gv0); X.set(sunGal0, N * 3); V.set(SUN_UVW, N * 3);
-  const SUBa = orbSub(P, X, V, n1); orbSteps(P, X, V, n1, ORB_DT, 200, SUBa);      /* état calculé à +200 Ma */
+  const SUBa = orbSub(P, X, V, n1); orbSteps(P, X, V, n1, ORB_DT, 200, SUBa, 0);      /* état calculé à +200 Ma */
   const res = { t: 0.2, pos: Float32Array.from(X), vel: Float32Array.from(V) }, posted = [];
   K.orb = { w: { postMessage: m => posted.push(m) }, n: N, P, res, acc: new Float32Array(n1 * 3).fill(NaN), want: null, sent: null, sentAt: 0, on: true, far: true, exact: false };
   orbRequest(K, 0.2, true, true); check(K.orb.exact && posted.length === 0, 'résultat à l\'instant affiché : orbite calculée choisie, aucune demande inutile');
   /* justesse du prolongement : comparé au calcul pas à pas, vu du Soleil (ce qui est dessiné) */
-  for (const dMa of [2, 4, 5.9]) { const Xs = X.slice(), Vs = V.slice(); orbSteps(P, Xs, Vs, n1, ORB_DT, dMa, SUBa); const tt = 0.2 + dMa / 1000, s = [0, 0, 0], err = []; starOrbSun(K, tt, s);
+  for (const dMa of [2, 4, 5.9]) { const Xs = X.slice(), Vs = V.slice(); orbSteps(P, Xs, Vs, n1, ORB_DT, dMa, SUBa, 0.2); const tt = 0.2 + dMa / 1000, s = [0, 0, 0], err = []; starOrbSun(K, tt, s);
     for (let i = 0; i < N; i += 7) { starOrbPos(K, i, tt, g); err.push(Math.hypot(g[0] - s[0] - (Xs[i * 3] - Xs[N * 3]), g[1] - s[1] - (Xs[i * 3 + 1] - Xs[N * 3 + 1]), g[2] - s[2] - (Xs[i * 3 + 2] - Xs[N * 3 + 2])) * 1000); }
     err.sort((a, b) => a - b); const med = err[err.length >> 1], p99 = err[Math.floor(0.99 * (err.length - 1))];
     check(med < 10 && p99 < 60, `prolongement de ${dMa} Ma : écart vu du Soleil, médiane ${med.toFixed(1)} pc, 99 % ${p99.toFixed(0)} pc (seuils 10 et 60 pc ; épicycles à +200 Ma : ~265 pc)`); }
@@ -69,7 +69,7 @@ check(K.gx0 && K.gx0.length === N * 3 && Number.isFinite(K.gx0[0]), `état initi
   check(dr < 0.002, `orbite circulaire à 8,2 kpc et ${v.toFixed(1)} km/s : rayon constant à ${(dr * 1000).toFixed(2)} pc près sur 1 Ga (forces et courbe de rotation d'accord)`); }
 
 /* 6. Soleil dans la galaxie : calculé dans la page, à toute date, même résultat que le Worker */
-{ const a = sunOrbAt(null, 0.2, [0, 0, 0]), X = Float64Array.from(sunGal0), V = Float64Array.from(SUN_UVW); orbSteps(P, X, V, 1, ORB_DT, 200);
+{ const a = sunOrbAt(null, 0.2, [0, 0, 0]), X = Float64Array.from(sunGal0), V = Float64Array.from(SUN_UVW); orbSteps(P, X, V, 1, ORB_DT, 200, null, 0);
   const b = sunOrbAt(null, -0.35, [0, 0, 0]), c = sunOrbAt(null, 0.2, [0, 0, 0]);
   check(Math.hypot(a[0] - X[0], a[1] - X[1], a[2] - X[2]) < 1e-9 && Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]) < 1e-6 && Number.isFinite(b[0]), `Soleil dans la galaxie à +200 Ma : (${a.map(v => v.toFixed(3)).join(', ')}) kpc, identique après un détour par −350 Ma`); }
 
@@ -79,4 +79,8 @@ check(K.gx0 && K.gx0.length === N * 3 && Number.isFinite(K.gx0[0]), `état initi
   check(e[e.length >> 1] > 100, `épicycles contre calcul pas à pas à 50 Ma : écart médian ${e[e.length >> 1].toFixed(0)} pc (mesure de départ : 148 pc)`); }
 
 console.log(fails ? `\n${fails} échec(s)` : '\norbites calculées : tout est vert');
+/* Barre centrale (Dehnen 2000) : l'énergie n'est plus conservée, mais l'intégrale de Jacobi E − Ω_b L_z l'est (repère de la barre) */
+{ const X = Float64Array.from([-4.5, 0.3, 0.05]), V = Float64Array.from([20, 180, 5]), J = (t) => { const Lz = X[0] * V[1] - X[1] * V[0]; return orbEnergy(P, X[0], X[1], X[2], V[0], V[1], V[2]) + barPhi(P, X[0], X[1], t) - (-P.Ob / 1.0227121650456) * Lz; };
+  const j0 = J(0); let worst = 0, t = 0; for (let s = 0; s < 2000; s++) { orbSteps(P, X, V, 1, ORB_DT / 4, 1, null, t); t += ORB_DT / 4; worst = Math.max(worst, Math.abs(J(t) / j0 - 1)); }
+  check(worst < 2e-3, `barre : intégrale de Jacobi conservée à ${worst.toExponential(1)} près sur 500 Ma (orbite à 4,5 kpc)`); }
 process.exit(fails ? 1 : 0);

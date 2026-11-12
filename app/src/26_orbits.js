@@ -1,7 +1,7 @@
 /* --------------------------------------------------------------------------
    S2 — Orbites calculées pas à pas des étoiles du catalogue principal (HYG, environ 59 000 étoiles).
    Chaque étoile, et le Soleil, est intégrée pas à pas dans le MODÈLE de la Voie lactée
-   de 20_physics.js (sans barre ni bras ; inspiré de MWPotential2014, Bovy 2015, recalé) (bulbe de Hernquist + disque de Miyamoto-Nagai + halo NFW, objet GAL),
+   de 20_physics.js (inspiré de MWPotential2014, Bovy 2015, recalé), plus la barre centrale tournante (voir orbParams ; sans bras) (bulbe de Hernquist + disque de Miyamoto-Nagai + halo NFW, objet GAL),
    par la méthode du saut de grenouille (vitesse de Verlet), pas de 1 Ma, dans un Web Worker.
    Tant que le résultat pour l'instant affiché n'est pas prêt, on garde l'approximation des
    épicycles (25_future.js), comme avant. Les étoiles Gaia en flux (millions) restent en épicycles.
@@ -13,15 +13,31 @@ const ORB_MAXCP = 24;            /* points de contrôle gardés au plus (Float32
 const ORB_EXTRA = 0.006;         /* au-delà de 6 Ma d'écart avec le dernier résultat calculé, on revient aux épicycles */
 const ORB_KV = 1.0227121650456;  /* km/s -> kpc/Ga */
 
+/* Barre centrale de la Voie lactée (lot G) : potentiel tournant de Dehnen (2000, AJ 119, 800), quadrupolaire :
+   Φ_b = A cos 2(φ − φ_b(t)) U(R), U = (R/R_b)³ − 2 sous R_b, −(R_b/R)³ au-delà ; A = α v0² (R0/R_b)³ / 3.
+   Mesuré : vitesse de rotation de la barre 39 ± 3,5 km/s/kpc (Portail et al. 2017 ; Sanders et al. 2019 : 41 ± 3) ;
+   angle de la barre, 28° devant la direction du centre, côté proche aux longitudes positives (Wegg et Gerhard 2013).
+   Modèle (évolution supposée) : longueur R_b = 0,8 × rayon de corotation, force α = 0,01 (valeur de Dehnen, qui
+   reproduit le courant d'étoiles d'Hercule près du Soleil). Sans bras spiraux (leur vitesse de rotation n'est pas établie). */
+const BAR_OMEGA = 39 * 1.0227121650456, BAR_PHI0 = (180 - 28) * Math.PI / 180, BAR_ALPHA = 0.01;
+/** Potentiel de la barre seule, (km/s)², pour les contrôles (intégrale de Jacobi). */
+function barPhi(P, x, y, t) { const R = Math.hypot(x, y), q = R / P.Rb, U = R < P.Rb ? q * q * q - 2 : -1 / (q * q * q); return P.Ab * Math.cos(2 * (Math.atan2(y, x) - (P.Pb - P.Ob * t))) * U; }
 /** Paramètres du potentiel, copiés de GAL pour le Worker (qui ne voit pas le reste de la page). */
-const orbParams = () => ({ G: G_KPC, Mb: GAL.Mb, ab: GAL.ab, Md: GAL.Md, ad: GAL.ad, bd: GAL.bd, rs: GAL.rs, GMs: GAL.GMs });
+const orbParams = () => { const v0 = 230, Rb = 0.8 * v0 / 39; return { G: G_KPC, Mb: GAL.Mb, ab: GAL.ab, Md: GAL.Md, ad: GAL.ad, bd: GAL.bd, rs: GAL.rs, GMs: GAL.GMs,
+  Rb, Ab: BAR_ALPHA * v0 * v0 * Math.pow(GAL.R0 / Rb, 3) / 3, Ob: BAR_OMEGA, Pb: BAR_PHI0 }; };
 
 /** Accélération (km/s)²/kpc au point (x, y, z) kpc, écrite dans a[0..2]. */
-function orbAcc(P, x, y, z, a) {
+function orbAcc(P, x, y, z, a, t) {
   const R2 = x * x + y * y, r = Math.sqrt(R2 + z * z) || 1e-9, xs = r / P.rs;
   const ar = -P.G * P.Mb / ((r + P.ab) * (r + P.ab)) - P.GMs * (Math.log(1 + xs) - xs / (1 + xs)) / (r * r);
   const B = Math.sqrt(z * z + P.bd * P.bd), D2 = R2 + (P.ad + B) * (P.ad + B), D3 = D2 * Math.sqrt(D2), gm = P.G * P.Md;
   a[0] = ar * x / r - gm * x / D3; a[1] = ar * y / r - gm * y / D3; a[2] = ar * z / r - gm * z * (P.ad + B) / (B * D3);
+  if (P.Ab && t !== undefined && R2 > 1e-8) {      /* barre : a_R = −A cos2ψ U'(R), a_φ = 2A sin2ψ U(R) / R ; elle tourne dans le sens du disque (φ décroissant) */
+    const R = Math.sqrt(R2), c = x / R, s = y / R, psi = Math.atan2(y, x) - (P.Pb - P.Ob * t), c2 = Math.cos(2 * psi), s2 = Math.sin(2 * psi), q = R / P.Rb;
+    const U = R < P.Rb ? q * q * q - 2 : -1 / (q * q * q), dU = R < P.Rb ? 3 * q * q / P.Rb : 3 / (q * q * q * q * P.Rb);
+    const aR = -P.Ab * c2 * dU, aP = 2 * P.Ab * s2 * U / R;
+    a[0] += aR * c - aP * s; a[1] += aR * s + aP * c;
+  }
 }
 
 /** Énergie par unité de masse, (km/s)², pour vérifier la conservation. */
@@ -45,15 +61,16 @@ function orbSub(P, X, V, n) {
 }
 
 /** Avance toutes les orbites de `steps` pas de durée dt (Ga, négatif pour remonter le temps). sub : sous-pas par étoile (orbSub). */
-function orbSteps(P, X, V, n, dt, steps, sub) {
+function orbSteps(P, X, V, n, dt, steps, sub, t0) {
   const a = [0, 0, 0];
   for (let s = 0; s < steps; s++) for (let k = 0, j = 0; k < n; k++, j += 3) {
     const m = sub ? sub[k] : 1, h = dt * 1.0227121650456 / m;
     for (let u = 0; u < m; u++) {
-      orbAcc(P, X[j], X[j + 1], X[j + 2], a);
+      const ta = t0 === undefined ? undefined : t0 + (s + u / m) * dt, tb = ta === undefined ? undefined : ta + dt / m;      /* heure de chaque coup (la barre tourne) */
+      orbAcc(P, X[j], X[j + 1], X[j + 2], a, ta);
       V[j] += 0.5 * h * a[0]; V[j + 1] += 0.5 * h * a[1]; V[j + 2] += 0.5 * h * a[2];
       X[j] += h * V[j]; X[j + 1] += h * V[j + 1]; X[j + 2] += h * V[j + 2];
-      orbAcc(P, X[j], X[j + 1], X[j + 2], a);
+      orbAcc(P, X[j], X[j + 1], X[j + 2], a, tb);
       V[j] += 0.5 * h * a[0]; V[j + 1] += 0.5 * h * a[1]; V[j + 2] += 0.5 * h * a[2];
     }
   }
@@ -76,7 +93,7 @@ function orbWorkerMain() {
     if (goal === null) { busy = false; return; }
     busy = true;
     const left = Math.round((goal - t) / ORB_DT), m = Math.min(Math.abs(left), CHUNK), dir = Math.sign(left);
-    for (let s = 0; s < m; s++) { orbSteps(P, X, V, n, dir * ORB_DT, 1, SUB); t = Math.round((t + dir * ORB_DT) / ORB_DT) * ORB_DT; save(); }
+    for (let s = 0; s < m; s++) { orbSteps(P, X, V, n, dir * ORB_DT, 1, SUB, t); t = Math.round((t + dir * ORB_DT) / ORB_DT) * ORB_DT; save(); }
     if (Math.abs(left) <= CHUNK) { const pos = Float32Array.from(X), vel = Float32Array.from(V); postMessage({ t, pos, vel }, [pos.buffer, vel.buffer]); goal = null; busy = false; return; }
     setTimeout(run, 0);
   }
@@ -127,7 +144,7 @@ function starOrbPos(K, i, tEff, out, j) {
   j = j || 0;
   if (!orbFresh(K, tEff)) { epicyclePos(K.epi, i * 10, tEff, out, j); return; }
   const O = K.orb, R = O.res, d = (tEff - R.t) * ORB_KV, q = i * 3, A = O.acc;
-  if (Number.isNaN(A[q])) { const a = [0, 0, 0]; orbAcc(O.P, R.pos[q], R.pos[q + 1], R.pos[q + 2], a); A[q] = a[0]; A[q + 1] = a[1]; A[q + 2] = a[2]; }
+  if (Number.isNaN(A[q])) { const a = [0, 0, 0]; orbAcc(O.P, R.pos[q], R.pos[q + 1], R.pos[q + 2], a, R.t); A[q] = a[0]; A[q + 1] = a[1]; A[q + 2] = a[2]; }
   for (let c = 0; c < 3; c++) out[j + c] = R.pos[q + c] + R.vel[q + c] * d + 0.5 * A[q + c] * d * d;
 }
 
@@ -147,7 +164,7 @@ function sunOrbAt(K, tEff, out) {
   const goal = Math.round(tEff / ORB_DT) * ORB_DT;
   let best = null; for (const k of S.cps.keys()) if (best === null || Math.abs(k * ORB_CP - goal) < Math.abs(best * ORB_CP - goal)) best = k;
   if (Math.abs(best * ORB_CP - goal) < Math.abs(S.t - goal)) { const c = S.cps.get(best); S.X = c[0].slice(); S.V = c[1].slice(); S.t = best * ORB_CP; }
-  while (Math.abs(goal - S.t) > ORB_DT / 2) { const dir = Math.sign(goal - S.t); orbSteps(P, S.X, S.V, 1, dir * ORB_DT, 1); S.t = Math.round((S.t + dir * ORB_DT) / ORB_DT) * ORB_DT; const k = Math.round(S.t / ORB_CP); if (Math.abs(k * ORB_CP - S.t) < ORB_DT / 2 && !S.cps.has(k)) S.cps.set(k, [S.X.slice(), S.V.slice()]); }
+  while (Math.abs(goal - S.t) > ORB_DT / 2) { const dir = Math.sign(goal - S.t); orbSteps(P, S.X, S.V, 1, dir * ORB_DT, 1, null, S.t); S.t = Math.round((S.t + dir * ORB_DT) / ORB_DT) * ORB_DT; const k = Math.round(S.t / ORB_CP); if (Math.abs(k * ORB_CP - S.t) < ORB_DT / 2 && !S.cps.has(k)) S.cps.set(k, [S.X.slice(), S.V.slice()]); }
   const d = (tEff - S.t) * ORB_KV; for (let c = 0; c < 3; c++) out[c] = S.X[c] + S.V[c] * d;
   return out;
 }
@@ -158,5 +175,5 @@ function orbMotionText(K, i, tEff, gaia) {
   const base = "ligne droite avec la vitesse mesurée jusqu'à 3 millions d'années, puis orbite ";
   if (gaia || !K.orb) return base + 'approchée (épicycles) dans un modèle de la Voie lactée';
   const now = K.orb.far && K.orb.on && !orbFresh(K, tEff) ? ' ; calcul en cours, orbite approchée affichée en attendant' : '';
-  return base + 'calculée pas à pas dans un modèle de la Voie lactée (bulbe, disque et halo, d’après Bovy 2015, recalé sur 230 km/s)' + now;
+  return base + 'calculée pas à pas dans un modèle de la Voie lactée (bulbe, disque, halo d’après Bovy 2015, recalé sur 230 km/s, et barre centrale tournante, Dehnen 2000, vitesse mesurée par Portail et al. 2017)' + now;
 }
