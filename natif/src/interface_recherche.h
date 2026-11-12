@@ -223,6 +223,7 @@ void drawGoToMenu(Sim& sim, UiState& ui) {
         ImGui::TextDisabled("contrôlées contre le catalogue des éclipses de la NASA.");
         ImGui::EndMenu();
     }
+    if (ui.gwCount > 0 && ImGui::MenuItem("Ondes gravitationnelles détectées", std::to_string(ui.gwCount).c_str())) ui.gwOpen = true;
     if (ImGui::MenuItem("Revenir à la vue précédente", "Retour arrière", false, !sim.history.empty())) {
         ui.tour = -1;
         sim.back();

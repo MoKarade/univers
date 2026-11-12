@@ -188,6 +188,8 @@ struct UiState {
     int cardClosedFor = -1;         // fiche fermée pour cet astre
     int armSel = -1;                // traceur de bras spiral choisi au clic (-1 : aucun)
     int tour = -1;                  // étape de la visite guidée (-1 : pas de visite)
+    int gwCount = 0;                // ondes gravitationnelles chargées (interface_ondes.h)
+    bool gwOpen = false;            // leur fenêtre est ouverte
     double tourClock = 0;
 };
 

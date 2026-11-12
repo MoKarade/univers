@@ -158,6 +158,7 @@ int runWindow(const WindowOptions& opt) {
             }
         });
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
+    loadGravWaves(dataDir + "/ondes_gravitationnelles.tsv");      // ondes gravitationnelles (GWOSC) : fenêtre ouverte depuis « Aller à »
     if (!opt.target.empty()) {
         bool found = false;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
