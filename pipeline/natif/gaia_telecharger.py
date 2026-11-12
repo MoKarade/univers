@@ -12,15 +12,21 @@ Colonnes : source_id, ra, dec (degrés, ICRS, époque J2016.0), parallax (mas), 
 radial_velocity (km/s, absente pour la plupart), phot_g_mean_mag, bp_rp (magnitudes, telles que mesurées,
 poussière comprise). Aucune valeur n'est modifiée ici.
 
-Usage : python gaia_telecharger.py <dossier> [--parts 256] [--simultanes 4]
-Taille attendue : environ 6 Go.
+Jeu « erreurs » (--jeu erreurs, plan-precalcul.md § 1) : mêmes étoiles, mêmes parts, colonnes source_id, parallax_error,
+pmra_error, pmdec_error (mas, mas/an), parallax_pmra_corr, parallax_pmdec_corr, pmra_pmdec_corr (corrélations des
+mesures), radial_velocity_error (km/s) : les incertitudes publiées par Gaia, pour les clones d'incertitude.
+
+Usage : python gaia_telecharger.py <dossier> [--parts 256] [--simultanes 4] [--jeu base|erreurs]
+Taille attendue : environ 6 Go (base), environ 4 Go (erreurs).
 """
 import sys as _sys
 _sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
 import argparse, concurrent.futures as cf, os, sys, time, urllib.parse, urllib.request
 
 TAP = 'https://gea.esac.esa.int/tap-server/tap'
-COLONNES = 'source_id, ra, dec, parallax, pmra, pmdec, radial_velocity, phot_g_mean_mag, bp_rp'
+JEUX = {'base': 'source_id, ra, dec, parallax, pmra, pmdec, radial_velocity, phot_g_mean_mag, bp_rp',
+        'erreurs': 'source_id, parallax_error, pmra_error, pmdec_error, parallax_pmra_corr, parallax_pmdec_corr, pmra_pmdec_corr, radial_velocity_error'}
+COLONNES = JEUX['base']
 HPX12 = 12 * 4 ** 12      # pixels HEALPix de niveau 12 sur tout le ciel
 MAXREC = 10_000_000      # sans ce paramètre, le service coupe à 50 000 lignes (constaté le 12 novembre 2026)
 UNITE = 2 ** 35      # source_id = pixel HEALPix niveau 12 × 2^35 + numéro dans le pixel
@@ -77,7 +83,10 @@ def une_part(dossier, k, parts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('dossier'); ap.add_argument('--parts', type=int, default=1024); ap.add_argument('--simultanes', type=int, default=4)
+    ap.add_argument('--jeu', default='base', choices=sorted(JEUX))
     a = ap.parse_args()
+    global COLONNES
+    COLONNES = JEUX[a.jeu]
     os.makedirs(a.dossier, exist_ok=True)
     t0, total, echecs = time.time(), 0, []
     with cf.ThreadPoolExecutor(a.simultanes) as ex:
