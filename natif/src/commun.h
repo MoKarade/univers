@@ -22,8 +22,25 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr size_t kAlign = 64;
 
+// Mode fenêtre : une erreur est montrée à l'écran (boîte de message) et écrite dans univers.log à côté du
+// programme, au lieu de disparaître avec une console que personne ne voit.
+inline bool gWindowMode = false;
+
 [[noreturn]] void fail(const std::string& what, VkResult r = VK_SUCCESS) {
-    std::fprintf(stderr, "ECHEC : %s (code %d)\n", what.c_str(), static_cast<int>(r));
+    const std::string msg = "ECHEC : " + what + " (code " + std::to_string(static_cast<int>(r)) + ")";
+    std::fprintf(stderr, "%s\n", msg.c_str());
+    if (gWindowMode) {
+        char path[MAX_PATH];
+        const DWORD n = GetModuleFileNameA(nullptr, path, MAX_PATH);
+        std::string dir(path, n);
+        const size_t cut = dir.find_last_of("\\/");
+        if (cut != std::string::npos) dir.resize(cut);
+        if (FILE* f = std::fopen((dir + "/univers.log").c_str(), "a")) {
+            std::fprintf(f, "%s\n", msg.c_str());
+            std::fclose(f);
+        }
+        MessageBoxA(nullptr, msg.c_str(), "Univers", MB_OK | MB_ICONERROR);
+    }
     std::exit(1);
 }
 void check(VkResult r, const char* what) {

@@ -47,3 +47,11 @@ target_compile_definitions(univers PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_compile_options(univers PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(univers PRIVATE -static)
 add_dependencies(univers shaders)
+
+# Même programme, sans console : c'est lui que le raccourci du Bureau lance.
+add_executable(UniversPC src/univers.cpp src/fenetre.cpp)
+target_link_libraries(UniversPC PRIVATE volk)
+target_compile_definitions(UniversPC PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_options(UniversPC PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(UniversPC PRIVATE -static -mwindows)
+add_dependencies(UniversPC shaders)

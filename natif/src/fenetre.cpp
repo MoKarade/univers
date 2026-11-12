@@ -249,6 +249,7 @@ void beginPass(VkCommandBuffer cmd, VkImageView view, VkExtent2D extent) {
 // testFrames > 0 : fenêtre cachée, ce nombre d'images au plus vite, puis sortie (contrôle sans rien montrer à l'écran).
 int runWindow(const char* starsPath, uint64_t lookAtIndex, int testFrames) {
     const bool test = testFrames > 0;
+    gWindowMode = !test;      // dès le début : même un fichier d'étoiles absent est dit à l'écran
     const Stars stars = openStars(starsPath);
     if (lookAtIndex >= stars.n) fail("--regarde : numero hors du catalogue");
 
@@ -265,8 +266,13 @@ int runWindow(const char* starsPath, uint64_t lookAtIndex, int testFrames) {
                                 nullptr, wc.hInstance, nullptr);
     if (!hwnd) fail("création de la fenêtre");
     SetWindowLongPtrA(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&input));
-    if (!test) FreeConsole();                  // lancé par un double-clic : pas de fenêtre noire de console derrière
-    if (!test) ShowWindow(hwnd, SW_SHOW);      // en contrôle, la fenêtre reste cachée : rien ne s'ouvre à l'écran
+    if (!test) {
+        // Deux appels : Windows impose au premier l'état demandé par le lanceur (un raccourci « réduit » donnait une
+        // fenêtre réduite, sans surface à dessiner : l'appli s'arrêtait sans rien montrer). Le second s'applique toujours.
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        SetForegroundWindow(hwnd);
+    }
 
     const Gpu g = createGpu(true);
     VkWin32SurfaceCreateInfoKHR sci{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
@@ -279,7 +285,16 @@ int runWindow(const char* starsPath, uint64_t lookAtIndex, int testFrames) {
     if (!canPresent) fail("la carte ne peut pas afficher dans cette fenêtre");
 
     Swapchain sc;
-    if (!createSwapchain(g, surface, test, sc)) fail("fenêtre sans surface");
+    while (!createSwapchain(g, surface, test, sc)) {      // fenêtre réduite : on attend qu'elle ait une surface
+        if (test) fail("fenêtre sans surface");
+        MSG m;
+        while (PeekMessageA(&m, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&m);
+            DispatchMessageA(&m);
+        }
+        if (input.quit) return 0;
+        Sleep(50);
+    }
     StarRenderer sr;
     sr.create(g, stars, HdrTarget::kFormat);
     HdrTarget hdr;
