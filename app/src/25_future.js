@@ -164,7 +164,34 @@ function starPositions(K, tYears, tEff, out, i0, i1) {
    -------------------------------------------------------------------------- */
 const M31_MASS_RATIO = 1.5, HALO_EDGE = 220;
 const mwMass = r => { const rr = Math.min(Math.max(r, 0.3), HALO_EDGE); return (v2Baryons(rr) + GAL.GMs * nfwShape(rr)) * rr / G_KPC; };
-function andromedaOrbit(C, vtKms, Vin) {
+/* --------------------------------------------------------------------------
+   R10 (lot G) : le calcul complet de la fusion (R9 : 300 000 particules qui s'attirent toutes, pipeline/fusion/calcul.py),
+   rejoué pour le Groupe local. Fichier joint fusion_centres.json (pipeline/fusion/exporter_page.py) : centres de la
+   Voie lactée, d'Andromède, du Triangle et du Grand Nuage, et 38 naines traceuses, toutes les 20 Ma de 0 à 10 Ga,
+   dans le repère centré sur la Voie lactée. Valable seulement pour la vitesse d'Andromède « Gaia, 2025 » et la
+   cosmologie de Planck, celles du calcul ; sinon la page garde ses propres orbites.
+   -------------------------------------------------------------------------- */
+let FUSC = null;
+function fusLoad(j) {
+  const dec = s => { const b = b64ToBytes(s); return new Float32Array(b.buffer, b.byteOffset, b.length / 4); };
+  FUSC = { t: j.t, n: j.t.length, dt: j.t[1] - j.t[0], c: dec(j.c), sun: dec(j.sun), tr: dec(j.tr), lgv: j.lgv, nTr: j.lgv.length, ga: j.fusion_ga, drift: j.derive_max, vName: j.vitesse_m31, src: j.source };
+  FUSC.tEnd = FUSC.t[FUSC.n - 1];
+  return FUSC;
+}
+/** Position (kpc, repère centré sur la Voie lactée) lue dans le calcul complet : tableau arr, stride corps par date, corps k, date t (Ga). */
+function fusAt(arr, stride, k, t, out) {
+  const F = FUSC, x = clamp(t / F.dt, 0, F.n - 1.0001), i = x | 0, f = x - i, a = (i * stride + k) * 3, b = ((i + 1) * stride + k) * 3;
+  out[0] = lerp(arr[a], arr[b], f); out[1] = lerp(arr[a + 1], arr[b + 1], f); out[2] = lerp(arr[a + 2], arr[b + 2], f); return out;
+}
+/* Extrema de la distance entre deux corps du calcul complet : [[t, d, 'min'|'max'], …]. */
+function fusExtrema(k) { const F = FUSC, d = [], out = [], W = 10;      /* extremum vrai : le plus petit (ou grand) sur ±0,2 Ga, et d'au moins 2 kpc ; écarte le bruit du calcul */
+  for (let i = 0; i < F.n; i++) { const a = i * 12 + k * 3; d.push(Math.hypot(F.c[a], F.c[a + 1], F.c[a + 2])); }
+  for (let i = 1; i < F.n - 1; i++) { const w = d.slice(Math.max(0, i - W), Math.min(F.n, i + W + 1)), lo = Math.min(...w), hi = Math.max(...w);
+    if (d[i] === lo && hi - lo > 2 && (!out.length || out[out.length - 1][2] !== 'min')) out.push([F.t[i], d[i], 'min']);
+    else if (d[i] === hi && hi - lo > 2 && out.length && out[out.length - 1][2] !== 'max') out.push([F.t[i], d[i], 'max']); }
+  return out; }
+
+function andromedaOrbit(C, vtKms, Vin, fus) {
   const P = DATA.M31.pos, V = Vin || DATA.M31.vel, r0 = Math.hypot(P[0], P[1], P[2]), u = [P[0] / r0, P[1] / r0, P[2] / r0], vr = V[0] * u[0] + V[1] * u[1] + V[2] * u[2];
   const vt = [V[0] - vr * u[0], V[1] - vr * u[1], V[2] - vr * u[2]], vt0 = Math.hypot(vt[0], vt[1], vt[2]), sc = vtKms === undefined ? 1 : vtKms / vt0;
   const h2 = C.h * C.h, w = C.par.w, OL = C.par.OL, tmp = {};
@@ -199,7 +226,18 @@ function andromedaOrbit(C, vtKms, Vin) {
       dPrev2 = dPrev; dPrev = d;
     }
   };
-  run(1); run(-1); return res;
+  run(1); run(-1);
+  if (fus && FUSC && Math.abs(vt0 * sc - vt0) < 0.5) {      /* R10 : de 0 à la fusion, l'orbite vient du calcul complet ; avant aujourd'hui, du calcul de la page (même départ) ; après la fusion, centres confondus */
+    const p = [0, 0, 0], o = [0, 0, 0, 0, 0, 0], H = 0.1, aF = t => { const a = [0, 0, 0], b = [0, 0, 0], c = [0, 0, 0]; fusAt(FUSC.c, 4, 1, t - H, a); fusAt(FUSC.c, 4, 1, t, b); fusAt(FUSC.c, 4, 1, t + H, c); return [0, 1, 2].map(i => (a[i] - 2 * b[i] + c[i]) / (H * H)); };
+    for (let idx = 0; idx < n; idx++) { const t = T0 + idx * 0.01; if (t < 0) continue;
+      if (t >= FUSC.ga) { tab.set([0, 0, 0], idx * 3); tabF.set([0, 0, 0], idx * 3); continue; }
+      fusAt(FUSC.c, 4, 1, t, p); tab.set(p, idx * 3);
+      /* tabF : ce que le calcul complet ajoute à l'attraction du modèle (frottement, Grand Nuage, Triangle), accélération lissée sur ±0,1 Ga, pour que les étoiles d'Andromède suivent son centre */
+      const af = t > H && t < FUSC.ga - H ? aF(t) : null; acc(p, [0, 0, 0], t, false, o);
+      tabF.set(af ? [af[0] - o[0], af[1] - o[1], af[2] - o[2]] : [0, 0, 0], idx * 3); }
+    res.peri = fusExtrema(1).filter(e => e[2] === 'min' && e[0] < FUSC.ga).map(e => [e[0], e[1]]); res.tMerge = FUSC.ga; res.fus = true;
+  }
+  return res;
 }
 function erf(x) { const s = x < 0 ? -1 : 1, a = Math.abs(x), t = 1 / (1 + 0.3275911 * a); return s * (1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a)); }
 function andromedaAt(O, t, out, fric) { const x = clamp((t - O.t0) / O.dt, 0, O.n - 1.001), i = x | 0, f = x - i, r = fric ? O.f : O.r; out[0] = lerp(r[i * 3], r[i * 3 + 3], f); out[1] = lerp(r[i * 3 + 1], r[i * 3 + 4], f); out[2] = lerp(r[i * 3 + 2], r[i * 3 + 5], f); return out; }
@@ -288,7 +326,7 @@ function dynAdvance(D, O, tTarget, maxSteps, T) {
    -------------------------------------------------------------------------- */
 const LMC_MASS = 1.8e11, LMC_A = 12;      // les estimations publiées vont de 1,3 à 2,5 × 10¹¹ masses solaires
 const lmcMass = r => LMC_MASS * r * r / ((r + LMC_A) * (r + LMC_A));
-function lmcOrbit(massScale) {
+function lmcOrbit(massScale, fus) {
   const T0 = -1, T1 = 10, DT = 0.005, H = 0.0005, n = Math.round((T1 - T0) / DT) + 1, tab = new Float32Array(n * 3), res = { t0: T0, dt: DT, n, r: tab, peri: [], apo: [], tMerge: null }, ms0 = massScale || 1;
   const acc = (r, v, fr, o) => {
     const d = Math.max(Math.hypot(r[0], r[1], r[2]), 0.5), Mh = mwMass(d), g = -G_KPC * (Mh + ms0 * lmcMass(d)) / (d * d * d) * 1.0459; o[0] = g * r[0]; o[1] = g * r[1]; o[2] = g * r[2];
@@ -309,6 +347,14 @@ function lmcOrbit(massScale) {
       }
       t += h;
     }
+  }
+  if (fus && FUSC) {      /* R10 : de 0 à 10 Ga, le Grand Nuage du calcul complet (il y a sa masse, et la Voie lactée recule sous son attraction) */
+    const ex = fusExtrema(3); res.peri = []; res.apo = []; res.tMerge = null;
+    for (const e of ex) { if (e[2] === 'min') res.peri.push([e[0], e[1]]); else { res.apo.push([e[0], e[1]]); if (res.peri.length && e[1] < 15 && res.tMerge === null) res.tMerge = e[0]; } }
+    if (res.tMerge === null) { const m = ex.find(e => e[2] === 'min' && e[1] < 5); if (m) res.tMerge = m[0]; }
+    const p = [0, 0, 0];
+    for (let idx = 0; idx < n; idx++) { const t = T0 + idx * DT; if (t < 0) continue; if (t > FUSC.tEnd) { tab.set([0, 0, 0], idx * 3); continue; }      /* après l'absorption, il reste où le calcul le met (pas de saut au centre) */ fusAt(FUSC.c, 4, 3, t, p); tab.set(p, idx * 3); }
+    res.fus = true;
   }
   return res;
 }

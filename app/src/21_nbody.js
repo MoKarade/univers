@@ -174,3 +174,49 @@ function nbFromData(D) {
   D = D || DATA.NB;
   return { N: D.names.length, jd: D.jd, names: D.names.slice(), gm: Float64Array.from(D.gm), Q: Float64Array.from(D.Q), V: Float64Array.from(D.V), dt: D.dt };
 }
+
+/* --------------------------------------------------------------------------
+   Orbites sur des millions d'années (G2) : table écrite par pipeline/gravite/build_long.js à partir de
+   l'intégration longue (long.js), chargée à part de la page au-delà de ±3 000 ans. Longitude moyenne
+   tous les 1 000 ans, autres éléments tous les 10 000 ans ; entre deux dates, λ avance au mouvement
+   moyen réel (nombre de tours retrouvé par la troisième loi de Kepler), les autres éléments en ligne droite.
+   Jupiter et Saturne ont quatre points par millier d'années (leur « grande inégalité », ≈ 900 ans).
+   Les autres oscillations plus rapides que 1 000 ans ne sont pas suivies entre deux dates de la table.
+   -------------------------------------------------------------------------- */
+let NB_LONG = null;
+function nbLongLoad(buf) {
+  const h = new Float64Array(buf, 0, 7), nP = h[3], nF = h[4], NK = h[5], SL = h[6], n = nP + nF + 1, nS = Math.floor((n - 1) / SL) + 1;
+  const o2 = 56 + n * NK * 4 + nS * NK * 5 * 4;
+  NB_LONG = { jd0: h[1], dd: h[2], nP, nF, NK, SL, n, lam: new Float32Array(buf, 56, n * NK), slow: new Float32Array(buf, 56 + n * NK * 4, nS * NK * 5),
+    lq: h[0] >= 2 ? new Float32Array(buf, o2, (n - 1) * 6) : null,
+    idx: Object.fromEntries(NB_BODIES.slice(0, NK).map((b, i) => [b[0], i])) };
+  return NB_LONG;
+}
+/** Années (depuis la date de départ du calcul) couvertes par la table : [début, fin], ou null. */
+function nbLongRange() { const L = NB_LONG; return L ? [-L.nP * L.dd / 365.25, L.nF * L.dd / 365.25] : null; }
+const nbAng = (a, b, f) => { const d = Math.atan2(Math.sin(b - a), Math.cos(b - a)); return a + d * f; };
+/** Même sortie que planetState, d'après la table longue ; null hors de la table. T : siècles juliens TDB depuis J2000. */
+function nbLongState(key, T, out) {
+  const L = NB_LONG, b = L ? L.idx[key] : undefined; if (b === undefined) return null;
+  const x = ((JD_J2000 + T * 36525) - L.jd0) / L.dd + L.nP; if (!(x >= 0 && x <= L.n - 1)) return null;
+  const k = Math.min(Math.floor(x), L.n - 2), f = x - k, NK = L.NK, xs = x / L.SL, nS = L.slow.length / (NK * 5), ks = Math.min(Math.floor(xs), nS - 2), fs = Math.max(0, xs - ks);
+  const S = L.slow, o0 = (ks * NK + b) * 5, o1 = ((ks + 1) * NK + b) * 5, has1 = ks + 1 < nS;
+  const g = q => has1 ? S[o0 + q] + (S[o1 + q] - S[o0 + q]) * fs : S[o0 + q], ga = q => has1 ? nbAng(S[o0 + q], S[o1 + q], fs) : S[o0 + q];
+  const a = g(0), e = g(1), I = g(2), O = ga(3), om = ga(4);
+  const turn = 0.01720209895 / Math.pow(a, 1.5) * L.dd, jb = key === 'jupiter' ? 0 : key === 'saturn' ? 1 : -1;
+  let lam;
+  if (jb >= 0 && L.lq) {      /* Jupiter et Saturne : quatre points par millier d'années (leur « grande inégalité » dure ≈ 900 ans) */
+    const u = f * 4, q = Math.min(Math.floor(u), 3), node = m => m === 0 ? L.lam[k * NK + b] : m === 4 ? L.lam[(k + 1) * NK + b] : L.lq[(k * 3 + m - 1) * 2 + jb];
+    const l0 = node(q), d = node(q + 1) - l0; lam = l0 + (u - q) * (d + Math.round((turn / 4 - d) / TAU) * TAU);
+  } else { const l0 = L.lam[k * NK + b], d = L.lam[(k + 1) * NK + b] - l0; lam = l0 + f * (d + Math.round((turn - d) / TAU) * TAU); }
+  const M = wrapPi(lam - om), E = keplerE(M, e), w = om - O;
+  const cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(O), sO = Math.sin(O), cI = Math.cos(I), sI = Math.sin(I);
+  const o = out || {};
+  o.a = a; o.e = e; o.E = E; o.M = M; o.long = true;
+  o.P = [cw * cO - sw * sO * cI, cw * sO + sw * cO * cI, sw * sI];
+  o.Q = [-sw * cO - cw * sO * cI, -sw * sO + cw * cO * cI, cw * sI];
+  const xp = a * (Math.cos(E) - e), yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
+  o.pos = [o.P[0] * xp + o.Q[0] * yp, o.P[1] * xp + o.Q[1] * yp, o.P[2] * xp + o.Q[2] * yp];
+  o.period = Math.pow(a, 1.5);
+  return o;
+}
