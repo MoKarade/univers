@@ -355,7 +355,16 @@
     if (!W) { const c = Rr.camPos, v = new THREE.Vector3(x / Rr.cssW * 2 - 1, 1 - y / Rr.cssH * 2, 0.5).unproject(Rr.camera), dir = v.sub(c).normalize(), n = c.clone().normalize(), dn = dir.dot(n);
       if (Math.abs(dn) < 1e-6) return null; const t = -c.dot(n) / dn; W = [(c.x + t * dir.x) / F.s + F.tg[0], (c.y + t * dir.y) / F.s + F.tg[1], (c.z + t * dir.z) / F.s + F.tg[2]]; }
     zAnc = { x, y, t: now, W }; return W; }
-  function zoomAt(dl, x, y) { const l0 = S.logR, l1 = clampZoom(l0 + dl); S.anim = null; S.logR = l1;
+  /* R12 : vitesse de zoom constante par puissance de dix, sauf dans les étendues où rien ne change à l'écran : traversées trois fois plus vite, et le panneau le dit.
+     Étendues repérées par mesure (écart moyen entre deux images successives, un quart de puissance de dix d'écart, inférieur à 3 sur 255 : docs/r12-zoom.md). */
+  const ZFAST = [{ lo: 3.3, hi: 5.5, txt: 'Traversée rapide : quand le champ passe de 600 km à 4 km, la simulation n’a pas d’image plus fine du sol ; rien ne change à l’écran.' },
+    { lo: 0.5, hi: 2.0, txt: 'Traversée rapide : quand le champ passe de 200 m à 6 m, rien n’est dessiné, faute de donnée réelle à cette finesse.' },
+    { lo: -2.3, hi: 0.0, txt: 'Traversée rapide : quand le champ passe de 2 m à 1 cm, la gouttelette approche sans rien montrer de nouveau.' },
+    { lo: -8.0, hi: -4.5, txt: 'Traversée rapide : quand le champ passe de 60 micromètres à 20 nanomètres, l’eau liquide paraît la même. Rien de nouveau avant les molécules.' },
+    { lo: -13.4, hi: -12.6, txt: 'Traversée rapide : entre les électrons et le noyau, rien. Presque tout l’atome est vide.' },
+    { lo: -19.3, hi: -17.2, txt: 'Traversée rapide : le quark reste un point, rien de nouveau jusqu’à la limite du connu.' }], ZFAST_K = 3;
+  const zFast = lr => microOn() ? ZFAST.find(z => lr > z.lo && lr < z.hi) || null : null;
+  function zoomAt(dl, x, y) { if (zFast(S.logR)) dl *= ZFAST_K; const l0 = S.logR, l1 = clampZoom(l0 + dl); S.anim = null; S.logR = l1;
     if (S.center || microOn() || (S.focus !== 'sun' && l0 < 14.4) || !(l1 !== l0) || !F.s) return;      /* objet touché ou astre suivi : le zoom reste centré sur lui (R1) */
     const W = anchorAt(x, y); if (!W || !isFinite(W[0])) return; const k = Math.pow(10, l1 - l0), z = S.zoff || [0, 0, 0];
     for (let i = 0; i < 3; i++) { const dz = (W[i] - F.tg[i]) * (1 - k); z[i] += dz; F.tg[i] += dz; } S.zoff = z; F.s /= k; }      /* F.tg et F.s suivent tout de suite : plusieurs crans dans la même image restent justes */
@@ -370,7 +379,7 @@
     });
     const up = e => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (ptrs.size === 0) { canvas.classList.remove('drag'); if (e.type === 'pointerup' && moved < 6 && performance.now() - t0 < 450) tap(e.clientX, e.clientY); } pinch = 0; };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 26 puissances de dix : la molette y va plus vite */ }, { passive: false });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013), e.clientX, e.clientY); /* R12 : même vitesse partout ; seules les étendues vides vont plus vite (zoomAt) */ }, { passive: false });
     function labelAt(x, y) { for (const b of placed) if (b[4] && x >= b[0] - 5 && x <= b[1] + 5 && y >= b[2] - 5 && y <= b[3] + 5) { const L = b[4]; if (L.micro) return null; if (L.body) return { body: L.body }; const p = L.get(), q = [0, 0, 0]; if (p && isFinite(p[0]) && Rr.project(p, F, q)) return { x: q[0], y: q[1] }; } return null; }
     S._tap = (x, y) => tap(x, y);
     function tap(x, y) { const now = performance.now(), dbl = now - lastTap[0] < 380 && Math.hypot(x - lastTap[1], y - lastTap[2]) < 26; lastTap = [now, x, y]; let best = null, bd = 30; for (const b of BODIES) { const o = Rr.bodies[b.key]; if (!o.screen) continue; const d = Math.hypot(o.screen[0] - x, o.screen[1] - y) - Math.min(o.px, 200); if (d < bd) { bd = d; best = b.key; } } if (best) { select(null); if (best !== S.focus) focusBody(best); return; }
@@ -411,6 +420,12 @@
       S.opts.simWeb = box.checked;
     }); }
   $('c-lite').addEventListener('change', e => { S.lite = e.target.checked; resize(); });
+  /* R12 : compteur d'images par seconde, à lire sur le téléphone. Choix gardé sur cet appareil. */
+  const FPS = { on: false, n: 0, t0: 0, v: 0 };
+  const fpsShow = on => { FPS.on = on; $('fps').hidden = !on; $('c-fps').checked = on; FPS.n = 0; FPS.t0 = 0; try { localStorage.setItem('univers-fps', on ? '1' : '0'); } catch (err) {} };
+  $('c-fps').addEventListener('change', e => fpsShow(e.target.checked));
+  { let on = false; try { on = localStorage.getItem('univers-fps') === '1'; } catch (err) {} fpsShow(on); }
+  function fpsTick(now) { if (!FPS.t0) { FPS.t0 = now; FPS.n = 0; return; } FPS.n++; if (now - FPS.t0 >= 1000) { FPS.v = FPS.n * 1000 / (now - FPS.t0); FPS.n = 0; FPS.t0 = now; if (FPS.on) $('fps').textContent = Math.round(FPS.v) + ' images/s'; } }
   $('n-stars').textContent = nf(starTotal(), 0); $('n-bodies').textContent = nf(DATA.AST_N + DATA.TNO_N, 0); $('n-comets').textContent = nf(DATA.COM_N, 0); $('n-bh').textContent = nf(DATA.BHS.n + DATA.BHM.n + 1, 0); $('n-exo').textContent = nf(DATA.EXO_N, 0); $('n-psr').textContent = nf(DATA.PSR_N, 0); $('n-clusters').textContent = nf(DATA.CLUSTERS_N[0] + DATA.CLUSTERS_N[1], 0); $('n-near').textContent = nf(DATA.LOCAL.length + DATA.NEAR_N, 0); $('n-surv').textContent = nf(DATA.SURV_N[0] + DATA.SURV_N[1] + DATA.SURV_N[2], 0);
 
   /* ---- cosmologie : curseurs, courbes, lectures ---- */
@@ -563,7 +578,7 @@
   // ---- amas, galaxies, pulsars : compléments des catalogues
   const velRow = v => ['Vitesse mesurée', (v < 0 ? 'se rapproche' : 's’éloigne') + ' à ' + nf(Math.abs(Math.round(v)), 0) + NBSP + 'km/s, z = ' + zStr(v / 299792.458)], metal = x => ['Éléments plus lourds que l’hélium', sig(Math.pow(10, x) * 100, 2) + NBSP + '% de la teneur du Soleil'];
   const cluExtra = i => { const x = DATA.CLU_X[i], r = []; if (!x) return r; if (x[1] !== null) r.push(velRow(x[1])); if (x[0] !== null) r.push(metal(x[0])); if (x[2]) r.push(['Moitié de sa lumière dans un rayon de', fmtDist(x[2] * LY)]); if (x[3]) r.push(['Distance au centre de la galaxie', fmtDist(x[3] * KPC)]); return r; };
-  const lgExtra = (g, r, noVel) => { const gi = DATA.LOCAL.findIndex(q => q.n === g.n), x = DATA.LG_X[gi]; lgMove(gi, r); lgTurn(gi, r); if (!x) return; if (x[0]) r.push(['Type', x[0]]); if (x[1] !== null && !noVel) r.push(velRow(x[1])); if (x[2]) r.push(['Masse en étoiles', bigMass(x[2] * 1e6)]); if (x[4]) r.push(['Gaz d’hydrogène', bigMass(x[4] * 1e6)]); if (x[3] !== null) r.push(metal(x[3])); };
+  const lgExtra = (g, r, noVel) => { const gi = DATA.LOCAL.findIndex(q => q.n === g.n), x = DATA.LG_X[gi]; lgMove(gi, r); lgTurn(gi, r); if (!x) return; if (x[0]) r.push(['Type', x[0]]); if (x[1] !== null && !noVel) { const v = velRow(x[1]); v[0] = 'Vitesse mesurée, vue du Soleil'; v[1] += ' · mesuré'; r.push(v); } if (x[2]) r.push(['Masse en étoiles', bigMass(x[2] * 1e6)]); if (x[4]) r.push(['Gaz d’hydrogène', bigMass(x[4] * 1e6)]); if (x[3] !== null) r.push(metal(x[3])); };
   const nearExtra = i => { const x = DATA.NEAR_X[i], r = []; if (!x) return r; if (x[0] !== null) r.push(['Type', x[0] <= 0 ? 'elliptique ou lenticulaire' : x[0] <= 8 ? 'spirale' : 'irrégulière ou naine']); if (x[1] !== null) r.push(velRow(x[1])); if (x[2] !== null) r.push(['Éclat', bigMass(Math.pow(10, 0.4 * (5.48 - x[2])))]); if (x[3]) r.push(['Masse d’après sa rotation', bigMass(Math.pow(10, x[3]))]); if (x[4]) r.push(['Gaz d’hydrogène', bigMass(Math.pow(10, x[4]))]); return r; };
   const PSRA = DATA.PSR_AGE ? new Float32Array(b64ToBytes(DATA.PSR_AGE).buffer) : null;
   const psrExtra = (i, p) => { const r = []; if (PSRA && PSRA[i] > 0) r.push(['Âge estimé', fmtYears(PSRA[i])]); if (p > 0) r.push(['Vitesse à son équateur', sig(TAU * 12 / p / 299792.458 * 100, 2) + NBSP + '% de la vitesse de la lumière (pour un rayon supposé de 12 km)']); return r; };
@@ -1082,7 +1097,20 @@
   /* ---- galaxies naines du Groupe local : chacune suit l'orbite calculée d'après sa vitesse mesurée (Local Volume Database, Pace 2024),
      sous l'attraction de la Voie lactée, d'Andromède et du Grand Nuage de Magellan. Sans déplacement mesuré dans le ciel, une galaxie reste en place, ou suit Andromède si elle en est satellite. ---- */
   const LGO = { list: [], sh: new Float32Array(104 * 3), run: 0, t0: 0, dt: 0.02, n: 0, ready: false };
-  function lgStart() { const V = DATA.LGV; if (!V || !S.orbit) return; const run = ++LGO.run, O = S.orbit, cen = G.lg.centers, T0 = Math.max(O.t0, -8), T1 = Math.min(O.t0 + (O.n - 1) * O.dt, 12), DT = 0.02, H = 0.004, n = Math.round((T1 - T0) / DT) + 1, ids = Object.keys(V).map(Number).filter(i => cen[i] && !cen[i].own && !cen[i].m0);
+  /* R18 suite : galaxie sans déplacement mesuré dans le ciel mais avec sa vitesse mesurée le long de la ligne de visée (McConnachie 2012).
+     Supposition : elle ne bouge ni de côté ni en tournant autour de la Voie lactée, seulement en s'en rapprochant ou en s'en éloignant (part de côté prise nulle,
+     dans le repère du centre de la Voie lactée). La vitesse mesurée fixe alors toute la vitesse ; on l'écrit comme vue du Soleil, comme DATA.LGV.
+     Exclues : les satellites d'Andromède (ils la suivent), les galaxies à moins de 50 kpc (pour elles la part de côté domine : supposition trop forte). */
+  const LGR = { v: null, vg: {} };
+  function lgRadial() { if (LGR.v) return LGR.v; const V = DATA.LGV || {}, X = DATA.LG_X || [], cen = G.lg.centers, out = {};
+    cen.forEach((c, i) => { const vl = X[i] && X[i][1]; if (V[i] || c.own || c.m0 || c.grp || vl === null || vl === undefined || !isFinite(vl)) return;
+      const q = c.c0, h = [q[0] + gcRelKpc0[0], q[1] + gcRelKpc0[1], q[2] + gcRelKpc0[2]], tr = v => [M[0][0] * v[0] + M[1][0] * v[1] + M[2][0] * v[2], M[0][1] * v[0] + M[1][1] * v[1] + M[2][1] * v[2], M[0][2] * v[0] + M[1][2] * v[1] + M[2][2] * v[2]],
+        hg = tr(h), rg = tr(q), dh = Math.hypot(hg[0], hg[1], hg[2]), dr = Math.hypot(rg[0], rg[1], rg[2]); if (!(dr >= 50)) return;
+      const vgsr = vl + (hg[0] * SUN_UVW[0] + hg[1] * SUN_UVW[1] + hg[2] * SUN_UVW[2]) / dh;      // vitesse mesurée ramenée au centre de la Voie lactée
+      LGR.vg[i] = vgsr; out[i] = [vgsr * rg[0] / dr - SUN_UVW[0], vgsr * rg[1] / dr - SUN_UVW[1], vgsr * rg[2] / dr - SUN_UVW[2], null, vl]; });
+    return (LGR.v = out); }
+  function lgStart() { const V = DATA.LGV; if (!V || !S.orbit) return; const run = ++LGO.run, O = S.orbit, cen = G.lg.centers, T0 = Math.max(O.t0, -8), T1 = Math.min(O.t0 + (O.n - 1) * O.dt, 12), DT = 0.02, H = 0.004, n = Math.round((T1 - T0) / DT) + 1, ids = Object.keys(V).map(Number).filter(i => cen[i] && !cen[i].own && !cen[i].m0), VR = lgRadial();
+    for (const i of Object.keys(VR).map(Number)) ids.push(i);
     LGO.list = []; LGO.t0 = T0; LGO.dt = DT; LGO.n = n; LGO.ready = false; const m3 = [0, 0, 0], lm = [0, 0, 0], a = [0, 0, 0], K2 = G_KPC * 1.0459, LT1 = LMCO.t0 + (LMCO.n - 1) * LMCO.dt;
     const acc = (r, t, o) => { const d = Math.max(Math.hypot(r[0], r[1], r[2]), 1), g = -K2 * mwMass(d) / (d * d * d); o[0] = g * r[0]; o[1] = g * r[1]; o[2] = g * r[2];
       andromedaAt(O, t, m3); const D = Math.hypot(m3[0], m3[1], m3[2]);
@@ -1090,7 +1118,7 @@
       else { o[0] += g * r[0] * M31_MASS_RATIO; o[1] += g * r[1] * M31_MASS_RATIO; o[2] += g * r[2] * M31_MASS_RATIO; }                                                                                                                                                                          // galaxies fusionnées : leurs masses s'ajoutent
       if (t > LMCO.t0 && t < LT1) { andromedaAt(LMCO, t, lm); const DL = Math.hypot(lm[0], lm[1], lm[2]); if (DL > 2) { const x = r[0] - lm[0], y = r[1] - lm[1], z = r[2] - lm[2], dl = Math.max(Math.hypot(x, y, z), 2), gl = K2 * lmcMass(dl) / (dl * dl * dl), gL = K2 * lmcMass(DL) / (DL * DL * DL); o[0] -= gl * x + gL * lm[0]; o[1] -= gl * y + gL * lm[1]; o[2] -= gl * z + gL * lm[2]; } }
       return o; };
-    const one = k => { if (run !== LGO.run) return; if (k >= ids.length) { LGO.ready = true; return; } const i = ids[k], c = cen[i], v0 = V[i], q = c.c0, r0 = [M[0][0] * q[0] + M[1][0] * q[1] + M[2][0] * q[2], M[0][1] * q[0] + M[1][1] * q[1] + M[2][1] * q[2], M[0][2] * q[0] + M[1][2] * q[1] + M[2][2] * q[2]], tab = new Float32Array(n * 3), dist = new Float32Array(n);
+    const one = k => { if (run !== LGO.run) return; if (k >= ids.length) { LGO.ready = true; return; } const i = ids[k], c = cen[i], v0 = V[i] || VR[i], q = c.c0, r0 = [M[0][0] * q[0] + M[1][0] * q[1] + M[2][0] * q[2], M[0][1] * q[0] + M[1][1] * q[1] + M[2][1] * q[2], M[0][2] * q[0] + M[1][2] * q[1] + M[2][2] * q[2]], tab = new Float32Array(n * 3), dist = new Float32Array(n);
       for (const dir of [1, -1]) { if (dir < 0 && T0 >= 0) continue; const r = r0.slice(), v = [(v0[0] + SUN_UVW[0]) * KMS_KPC_GYR, (v0[1] + SUN_UVW[1]) * KMS_KPC_GYR, (v0[2] + SUN_UVW[2]) * KMS_KPC_GYR], h = H * dir, steps = Math.round((dir > 0 ? T1 : -T0) / H); let t = 0;
         for (let s = 0; s <= steps; s++) { if (s % 5 === 0) { const idx = Math.round((t - T0) / DT); if (idx >= 0 && idx < n) { const dx = r[0] - r0[0], dy = r[1] - r0[1], dz = r[2] - r0[2]; tab[idx * 3] = M[0][0] * dx + M[0][1] * dy + M[0][2] * dz; tab[idx * 3 + 1] = M[1][0] * dx + M[1][1] * dy + M[1][2] * dz; tab[idx * 3 + 2] = M[2][0] * dx + M[2][1] * dy + M[2][2] * dz; dist[idx] = Math.hypot(r[0], r[1], r[2]); } }
           acc(r, t, a); v[0] += a[0] * h / 2; v[1] += a[1] * h / 2; v[2] += a[2] * h / 2; r[0] += v[0] * h; r[1] += v[1] * h; r[2] += v[2] * h; t += h; acc(r, t, a); v[0] += a[0] * h / 2; v[1] += a[1] * h / 2; v[2] += a[2] * h / 2; } }
@@ -1106,6 +1134,10 @@
     if (c.own) { r.push(['Mouvement dans la simulation', 'Orbite calculée d’après sa vitesse mesurée, sous l’attraction des deux galaxies · scénario']); return; }
     if (c.m0) { r.push(['Mouvement dans la simulation', MAG.c.indexOf(c) === 0 ? 'Orbite calculée d’après sa vitesse mesurée (Kallivayalil et al. 2013) · scénario pour l’avenir lointain' : 'Suit le Grand Nuage, dont il est compagnon : sa propre orbite n’est pas calculée · calculé avec le Grand Nuage']); return; }
     if (lv) { r.push(['Vitesse par rapport à la Voie lactée', nf(Math.round(Math.hypot(lv[0] + SUN_UVW[0], lv[1] + SUN_UVW[1], lv[2] + SUN_UVW[2])), 0) + NBSP + 'km/s (± ' + lv[3] + ' sur la part mesurée dans le ciel)']); r.push(['Mouvement dans la simulation', 'Orbite calculée d’après cette vitesse, sous l’attraction de la Voie lactée, d’Andromède et du Grand Nuage · Probable']); r.push(['Source de la vitesse', (DATA.LGV_SRC && DATA.LGV_SRC[gi]) || 'Local Volume Database (Pace 2024)']); if (c.g.s > 5) r.push(['Limite du calcul', 'Le freinage par la matière noire d’Andromède n’est pas pris en compte : pour une galaxie aussi massive, l’éloignement après le passage est probablement exagéré']); }
+    else if (lgRadial()[gi]) { const vg = LGR.vg[gi]; r.push(['Vitesse par rapport au centre de la Voie lactée', (vg < 0 ? 'se rapproche' : 's’éloigne') + ' à ' + nf(Math.abs(Math.round(vg)), 0) + NBSP + 'km/s : la vitesse mesurée vue du Soleil, moins le mouvement du Soleil dans la Voie lactée · calculé']);
+      r.push(['Mouvement dans la simulation', 'Orbite calculée d’après cette vitesse, sous l’attraction de la Voie lactée, d’Andromède et du Grand Nuage · scénario']);
+      r.push(['Part de côté du mouvement', 'Non mesurée : supposée nulle, la galaxie va tout droit vers la Voie lactée ou s’en éloigne · supposé']); r.push(['Source de la vitesse', 'McConnachie 2012 (vitesse dans l’axe de notre regard)']);
+      r.push(['Limite du calcul', 'L’expansion de l’univers et les galaxies au-delà du Groupe local ne sont pas prises en compte : pour une galaxie lointaine, la trajectoire après quelques milliards d’années est incertaine']); }
     else r.push(['Mouvement dans la simulation', c.grp ? 'Suit Andromède, dont elle est satellite : sa propre orbite n’est pas calculée, faute de déplacement mesuré dans le ciel · calculé avec Andromède' : 'Déplacement dans le ciel non mesuré, ou trop incertain : galaxie laissée en place · inconnu']); }
   /* ---- nuage d'Oort vivant : chaque comète du modèle a son orbite autour du Soleil, et chaque étoile du catalogue qui passe à moins de 2 années-lumière la dévie ----
      Le nuage reste hypothétique (personne ne l'a observé directement) : sa forme est un modèle. Ce qui est calculé, c'est sa réponse à la gravité du Soleil et des étoiles de passage. */
@@ -1187,6 +1219,7 @@
     const C = S.cosmo, lr = S.logR, age = F.age;
     if (S.lost) return S.lostMsg || '';
     if (Rr.lens && Rr.lens.on && Rr.lens.inside) return 'Inconnu : si près de ' + Rr.lens.name + ', à moins d’une fois et demie la taille de son horizon, la lumière n’est pas calculée ici.';      /* S6 */
+    if (microOn() && zFast(lr)) return zFast(lr).txt;
     if (microOn()) { const nt = microLevel(lr).note; return (typeof nt === 'function' ? nt() : nt) || ''; }
     if (lr < 17.6 && S.ty >= SYS_END * 1e9) return SYS_END_TXT;      /* vue du système solaire : son état passe avant le calcul d'Andromède */
     if (lr < 13.5 && S.ty / 1e9 >= T_DIV) return EARTH_TXT;      /* R6 : panneau du sort de la Terre, dans le système solaire */
@@ -1355,6 +1388,7 @@
   /* ---- boucle ---- */
   let last = performance.now(), hudT = 0, frames = 0;
   function step(now) {
+    fpsTick(now);
     const wall = now / 1000, dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000)); last = now;
     if (S.anim) { const A = S.anim, k = clamp((wall - A.t0) / A.dur, 0, 1), e = ease(k); S.logR = lerp(A.l0, A.l1, e); S.az = lerp(A.a0, A.a1, e); S.el = lerp(A.e0, A.e1, e); if (k >= 1) S.anim = null; }
     S.logR = clampZoom(S.logR);
@@ -1430,7 +1464,7 @@
     const sun = sunGalAt(Rr.K, 0, [0, 0, 0]);
     return { m31: { pos: DATA.M31.pos, vel: M31_MEAS[0][1], vel_name: M31_MEAS[0][0], spin: DATA.M31.spin, meas: M31_MEAS }, lmc: DATA.LMC, lmc_spin: (LG_SPIN.find(q => /Grand Nuage/.test(q.key)) || {}).L, m33_spin: (LG_SPIN.find(q => /Triangle/.test(q.key)) || {}).L,
       dwarfs: dw, sun: { pos: sun, vel: SUN_UVW }, M_GAL2ECL: M, note: 'Axes LG_SPIN dans le repère équatorial (voir 30_gen.js) ; le reste dans le repère galactocentrique d’andromedaOrbit.' }; }
-  window.__U = { selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
+  window.__U = { FPS, ZFAST, zFast, lgRadial, LGR, gcRelKpc0, selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
   if (!reduced) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
   requestAnimationFrame(now => { last = now; step(now); requestAnimationFrame(() => { $('loader').classList.add('out'); setTimeout(() => $('loader').remove(), 1000); if (!reduced && !S.resumed) { S.anim = { t0: performance.now() / 1000 + 0.3, dur: 5.5, l0: S.logR, l1: STOPS[1].logR, a0: S.az, a1: S.az + 0.5, e0: S.el, e1: 0.6 }; } showRail(); }); });
 })();
