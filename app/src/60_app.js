@@ -494,13 +494,16 @@
   function lookbackGyr(z) { const C = S.cosmo, a = 1 / (1 + z); let hi = 0; while (hi < C.n - 1 && C.t[hi + 1] <= 1e-9) hi++; let lo = hi; while (lo > 0 && C.a[lo - 1] < C.a[lo] && C.a[lo] > a) lo--; if (C.a[lo] > a) return -C.t[lo]; const f = (a - C.a[lo]) / Math.max(C.a[lo + 1] - C.a[lo], 1e-12); return -(C.t[lo] + clamp(f, 0, 1) * (C.t[lo + 1] - C.t[lo])); }
   /* état d'une étoile à la date affichée selon starLife : un modèle statistique (place dans la vie tirée au hasard), pas une prédiction étoile par étoile ; le repère le dit. Même règle que l'affichage des points */
   function starState(L, fate) { const t = F.tMyr; if (t < L[0]) return 'pas encore née d’après un modèle statistique (âge réel inconnu)'; if ((fate === 1 || fate === 3) && t > L[2] + F.flash) return 'explosée d’après un modèle statistique (âge réel inconnu)'; return null; }
+  /* S5 : extinction par la poussière mesurée (Edenhofer et al. 2024), vue de la Terre et vue d'ici */
+  function dustRow(P, i) { const s = eclLyToGalPc([P[i * 3], P[i * 3 + 1], P[i * 3 + 2]]), cl = Rr.dustU.uCamLy.value, pr = dustPair(eclLyToGalPc([cl.x, cl.y, cl.z]), s), x = a => a < 0.05 ? 'presque pas atténuée' : sig(Math.pow(10, 0.4 * a), 2) + ' fois moins lumineuse';
+    return 'vue de la Terre : ' + x(pr[1]) + (Rr.dustOn ? ' ; vue d’ici : ' + x(pr[0]) + ', son éclat en tient compte' : '') + (Math.hypot(...s) > DATA.DUST.rmax ? ' ; au-delà de la carte (1,25 kpc), poussière inconnue' : '') + ' (carte 3D mesurée, Edenhofer et al. 2024)'; }
   function selStar(i) {
     const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i], L = [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]], fate = st.fate[i];
     const get = () => [sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY]; if (!Rr.keyStars.includes(i)) Rr.keyStars.push(i);
     return { exoI: STAREXO[i] >= 0 ? STAREXO[i] : undefined, exoC: true, lr: STAREXO[i] >= 0 ? exoLr(STAREXO[i]) : undefined, name: DATA.STAR_NAMES[i] || (hip ? 'HIP ' + hip : 'Étoile sans nom'), exist: () => starState(L, fate), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
       const d = vlen(get()), t = F.tMyr, sn = fate === 1 || fate === 3, lum = Math.pow(10, 0.4 * (4.83 - MV));
       const fut = fate === 4 || (!sn && t >= L[2]) ? 'naine blanche qui refroidit' : sn && t >= L[2] ? 'a explosé en supernova' : sn ? 'supernova ' + inTime((L[2] - t) * 1e6) : t < L[1] ? 'géante rouge ' + inTime((L[1] - t) * 1e6) + ', puis naine blanche' : 'naine blanche ' + inTime((L[2] - t) * 1e6);
-      return [['Distance', fmtDist(d)], ['Éclat', fmtTimes(lum) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(st.mass[i], 2) + NBSP + 'fois le Soleil'], ['Vitesse', Rr.K.vkms[i] > 0 ? sig(Rr.K.vkms[i], 3) + NBSP + 'km/s par rapport au Soleil' : 'non mesurée'], ['Mouvement', orbMotionText(Rr.K, i, F.tEff, false)], ['Avenir estimé', fut]].concat(passRows(i), starExtra(get(), kvOf(Rr.K, i), MV, bv), STAREXO[i] >= 0 ? [['Planètes connues', EXOP[STAREXO[i]] + ' : « Y aller » pour les voir tourner autour de l’étoile']].concat(exoRows(STAREXO[i])) : []); } };
+      return [['Distance', fmtDist(d)], ['Éclat', fmtTimes(lum) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(st.mass[i], 2) + NBSP + 'fois le Soleil'], ['Vitesse', Rr.K.vkms[i] > 0 ? sig(Rr.K.vkms[i], 3) + NBSP + 'km/s par rapport au Soleil' : 'non mesurée'], ['Mouvement', orbMotionText(Rr.K, i, F.tEff, false)], ['Poussière devant elle', dustRow(Rr.starPos, i)], ['Avenir estimé', fut]].concat(passRows(i), starExtra(get(), kvOf(Rr.K, i), MV, bv), STAREXO[i] >= 0 ? [['Planètes connues', EXOP[STAREXO[i]] + ' : « Y aller » pour les voir tourner autour de l’étoile']].concat(exoRows(STAREXO[i])) : []); } };
   }
   function selBody(tag, i) {
     const B = Rr[tag], raw = NM[tag][i] || '', parts = raw.split('~'), nm = parts[0] ? parts[0] + (parts[1] ? ' (' + parts[1] + ')' : '') : (parts[1] ? 'Astéroïde ' + parts[1] : 'Objet sans nom');
@@ -1204,7 +1207,7 @@
     const pn = placeName(); if (pn !== lastPlace) { $('place').textContent = lastPlace = pn; }
     { const ml = microOn() && S.logR < 3.2 ? microLevel(S.logR).id : ''; if (ml !== lastMl) { lastMl = ml; if (!S.sel) renderCard(); } }
     $('field').textContent = 'Champ large de ' + fmtDist(2 * R);
-    $('prov').textContent = provText(S.logR) + (Rr.lens.on ? (Rr.lens.inside ? ' Trop près de ' + Rr.lens.name + ' : non calculé ici.' : ' Lumière déviée par ' + Rr.lens.name + ' : calculée (sans rotation, sans disque).') : '');
+    $('prov').textContent = provText(S.logR) + (Rr.dustOn ? ' Étoiles assombries par la poussière mesurée entre elles et la vue.' : '') + (Rr.lens.on ? (Rr.lens.inside ? ' Trop près de ' + Rr.lens.name + ' : non calculé ici.' : ' Lumière déviée par ' + Rr.lens.name + ' : calculée (sans rotation, sans disque).') : '');
     const nt = noticeText(); if (nt !== lastNotice) { lastNotice = nt; $('notice').textContent = nt; $('notice').hidden = !nt; }
     renderCard();
 
