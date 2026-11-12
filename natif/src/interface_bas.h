@@ -225,6 +225,7 @@ void drawHelp(UiState& ui, float w, float h) {
     helpLine(ui, "Origine", "revenir au Soleil");
     helpLine(ui, "Espace", "arrêter ou faire avancer le temps");
     helpLine(ui, "Page préc. / suiv.", "temps plus rapide / plus lent");
+    helpLine(ui, "F2  F3", "lumière du ciel précédente / suivante (radio … gamma)");
     helpLine(ui, "F1", "afficher ou cacher cette aide");
     helpLine(ui, "Échap", "fermer la recherche ou un menu ; sinon quitter");
     ImGui::Spacing();

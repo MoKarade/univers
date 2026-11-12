@@ -3,7 +3,7 @@
 //   interface_base.h (style, état, échelle, orbites et noms, clavier), interface_recherche.h (recherche, « Aller à »),
 //   interface_temps.h (barre du temps, fiche), interface_bas.h (bas de l'écran, accueil, visite, aide, complétude).
 #pragma once
-#include "interface_bas.h"
+#include "interface_lumiere.h"
 
 namespace {
 
@@ -34,6 +34,8 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     drawTour(sim, ui, w, h, fixed);
     drawTopLeft(sim, ui, fixed);
     drawTimeBar(sim, ui, w, fixed);
+    lightKeys(sim);
+    drawLightLegend(sim, ui, w, h, fixed);
     drawCompleteness(sim, ui, w, fixed);
     drawCard(sim, ui, cam, w, fixed);
     drawStatus(sim, ui, h, fixed);
