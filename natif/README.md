@@ -66,5 +66,5 @@ par Claude sur le PC) : c'est Marc qui la voit en premier.
 - Temps : lecture/pause, sens, plus lent / plus rapide (aussi Page suiv. / Page préc.), « Maintenant », « Date… »
   (« 1969 », « 21/07/1969 », « -3000 »).
 - F1 ou « ? » : toutes les commandes. L'interface grandit avec la fenêtre (police chargée pour l'écran du PC).
-- Contrôles sans fenêtre : `UNIVERS_ECRAN=accueil|aide|menu|recherche:<texte>|visite:<étape>|vol:<nom>:<0 à 1>`
+- Contrôles sans fenêtre : `UNIVERS_ECRAN=accueil|aide|menu|completude|eclipse[:<rang>]|voyager|recherche:<texte>|visite:<étape>|vol:<nom>:<0 à 1>`
   avec `--fenetre-test 20 --capture f.ppm`. `essai_interface.exe` vérifie la recherche et la lecture des dates.

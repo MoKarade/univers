@@ -57,7 +57,7 @@ void applyStyle() {
 // Elle est chargée à la taille voulue pour la hauteur de l'écran principal (1 à 2 fois la taille de base de 1080 lignes).
 void loadFonts(ImFont*& normal, ImFont*& big) {
     ImGuiIO& io = ImGui::GetIO();
-    static const ImWchar ranges[] = {0x0020, 0x00FF, 0x2010, 0x2027, 0x2190, 0x2193, 0x2212, 0x2212, 0x2318, 0x2318, 0};
+    static const ImWchar ranges[] = {0x0020, 0x00FF, 0x2000, 0x206F, 0x2190, 0x2193, 0x2212, 0x2212, 0x2318, 0x2318, 0};
     gFontMaxScale = std::clamp(static_cast<float>(GetSystemMetrics(SM_CYSCREEN)) / 1080.0f, 1.0f, 2.5f);
     const char* path = "C:\\Windows\\Fonts\\segoeui.ttf";
     if (std::ifstream(path).good()) {
@@ -170,8 +170,10 @@ struct UiState {
     bool started = false;
     bool welcome = false, help = false, openGoTo = false;
     bool keepGoTo = false;
+    bool completeness = false;      // détail de la complétude ouvert
     ImVec2 goToAnchor{0, 0};
-    float searchRight = 0, timeW = 0, timeBottom = 0;      // place prise par la recherche et la barre du temps (image précédente)        // le menu « Aller à » s'ouvre sous son bouton          // contrôle : le menu « Aller à » reste ouvert pour la capture
+    float searchRight = 0, timeW = 0, timeBottom = 0;
+    float completenessBottom = 0, completenessW = 0;      // place prise par la ligne de complétude      // place prise par la recherche et la barre du temps (image précédente)        // le menu « Aller à » s'ouvre sous son bouton          // contrôle : le menu « Aller à » reste ouvert pour la capture
     int cardClosedFor = -1;         // fiche fermée pour cet astre
     int tour = -1;                  // étape de la visite guidée (-1 : pas de visite)
     double tourClock = 0;
@@ -288,6 +290,7 @@ void firstFrame(Sim& sim, UiState& ui) {
     const std::string e = env ? env : "";
     if (e == "accueil") ui.welcome = true;
     if (e == "aide") ui.help = true;
+    if (e == "completude") ui.completeness = true;
     if (e == "menu") ui.keepGoTo = true;
     if (e.rfind("recherche:", 0) == 0) std::snprintf(ui.search, sizeof(ui.search), "%s", e.substr(10).c_str());
     if (e.rfind("visite:", 0) == 0) {
@@ -753,7 +756,10 @@ void deepTimeNote(const Sim& sim) {
 
 void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     // Centrée, sauf si elle mordrait sur la recherche : elle se décale alors vers la droite.
-    ImGui::SetNextWindowPos({std::max(w * 0.5f, ui.searchRight + px(ui, 12) + ui.timeW * 0.5f), px(ui, 16)}, 0, {0.5f, 0});
+    const float minX = ui.searchRight + px(ui, 12) + ui.timeW * 0.5f;
+    const bool roomForAll = ui.searchRight + ui.timeW + ui.completenessW + px(ui, 48) <= w;
+    const float maxX = roomForAll ? w - px(ui, 28) - ui.completenessW - ui.timeW * 0.5f : w;
+    ImGui::SetNextWindowPos({std::clamp(w * 0.5f, minX, std::max(minX, maxX)), px(ui, 16)}, 0, {0.5f, 0});
     ImGui::Begin("temps", nullptr, fixed);
     ImGui::PushFont(ui.big);
     const std::string date = frDate(sim.years, kRates[sim.rate].yearsPerSecond < 0.02);
@@ -873,7 +879,7 @@ void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlag
     const int f = sim.focus;
     if (ui.cardClosedFor == f) return;
     ui.cardClosedFor = -1;
-    ImGui::SetNextWindowPos({w - px(ui, 16), std::max(px(ui, 150), ui.timeBottom + px(ui, 12))}, 0, {1, 0});      // sous la barre du temps : les deux ne se recouvrent jamais
+    ImGui::SetNextWindowPos({w - px(ui, 16), std::max({px(ui, 150), ui.timeBottom + px(ui, 12), ui.completenessBottom + px(ui, 12)})}, 0, {1, 0});      // sous la barre du temps : les deux ne se recouvrent jamais
     ImGui::Begin("fiche", nullptr, fixed);
     ImGui::PushFont(ui.big);
     ImGui::TextUnformatted(sim.bodies[static_cast<size_t>(f)].name.c_str());
@@ -1067,6 +1073,33 @@ void drawHelp(UiState& ui, float w, float h) {
     ImGui::End();
 }
 
+// ---------------------------------------------------------------- complétude (choix de Marc : toujours visible, détail au clic)
+
+// En haut à droite : ce qui est présent à l'échelle regardée, comparé à ce qui est connu. Un clic ouvre le détail.
+void drawCompleteness(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
+    if (!sim.completeness) return;
+    const completude::Echelle& e = (*sim.completeness)[static_cast<size_t>(completude::echellePour(sim.dist))];
+    // En haut à droite ; si la place manque à côté de la barre du temps, juste en dessous d'elle.
+    const bool roomOnTop = ui.searchRight + ui.timeW + ui.completenessW + px(ui, 48) <= w;
+    ImGui::SetNextWindowPos({w - px(ui, 16), roomOnTop ? px(ui, 16) : ui.timeBottom + px(ui, 12)}, 0, {1, 0});
+    ImGui::Begin("completude-ligne", nullptr, fixed);
+    const std::string line = completude::ligneCourte(e);
+    if (ImGui::Selectable(line.c_str(), ui.completeness)) ui.completeness = !ui.completeness;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic : ce qui est montré ici, comparé à ce qui est connu");
+    ui.completenessBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
+    ui.completenessW = ImGui::GetWindowWidth();
+    ImGui::End();
+    if (!ui.completeness) return;
+    ImGui::SetNextWindowPos({w * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f}, 0, {0.5f, 0.5f});
+    ImGui::SetNextWindowBgAlpha(0.97f);
+    ImGui::Begin("Ce qui est montré ici", &ui.completeness,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings);
+    completude::detail(e);
+    ImGui::Spacing();
+    if (ImGui::Button("Fermer")) ui.completeness = false;
+    ImGui::End();
+}
+
 // ---------------------------------------------------------------- tout
 
 // Dessine toute l'interface pour cette image et applique ce qu'on y fait. Rend toujours -1 : les vols vers un astre
@@ -1093,6 +1126,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     drawTour(sim, ui, w, h, fixed);
     drawTopLeft(sim, ui, fixed);
     drawTimeBar(sim, ui, w, fixed);
+    drawCompleteness(sim, ui, w, fixed);
     drawCard(sim, ui, cam, w, fixed);
     drawStatus(sim, ui, h, fixed);
     drawCosmology(sim, ui, w, h, fixed);
