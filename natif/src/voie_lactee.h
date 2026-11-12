@@ -9,6 +9,7 @@
 #pragma once
 #include "commun.h"
 #include "../physique/galaxie_orbites.h"
+#include "orbite_galactique.h"
 
 namespace {
 
@@ -80,7 +81,10 @@ public:
         };
         constexpr double kLyPerKpc = 3261.5638;
         MilkyWayUbo u{};
-        const Vec3 p = toGal(cam.pos);
+        // Le monde du simulateur reste centré sur le Soleil, qui tourne autour de la Galaxie : la Galaxie se décale donc de
+        // l'opposé du chemin du Soleil (orbite_galactique.h, decalageSoleil ; nul aux dates proches).
+        const Vec3 dec = orbite::decalageSoleil(years);
+        const Vec3 p = toGal(Vec3{cam.pos.x - dec.x, cam.pos.y - dec.y, cam.pos.z - dec.z});
         u.camGrid[0] = static_cast<float>(p.x / kLyPerKpc + par.sun[0]);
         u.camGrid[1] = static_cast<float>(p.y / kLyPerKpc + par.sun[1]);
         u.camGrid[2] = static_cast<float>(p.z / kLyPerKpc + par.sun[2]);
