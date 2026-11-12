@@ -182,6 +182,20 @@ body:has(#card.more:not([hidden])) #scale{display:none}
 #rail.tiny{visibility:hidden}
 body:has(.panel:not([hidden])) #card, body:has(.panel:not([hidden])) #notice{display:none}
 @media (max-width:900px){ #time{grid-template-columns:auto 1fr auto} #date{white-space:normal} }
+/* PC (12/11/2026, retour de Marc « pas ouf sur PC ») : fiche sur la même surface que les panneaux, barre du bas plus large,
+   et sur grand écran toute l'interface grossie d'un cinquième (la scène 3D et ses noms gardent leur taille). */
+@media (min-width:621px) and (min-height:521px){
+  #card{background:var(--panel); color:var(--ink); border:1px solid var(--line); border-left:2px solid var(--ice); border-radius:14px; padding:12px 14px 12px; max-width:400px; text-shadow:none; -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px)}
+  #card p, #card dt, #card dd.src{color:var(--ink-dim)} #card dt.grp{color:var(--ink)}
+  #card h2{font-size:23px}
+  #card .btn.sm{background:transparent; color:var(--ink); border-color:var(--line)}
+  #notice{max-width:400px; border-radius:0 10px 10px 0}
+  #time{width:min(1120px,calc(100% - 20px))}
+}
+@media (min-width:1500px) and (min-height:800px){
+  #top, #time, #nav, #rail, #scale, .panel, #hint{zoom:1.22}
+  #card dl{max-height:max(80px, calc(100vh / 1.22 - var(--bar-h) - 430px))}      /* sous zoom, les longueurs sont grossies : on ramène la hauteur de l'écran à la même échelle */
+}
 @media (max-width:620px), (max-height:520px){
   #notice{-webkit-line-clamp:2}
   #time{grid-template-columns:auto 1fr auto; grid-template-areas:"tl tl tl" "play date more" "speed speed speed" "btns btns btns"}

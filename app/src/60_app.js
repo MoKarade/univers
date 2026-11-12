@@ -1457,6 +1457,7 @@
   $('card-more').addEventListener('click', () => { S.more = !S.more; renderCard(); });
   $('n-back').addEventListener('click', goBack); $('n-home').addEventListener('click', goHome); $('n-out').addEventListener('click', () => stepZoom(1)); $('n-in').addEventListener('click', () => stepZoom(-1)); syncNav();
   { let seen = false; try { seen = !!localStorage.getItem('univers-aide'); } catch (e) {}      // rappel des gestes, une seule fois
+    if (!PHONE.matches) $('hint').textContent = 'Glisser : tourner. Molette : zoomer. Cliquer un astre : sa fiche, deux fois pour y aller. Espace : pause.';      /* le texte par défaut est celui du téléphone */
     if (!seen && !window.__NOADAPT) { const h = $('hint'), off = () => { h.hidden = true; try { localStorage.setItem('univers-aide', '1'); } catch (e) {} }; setTimeout(() => { h.hidden = false; }, 1500); setTimeout(off, 15000); h.addEventListener('click', off); canvas.addEventListener('pointerdown', () => setTimeout(off, 3000), { once: true }); } }
   function tilesTick(dtMs) {
     TL.ema += (Math.min(dtMs, 100) - TL.ema) * 0.05; const adapt = !window.__NOADAPT, gov = f => TL.ema > 27 ? Math.max(0.12, f * 0.985) : TL.ema < 18 ? Math.min(1, f * 1.004 + 0.001) : f;
