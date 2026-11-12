@@ -91,8 +91,9 @@ int main(int argc, char** argv) {
     bool sansModele = true;
     for (const Ligne& l : rs[2].lignes) sansModele = sansModele && l.nature != Nature::Suppose && l.nature != Nature::Ajuste;
     verifie(sansModele && rs[2].mesure.find("pas dessinée") != std::string::npos, "Gaia sans Voie lactée modèle : rien de supposé ni d'ajusté");
-    // Lumière additionnée des autres sources Gaia (gaia_agrege.bin). Attendu (numpy, 12/11) : 920 197 143 sources dans les
-    // cases placées à leur distance, 31,3 % de la lumière sans distance.
+    // Lumière additionnée des autres sources Gaia (gaia_agrege.bin, format v2 : seules les sources à parallaxe fiable sont
+    // placées en volume). Attendu (numpy, 12/11) : 93 831 724 sources dans les cases placées à leur distance, 69,7 % de la
+    // lumière sans distance.
     sim.hasGaia = true;
     sim.hasMilkyWay = false;
     const Comptes ca = compter(sim, 5566702, nGaia, dir + "/gaia_agrege.bin");
@@ -105,8 +106,8 @@ int main(int argc, char** argv) {
     verifie(std::fabs(rv[1].part - 467.0 / 540.0) < 1e-12, "voisinage avec Gaia : (317 + 150) / 540");
     std::printf("Voisinage avec Gaia : %s\n  %s\n  %s\n", rv[1].complet.c_str(), rv[1].precision.c_str(), rv[1].mesure.c_str());
     verifie(!compter(sim, 5566702, nGaia, "", dir + "/absent.bin").voisinageGaia, "gaia.bin absent : voisinage compté dans etoiles.bin");
-    verifie(ca.agrege && ca.additionneesPlacees == 920197143, "gaia_agrege.bin : 920 197 143 sources placées (numpy : 920 197 143)");
-    verifie(std::fabs(ca.lumiereSansDistance - (1 - 0.6870550175944111)) < 1e-9, "lumière sans distance : 31,3 % (numpy)");
+    verifie(ca.agrege && ca.additionneesPlacees == 93831724, "gaia_agrege.bin : 93 831 724 sources placées (numpy : 93 831 724)");
+    verifie(std::fabs(ca.lumiereSansDistance - 0.6971758128609438) < 1e-9, "lumière sans distance : 69,7 % (numpy)");
     const auto ra = rapport(ca);
     verifie(std::fabs(ra[2].part - (98278356.0 + 1707918961.0) / 1811709771.0) < 1e-15, "Voie lactée : (une à une + additionnées) / Gaia DR3");
     std::printf("Voie lactée avec les sources additionnées : %s\n  %s\n", ra[2].complet.c_str(), ra[2].precision.c_str());

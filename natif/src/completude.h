@@ -158,20 +158,24 @@ inline Comptes lireAgrege(Comptes c, const std::string& chemin) {
     std::ifstream f(chemin, std::ios::binary);
     char h[64] = {};
     f.read(h, 64);
-    if (!f || std::memcmp(h, "UNIVGAG1", 8) != 0) return c;
+    // Deux formats : « UNIVGAG1 » (cases de 32 octets) et « UNIVGAG2 » (cases de 48 octets, avec leur vitesse moyenne) ;
+    // dans les deux, le nombre de sources d'une case est à l'octet 28 de la case.
+    const bool v1 = std::memcmp(h, "UNIVGAG1", 8) == 0, v2 = std::memcmp(h, "UNIVGAG2", 8) == 0;
+    if (!f || (!v1 && !v2)) return c;
+    const size_t taille = v2 ? 48 : 32;
     uint64_t cases = 0;
     double lumiere3d = 0, lumiereCiel = 0;
     std::memcpy(&cases, h + 8, 8);
     std::memcpy(&lumiere3d, h + 24, 8);
     std::memcpy(&lumiereCiel, h + 32, 8);
-    std::vector<char> bloc(32 * 65536);
+    std::vector<char> bloc(taille * 65536);
     uint64_t sources = 0;
     for (uint64_t lu = 0; lu < cases;) {
         const uint64_t k = std::min<uint64_t>(65536, cases - lu);
-        if (!f.read(bloc.data(), static_cast<std::streamsize>(k * 32))) return c;
+        if (!f.read(bloc.data(), static_cast<std::streamsize>(k * taille))) return c;
         for (uint64_t i = 0; i < k; ++i) {
             uint32_t n = 0;
-            std::memcpy(&n, bloc.data() + i * 32 + 28, 4);
+            std::memcpy(&n, bloc.data() + i * taille + 28, 4);
             sources += n;
         }
         lu += k;
@@ -458,8 +462,12 @@ inline Echelle voieLactee(const Comptes& c) {
     const double additionnees = c.agrege ? kGaiaSourcesAdditionnees : 0;
     e.part = (c.agrege ? double(c.etoilesGaia) + additionnees : n) / kSourcesGaiaDr3;      /* additionnées : Gaia seul (le catalogue principal y est déjà) */
     if (c.agrege)
+        // Depuis gaia_agrege v2 : seules les sources dont la distance est mesurée (parallaxe supérieure à 5 fois son erreur)
+        // sont additionnées à leur place ; les autres n'ont pas de distance mesurée et ne sont montrées que dans le ciel
+        // d'aujourd'hui, vu du Soleil.
         e.complet = pourcent(e.part) + " des sources de Gaia DR3 : " + entier(double(c.etoilesGaia)) + " vues une à une, " +
-                    entier(additionnees) + " additionnées par case";
+                    entier(double(c.additionneesPlacees)) + " additionnées à leur distance, " +
+                    entier(additionnees - double(c.additionneesPlacees)) + " sans distance mesurée (ciel d'aujourd'hui seulement)";
     else
         e.complet = pourcent(e.part) + " des sources de Gaia DR3 (" + entier(n) + " étoiles)";
     e.precision = c.agrege ? "une à une : distance à mieux que 10 % ; additionnées : " + pourcent(c.lumiereSansDistance) +
