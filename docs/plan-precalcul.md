@@ -50,3 +50,20 @@ Conséquence pour l'affichage : au-delà de l'horizon, l'appli montre le nuage d
 2. Nuanceur d'intégration exacte et outil de précalcul des clones d'étoiles (avec les erreurs Gaia après accord).
 3. Système solaire ±60 Ma (tourne en fond sur le processeur).
 4. N-corps haute résolution de la fusion.
+
+## Résultats
+
+### Clones du Groupe local (12/11/2026) [mesuré]
+`pipeline/fusion/groupe_local_clones.py` reprend le code public de Sawala et al. 2025, vectorisé : 5 000 tirages, 4 galaxies, 98 s sur le processeur. Résultats dans `pipeline/fusion/resultats/clones_groupe_local.json`.
+
+| Galaxies | Ici | Sawala et al. 2025 |
+|---|---|---|
+| Voie lactée + M31 | 43,3 % | ~44 % (« un peu moins de la moitié ») |
+| + M33 | 62,3 % | ~2/3 |
+| + LMC | 35,8 % | un peu plus d'1/3 |
+| + M33 + LMC | **52,6 %** ; médiane 7,57 unités (7,40 Ga) | « un peu plus de 50 % » ; médiane 7,6 |
+| LMC absorbée par la Voie lactée | 99,8 % | toujours |
+| M33 absorbée par M31 | 85,8 % | ~86 % |
+
+- Dates de fusion, en vrais Ga (l'unité de temps du carnet vaut 0,978 Ga) : 5 % → 5,65 ; 16 % → 6,36 ; médiane 7,40 ; 84 % → 8,67 ; 95 % → 9,33.
+- Notre rejeu R9 (fusion à 5,44 Ga) tombe dans les 4 % les plus précoces des cas qui fusionnent. Il ne représente pas ce que disent les mesures. Réserve : R9 date la fusion à la coalescence des centres, Sawala à un passage sous 20 kpc.
