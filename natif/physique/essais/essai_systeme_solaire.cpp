@@ -49,6 +49,20 @@ int main(int argc, char** argv) {
     // 2. Construction aux bornes, puis retour dans DE440.
     phys::SystemeSolaire ss;
     ok(ss.construire(source, 2000.0), "construction des points de reprise sur 2 000 ans de chaque côté");
+    {   // Réserve sur disque : relue, elle donne exactement les mêmes positions ; refusée pour un autre `ansDirects`.
+        const std::string res = "essai_reserve_systeme_solaire.bin";
+        ok(ss.sauver(res), "réserve des points de reprise écrite");
+        phys::SystemeSolaire r2, r3;
+        const auto t0 = std::chrono::steady_clock::now();
+        const bool lue = r2.chargerReserve(res, source, 2000.0);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        double d = 1e30; phys::Vec3 a, b, c2, d2; phys::Statut s1, s2;
+        const double jd = phys::kDe440Fin + 1234.5 * 365.25;
+        if (lue && ss.etat(phys::kMars, jd, a, b, s1) && r2.etat(phys::kMars, jd, c2, d2, s2)) d = std::hypot(a.x - c2.x, a.y - c2.y, a.z - c2.z);
+        ok(lue && d == 0 && ms < 500, "réserve relue en %.0f ms : Mars identique (écart %.0f km)", ms, d);
+        ok(!r3.chargerReserve(res, source, 20000.0), "réserve refusée quand la durée demandée diffère");
+        std::remove(res.c_str());
+    }
     for (int side = 0; side < 2; side++) {
         const phys::nb::State* s0 = ss.reprise(side == 1, 0);
         for (double yrs : {200.0, 400.0}) {
@@ -91,6 +105,20 @@ int main(int argc, char** argv) {
         phys::Suivi s3(ss); const auto t1 = std::chrono::steady_clock::now(); for (int k = 0; k < 400; k++) s3.aller(j0 + 4000 + k * 3.0);
         const double ms2 = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count();
         ok(ms2 < 200, "suivi seul : 400 dates en %.1f ms", ms2);
+        // Temps rapide (bogue signalé par le fil appli PC) : de l'an 3000 à 5000 par pas de 167 ans, puis retour, puis 1,7 an.
+        for (const double pasAns : {166.67, -166.67, 1.7, 47.3, 3000.0}) {
+            phys::Suivi s4(ss); int rates = 0, faux = 0; double pire = 0;
+            const double debut = pasAns > 0 ? 2461406.5 + (3000 - 2026) * 365.25 : 2461406.5 + (5000 - 2026) * 365.25;
+            for (int k = 0; k < 600; k++) {
+                const double jd = debut + k * pasAns * 365.25; if (jd > phys::kDe440Fin + 19990 * 365.25 || jd < phys::kDe440Fin) break;
+                phys::Vec3 a, b, c2, d2; phys::Statut s1, s2;
+                const bool attendu = ss.etat(phys::kMars, jd, c2, d2, s2);
+                const bool eu = s4.aller(jd) && s4.etat(phys::kMars, a, b, s1);
+                if (attendu && !eu) rates++;
+                if (attendu && eu) { const double e = std::hypot(a.x - c2.x, a.y - c2.y, a.z - c2.z); pire = std::fmax(pire, e); if (e > 1.0) faux++; }
+            }
+            ok(rates == 0 && faux == 0, "suivi par pas de %.1f ans : %.0f dates sans position, écart maximal %.3f km", pasAns, rates, pire);
+        }
     }
 
     // 4. Plusieurs fils d'exécution : mêmes réponses.

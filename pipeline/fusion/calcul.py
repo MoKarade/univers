@@ -15,6 +15,8 @@ Usage : python calcul.py <de_Ga> <a_Ga> [N_total] [--gpu]
         python calcul.py depart <N_total>        (conditions de départ seules, écrit sortie/depart.npz)
         python calcul.py reprise <a_Ga> [--gpu]  (repart du dernier instantané)
 --gpu : gravité sur la carte graphique (gravite_gpu.py) au lieu de falcON ; si sortie/depart.npz existe, il sert de départ.
+--theta=0.5 : angle d'ouverture de l'arbre (0,7 par défaut ; 0,5 : erreur médiane de force 0,03 % au lieu de 0,1 %).
+--sortie=<dossier> : dossier des sorties (par défaut pipeline/fusion/sortie).
 """
 import os, sys, json, time, math
 import numpy as np
@@ -146,8 +148,12 @@ SEUIL_OCCUPATION = 35      # % d'occupation de la carte, mesurée pendant notre 
 
 
 def main():
+    global OUT
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     gpu = '--gpu' in sys.argv
+    for a in sys.argv[1:]:
+        if a.startswith('--theta='): Carte.THETA = float(a.split('=', 1)[1])
+        if a.startswith('--sortie='): OUT = a.split('=', 1)[1]
     os.makedirs(OUT, exist_ok=True)
     jpath, spath, dpath = os.path.join(OUT, 'fusion.json'), os.path.join(OUT, 'etat.npz'), os.path.join(OUT, 'depart.npz')
     if args[0] == 'depart':      # conditions de départ seules (AGAMA) : python calcul.py depart <N>
@@ -170,7 +176,7 @@ def main():
         meta = json.load(open(jpath, encoding='utf-8')); debut = False
         if not reprise: assert abs(t - float(args[0])) < 1e-6, (t, args[0])
     S = Carte(p) if gpu else Processeur(p)
-    meta['gravite'] = S.nom; meta['particules'] = int((p['kind'] < 9).sum())
+    meta['gravite'] = S.nom if not gpu else f'arbre de Barnes-Hut avec quadripôles (carte graphique), theta {Carte.THETA}'; meta['particules'] = int((p['kind'] < 9).sum())
     stars = (p['kind'] > 0) & (p['kind'] < 9); trac = np.where(p['kind'] == 9)[0]
     star_idx = [np.where((gid == k) & stars)[0] for k in range(len(meta['galaxies']))]
     acc, phi = S.forces()

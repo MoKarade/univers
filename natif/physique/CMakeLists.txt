@@ -27,3 +27,9 @@ add_executable(essai_fusion essais/essai_fusion.cpp)
 target_link_libraries(essai_fusion PRIVATE univers_physique)
 target_compile_options(essai_fusion PRIVATE -Wall -Wextra)
 target_link_options(essai_fusion PRIVATE -static)
+
+# Horizon du chaos du système solaire (clones écartés de quelques mètres), outil de précalcul (plan-precalcul.md § 3).
+add_executable(chaos_systeme_solaire essais/chaos_systeme_solaire.cpp)
+target_link_libraries(chaos_systeme_solaire PRIVATE univers_physique)
+target_compile_options(chaos_systeme_solaire PRIVATE -Wall -Wextra -O3 -march=native)
+target_link_options(chaos_systeme_solaire PRIVATE -static)

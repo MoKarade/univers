@@ -64,6 +64,8 @@ inline Frequences frequences(double R) {
 
 struct Potentiel {
     double GMs = gmHalo(), Rb = kBarHalfLengthKpc, Ab = kBarAlpha * kV0 * kV0 * std::pow(kR0 / kBarHalfLengthKpc, 3) / 3;
+    double omegaBarre = kBarOmegaKmsKpc;      // km/s/kpc ; modifiable pour mesurer l'effet de son incertitude (33 à 41)
+    double angleBarre(double t) const { return kPi - kBarAngleRad - omegaBarre * kKmsKpcToRadGa * t; }
     bool barre = true;
     // Accélération (km/s)²/kpc en (x, y, z) kpc à tGa.
     void acc(double x, double y, double z, double t, double a[3]) const {
@@ -72,7 +74,7 @@ struct Potentiel {
         const double B = std::sqrt(z * z + kBd * kBd), D2 = R2 + (kAd + B) * (kAd + B), D3 = D2 * std::sqrt(D2), gm = kG * kMd;
         a[0] = ar * x / r - gm * x / D3; a[1] = ar * y / r - gm * y / D3; a[2] = ar * z / r - gm * z * (kAd + B) / (B * D3);
         if (barre && R2 > 1e-8) {      // Dehnen 2000 : a_R = −A cos2ψ U'(R), a_φ = 2A sin2ψ U(R) / R
-            const double R = std::sqrt(R2), c = x / R, s = y / R, psi = std::atan2(y, x) - barAngleAt(t), c2 = std::cos(2 * psi), s2 = std::sin(2 * psi), q = R / Rb;
+            const double R = std::sqrt(R2), c = x / R, s = y / R, psi = std::atan2(y, x) - angleBarre(t), c2 = std::cos(2 * psi), s2 = std::sin(2 * psi), q = R / Rb;
             const double U = R < Rb ? q * q * q - 2 : -1 / (q * q * q), dU = R < Rb ? 3 * q * q / Rb : 3 / (q * q * q * q * Rb);
             const double aR = -Ab * c2 * dU, aP = 2 * Ab * s2 * U / R;
             a[0] += aR * c - aP * s; a[1] += aR * s + aP * c;
@@ -86,7 +88,7 @@ struct Potentiel {
     }
     double phiBarre(double x, double y, double t) const {
         const double R = std::hypot(x, y), q = R / Rb, U = R < Rb ? q * q * q - 2 : -1 / (q * q * q);
-        return Ab * std::cos(2 * (std::atan2(y, x) - barAngleAt(t))) * U;
+        return Ab * std::cos(2 * (std::atan2(y, x) - angleBarre(t))) * U;
     }
 };
 
