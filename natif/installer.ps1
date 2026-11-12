@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force $Cible, "$Cible\spv" | Out-Null
 Copy-Item "$Build\univers.exe", "$Build\UniversPC.exe" $Cible -Force
 Copy-Item "$Build\spv\etoiles.*.spv", "$Build\spv\ecran.*.spv" "$Cible\spv" -Force
-Copy-Item "$Donnees\etoiles.bin", "$Donnees\etoiles.json" $Cible -Force
+Copy-Item "$Donnees\etoiles.bin", "$Donnees\etoiles.json", "$Donnees\etoiles_noms.tsv" $Cible -Force
 # Vue de départ : la ceinture d'Orion (étoile nommée de la page), si elle est dans le catalogue.
 $meta = Get-Content "$Cible\etoiles.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $orion = $meta.nommees | Where-Object { $_.n -like 'Alnilam*' } | Select-Object -First 1
@@ -14,7 +14,7 @@ $regarde = if ($orion) { $orion.i } else { 0 }
 $bureau = [Environment]::GetFolderPath('Desktop')
 $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$bureau\Univers PC.lnk")
 $lnk.TargetPath = "$Cible\UniversPC.exe"
-$lnk.Arguments = "`"$Cible\etoiles.bin`" --fenetre --regarde $regarde"
+$lnk.Arguments = ""      # sans argument : le simulateur, avec les étoiles rangées à côté du programme
 $lnk.WorkingDirectory = $Cible
 $lnk.WindowStyle = 1      # fenêtre normale (UniversPC.exe n'a pas de console)
 $lnk.Description = 'Univers : les étoiles de la page, sur le PC'

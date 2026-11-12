@@ -2,8 +2,9 @@
 //
 // Deux modes :
 //   univers                                                 fenêtre interactive, etoiles.bin pris à côté du programme
-//   univers <etoiles.bin> --fenetre [--regarde i]            fenêtre interactive (fenetre.cpp)
-//   univers <etoiles.bin> --fenetre-test n [--regarde i]     même chemin, fenêtre cachée, n images, puis sortie
+//   univers <etoiles.bin> --fenetre                          le simulateur (fenetre.cpp)
+//   univers <etoiles.bin> --fenetre-test n [--capture f.ppm] [--cible Nom] [--distance al] [--date annees]
+//                                                           même chemin, fenêtre cachée, n images, image finale écrite, puis sortie
 //   univers <etoiles.bin> <image.ppm> [options]              image hors écran, sans fenêtre (contrôles)
 // Options du mode image :
 //   --regarde i   : la caméra, au Soleil, regarde l'étoile numéro i (défaut : étoile 0)
@@ -12,7 +13,7 @@
 //   --taille LxH, --champ degres
 #include "commun.h"
 
-int runWindow(const char* starsPath, uint64_t lookAtIndex, int testFrames);      // fenetre.cpp
+#include "fenetre.h"
 
 namespace {
 
@@ -30,7 +31,11 @@ std::vector<uint64_t> parseList(const char* s) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc == 1) return runWindow((exeDir() + "/etoiles.bin").c_str(), 0, 0);      // double-clic : la fenêtre, avec les étoiles rangées à côté
+    WindowOptions wopt;
+    if (argc == 1) {      // double-clic : le simulateur, avec les étoiles rangées à côté du programme
+        wopt.starsPath = exeDir() + "/etoiles.bin";
+        return runWindow(wopt);
+    }
     if (argc < 3) fail("usage : univers <etoiles.bin> <image.ppm | --fenetre | --fenetre-test n> [--regarde i] [--verifie i,j] [--images n] [--taille LxH] [--champ degres]");
     uint64_t lookIndex = 0;
     std::vector<uint64_t> verify;
@@ -44,6 +49,10 @@ int main(int argc, char** argv) {
         const char* v = i + 1 < argc ? argv[i + 1] : "";
         if (k == "--fenetre") window = true;
         else if (k == "--fenetre-test") { window = true; testFrames = std::max(1, std::atoi(v)); ++i; }
+        else if (k == "--capture") { wopt.capture = v; ++i; }
+        else if (k == "--cible") { wopt.target = v; ++i; }
+        else if (k == "--distance") { wopt.dist = std::atof(v); ++i; }
+        else if (k == "--date") { wopt.years = std::atof(v); wopt.hasYears = true; ++i; }
         else if (k == "--regarde") { lookIndex = std::strtoull(v, nullptr, 10); ++i; }
         else if (k == "--verifie") { verify = parseList(v); ++i; }
         else if (k == "--images") { frames = std::max(1, std::atoi(v)); ++i; }
@@ -52,7 +61,11 @@ int main(int argc, char** argv) {
         else if (k.rfind("--", 0) == 0) fail("option inconnue : " + k);
         else imagePath = argv[i];
     }
-    if (window) return runWindow(argv[1], lookIndex, testFrames);
+    if (window) {
+        wopt.starsPath = argv[1];
+        wopt.testFrames = testFrames;
+        return runWindow(wopt);
+    }
     if (!imagePath) fail("il manque le nom de l'image a ecrire");
 
     const Stars stars = openStars(argv[1]);

@@ -36,6 +36,15 @@ def main():
         ang = math.degrees(math.acos(min(1.0, float(p @ ecl)))); good = ang < 0.05; ok &= good
         print(f'{name:11s} : écart de direction {ang:.4f}° -> {"PASSE" if good else "ÉCHEC"}')
     if found < 3: ok = False; print('moins de 3 étoiles de référence trouvées : ÉCHEC')
+    # Vitesse le long de la ligne de visée : valeurs publiées (SIMBAD) [Probable : recopiées de mémoire], tolérance 2 km/s.
+    vx, vy, vz = (np.frombuffer(raw, '<f4', n, 64 + k * col) for k in range(5, 8))
+    # Sirius n'est pas jugée : le catalogue HYG de la page lui donne -9,4 km/s, la valeur publiée est -5,5 km/s.
+    # Écart du catalogue source, connu, à corriger quand les vitesses viendront de Gaia ou de SIMBAD (plan-natif.md).
+    for name, rv in (('Aldébaran', 54.3), ('Véga', -13.9), ('Arcturus', -5.2)):
+        if name not in lab: print(f'{name} : absente'); continue
+        i = lab[name]['i']; p = np.array([x[i], y[i], z[i]], float); v = np.array([vx[i], vy[i], vz[i]], float)
+        got = float(v @ p / np.linalg.norm(p)); good = abs(got - rv) < 2.0; ok &= good
+        print(f'{name:11s} : vitesse radiale {got:+.1f} km/s (publiée {rv:+.1f}) -> {"PASSE" if good else "ÉCHEC"}')
     sys.exit(0 if ok else 1)
 
 

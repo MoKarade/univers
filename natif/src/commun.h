@@ -59,6 +59,7 @@ struct Stars {
     const float* z() const { return col(2); }
     const float* mag() const { return col(3); }
     const float* bv() const { return col(4); }
+    const float* vel(int axis) const { return col(5 + axis); }      // km/s
 };
 
 Stars openStars(const char* path) {
@@ -310,8 +311,9 @@ VkShaderModule shader(const Gpu& g, const char* name) {
 
 struct PushConstants {
     float viewProj[16];
-    float cam[4];
-    float par[4];
+    float camHi[4];      // position de la caméra, partie principale (années-lumière)
+    float camLo[4];      // reste de la position (ce que la simple précision a perdu)
+    float par[4];        // exposition ; hauteur de l'image en pixels ; temps écoulé, en années-lumière par (km/s)
 };
 
 // Demi-flottant IEEE 754 -> flottant.
@@ -334,27 +336,42 @@ float halfToFloat(uint16_t h) {
 }
 
 // ---------------------------------------------------------------- dessin des étoiles
-// Points additionnés en grande dynamique ; cinq colonnes de sommets (x, y, z, magnitude, couleur).
+// Points additionnés en grande dynamique ; huit colonnes de sommets (x, y, z, magnitude, couleur, vitesse).
+// Le Soleil, absent du catalogue, est ajouté en dernier : à l'origine, magnitude absolue 4,83, B-V 0,653
+// (valeurs nominales de l'UAI 2015 et de Ramírez et al. 2012 [Probable : recopiées de mémoire]).
+constexpr float kSunAbsMag = 4.83f, kSunBv = 0.653f;
+constexpr double kKmsToLyPerYear = 1.0 / 299792.458;
+
 struct StarRenderer {
+    static constexpr int kCols = 8;
     VkPipeline pipeline{};
     VkPipelineLayout layout{};
     VkShaderModule vs{}, fs{};
-    Buffer vb[5];
+    Buffer vb[kCols];
     uint32_t count = 0;
 
     void create(const Gpu& g, const Stars& stars, VkFormat fmt) {
-        count = static_cast<uint32_t>(stars.n);
+        const size_t n = static_cast<size_t>(stars.n) + 1;      // + le Soleil
+        count = static_cast<uint32_t>(n);
         // Couleur : table de 512 pas sur B-V (de -0,5 à 2,7 : étendue du codage de la page), appliquée à chaque étoile.
         std::vector<std::array<uint8_t, 4>> lut(512);
         for (int i = 0; i < 512; ++i) lut[i] = colorOfBv(-0.5 + 3.2 * i / 511.0);
-        std::vector<std::array<uint8_t, 4>> colors(stars.n);
-        for (uint64_t i = 0; i < stars.n; ++i) {
-            const double t = (static_cast<double>(stars.bv()[i]) + 0.5) / 3.2 * 511.0;
-            colors[i] = lut[static_cast<size_t>(std::clamp(t, 0.0, 511.0))];
-        }
-        const VkDeviceSize colBytes = static_cast<VkDeviceSize>(stars.n) * 4;
-        const void* cols[5] = {stars.x(), stars.y(), stars.z(), stars.mag(), colors.data()};
-        for (int i = 0; i < 5; ++i) vb[i] = uploadVertices(g, cols[i], colBytes);
+        auto colorOf = [&](double bv) { return lut[static_cast<size_t>(std::clamp((bv + 0.5) / 3.2 * 511.0, 0.0, 511.0))]; };
+        std::vector<std::array<uint8_t, 4>> colors(n);
+        for (uint64_t i = 0; i < stars.n; ++i) colors[i] = colorOf(stars.bv()[i]);
+        colors[n - 1] = colorOf(kSunBv);
+        std::vector<float> tmp(n);
+        auto column = [&](const float* src, float sun) {
+            std::memcpy(tmp.data(), src, static_cast<size_t>(stars.n) * 4);
+            tmp[n - 1] = sun;
+            return uploadVertices(g, tmp.data(), n * 4);
+        };
+        vb[0] = column(stars.x(), 0);
+        vb[1] = column(stars.y(), 0);
+        vb[2] = column(stars.z(), 0);
+        vb[3] = column(stars.mag(), kSunAbsMag);
+        vb[4] = uploadVertices(g, colors.data(), n * 4);
+        for (int a = 0; a < 3; ++a) vb[5 + a] = column(stars.vel(a), 0);
 
         vs = shader(g, "etoiles.vert.spv");
         fs = shader(g, "etoiles.frag.spv");
@@ -370,16 +387,16 @@ struct StarRenderer {
         li.pushConstantRangeCount = 1;
         li.pPushConstantRanges = &pcr;
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout), "agencement");
-        VkVertexInputBindingDescription binds[5];
-        VkVertexInputAttributeDescription attrs[5];
-        for (uint32_t i = 0; i < 5; ++i) {
+        VkVertexInputBindingDescription binds[kCols];
+        VkVertexInputAttributeDescription attrs[kCols];
+        for (uint32_t i = 0; i < kCols; ++i) {
             binds[i] = {i, 4, VK_VERTEX_INPUT_RATE_VERTEX};
-            attrs[i] = {i, i, i < 4 ? VK_FORMAT_R32_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM, 0};
+            attrs[i] = {i, i, i == 4 ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R32_SFLOAT, 0};
         }
         VkPipelineVertexInputStateCreateInfo vin{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-        vin.vertexBindingDescriptionCount = 5;
+        vin.vertexBindingDescriptionCount = kCols;
         vin.pVertexBindingDescriptions = binds;
-        vin.vertexAttributeDescriptionCount = 5;
+        vin.vertexAttributeDescriptionCount = kCols;
         vin.pVertexAttributeDescriptions = attrs;
         VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
         ia.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
@@ -432,9 +449,13 @@ struct StarRenderer {
         vkCmdSetViewport(cmd, 0, 1, &vp);
         vkCmdSetScissor(cmd, 0, 1, &sc);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        const VkBuffer bufs[5] = {vb[0].buf, vb[1].buf, vb[2].buf, vb[3].buf, vb[4].buf};
-        const VkDeviceSize offs[5] = {0, 0, 0, 0, 0};
-        vkCmdBindVertexBuffers(cmd, 0, 5, bufs, offs);
+        VkBuffer bufs[kCols];
+        VkDeviceSize offs[kCols];
+        for (int i = 0; i < kCols; ++i) {
+            bufs[i] = vb[i].buf;
+            offs[i] = 0;
+        }
+        vkCmdBindVertexBuffers(cmd, 0, kCols, bufs, offs);
         vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
         vkCmdDraw(cmd, count, 1, 0, 0);
     }
@@ -515,15 +536,19 @@ Camera lookAt(Vec3 pos, Vec3 target, double fovDeg, double aspect) {
     return cam;
 }
 
-PushConstants pushConstants(const Camera& cam, float exposure, uint32_t height) {
+// years : années écoulées depuis l'époque du catalogue (les étoiles avancent en ligne droite à leur vitesse mesurée).
+PushConstants pushConstants(const Camera& cam, float exposure, uint32_t height, double years = 0.0) {
     PushConstants pc{};
     const auto m = cam.viewProj();
     std::memcpy(pc.viewProj, m.data(), sizeof(pc.viewProj));
-    pc.cam[0] = static_cast<float>(cam.pos.x);
-    pc.cam[1] = static_cast<float>(cam.pos.y);
-    pc.cam[2] = static_cast<float>(cam.pos.z);
+    const double p[3] = {cam.pos.x, cam.pos.y, cam.pos.z};
+    for (int a = 0; a < 3; ++a) {
+        pc.camHi[a] = static_cast<float>(p[a]);
+        pc.camLo[a] = static_cast<float>(p[a] - static_cast<double>(pc.camHi[a]));
+    }
     pc.par[0] = exposure;
     pc.par[1] = static_cast<float>(height);
+    pc.par[2] = static_cast<float>(years * kKmsToLyPerYear);
     return pc;
 }
 

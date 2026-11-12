@@ -54,7 +54,9 @@ def sph(lon_u16, lat_u16, d):
 def principal(D):
     n = D['STARS_N']; geo = np.frombuffer(base64.b64decode(D['STARS_GEO']), '<u2').reshape(-1, 3)[:n].astype(np.float64)
     aux = np.frombuffer(base64.b64decode(D['STARS_AUX']), 'u1').reshape(-1, 2)[:n].astype(np.float64)
-    vel = np.frombuffer(base64.b64decode(D['STARS_VEL']), '<i2').reshape(-1, 3)[:n] / 20.0
+    # Vitesses du catalogue principal : repère galactique (25_future.js, initStarKin : ve = M_GAL2ECL · v) ;
+    # on les tourne dans le repère écliptique des positions, comme la page.
+    vel = (np.frombuffer(base64.b64decode(D['STARS_VEL']), '<i2').reshape(-1, 3)[:n] / 20.0) @ np.array(D['M_GAL2ECL']).T
     pos = sph(geo[:, 0], geo[:, 1], 10 ** (geo[:, 2] / 65535 * 5.5 - 1))
     return pos, aux[:, 0] / 8 - 10, aux[:, 1] / 100 - 0.5, vel
 
@@ -86,7 +88,7 @@ def flux(dossier):
 def main():
     dossier, sortie = sys.argv[1], sys.argv[2]
     os.makedirs(sortie, exist_ok=True)
-    D = data_keys(['STARS_N', 'STARS_GEO', 'STARS_AUX', 'STARS_VEL', 'GAIA_N', 'GAIA_GEO', 'GAIA_AUX', 'GAIA_VEL', 'STAR_LABELS'])
+    D = data_keys(['STARS_N', 'STARS_GEO', 'STARS_AUX', 'STARS_VEL', 'GAIA_N', 'GAIA_GEO', 'GAIA_AUX', 'GAIA_VEL', 'STAR_LABELS', 'M_GAL2ECL'])
     blocs = [principal(D), gaia(D), flux(dossier)]
     counts = [len(b[0]) for b in blocs]; n = sum(counts)
     cols = [np.concatenate([b[0][:, a] for b in blocs]) for a in range(3)] + [np.concatenate([b[1] for b in blocs]), np.concatenate([b[2] for b in blocs])] \
@@ -99,6 +101,8 @@ def main():
             b = c.astype('<f4').tobytes(); f.write(b + b'\0' * (-len(b) % ALIGN))
     json.dump(dict(n=n, catalogues=dict(principal=counts[0], gaia=counts[1], flux=counts[2]), nommees=D['STAR_LABELS']),
               open(os.path.join(sortie, 'etoiles.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+    with open(os.path.join(sortie, 'etoiles_noms.tsv'), 'w', encoding='utf-8', newline='\n') as f:      # lu par l'appli PC
+        for l in D['STAR_LABELS']: f.write(f"{l['i']}\t{l['n']}\t{l['d']}\n")
     print(f'{n} étoiles ({counts[0]} + {counts[1]} + {counts[2]}), {os.path.getsize(path) / 1e6:.1f} Mo -> {path}')
 
 
