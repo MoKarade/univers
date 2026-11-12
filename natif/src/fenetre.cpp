@@ -37,7 +37,7 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_CLOSE: in->quit = true; return 0;
         case WM_SIZE: in->resized = true; return 0;
         case WM_KEYDOWN:
-            if (wp == VK_ESCAPE) in->quit = true;
+            if (wp == VK_ESCAPE && !uiKeys) in->quit = true;      // dans la recherche ou un menu, Échap ferme d'abord la recherche ou le menu
             if (!uiKeys && wp == VK_HOME) in->home = true;
             if (!uiKeys && wp == VK_SPACE && !(lp & (1 << 30))) in->space = true;
             in->touched = true;
