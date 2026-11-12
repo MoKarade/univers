@@ -54,6 +54,23 @@ def format_(n, fe, rec):
     verifie(hors_boite == 0, 'étoiles dans la boîte de leur feuille')
 
 
+def fiabilite(gaia_bin, n, fe, rec):
+    """Drapeaux 2 (orbite fiable) et 4 (poussière) de gaia.bin (docs/gaia-rayons.md), si le fichier les porte."""
+    f = np.asarray(rec['f'])
+    rv, fi, po = (f & 1) > 0, (f & 2) > 0, (f & 4) > 0
+    if not fi.any() and not po.any():
+        print('drapeaux orbite fiable / poussière absents (fichier ancien) : non contrôlés')
+        return
+    verifie(not np.any(fi & ~rv), f'orbite fiable seulement avec vitesse radiale mesurée ({int(fi.sum())} sur {int(rv.sum())})')
+    debut = 4096 + (len(fe) * 48 + 63) // 64 * 64 + (n * 16 + 63) // 64 * 64
+    vel = np.memmap(gaia_bin, '<u2', 'r', debut, (n, 4))
+    q = np.asarray(vel[:, 3])
+    verifie(not np.any(q[~po]), 'poussière nulle quand Gaia ne l’estime pas')
+    ag = (q[po] & 1023) * 0.01
+    verifie(po.sum() == 0 or (np.median(ag) < 2.0 and ag.max() <= 10.23),
+            f'poussière estimée pour {int(po.sum())} étoiles ; A_G médiane {np.median(ag) if po.any() else 0:.2f} mag')
+
+
 def retrouve(parts, rec, n):
     """Position recalculée depuis les fichiers téléchargés -> présente dans gaia.bin."""
     fichiers = sorted(glob.glob(os.path.join(parts, 'part_*.fits')))
@@ -127,6 +144,7 @@ def main():
     parts, gaia_bin = sys.argv[1], sys.argv[2]
     n, fe, rec = lire(gaia_bin)
     format_(n, fe, rec)
+    fiabilite(gaia_bin, n, fe, rec)
     retrouve(parts, rec, n)
     connues(parts, rec)
     if len(sys.argv) > 3: voie(sys.argv[3])

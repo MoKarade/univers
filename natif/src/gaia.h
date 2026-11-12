@@ -44,6 +44,14 @@ struct GaiaFile {
     }
 };
 
+// Orbite fiable et poussière (docs/gaia-rayons.md) : mêmes valeurs que shaders/gaia_fiable.glsl.
+namespace GaiaFiable {
+constexpr uint8_t kVitesseRadiale = 1, kOrbiteFiable = 2, kPoussiere = 4;      // drapeaux d'une étoile (gaia.bin)
+constexpr double kTauAns = 3.0e6;      // sources sans orbite fiable : lumière × exp(-(t / kTauAns)²) loin d'aujourd'hui
+inline double effacement(double ans) { const double u = ans / kTauAns; return std::exp(-u * u); }
+inline double poidsPoussiere(double camDist, double starDist) { return std::clamp(camDist / std::max(starDist, 1.0), 0.0, 1.0); }
+}  // namespace GaiaFiable
+
 inline size_t gaiaAlign(size_t v) { return (v + kAlign - 1) / kAlign * kAlign; }
 
 // Rend false si le fichier manque ou n'est pas complet.
@@ -117,6 +125,16 @@ public:
     // leur distance, et lumière sans distance (« ciel seul ») montrée seulement près du Soleil.
     uint32_t cellCount = 0, skyCount = 0;
     float cellDispersionKms = 0;      // dispersion médiane des vitesses sur le ciel dans une case (à dire à l'écran)
+    // Orbite fiable (fil appli PC) : vitesse radiale mesurée et vitesse 3D connue à mieux que 10 km/s (drapeau 2, calculé par
+    // gaia_convertir.py depuis les erreurs publiées). Seules ces étoiles avancent loin d'aujourd'hui ; les autres s'effacent.
+    uint64_t reliableCount = 0;      // étoiles à orbite fiable
+    double reliableLight = 0;        // part de la lumière (magnitude absolue mesurée) portée par ces étoiles
+    uint64_t dustCount = 0;          // étoiles dont la poussière est estimée par Gaia (drapeau 4)
+    bool starReliable(uint64_t i) const { return i < file_.n && (file_.stars[i * 16 + 15] & GaiaFiable::kOrbiteFiable); }
+    // Part de la lumière de la feuille i portée par des étoiles à orbite fiable (0 à 1).
+    float leafReliableShare(uint32_t i) const { return i < leafShare_.size() ? leafShare_[i] : 0.0f; }
+    // Part de la lumière Gaia encore montrée à cette date (années depuis les mesures) : 1 aujourd'hui, reliableLight loin.
+    double shownLightShare(double since) const { return reliableLight + (1.0 - reliableLight) * GaiaFiable::effacement(since); }
     static constexpr double kSkyOnlyRadiusLy = 100.0;
     static constexpr uint32_t kCellSpread = 8;
     static constexpr double kAggregateYears = 3.0e6;      // lumière additionnée montrée à moins de 3 millions d'années des mesures      // même valeur que SPREAD dans gaia_agrege.vert
@@ -142,6 +160,7 @@ public:
                 for (int a = 0; a < 3; ++a) v[a] += q[j * 4 + a];
             meanVel_[i] = {v[0] * 0.05 / std::max(1u, L.n), v[1] * 0.05 / std::max(1u, L.n), v[2] * 0.05 / std::max(1u, L.n)};
         }
+        summarizeReliability();
         // Couleur de chaque pas BP-RP : corps noir de la température du fichier, vu par l'observateur CIE (commun.h).
         std::array<float, 256 * 4> colors{};
         for (int i = 0; i < 256; ++i) {
@@ -202,7 +221,7 @@ public:
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, aggPipeline_);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &aggSet_, 0, nullptr);
             vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
-            if (cellCount) vkCmdDraw(cmd, cellCount, kCellSpread, 0, 0);      // kCellSpread points par case (gaia_agrege.vert)
+            if (cellCount && GaiaFiable::effacement(since) > 1e-4) vkCmdDraw(cmd, cellCount, kCellSpread, 0, 0);      // kCellSpread points par case (gaia_agrege.vert) ; effacées loin d'aujourd'hui (gaia_fiable.glsl)
             if (skyCount && std::fabs(since) < kAggregateYears && std::sqrt(dot(cam.pos, cam.pos)) < kSkyOnlyRadiusLy) {
                 pa.base.camLo[3] = 1.0f;
                 vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
@@ -275,6 +294,49 @@ private:
     static constexpr double kDispersionKms = 100.0;     // écart des vitesses dans une feuille, une fois sur orbite (marge large)
     static constexpr double kMaxGrowLy = 1.5e5;         // au-delà, la feuille couvre la Galaxie entière
     std::vector<Vec3> centre_, meanVel_, shift_;
+    // Par feuille : part fiable de la lumière, absorption la plus forte, et par tranche de magnitude (résumé de gaia.bin) :
+    // lumière fiable, lumière sans poussière, lumière fiable sans poussière (4 × bins flottants par feuille, ordre ci-dessus
+    // après la lumière totale du fichier).
+    std::vector<float> leafShare_, leafMaxAg_, extra_;
+
+    void summarizeReliability() {
+        const uint32_t nb = file_.bins;
+        leafShare_.assign(file_.leafCount, 0.0f);
+        leafMaxAg_.assign(file_.leafCount, 0.0f);
+        extra_.assign(static_cast<size_t>(file_.leafCount) * 3 * nb, 0.0f);
+        double all = 0, rel = 0;
+        for (uint32_t i = 0; i < file_.leafCount; ++i) {
+            const GaiaLeaf& L = file_.leaves[i];
+            double a = 0, r = 0;
+            float* e = extra_.data() + static_cast<size_t>(i) * 3 * nb;
+            for (uint32_t j = 0; j < L.n; ++j) {
+                const uint64_t k = L.first + j;
+                const uint8_t f = file_.stars[k * 16 + 15];
+                const double M = file_.magnitude(k), l = std::pow(10.0, -0.4 * M);
+                double ag = 0;
+                if (f & GaiaFiable::kPoussiere) {
+                    uint16_t q;
+                    std::memcpy(&q, file_.velocities + k * 8 + 6, 2);
+                    ag = 0.01 * (q & 1023u);
+                    leafMaxAg_[i] = std::max(leafMaxAg_[i], static_cast<float>(ag));
+                    ++dustCount;
+                }
+                const bool ok = f & GaiaFiable::kOrbiteFiable;
+                a += l;
+                if (ok) { r += l; ++reliableCount; }
+                if (!nb) continue;
+                const int b = std::clamp(static_cast<int>(std::floor((M - file_.bin0) / file_.binWidth)), 0, static_cast<int>(nb) - 1);
+                const double ld = l * std::pow(10.0, 0.4 * ag);
+                if (ok) e[b] += static_cast<float>(l);
+                e[nb + b] += static_cast<float>(ld);
+                if (ok) e[2 * nb + b] += static_cast<float>(ld);
+            }
+            leafShare_[i] = a > 0 ? static_cast<float>(r / a) : 0.0f;
+            all += a;
+            rel += r;
+        }
+        reliableLight = all > 0 ? rel / all : 0;
+    }
     double shiftYears_ = 0;
     GaiaFile file_;
     GaiaOrbits orbits_;
@@ -369,7 +431,10 @@ private:
             uint32_t take = L.n;
             if (d2 > 0) {
                 const double dPc = std::sqrt(d2) / 3.2615638;
-                const double absLim = mLim - 5.0 * std::log10(dPc / 10.0);      // magnitude absolue la plus faible qui compte
+                // magnitude absolue (mesurée) la plus faible qui compte ; vue d'ailleurs que du Soleil, la poussière retirée peut
+                // rendre une étoile jusqu'à leafMaxAg plus brillante (gaia_fiable.glsl) : la limite recule d'autant
+                const double wd = GaiaFiable::poidsPoussiere(std::sqrt(dot(cam.pos, cam.pos)), std::sqrt(dot(centre_[i], centre_[i])));
+                const double absLim = mLim - 5.0 * std::log10(dPc / 10.0) + wd * leafMaxAg_[i];
                 uint32_t a = 0, b = L.n;      // première étoile trop faible (les magnitudes croissent dans la feuille)
                 while (a < b) {
                     const uint32_t m = (a + b) / 2;
@@ -377,7 +442,7 @@ private:
                     else b = m;
                 }
                 take = a;
-                if (rest && take < L.n) addRest(i, L, cam, absLim, dPc, pxPerRad, rest, o);
+                if (rest && take < L.n) addRest(i, L, cam, absLim, dPc, pxPerRad, rest, o, wd, GaiaFiable::effacement(since));
             }
             if (take == 0) continue;
             visible_.push_back(i);
@@ -392,10 +457,19 @@ private:
 
     // Lumière des étoiles de la feuille i plus faibles que absLim : somme des tranches de magnitude (la tranche coupée
     // compte au prorata de la part de sa largeur sous la limite), en un point au centre de lumière de la feuille.
-    void addRest(uint32_t i, const GaiaLeaf& L, const Camera& cam, double absLim, double dPc, double pxPerRad, float* rest, Vec3 o) {
+    // Lumière montrée (gaia_fiable.glsl) : part fiable + part pas fiable × effacement, sans poussière en proportion wd.
+    void addRest(uint32_t i, const GaiaLeaf& L, const Camera& cam, double absLim, double dPc, double pxPerRad, float* rest, Vec3 o, double wd, double fade) {
         const float* s = file_.summaries + static_cast<size_t>(i) * (4 + 2 * file_.bins);
-        const float* lum = s + 4;
-        const float* col = lum + file_.bins;
+        const float* lumAll = s + 4;
+        const float* col = lumAll + file_.bins;
+        const float* e = extra_.data() + static_cast<size_t>(i) * 3 * file_.bins;
+        std::array<float, 256> mixed{};
+        for (uint32_t b = 0; b < file_.bins; ++b) {
+            const double mes = e[b] + fade * (lumAll[b] - e[b]);
+            const double net = e[2 * file_.bins + b] + fade * (e[file_.bins + b] - e[2 * file_.bins + b]);
+            mixed[b] = static_cast<float>((1.0 - wd) * mes + wd * net);
+        }
+        const float* lum = mixed.data();
         double sum = 0, colSum = 0, colW = 0;
         for (uint32_t b = 0; b < file_.bins; ++b) {
             const double lo = file_.bin0 + b * file_.binWidth;

@@ -2,6 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 #include "orbite_galactique.glsl"
 #include "gaia_acc.glsl"
+#include "gaia_fiable.glsl"
 /* Lumière additionnée des sources Gaia à distance mal mesurée (gaia.h, gaia_agrege.bin). Deux usages, choisis par
    pc.camLo.w :
    0 : cases 3D (morceau de ciel × tranche de parallaxe), placées à leur distance, étalées sur leur taille à l'écran ;
@@ -56,6 +57,8 @@ void main() {
         p = ((q - pc.camHi.xyz) + dep) - pc.camLo.xyz;
         float d = max(length(p), 1e-12);
         flux = pc.par.x * pow(10.0, -0.4 * (c.pm.w + 2.5 * log(float(SPREAD)) / log(10.0) + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0));
+        /* poussière Soleil-case estimée par Gaia (bits 16-31 du mot de couleur), retirée vue d'ailleurs (gaia_fiable.glsl) */
+        flux *= pow(10.0, 0.4 * 0.01 * float(floatBitsToUint(c.rest.z) >> 16) * gfPoidsPoussiere(pc.camHi.xyz + pc.camLo.xyz, c.pm.xyz));
         /* tache : assez large pour que les points d'une case se recouvrent (côté de la case, ou épaisseur partagée entre les points) */
         /* l'épaisseur ne compte que vue de côté : projetée sur l'écran (sinus de l'angle entre le rayon de vue et la direction du Soleil) */
         float r = max(OVERLAP * c.rest.x * s, 0.23 * d0 / float(SPREAD) * length(cross(n, p / d)));
@@ -65,6 +68,8 @@ void main() {
         flux = pc.par.x * pow(10.0, -0.4 * c.pm.w);
         ext = 2.0 * OVERLAP * c.rest.x * pxPerRad;      /* vu du Soleil, pixels du ciel jointifs : recouvrement plus large */
     }
+    /* sources sans orbite fiable (aucune vitesse radiale propre, distance à 20 % près) : montrées autour d'aujourd'hui seulement */
+    flux *= gfEffacement(pc.par.w);
     float size = clamp(max(1.5 * pc.par.y / 1080.0, ext), 1.0, 512.0);
     vCol = colorOf[floatBitsToUint(c.rest.z) & 255u].rgb * flux / (size * size);
     gl_Position = pc.viewProj * vec4(p, 1.0);

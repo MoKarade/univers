@@ -13,11 +13,16 @@ layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 p
 layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
 #include "gaia_acc.glsl"
+#include "gaia_fiable.glsl"
 void main() {
     uvec4 r = star[gl_VertexIndex];
     vec3 pos = uintBitsToFloat(r.xyz), move = vec3(0.0);
+    uint flags = r.w >> 24;
+    /* orbite pas fiable (drapeau 2 absent) : montrée seulement autour d'aujourd'hui (gaia_fiable.glsl) */
+    float garde = (flags & 2u) != 0u ? 1.0 : gfEffacement(pc.par.w);
+    if (garde < 1.0e-4) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
+    uvec2 q = (pc.par.z != 0.0 || (flags & 4u) != 0u) ? vel[gl_VertexIndex] : uvec2(0u);
     if (pc.par.z != 0.0) {
-        uvec2 q = vel[gl_VertexIndex];
         vec3 v = vec3(float(int(q.x << 16) >> 16), float(int(q.x) >> 16), float(int(q.y << 16) >> 16)) * 0.05;
         /* ligne droite mesurée, raccordée sans seuil à l'orbite calculée autour de la Galaxie (orbite_galactique.glsl) ;
            sans vitesse radiale mesurée (drapeau), elle compte pour nulle : l'étoile ne s'éloigne ni ne s'approche du Soleil
@@ -37,9 +42,16 @@ void main() {
     vec3 p = ((pos - pc.camHi.xyz) + move) - pc.camLo.xyz;
     float d = max(length(p), 1e-12);
     float m = unpackHalf2x16(r.w).x + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0;
-    float flux = pc.par.x * pow(10.0, -0.4 * m);
+    uint pas = (r.w >> 16) & 255u;
+    if ((flags & 4u) != 0u) {      /* poussière Soleil-étoile estimée par Gaia, retirée vue d'ailleurs (gaia_fiable.glsl) */
+        float w = gfPoidsPoussiere(pc.camHi.xyz + pc.camLo.xyz, pos);
+        uint pq = q.y >> 16;
+        m -= w * 0.01 * float(pq & 1023u);
+        if (pas < 254u) pas = uint(max(0.0, float(pas) - w * float(pq >> 10) + 0.5));
+    }
+    float flux = pc.par.x * pow(10.0, -0.4 * m) * garde;
     float size = clamp(1.5 + 1.2 * log2(1.0 + flux), 1.5, 14.0) * pc.par.y / 1080.0;
-    vCol = colorOf[(r.w >> 16) & 255u].rgb * min(flux, 3.0e4) / (size * size);
+    vCol = colorOf[pas].rgb * min(flux, 3.0e4) / (size * size);
     gl_Position = pc.viewProj * vec4(p, 1.0);
     gl_PointSize = size;
 }

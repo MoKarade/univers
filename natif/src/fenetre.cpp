@@ -257,6 +257,9 @@ int runWindow(const WindowOptions& opt) {
     sim.gaiaCellDispersionKms = gaiaOk ? gaia.cellDispersionKms : 0;
     sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
     sim.gaiaCount = gaiaOk ? gaia.count : 0;
+    sim.gaiaReliableCount = gaiaOk ? gaia.reliableCount : 0;
+    sim.gaiaReliableLight = gaiaOk ? gaia.reliableLight : 0;
+    sim.gaiaDustCount = gaiaOk ? gaia.dustCount : 0;
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
     sr.create(g, stars, HdrTarget::kFormat, gaiaOk);

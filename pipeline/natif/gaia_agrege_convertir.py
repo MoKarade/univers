@@ -12,8 +12,10 @@ montrée que vue du voisinage du Soleil, là où seule la direction compte.
 
 Format gaia_agrege.bin (petit-boutiste) : en-tête 64 octets (« UNIVGAG2 », nombre de cases 3D (u64), nombre de pixels du
 ciel (u32), niveau HEALPix (u32), lumière totale 3D et ciel seul (f64, en 10^(-0,4 G) vu du Soleil)), puis cases 3D de
-32 octets : x, y, z (f32, al), magnitude absolue G (f32), rayon (f32, al), erreur relative de distance (f32), pas de
-couleur (u32, même table que gaia.bin), nombre de sources (u32) ; puis pixels du ciel de 16 octets : direction x, y, z
+48 octets : x, y, z (f32, al), magnitude absolue G (f32, mesurée depuis la Terre), rayon (f32, al), erreur relative de distance
+(f32), pas de couleur (u32 : bits 0-7 pas de couleur, même table que gaia.bin ; bit 8 vitesse radiale mesurée ; bits 16-31
+poussière Soleil-case retirable, en pas de 0,01 mag), nombre de sources (u32), vitesse moyenne x, y, z (f32, km/s),
+dispersion (f32, km/s) ; puis pixels du ciel de 16 octets : direction x, y, z
 (f32, unité), flux G vu du Soleil (f32) ; puis le pas de couleur des pixels du ciel (u8).
 
 Usage : python gaia_agrege_convertir.py <dossier de gaia_agreger.py> <gaia.bin> <dossier de sortie>
@@ -100,7 +102,17 @@ def main():
     cases['p'] = u * d_ly[:, None]
     cases['m'], cases['r'], cases['e'] = M, 0.5 * cote * d_ly, err[k]
     v, disp, a_rv = vitesses(D, k)
-    cases['c'], cases['n'] = pas_couleur(D['fc'][k], D['fcn'][k]) | (a_rv.astype(np.uint32) << 8), D['n'][k]
+    # poussière (docs/gaia-rayons.md) : absorption de la case = 2,5 log10(flux sans poussière / flux mesuré), où la poussière
+    # de chaque source estimée par Gaia (ag_gspphot) est retirée et les autres gardées telles quelles ; 0 si non demandée
+    if 'fd' in D:
+        f, fd, fdn = D['f'][k], np.nan_to_num(D['fd'][k]), np.nan_to_num(D['fdn'][k])
+        ag = 2.5 * np.log10(np.maximum(f - fdn + fd, f) / f)
+        print(f'poussière estimée pour {fdn.sum() / f.sum():.1%} de la lumière des cases ; absorption médiane (lumière) '
+              f'{np.median(ag):.2f} mag')
+    else:
+        ag = np.zeros(int(k.sum()))
+    ag_bits = np.clip(np.rint(ag / 0.01), 0, 65535).astype(np.uint32) << 16
+    cases['c'], cases['n'] = pas_couleur(D['fc'][k], D['fcn'][k]) | (a_rv.astype(np.uint32) << 8) | ag_bits, D['n'][k]
     cases['v'], cases['s'] = v, disp
     poids = D['f'][k]
     o = np.argsort(disp); cum = np.cumsum(poids[o]) / poids.sum()

@@ -41,7 +41,7 @@ set(SPV_FILES)
 foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp ciel_bandes.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet -I${CMAKE_SOURCE_DIR}/shaders ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
-    DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl VERBATIM)
+    DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_acc.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_fiable.glsl VERBATIM)
   list(APPEND SPV_FILES ${SPV_DIR}/${S}.spv)
 endforeach()
 add_custom_target(shaders DEPENDS ${SPV_FILES})
