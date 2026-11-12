@@ -35,7 +35,7 @@ from playwright.sync_api import sync_playwright
 
 URL = os.environ.get('U_URL', 'file://' + os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'dist', 'index.html')))
 SHOTS = os.environ.get('U_SHOTS', '')
-SIZES = {'phone': (390, 780, True), 'small': (360, 640, True), 'land': (780, 390, True), 'mid': (700, 800, False), 'desk': (1280, 800, False)}
+SIZES = {'phone': (390, 780, True), 'small': (360, 640, True), 'land': (780, 390, True), 'mid': (700, 800, False), 'desk': (1280, 800, False), 'big': (1920, 1080, False)}
 MODES = sys.argv[1:] or list(SIZES)
 BAR_MAX = 0.15
 REST_BLOCKS = 2
