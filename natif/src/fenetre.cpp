@@ -21,6 +21,7 @@
 #include "interface.h"
 #include "points_planetes.h"
 #include "spheres.h"
+#include "traceurs_bras.h"
 #include "voie_lactee.h"
 #include "rendu_fenetre.h"
 
@@ -292,6 +293,8 @@ int runWindow(const WindowOptions& opt) {
     FusionCloud fusionCloud;
     if (hasReplay) fusionCloud.create(g, fusionDir, HdrTarget::kFormat);
     double fusionShare = 0;
+    ArmTracerPoints armTracers;      // masers et amas mesurés qui tracent les bras spiraux
+    if (armTracers.create(g, dataDir + "/traceurs_bras.tsv")) sim.armTracers = &armTracers.tracers;
     ClonePoints clones;      // nuage des 10 000 scénarios du Groupe local (précalculés par le fil physique)
     if (clones.create(g, dataDir + "/clones_groupe_local.bin")) {
         sim.cloneCount = clones.n;
@@ -496,6 +499,9 @@ int runWindow(const WindowOptions& opt) {
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
                                                                : "points du calcul fait à l'avance (un scénario) ; éclat d'affichage fixe, pas encore à l'échelle des étoiles mesurées"});
+            if (sim.armTracers)
+                sim.calcStates.push_back({"Traceurs des bras spiraux", armTracers.count ? CalcMode::Measured : CalcMode::Hidden, 0,
+                                          "masers à parallaxe radio (Reid et al. 2019) et amas ouverts datés (Hunt & Reffert 2023) : positions mesurées, montrées autour d'aujourd'hui"});
             if (sim.cloneCount)
                 sim.calcStates.push_back({"Scénarios du Groupe local", clones.count ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           "10 000 routes possibles des galaxies voisines, calculées à l'avance d'après l'incertitude des mesures"});
@@ -524,6 +530,8 @@ int runWindow(const WindowOptions& opt) {
         fusionShare = (sim.wholeGalaxy ? 1.0 : 1.0 - sim.starShare()) * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0);
         fusionCloud.update(g, sim.replayGa(), fusionShare);
         if (milkyWayCentre >= 0) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
+        armTracers.update(cam, sim.years - kStartYears, sim.dist, pc.par[0]);
+        sim.armTracersShown = armTracers.count > 0;
         tasksTimer += dt;
         if (tasksTimer > 2.0) {      // calculs de fond du PC : relus toutes les 2 secondes
             tasksTimer = 0;
@@ -578,12 +586,13 @@ int runWindow(const WindowOptions& opt) {
         }
         if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0)
             fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height);
-        if (!skyOnly && (fusionPoints.count || clones.count)) {
+        if (!skyOnly && (fusionPoints.count || clones.count || armTracers.count)) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
             still.par[2] = 0;
             sr.bind(cmd, still, sc.extent.width, sc.extent.height);
             fusionPoints.draw(cmd);
             clones.draw(cmd);
+            armTracers.draw(cmd);
         }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
                        sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // cachés dans une autre lumière : on ne les voit qu'en lumière visible
@@ -680,6 +689,7 @@ int runWindow(const WindowOptions& opt) {
     fusionPoints.release(g);
     fusionCloud.release(g);
     clones.release(g);
+    armTracers.release(g);
     asteroids.release(g);
     galaxies.release(g);
     spheres.release(g);

@@ -93,6 +93,15 @@ constexpr int kRateCount = static_cast<int>(sizeof(kRates) / sizeof(kRates[0]));
 // Orbites exactes (double précision, bibliothèque de physique) du Soleil et des étoiles nommées : le même calcul que
 // celui de la carte graphique (orbites_gpu.h), pour que les noms et le point visé suivent les étoiles dessinées.
 // Deux états par étoile, au pas d'avant et au pas d'après la date (1 million d'années), reliés par une courbe de Hermite.
+// Un objet mesuré qui trace un bras spiral (traceurs_bras.h) : maser à parallaxe radio ou amas ouvert daté.
+struct ArmTracer {
+    std::string name, arm;      // arm : code du bras donné par Reid et al. 2019 (masers) ; vide pour les amas
+    Vec3 pos{0, 0, 0};          // années-lumière, repère du simulateur, aujourd'hui
+    bool maser = false;
+    double ageMyr = -1;         // amas : âge en millions d'années ; -1 pour un maser
+    double distanceError = 0;   // erreur relative de la distance
+};
+
 // Comment ce qui est montré est obtenu, famille par famille (demande de Marc, 12 novembre 2026 : « je veux voir quand ça
 // montre ce qui a été calculé en amont sur carte graphique ou approximation »). Rempli à chaque image par fenetre.cpp.
 enum class CalcMode { Measured, Exact, Precomputed, Approx, Hidden };      // mesuré, calculé exactement, précalculé, approché, non montré
@@ -186,6 +195,8 @@ struct Sim {
     // Proposition faite à Marc le 12 novembre 2026 (en attente de sa réponse, donc coupé par défaut) : montrer à toutes les
     // dates, aujourd'hui compris, la Galaxie entière du calcul (les mêmes points jusqu'à la fusion), dans les teintes des
     // étoiles, avec les étoiles mesurées par-dessus : plus de bascule entre l'ère des mesures et celle de la fusion.
+    const std::vector<ArmTracer>* armTracers = nullptr;      // traceurs mesurés des bras spiraux (nul : fichier absent)
+    bool armTracersShown = false;                            // dessinés à cette image (près d'aujourd'hui, vus d'assez loin)
     bool wholeGalaxy = false;
     std::vector<TaskProgress> tasks;     // calculs de fond du PC (avancement.h), relus toutes les 2 secondes
     // Scénarios du Groupe local (clones.h) : nombre, part qui finit par une fusion Voie lactée-Andromède, et date de cette
