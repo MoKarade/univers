@@ -193,3 +193,15 @@ l'image des anneaux de Saturne (calée sur deux repères mesurés).
   Horizons après 154 jours (orbite simple, sans l'attraction des planètes). `natif/src/asteroides.h`,
   `shaders/asteroides.vert` : équation de Kepler résolue par la carte graphique à chaque image. Montrés à moins de
   300 ans de l'époque. Pas encore : noms et fiches des astéroïdes, comètes, sondes.
+
+## Relecture contre la NASA (12 novembre 2026)
+
+Règle de Marc, dans ses mots : « rien supposé, seulement du mesuré. le supposé c'est l'évolution dans le temps ».
+Relu contre la fiche « Planetary Fact Sheet » de la NASA (nssdc.gsfc.nasa.gov/planetary/factsheet/) [Certain] :
+- rayons des planètes, de la Lune et de Pluton : conformes (l'appli donne le rayon moyen, la NASA le diamètre à
+  l'équateur ; écart maximal 3,4 % pour Saturne, dû à son aplatissement) ;
+- durées des orbites : conformes à mieux que 0,7 % ;
+- vitesses de rotation utilisées pour orienter les astres (orientation.h) : conformes aux durées de rotation de la
+  NASA pour Mercure, Vénus, Mars, Jupiter, Saturne, Uranus, Neptune et Pluton.
+Pas encore relu [À vérifier] : magnitudes H et couleurs B-V des planètes (éclat des points vus de loin), direction
+des pôles hors Terre et Lune, étendue de l'image des anneaux.
