@@ -42,6 +42,26 @@ inline double v2Baryons(double r) { return kG * kMb * r / ((r + kAb) * (r + kAb)
 inline double nfwShape(double r) { const double x = r / kRs; return (std::log(1 + x) - x / (1 + x)) / r; }
 inline double gmHalo() { return (kV0 * kV0 - v2Baryons(kR0)) / nfwShape(kR0); }      // calé sur 230 km/s au Soleil
 
+// Fréquences du potentiel SANS la barre, dans le plan (z = 0), à R kpc ; en km/s/kpc (× kKmsKpcToRadGa pour des rad/Ga).
+// Formules exactes (dérivées analytiques du même potentiel que Potentiel::acc) ; contrôlées dans essai_galaxie contre des
+// différences finies de acc. Approximation des épicycles valable pour les orbites presque circulaires du disque seulement :
+// pour suivre une étoile à toute date sans approximation, intégrer Potentiel::acc (c'est ce que fait Orbites).
+struct Frequences {
+    double vc;      // vitesse circulaire (km/s)
+    double omega;   // fréquence de rotation Ω = vc / R
+    double kappa;   // fréquence radiale des épicycles κ (κ² = Φ'' + 3 Ω²)
+    double nu;      // fréquence verticale ν (ν² = ∂²Φ/∂z² en z = 0)
+};
+inline Frequences frequences(double R) {
+    const double gb = kG * kMb, gd = kG * kMd, gh = gmHalo(), c2 = (kAd + kBd) * (kAd + kBd), D2 = R * R + c2, D = std::sqrt(D2), x = R / kRs;
+    const double m = std::log(1 + x) - x / (1 + x);
+    const double d1 = gb / ((R + kAb) * (R + kAb)) + gd * R / (D2 * D) + gh * m / (R * R);                                   // Φ'(R)
+    const double d2 = -2 * gb / std::pow(R + kAb, 3) + gd * (c2 - 2 * R * R) / (D2 * D2 * D) + gh * (x / ((1 + x) * (1 + x) * kRs * R * R) - 2 * m / (R * R * R));      // Φ''(R)
+    const double nu2 = gb / (R * (R + kAb) * (R + kAb)) + gd * (kAd + kBd) / (kBd * D2 * D) + gh * m / (R * R * R);
+    const double om2 = d1 / R;
+    return {std::sqrt(R * d1), std::sqrt(om2), std::sqrt(d2 + 3 * om2), std::sqrt(nu2)};
+}
+
 struct Potentiel {
     double GMs = gmHalo(), Rb = kBarHalfLengthKpc, Ab = kBarAlpha * kV0 * kV0 * std::pow(kR0 / kBarHalfLengthKpc, 3) / 3;
     bool barre = true;

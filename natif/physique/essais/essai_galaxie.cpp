@@ -47,6 +47,19 @@ int main() {
         a.avance(0); double back = 0; for (size_t k = 0; k < p.size(); k += 97) { const auto x = a.position(k); back = std::fmax(back, std::hypot(x.x - p[k].x, x.y - p[k].y, x.z - p[k].z)); }
         ok(back < 1e-6, "aller 100 Ma puis retour : écart %.2g kpc", back);
     }
+    {   // Fréquences analytiques contre différences finies de Potentiel::acc (sans barre), de 0,5 à 30 kpc.
+        Potentiel P; P.barre = false; double worst = 0;
+        auto aR = [&](double R) { double a[3]; P.acc(R, 0, 0, 0, a); return -a[0]; };      // Φ'(R)
+        auto az = [&](double R, double z) { double a[3]; P.acc(R, 0, z, 0, a); return -a[2]; };
+        for (double R = 0.5; R <= 30; R *= 1.15) {
+            const auto f = frequences(R); const double h = 1e-4 * R, hz = 1e-5;
+            const double vc = std::sqrt(R * aR(R)), om2 = aR(R) / R, k2 = (aR(R + h) - aR(R - h)) / (2 * h) + 3 * om2, n2 = (az(R, hz) - az(R, -hz)) / (2 * hz);
+            worst = std::fmax(worst, std::fmax(std::fmax(std::fabs(f.vc / vc - 1), std::fabs(f.omega / std::sqrt(om2) - 1)), std::fmax(std::fabs(f.kappa / std::sqrt(k2) - 1), std::fabs(f.nu / std::sqrt(n2) - 1))));
+        }
+        ok(worst < 1e-5, "fréquences (vc, Ω, κ, ν) : écart relatif %.1e aux dérivées de acc", worst);
+        const auto s = frequences(kR0);
+        ok(std::fabs(s.vc - kV0) < 1e-9, "au Soleil : vc %.3f km/s, κ %.2f, ν %.1f km/s/kpc", s.vc, s.kappa, s.nu);
+    }
     std::printf(g_fail ? "ECHEC (%d)\n" : "PASSE\n", g_fail);
     return g_fail ? 1 : 0;
 }
