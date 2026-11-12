@@ -35,8 +35,8 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 ### S3 — Méthode de mesure des distances (A1)
 - Après : la fiche de chaque galaxie de Cosmicflows-4 dit comment sa distance a été mesurée (Céphéides, TRGB, Tully-Fisher, plan fondamental, supernova, fluctuations de brillance de surface…), avec l'incertitude.
 - Données : Cosmicflows-4, Tully et al. 2023, ApJ 944, 94 (VizieR J/ApJ/944/94, 55 874 galaxies). `pipeline/sources/build_cf4.py`.
-- État : serveurs du CDS injoignables le 11/11/2026 à 21 h 50 UTC ; à relancer.
-- Fini quand : test `distances` : 20 galaxies tirées au hasard ont la ligne « Distance mesurée par » ; M31 et NGC 4258 donnent la méthode publiée.
+- Fait : table VizieR de 55 877 galaxies (l'EDD en annonce 55 874). La table complète (3,6 Mo) ne tient pas dans la page : seules les galaxies qui ont une fiche sont gardées (`app/gen/data17.js`, 23 ko), associées par position à moins de 1,5′ et à moins d'un facteur 3 de la distance déjà affichée. 405 galaxies proches sur 788 et 55 du Groupe local sur 101 ; 4 associations écartées pour distance incohérente : NGC 3274 (voisin d'arrière-plan PGC 213714 à 458 Mpc), HIZSS 003, HIZSS 3(A) et HIZSS 3B (PGC 2807061 : 6,5 Mpc dans Cosmicflows-4 contre 1,7 Mpc affichés, désaccord réel non tranché ici). Contrôle : NGC 4258 à 7,5 Mpc, dont le maser (7,6 Mpc publiés). Manque connu : M51, dont la position du catalogue de Karachentsev est à 2,4′ de celle de Cosmicflows-4. Table complète hors dépôt (`cf4_complet.json`) pour un chargement à part.
+- Fini quand : test `pipeline/sources/test_build_cf4.py` (M31 → PGC 2557, M33 → 5818, NGC 4258 → 39600, refus de l'arrière-plan de NGC 3274, aucun doublon) ; test `app/test/lot_s.py` : fiches de NGC 4258 et de M31 avec mesure, précision, méthodes et source, 20 galaxies proches associées portent la mesure, une galaxie sans mesure n'a pas de ligne vide ; critiques PASSE.
 
 ### S4 — Mouvements à grande échelle et Laniakea (A2, rejoint le lot E)
 - Après : les galaxies de Cosmicflows-4 portent leur vitesse particulière mesurée ; la frontière de Laniakea est tracée d'après la reconstruction publiée.
