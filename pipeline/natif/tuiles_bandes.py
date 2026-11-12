@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""Tuiles fines d'un relevé du ciel pour l'appli PC (format UNIVTIL2) : la carte à pleine finesse (ordre HiPS 6, pixel de
+6,4 secondes d'arc pour des tuiles de 512 px), lue tuile par tuile pendant le vol.
+
+Source : les tuiles FITS du relevé telles que publiées (valeurs mesurées ; seuls BSCALE et BZERO appliqués ; tuiles
+compressées en gzip acceptées), via la même fiche et les mêmes copies de secours que ciel_bandes.py. Contrôle fait le
+12/11/2026 : chez l'IRSA, la tuile WISE W1 d'ordre 6 est exactement la moyenne de ses 16 tuiles d'ordre 8 (écart 0,000 %
+pixel par pixel sur 3 tuiles). Les ordres plus grossiers (5 et 4) sont recalculés ici par moyenne des 4 enfants mesurés
+(np.nanmean), pas pris du serveur : le 12/11/2026 les tuiles d'ordre 2 de WISE à l'IRSA étaient fausses. L'ordre 3
+(Nside 4096 pour 512 px) est la carte entière ciel_<nom>.bin ; les tuiles commencent à l'ordre 4.
+
+Format UNIVTIL2 :
+- Index, petit, sur le PC : <index>/<nom>/ordre_K.idx = « UNIVTIL2 », '<IIII' (K, w, 12·4^K, g=3), puis 12·4^K uint32 :
+  position de la tuile dans son paquet + 1, 0 si la tuile est absente.
+- Paquets : <paquets>/<nom>/ordre_K/p######.bin, ###### = numéro de tuile >> (2g) sur 6 chiffres. Un paquet met bout à
+  bout, sans en-tête, les tuiles présentes de son groupe de 64, par numéro croissant ; une tuile = w² float16 en ordre
+  emboîté local (valeur i de la tuile n = pixel emboîté n·w² + i de la carte Nside w·2^K), NaN = pas de mesure.
+- float16 ne va que de 6e-8 à 65504 : chaque valeur est stockée multipliée par facteur_float16 (puissance de 10 choisie
+  d'après les valeurs du relevé, écrite dans fiche.json) ; valeur mesurée = valeur lue / facteur_float16. Les valeurs qui
+  dépasseraient 65504 sont comptées (« depassements ») et écrites à ±65504.
+- <index>/<nom>/fiche.json : fiche de ciel_<nom>.bin, plus ordre_max, largeur, ordres, groupe, facteur, comptes.
+
+Travail par morceaux : un groupe de 64 tuiles d'ordre 4 = 1024 tuiles d'ordre 6 (environ 1 Go de FITS, 0,5 Go de float16),
+écrits puis oubliés ; reprise possible (etat.npz dans le dossier des paquets). Les FITS d'origine ne sont gardés que si
+--brut est donné.
+
+Usage : python tuiles_bandes.py <sortie> <nom> [--index D] [--paquets D] [--brut D] [--simultanes 12] [--avancement F --rang i/n]
+"""
+import sys as _sys
+_sys.stdout.reconfigure(encoding='utf-8')
+import argparse, concurrent.futures as cf, datetime, json, math, os, struct, time, urllib.error, urllib.request, warnings
+import numpy as np
+
+_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ciel_bandes as cb      # fiches RELEVES, lecture des fiches HiPS et des FITS, pose des tuiles
+
+SOURCES = {'erosita': 'eROSITA-DR1-024', 'galexfuv': 'GALEX-GR6-FUV', 'galexnuv': 'GALEX-GR6-NUV',
+           'wise3': 'AllWISE-W1', 'wise46': 'AllWISE-W2', 'wise12': 'AllWISE-W3', 'wise22': 'AllWISE-W4'}
+F16_MAX = 65504.0
+G = 3                # 4^3 = 64 tuiles par paquet
+K_FIN = 6            # ordre le plus fin (pixel de 6,4″ pour 512 px)
+K_BAS = 4            # ordre le plus grossier en tuiles (l'ordre 3 est la carte entière)
+
+
+def choisir_source(nom):
+    """Relevé principal puis copies de secours, comme ciel_bandes.main() ; renvoie (fiche du relevé, fiche HiPS)."""
+    base = cb.RELEVES[nom]
+    for r in [base] + [dict(base, **s) for s in base.get('secours', [])]:
+        r = dict(r)
+        r.pop('secours', None)
+        if r.get('fichiers'):
+            continue
+        try:
+            return r, cb.proprietes(r['hips'], r.get('adresse'))
+        except (Exception, SystemExit) as e:
+            print(f'  {e} ; copie suivante', flush=True)
+    raise SystemExit(f'{nom} : aucune copie en tuiles ne répond')
+
+
+def telecharger(adresse, ordre, n, brut):
+    """Tuile FITS telle que publiée ; b'' si le serveur dit qu'elle n'existe pas (404). Gardée sur disque si brut."""
+    rel = os.path.join(f'Norder{ordre}', f'Dir{(n // 10000) * 10000}', f'Npix{n}.fits')
+    if brut and os.path.exists(os.path.join(brut, rel)):
+        with open(os.path.join(brut, rel), 'rb') as f:
+            return f.read()
+    url = f'{adresse}/Norder{ordre}/Dir{(n // 10000) * 10000}/Npix{n}.fits'
+    for k in range(6):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                octets = r.read()
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return b''
+            if k == 5:
+                raise
+        except Exception:
+            if k == 5:
+                raise
+        time.sleep(2 ** k)
+    if octets[:6] != b'SIMPLE' and octets[:2] != bytes([0x1F, 0x8B]):      # FITS, ou FITS compressé en gzip (IRSA)
+        raise RuntimeError(f'tuile {n} : ni FITS ni gzip')
+    if brut:
+        chemin = os.path.join(brut, rel)
+        os.makedirs(os.path.dirname(chemin), exist_ok=True)
+        with open(chemin + '.part', 'wb') as f:
+            f.write(octets)
+        os.replace(chemin + '.part', chemin)
+    return octets
+
+
+def facteur_float16(stats):
+    """Puissance de 10 : le 99,9e centile vers 1000, et le maximum de la carte Nside 4096 au moins 20 fois sous 65504
+    (les pixels fins montent plus haut que leur moyenne)."""
+    if not stats.get('p999'):
+        return 1.0
+    f = 1000.0 / abs(stats['p999'])
+    if stats.get('max'):
+        f = min(f, F16_MAX / (20.0 * abs(stats['max'])))
+    return 10.0 ** math.floor(math.log10(f))
+
+
+class Avancement:
+    """Fichier lu par l'appli : écrit dans un .tmp puis renommé."""
+    def __init__(self, chemin, nom, total, unite):
+        self.chemin, self.nom, self.total, self.unite = chemin, nom, total, unite
+        self.debut = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        self.dernier = 0.0
+
+    def ecrire(self, fait, etat, detail, force=False):
+        if not self.chemin or (not force and time.time() - self.dernier < 15):
+            return
+        self.dernier = time.time()
+        txt = (f'nom={self.nom}\nfait={fait}\ntotal={self.total}\nunite={self.unite}\ndebut={self.debut}\n'
+               f"maj={datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}\netat={etat}\ndetail={detail}\n")
+        tmp = self.chemin[:-4] + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(txt)
+        os.replace(tmp, self.chemin)
+
+
+def ecrire_paquets(dossier, ordre, blocs, idx):
+    """blocs : dict numéro de tuile -> tableau (w² valeurs, déjà multipliées par le facteur). Un paquet par groupe de 64
+    tuiles présentes, dans l'ordre croissant ; remplit idx (position + 1)."""
+    os.makedirs(os.path.join(dossier, f'ordre_{ordre}'), exist_ok=True)
+    for g in sorted({n >> (2 * G) for n in blocs}):
+        rang = 0
+        chemin = os.path.join(dossier, f'ordre_{ordre}', f'p{g:06d}.bin')
+        with open(chemin + '.part', 'wb') as f:
+            for n in range(g << (2 * G), (g + 1) << (2 * G)):
+                if n in blocs:
+                    f.write(blocs[n].astype('<f2').tobytes())
+                    rang += 1
+                    idx[n] = rang
+        os.replace(chemin + '.part', chemin)
+
+
+def moyenne_enfants(blocs_fins, n, w):
+    """Tuile n de l'ordre K depuis ses 4 enfants 4n..4n+3 de l'ordre K+1 (moyenne des pixels mesurés) ; None si aucun."""
+    if not any((4 * n + k) in blocs_fins for k in range(4)):
+        return None
+    fin = np.full(4 * w * w, np.nan, dtype=np.float32)
+    for k in range(4):
+        b = blocs_fins.get(4 * n + k)
+        if b is not None:
+            fin[k * w * w:(k + 1) * w * w] = b
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', RuntimeWarning)      # pixel sans enfant mesuré : reste NaN
+        return np.nanmean(fin.reshape(-1, 4), axis=1)
+
+
+def ecrire_idx(chemin, ordre, w, idx):
+    with open(chemin + '.part', 'wb') as f:
+        f.write(b'UNIVTIL2')
+        f.write(struct.pack('<IIII', ordre, w, idx.size, G))
+        f.write(idx.astype('<u4').tobytes())
+    os.replace(chemin + '.part', chemin)
+
+
+def lire_fiche(sortie, nom, r):
+    """Fiche de la carte entière ciel_<nom>.bin si elle existe (mêmes textes et statistiques), sinon celle du relevé."""
+    carte = os.path.join(sortie, f'ciel_{nom}.bin')
+    if not os.path.exists(carte):
+        return dict(r)
+    with open(carte, 'rb') as f:
+        f.read(8)
+        _, _, lj, _ = struct.unpack('<IIII', f.read(16))
+        return json.loads(f.read(lj))
+
+
+def morceau(ex, adresse, w, table, facteur, premier, nombre, brut):
+    """Télécharge les tuiles d'ordre K_FIN [premier, premier + nombre) ; renvoie (blocs, absentes, dépassements)."""
+    futurs = {ex.submit(telecharger, adresse, K_FIN, n, brut): n for n in range(premier, premier + nombre)}
+    blocs, echecs, absentes, depass = {}, [], 0, 0
+    for fu in cf.as_completed(futurs):
+        n = futurs[fu]
+        try:
+            octets = fu.result()
+        except Exception as e:
+            echecs.append(n)
+            print(f'  tuile {n} : {e}', flush=True)
+            continue
+        if not octets:
+            absentes += 1
+            continue
+        img = cb.lire_fits(octets)
+        if img.shape != (w, w):
+            raise SystemExit(f'tuile {n} : {img.shape}, attendu {w} × {w}')
+        v = np.full(w * w, np.nan, dtype=np.float32)
+        v[table] = img.astype(np.float32).ravel()
+        v *= facteur
+        trop = np.abs(v) > F16_MAX
+        depass += int(trop.sum())
+        v[trop] = np.sign(v[trop]) * F16_MAX
+        blocs[n] = v
+    if echecs:
+        raise SystemExit(f'{len(echecs)} tuiles en échec réseau ({echecs[:10]}) ; relancer, la reprise part de ce morceau')
+    return blocs, absentes, depass
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('sortie', help='dossier des cartes entières (ciel_<nom>.bin)')
+    ap.add_argument('nom')
+    ap.add_argument('--index', default=r'C:\tmp\natif\donnees\tuiles', help='dossier des .idx et de fiche.json')
+    ap.add_argument('--paquets', help='dossier des paquets (défaut : <sortie>/tuiles_paquets)')
+    ap.add_argument('--brut', help="garder les FITS d'origine dans ce dossier (Norder/Dir/Npix), pour l'archive")
+    ap.add_argument('--simultanes', type=int, default=12)
+    ap.add_argument('--avancement', help="fichier d'avancement lu par l'appli")
+    ap.add_argument('--rang', default='1/1', help="place de ce relevé dans le lot, « i/n »")
+    a = ap.parse_args()
+
+    r, p = choisir_source(a.nom)
+    adresse = p['hips_service_url'].rstrip('/')
+    w = int(p.get('hips_tile_width', 512))
+    ordre_max = int(p.get('hips_order', K_FIN))
+    if ordre_max < K_FIN:
+        raise SystemExit(f'{a.nom} : publié jusqu’à l’ordre {ordre_max} seulement')
+    ordres = list(range(K_BAS, K_FIN + 1))
+    dossier_idx = os.path.join(a.index, a.nom)
+    dossier_paq = os.path.join(a.paquets or os.path.join(a.sortie, 'tuiles_paquets'), a.nom)
+    os.makedirs(dossier_idx, exist_ok=True)
+    os.makedirs(dossier_paq, exist_ok=True)
+    fiche = lire_fiche(a.sortie, a.nom, r)
+    facteur = facteur_float16(fiche.get('stats', {}))
+    table = cb.orientations(w)[0].ravel()
+    print(f'{r["libelle"]} : serveur {adresse}, tuiles {w} px, ordres {ordres} (publié jusqu\'à {ordre_max}), '
+          f'Nside {w << K_FIN}, facteur float16 {facteur:g}', flush=True)
+
+    # état de reprise : index déjà remplis et morceaux faits
+    etat = os.path.join(dossier_paq, 'etat.npz')
+    idx = {k: np.zeros(12 * 4 ** k, dtype=np.uint32) for k in ordres}
+    faits, depass, absentes = set(), 0, 0
+    if os.path.exists(etat):
+        e = np.load(etat)
+        idx = {k: e[f'idx{k}'] for k in ordres}
+        faits, depass, absentes = set(e['faits'].tolist()), int(e['depass']), int(e['absentes'])
+
+    i_r, n_r = (int(x) for x in a.rang.split('/'))
+    av = Avancement(a.avancement, 'Tuiles fines du ciel (ordre 6, pixel de 6,4″)', 100 * n_r, '%')
+    n_morceaux = (12 * 4 ** K_BAS) >> (2 * G)          # groupes de 64 tuiles d'ordre 4 : 48
+    par_morceau = 1 << (2 * (G + K_FIN - K_BAS))       # tuiles d'ordre 6 par morceau : 1024
+    t0 = time.time()
+    with cf.ThreadPoolExecutor(a.simultanes) as ex:
+        for m in range(n_morceaux):
+            if m in faits:
+                continue
+            premier = m * par_morceau
+            blocs, ab, de = morceau(ex, adresse, w, table, facteur, premier, par_morceau, a.brut)
+            absentes += ab
+            depass += de
+            ecrire_paquets(dossier_paq, K_FIN, blocs, idx[K_FIN])
+            for k in range(K_FIN - 1, K_BAS - 1, -1):      # ordres 5 puis 4, depuis les blocs de l'ordre au-dessus
+                deb = premier >> (2 * (K_FIN - k))
+                fins, blocs = blocs, {}
+                for n in range(deb, deb + (par_morceau >> (2 * (K_FIN - k)))):
+                    b = moyenne_enfants(fins, n, w)
+                    if b is not None:
+                        blocs[n] = b
+                ecrire_paquets(dossier_paq, k, blocs, idx[k])
+            faits.add(m)
+            np.savez(etat[:-4] + '_part.npz', faits=np.array(sorted(faits)), depass=depass, absentes=absentes,
+                     **{f'idx{k}': idx[k] for k in ordres})
+            os.replace(etat[:-4] + '_part.npz', etat)
+            print(f'  morceau {m + 1}/{n_morceaux} fait, {time.time() - t0:.0f} s', flush=True)
+            av.ecrire(100 * (i_r - 1) + int(100 * len(faits) / n_morceaux), 'en cours',
+                      f'{r["libelle"]} : morceau {len(faits)} sur {n_morceaux} (relevé {i_r} sur {n_r})', True)
+
+    for k in ordres:
+        ecrire_idx(os.path.join(dossier_idx, f'ordre_{k}.idx'), k, w, idx[k])
+    comptes = {str(k): int((idx[k] > 0).sum()) for k in ordres}
+    fiche = dict(fiche, ordre_max=K_FIN, largeur=w, ordres=ordres, groupe=G, serveur=adresse, facteur_float16=facteur,
+                 depassements=depass, tuiles_presentes=comptes, tuiles_absentes_ordre_max=absentes,
+                 source_archive=SOURCES.get(a.nom, a.nom), format='UNIVTIL2', date_tuiles=time.strftime('%Y-%m-%d'),
+                 outil_tuiles='pipeline/natif/tuiles_bandes.py')
+    with open(os.path.join(dossier_idx, 'fiche.json.part'), 'w', encoding='utf-8') as f:
+        json.dump(fiche, f, ensure_ascii=False, indent=1)
+    os.replace(os.path.join(dossier_idx, 'fiche.json.part'), os.path.join(dossier_idx, 'fiche.json'))
+    taille = sum(os.path.getsize(os.path.join(d, x)) for d, _, fs in os.walk(dossier_paq) for x in fs if x.startswith('p'))
+    print(f'Écrit {dossier_idx} (index) et {dossier_paq} (paquets, {taille / 1e9:.2f} Go) : tuiles présentes {comptes}, '
+          f'{absentes} absentes à l\'ordre {K_FIN}, {depass} valeurs au-delà de float16', flush=True)
+    av.ecrire(100 * i_r, 'terminé' if i_r == n_r else 'en cours',
+              f'{r["libelle"]} fait : {comptes[str(K_FIN)]} tuiles, {taille / 1e9:.1f} Go (relevé {i_r} sur {n_r})', True)
+
+
+if __name__ == '__main__':
+    main()
