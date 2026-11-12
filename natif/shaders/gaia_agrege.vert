@@ -1,12 +1,19 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+#include "orbite_galactique.glsl"
+#include "gaia_acc.glsl"
 /* Lumière additionnée des sources Gaia à distance mal mesurée (gaia.h, gaia_agrege.bin). Deux usages, choisis par
    pc.camLo.w :
    0 : cases 3D (morceau de ciel × tranche de parallaxe), placées à leur distance, étalées sur leur taille à l'écran ;
-   1 : ciel seul (distance inconnue), dessiné comme vu du Soleil : direction seulement, flux mesuré tel quel. */
-struct Cell { vec4 pm; vec4 rest; };      /* x, y, z (al), magnitude ; rayon (al ou rad), erreur, couleur (bits), nombre (bits) */
+   1 : ciel seul (distance inconnue), dessiné comme vu du Soleil : direction seulement, flux mesuré tel quel.
+   Les cases bougent comme les étoiles (gaia.vert) : centre emporté à la vitesse moyenne mesurée de ses sources, ligne
+   droite puis orbite (exacte si calculée, sinon épicycles). Les points d'une case restent groupés autour du centre. */
+struct Cell { vec4 pm; vec4 rest; vec4 vel; };      /* x, y, z (al), magnitude ; rayon, erreur, couleur (bits), nombre (bits) ; vitesse moyenne (km/s), dispersion */
+struct Etat { vec4 p; vec4 v; };
+layout(std430, set = 0, binding = 3) readonly buffer Orb { Etat orb[]; };
 layout(std430, set = 0, binding = 0) readonly buffer Cells { Cell cell[]; };
 layout(std430, set = 0, binding = 2) readonly buffer Col { vec4 colorOf[]; };      /* binding 1 : vitesses des étoiles, inutile ici */
-layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; } pc;   /* par.w : tan(champ / 2) */
+layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; uint sun; float frac; float exact; uint cellBase; } pc;   /* camHi.w : tan(champ / 2) ; par.w : temps (Ga) */
 layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
 const int SPREAD = 8;          /* points par case (gaia.h dessine SPREAD instances) */
@@ -22,7 +29,7 @@ vec3 hash3(uvec2 k) {
 }
 void main() {
     Cell c = cell[gl_VertexIndex];
-    float pxPerRad = pc.par.y / (2.0 * pc.par.w);
+    float pxPerRad = pc.par.y / (2.0 * pc.camHi.w);
     vec3 p;
     float flux, ext;
     if (pc.camLo.w == 0.0) {
@@ -36,7 +43,17 @@ void main() {
         vec3 t2 = cross(n, t1);
         float d0 = length(c.pm.xyz) * s;
         vec3 q = (n + (2.0 * h.y - 1.0) * c.rest.x / length(c.pm.xyz) * t1 + (2.0 * h.z - 1.0) * c.rest.x / length(c.pm.xyz) * t2) * d0;
-        p = (q - pc.camHi.xyz) - pc.camLo.xyz;
+        vec3 dep = vec3(0.0), v = c.vel.xyz;
+        if (pc.par.w == 0.0) dep = v * pc.par.z;
+        else if (pc.exact > 0.5) {
+            float u = pc.par.w * 1.0e9 / OG_RACCORD_ANS, w = 1.0 - exp(-u * u);
+            float tEtat = pc.par.w - pc.frac * 1.0e-3, hh = pc.frac * 1.0e-3 * OP_K;
+            Etat a = orb[pc.cellBase + uint(gl_VertexIndex)], so = orb[pc.sun];
+            vec3 xa = a.p.xyz + hh * a.v.xyz + 0.5 * hh * hh * accGal(a.p.xyz, tEtat);
+            vec3 xs = so.p.xyz + hh * so.v.xyz + 0.5 * hh * hh * accGal(so.p.xyz, tEtat);
+            dep = mix(v * pc.par.z, OG_M * (xa - xs) * OG_KPC_LY - c.pm.xyz, w);
+        } else dep = ogDeplacement(c.pm.xyz, v, pc.par.z, pc.par.w);
+        p = ((q - pc.camHi.xyz) + dep) - pc.camLo.xyz;
         float d = max(length(p), 1e-12);
         flux = pc.par.x * pow(10.0, -0.4 * (c.pm.w + 2.5 * log(float(SPREAD)) / log(10.0) + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0));
         /* tache : assez large pour que les points d'une case se recouvrent (côté de la case, ou épaisseur partagée entre les points) */

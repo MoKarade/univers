@@ -135,7 +135,8 @@ def lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z, agrege=None
     if agrege and os.path.exists(agrege):      # lumière additionnée des sources Gaia à distance moins sûre (gaia_agrege.bin)
         h = np.fromfile(agrege, np.uint8, 64)
         nc = int(h[8:16].view('<u8')[0])
-        cases = np.fromfile(agrege, np.dtype([('p', '<f4', 3), ('m', '<f4'), ('r', '<f4'), ('e', '<f4'), ('c', '<u4'), ('n', '<u4')]), nc, offset=64)
+        champs = [('p', '<f4', 3), ('m', '<f4'), ('r', '<f4'), ('e', '<f4'), ('c', '<u4'), ('n', '<u4')] + ([('x', 'V16')] if bytes(h[:8]) == b'UNIVGAG2' else [])
+        cases = np.fromfile(agrege, np.dtype(champs), nc, offset=64)
         ranger(cases['p'].astype(np.float64), cases['m'].astype(np.float64))
     return grille / (100.0 * 100.0 * 50.0), n
 

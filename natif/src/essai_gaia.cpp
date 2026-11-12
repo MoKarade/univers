@@ -82,6 +82,7 @@ int main(int argc, char** argv) {
         endOnce(g, c0);
         const auto t2 = std::chrono::steady_clock::now();
         long steps = 0;
+        gaia.wantAllLeaves();      // contrôle : toutes les feuilles avancées
         while (true) {
             VkCommandBuffer c = beginOnce(g);
             gaia.advance(g, c, years, 50);
@@ -145,6 +146,19 @@ int main(int argc, char** argv) {
         for (int i = 0; i < frames; ++i) draw(false);
         const double dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count();
         std::printf("cadence : %.1f images par seconde (%.2f ms par image, %ux%u)\n", frames / dt, 1000.0 * dt / frames, width, height);
+    }
+    if (exact && withGaia) {      // avance des seules feuilles visibles (celles de la dernière image), 1 pas par image
+        draw(false);
+        const auto t3 = std::chrono::steady_clock::now();
+        int framesV = 0;
+        for (; framesV < 10; ++framesV) {
+            VkCommandBuffer c = beginOnce(g);
+            gaia.advance(g, c, years + (framesV + 1) * 1.0e6, 1);
+            endOnce(g, c);
+        }
+        const double dv = std::chrono::duration<double>(std::chrono::steady_clock::now() - t3).count();
+        std::printf("avance des feuilles visibles : %.2f ms par pas (retard restant %ld)\n", 1000.0 * dv / framesV, gaia.orbitLagSteps());
+        years += 10 * 1.0e6;
     }
     draw(true);
     std::printf("etoiles Gaia dessinees : %llu sur %llu (flux minimal %g)\n", static_cast<unsigned long long>(gaia.drawn),

@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
         std::stringstream sc;
         sc << fc.rdbuf();
         const g::Potentiel P;
-        for (const char* fichier : {"orbites_pas.comp", "gaia.vert"}) {      // gaia.vert porte une copie du même calcul
+        for (const char* fichier : {"orbites_pas.comp", "gaia_acc.glsl"}) {      // gaia_acc.glsl (étoiles Gaia) porte une copie du même calcul
         std::ifstream fk(dir + "/" + fichier);
         std::stringstream sk;
         sk << fk.rdbuf();
