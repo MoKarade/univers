@@ -23,7 +23,10 @@ setTimeout(() => {
   { global.performance = global.performance || require('perf_hooks').performance; const T = dynTables(), n = I.NS, D = { n, t: 10, x: new Float64Array(n * 3), v: new Float64Array(n * 3), out: new Float32Array(n * 3) };
     for (let j = 0; j < n * 3; j++) D.x[j] = a[j] * I.Q;
     for (let i = 0; i < n; i++) { const j = i * 3, R = Math.max(Math.hypot(D.x[j], D.x[j + 1]), 0.3), vc = vCirc(R, true) * KMS_KPC_GYR * 1.5; D.v[j] = vc * D.x[j + 1] / R; D.v[j + 1] = -vc * D.x[j] / R; }
+    /* le budget est vérifié entre deux tranches de 5 Ma : un appel dure au plus le budget plus une tranche. La durée d'une tranche
+       dépend de la machine (les machines de contrôle de GitHub sont plusieurs fois plus lentes que le PC) : elle est mesurée ici. */
+    const ts = performance.now(); tailAdvance(D, D.t + 0.005, 1e9, T); const slice = performance.now() - ts;
     let worst = 0; for (let k = 0; k < 5; k++) { const t0 = performance.now(); tailAdvance(D, 12, 14, T); worst = Math.max(worst, performance.now() - t0); }
-    ok(worst < 30, `tailAdvance : appel le plus long ${worst.toFixed(1)} ms pour un budget de 14 ms (tranches de 5 Ma)`); }
+    ok(worst <= 14 + 2 * slice + 5, `tailAdvance : appel le plus long ${worst.toFixed(1)} ms pour un budget de 14 ms et une tranche de 5 Ma de ${slice.toFixed(1)} ms sur cette machine`); }
   process.exit(fail ? 1 : 0);
 }, 50);
