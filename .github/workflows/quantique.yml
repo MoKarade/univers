@@ -1,0 +1,44 @@
+# Lot D : données de l'infiniment petit calculées dans le nuage (R15 : contenu du proton d'après CT18NNLO).
+name: Quantique
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["r1[4-7]-*"]
+    paths: ["pipeline/quantique/**", ".github/workflows/quantique.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  proton:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: python -m pip install --quiet "numpy<2"
+      - name: Jeu de distributions CT18NNLO (LHAPDF)
+        run: |
+          curl -sSL --max-time 300 -o /tmp/ct18.tgz https://lhapdfsets.web.cern.ch/current/CT18NNLO.tar.gz
+          tar -xzf /tmp/ct18.tgz -C /tmp CT18NNLO/CT18NNLO_0000.dat CT18NNLO/CT18NNLO.info
+          head -30 /tmp/CT18NNLO/CT18NNLO.info
+      - name: Parts d'impulsion et comptes
+        run: python pipeline/quantique/proton_pdf.py /tmp/CT18NNLO/CT18NNLO_0000.dat
+      - uses: actions/upload-artifact@v4
+        with: { name: proton-pdf, path: app/gen/proton_pdf.js, retention-days: 30 }
+  eau:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: python -m pip install --quiet pyscf numpy
+      - name: Eau et hydrogène (PySCF)
+        run: python pipeline/quantique/eau_pyscf.py
+      - uses: actions/upload-artifact@v4
+        with: { name: water-qm, path: app/gen/water_qm.js, retention-days: 30 }

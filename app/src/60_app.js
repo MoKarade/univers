@@ -72,7 +72,7 @@
   const M31_MEAS = [['Gaia, 2025', [28.4, -109.8, 41.4]], ['Hubble, 2012', [44.1, -118.0, 3.1]], ['Gaia, 2021', DATA.M31.vel]];
   const vtOf = V => { const P = DATA.M31.pos, d = Math.hypot(P[0], P[1], P[2]), vr = (V[0] * P[0] + V[1] * P[1] + V[2] * P[2]) / d; return Math.hypot(V[0] - vr * P[0] / d, V[1] - vr * P[1] / d, V[2] - vr * P[2] / d); };
   const DTAB = dynTables(), LMCO = lmcOrbit(); andromedaAt(LMCO, 0, MAG.r0);
-  const LMIN = 6.6, LMAX = 26.95, SPEED_MAX_LOG = 17.2, LMICRO = -35.3;      // LMICRO : un peu en dessous de la longueur de Planck, accessible seulement en plongeant vers la Terre
+  const LMIN = 6.6, LMAX = 26.95, SPEED_MAX_LOG = 17.2, LMICRO = -20.0;      /* R13 : le zoom s'arrête à 10⁻²⁰ m, le plus fin jamais sondé (ordre de grandeur, LHC) ; accessible seulement en plongeant vers la Terre */
   const S = { logR: Math.log10(42 * AU), az: -0.95, el: 0.6, focus: 'sun', fa: null, curFo: [0, 0, 0], ty: 0, lastTy: 0, speed: 20 * DAY_S, dir: 1, playing: true, T1: 0, T2: 0, dmMix: 1, beltYears: 0, par: Object.assign({}, PLANCK), cosmo: fid, anim: null, lite: false, hit: null, vt: 33.7, m31V: null, tOn: null, dyn: null, orbit: null, sel: null, center: null, ck: 0, cpos: null,
     opts: { labels: true, orbits: true, realSize: false, dm: true, horizons: true, comoving: false, simWeb: false } };
   const F = { tg: [0, 0, 0], gcRel: [0, 0, 0], cos: {}, opts: S.opts, aFac: 1 };
@@ -96,14 +96,14 @@
     { name: 'Superamas voisins', logR: Math.log10(2.6e8 * LY), speed: 0.4e9 * YEAR_S, el: 0.42 },
     { name: 'Toile cosmique', logR: Math.log10(2.2e9 * LY), speed: 0.4e9 * YEAR_S, el: 0.34 },
     { name: 'Univers observable', logR: Math.log10(6.7e10 * LY), speed: 0.4e9 * YEAR_S, el: 0.3 },
-    // l'infiniment petit : on plonge vers la Terre, puis dans une gouttelette d'eau, jusqu'à la longueur de Planck
+    // l'infiniment petit : on plonge vers la Terre, puis dans une gouttelette d'eau, jusqu'à 10⁻²⁰ m (au-delà : inconnu)
     { name: 'Gouttelette d’eau', logR: Math.log10(3e-3), focus: 'earth', micro: true },
     { name: 'Molécules d’eau', logR: Math.log10(5.5e-10), focus: 'earth', micro: true },
     { name: 'Atome', logR: Math.log10(7e-11), focus: 'earth', micro: true },
     { name: 'Noyau atomique', logR: Math.log10(6.5e-15), focus: 'earth', micro: true },
     { name: 'Proton', logR: Math.log10(1.1e-15), focus: 'earth', micro: true },
     { name: 'Quarks', logR: Math.log10(8e-19), focus: 'earth', micro: true },
-    { name: 'Longueur de Planck', logR: Math.log10(4e-35), focus: 'earth', micro: true },
+    { name: 'Limite du connu', logR: -20.0, focus: 'earth', micro: true },
   ];
   /* ---- l'infiniment petit : ce qui est affiché et dit à chaque palier. lo : le palier vaut tant que log10(demi-champ en mètres) reste au-dessus. ---- */
   const MLEV = [
@@ -117,24 +117,20 @@
       rows: [['Liaison oxygène-hydrogène', '95,7 pm'], ['Angle entre les deux liaisons', '104,5°'], ['Écart entre molécules voisines', 'environ 0,28 nm'], ['Densité', '33 molécules par nanomètre cube'], ['Agitation', 'environ 640 m/s à 25 °C'], ['Unités', '1 pm = un millième de nanomètre'],
         ['Dans la simulation', 'Géométrie de chaque molécule : mesurée. Position des voisines : tirée au hasard, à la bonne densité. Rouge pour l’oxygène, blanc pour l’hydrogène : couleurs de convention.'], ['Sources', 'Géométrie : Benedict, Gailar et Plyler 1956 ; densité et agitation : calculées'], ['Certitude', 'Certain pour la géométrie et la densité ; modèle pour l’arrangement']] },
     { id: 'atome', lo: -12.3, place: 'Atome d’oxygène', name: 'Nuage d’électrons', sub: 'Une molécule d’eau vue de l’intérieur : 10 électrons', note: 'Un électron n’a pas de trajectoire : chaque point bleu est un endroit où l’on pourrait le trouver. Plus c’est dense, plus c’est probable.',
-      rows: [['Ce que montrent les points', 'les endroits où un électron a une chance d’être trouvé'], ['Taille de l’atome d’hydrogène', '53 pm de rayon (rayon de Bohr)'], ['Électrons', '8 venus de l’oxygène, 1 de chaque hydrogène'], ['Noyau', 'environ 20 000 fois plus petit que l’atome'],
-        ['Dans la simulation', 'Densité approchée (orbitales de Slater, charges de Clementi et Raimondi) : la forme générale est bonne, le détail des liaisons est simplifié.'], ['Sources', 'Rayon de Bohr : CODATA 2022'], ['Certitude', 'Probable (modèle approché)']] },
+      rows: () => waterRows(DATA.WATER_QM) },
     { id: 'vide', lo: -13.6, place: 'Le vide de l’atome', name: 'Entre les électrons et le noyau', sub: 'Presque tout l’atome est vide', note: 'Si le noyau était une bille d’un centimètre, l’atome ferait plus de 200 mètres de large.',
       rows: [['Rayon du noyau d’oxygène', '2,70 fm'], ['Masse', '99,97 % de la masse de l’atome est dans le noyau'], ['Unités', '1 fm = un millionième de nanomètre'], ['Sources', 'Rayon : Angeli et Marinova 2013'], ['Certitude', 'Certain']] },
     { id: 'noyau', lo: -14.75, place: 'Noyau d’oxygène', name: 'Noyau d’oxygène 16', sub: '8 protons et 8 neutrons', note: 'Le noyau : 8 protons (rouges) et 8 neutrons (gris), tenus ensemble par l’interaction forte.',
-      rows: [['Rayon', '2,70 fm'], ['Contenu', '8 protons et 8 neutrons'], ['Ce qui les tient', 'l’interaction forte, environ cent fois plus intense que la répulsion électrique entre protons'], ['Vitesse des protons et neutrons', 'environ un quart de celle de la lumière'],
-        ['Dans la simulation', 'Quatre groupes de 2 protons et 2 neutrons : une description courante de ce noyau, pas une image. Couleurs de convention.'], ['Sources', 'Rayon : Angeli et Marinova 2013'], ['Certitude', 'Certain pour le rayon et le contenu ; modèle pour l’arrangement']] },
-    { id: 'proton', lo: -16.6, place: 'Proton', name: 'Intérieur d’un proton', sub: 'Trois quarks liés par des gluons', note: 'Les trois quarks ne pèsent qu’environ 1 % du proton : le reste de sa masse est l’énergie des gluons qui les lient.',
-      rows: [['Rayon', '0,84 fm'], ['Quarks', 'deux « up » et un « down »'], ['Masse des trois quarks', 'environ 1 % de celle du proton'], ['Rouge, vert, bleu', 'une étiquette pour la charge de l’interaction forte, pas de vraies couleurs ; les quarks se les échangent sans cesse'],
-        ['Dans la simulation', 'Schéma : positions, tubes de gluons et paires éphémères sont indicatifs. Le nuage orangé suit la répartition de charge mesurée.'], ['Sources', 'Rayon : CODATA 2022 ; masses : Particle Data Group'], ['Certitude', 'Certain pour le rayon et le contenu ; schéma pour l’image']] },
+      rows: [['Rayon de charge', '2,70 fm (2,6991 fm, mesuré)'], ['Contenu', '8 protons et 8 neutrons'], ['Ce qui les tient', 'l’interaction forte, environ cent fois plus intense que la répulsion électrique entre protons'], ['Vitesse des protons et neutrons', 'jusqu’à environ un quart de celle de la lumière (impulsion de Fermi ≈ 250 MeV/c)'],
+        ['Dans la simulation', 'Place de chaque nucléon tirée au hasard dans la répartition mesurée (rayon mesuré). Couleurs de convention.'], ['Sources', 'Rayon : Angeli et Marinova 2013 ; répartition de charge : de Vries, de Jager et de Vries 1987 (oscillateur harmonique, a = 1,833 fm, α = 1,544) ; impulsion de Fermi : Moniz et al. 1971'], ['Certitude', 'Certain pour le rayon, le contenu et la répartition ; tirage au hasard pour la place de chaque nucléon']] },
+    { id: 'proton', lo: -16.6, place: 'Proton', name: 'Intérieur d’un proton', sub: 'Quarks, paires et gluons, d’après les mesures', note: () => pdfNote(),
+      rows: [['Rayon', '0,84 fm (CODATA 2022)'], ['Quarks de valence', 'deux « up » et un « down » : le compte net mesuré vaut 2 et 1'], ['Ce qui change avec la finesse', 'plus on regarde fin, plus la part d’impulsion des gluons et des paires quark-antiquark augmente'], ['Couleurs des points', 'rouge : quarks u principaux ; bleu : quark d principal ; turquoise : paires ; jaune : gluons'],
+        ['Dans la simulation', 'Un point = une part d’impulsion, pas une particule. Parts mesurées, positions au hasard. Gros points : repères des trois quarks principaux (deux u, un d).'], ['Sources', 'Distributions de partons CT18NNLO (Hou et al. 2021, Phys. Rev. D 103, 014013), lues avec le format LHAPDF6 (Buckley et al. 2015) ; rayon : CODATA 2022'], ['Finesse et énergie', 'convention : la finesse est le demi-champ affiché, et l’énergie de la sonde Q = ħc / finesse (ordre de grandeur)'], ['Licence des données', 'aucune licence écrite pour les grilles (LHAPDF et CT18) ; l’article CT18 est sous CC BY 4.0 ; usage libre avec citation de Hou et al. 2021 et de LHAPDF6 (Buckley et al. 2015) [Probable]'], ['Certitude', 'Mesuré pour les parts d’impulsion et les comptes ; positions des points tirées au hasard']] },
     { id: 'quark', lo: -19.3, place: 'Quark', name: 'Quarks et électrons', sub: 'Aucune taille mesurée', note: 'Un quark reste un point : aucune expérience ne lui a trouvé de taille ni de structure.',
       rows: [['Taille d’un quark', 'inférieure à 0,43 × 10⁻¹⁸ m'], ['Portée de l’interaction faible', '2,5 × 10⁻¹⁸ m'], ['Détail le plus fin sondé', 'de l’ordre de 10⁻¹⁹ à 10⁻²⁰ m, au collisionneur LHC'], ['Dans la simulation', 'Le quark reste un point à toutes les échelles. Les cercles orangés marquent les limites mesurées.'],
         ['Sources', 'Limite : collaboration ZEUS 2016 ; portée : calculée d’après la masse du boson W'], ['Certitude', 'Certain pour la limite ; ordre de grandeur pour le LHC']] },
-    { id: 'desert', lo: -33.3, place: 'Territoire inexploré', name: 'Au-delà des mesures', sub: 'De 10⁻²⁰ à 10⁻³⁵ m : aucune expérience', note: 'Ici, plus aucune mesure. Quinze puissances de dix séparent le plus petit détail jamais sondé de la longueur de Planck. Les cercles ne sont que des repères, un par puissance de dix.',
-      rows: [['Ce que vous voyez', 'des cercles repères : rien n’est connu ici'], ['Pourquoi', 'sonder plus petit demande plus d’énergie, bien au-delà de tout accélérateur'], ['Hypothèses', 'une unification des forces vers 10⁻³² m, des cordes : rien de cela n’est observé'], ['Certitude', 'Supposition']] },
-    { id: 'planck', lo: -99, place: 'Longueur de Planck', name: 'Longueur de Planck', sub: '1,6 × 10⁻³⁵ m', note: 'Fin du zoom. En dessous de cette longueur, gravitation et physique quantique devraient se mêler : aucune théorie vérifiée ne le décrit. Le bouillonnement est une vue d’artiste.',
-      rows: [['Valeur', '1,616255 × 10⁻³⁵ m'], ['D’où elle vient', 'de trois constantes : gravitation, constante de Planck, vitesse de la lumière'], ['La lumière la parcourt en', '5,39 × 10⁻⁴⁴ s (temps de Planck)'], ['Ce que cela signifie', 'en dessous, on ne sait plus ce que « distance » veut dire'],
-        ['Dans la simulation', 'Le bouillonnement est une vue d’artiste. Le zoom s’arrête ici.'], ['Sources', 'CODATA 2022'], ['Certitude', 'Certain pour la valeur ; Supposition pour ce qui s’y passe']] },
+    { id: 'inconnu', lo: -99, place: 'Inconnu', name: 'Inconnu', sub: 'Aucune expérience n’a sondé plus fin', note: 'Inconnu : aucune expérience n’a sondé plus fin. Il reste quinze puissances de dix jusqu’à la longueur de Planck, 1,616 × 10⁻³⁵ m. Le zoom s’arrête ici.',
+      rows: [['Détail le plus fin sondé', 'de l’ordre de 10⁻¹⁹ à 10⁻²⁰ m, au collisionneur LHC'], ['Jusqu’à la longueur de Planck', 'quinze puissances de dix, où aucune expérience n’est possible aujourd’hui'], ['Longueur de Planck', '1,616255 × 10⁻³⁵ m (CODATA 2022) : un chiffre calculé à partir de trois constantes, rien de plus n’est connu à cette échelle'], ['Dans la simulation', 'Le zoom s’arrête à 10⁻²⁰ m : rien n’est dessiné au-delà, faute de mesure.'], ['Certitude', 'Certain pour la valeur de la longueur de Planck ; inconnu pour tout le reste']] },
   ];
   const microOn = () => S.focus === 'earth' && !S.center && S.logR < 6.3, microLevel = lr => { for (const m of MLEV) if (lr > m.lo) return m; return MLEV[MLEV.length - 1]; }; let lastMl = '';
 
@@ -202,9 +198,9 @@
   { const ML = (text, key, lo, hi, o) => { addLabel(text, 'region', 2, lo, hi, () => Rr.micro.pos[key], o); LB[LB.length - 1].micro = true; };
     ML('gouttelette d’eau', 'drop', -3.2, -0.3, { center: true }); ML('molécule d’eau', 'mol', -9.55, -8.95, { center: true }); ML('oxygène', 'O', -10.25, -9.5); ML('hydrogène', 'H1', -10.25, -9.5); ML('hydrogène', 'H2', -10.25, -9.5);
     ML('noyau d’oxygène', 'nuc', -13.9, -10.6); ML('proton', 'p', -15.0, -13.95, { center: true }); ML('neutron', 'n', -15.0, -13.95, { center: true });
-    ML('quark up', 'q0', -16.9, -15.2); ML('quark up', 'q1', -16.9, -15.2); ML('quark down', 'q2', -16.9, -15.2); ML('gluons', 'glu', -16.4, -15.4);
+    ML('quark up', 'q0', -16.9, -15.2); ML('quark up', 'q1', -16.9, -15.2); ML('quark down', 'q2', -16.9, -15.2);
     ML('portée de l’interaction faible', 'weak', -18.35, -16.95, { center: true }); ML('aucune structure observée en dessous', 'lim', -19.15, -17.7, { center: true }); ML('détail le plus fin sondé (ordre de grandeur)', 'lhc', -20.5, -19.0, { center: true });
-    ML('unification des forces ? (hypothèse)', 'gut', -32.5, -31.0, { center: true }); ML('longueur de Planck', 'planck', -35.3, -34.0, { center: true }); }
+    }
   for (const tag of ['AST', 'TNO']) { const B = Rr[tag], ast = tag === 'AST';
     for (const l of DATA[tag + '_LABELS']) if (l.i < B.count) addLabel(l.n, '', l.p + 0.4, ast ? 11.05 : 12.35, ast ? 12.75 : 14.5, () => [B.pos[l.i * 3] * AU, B.pos[l.i * 3 + 1] * AU, B.pos[l.i * 3 + 2] * AU], { gate: () => (ast ? Rr.beltVis : Rr.kuiperVis) }); }
   addLabel('Soleil', 'here', 0, 14.75, 21.6, () => [0, 0, 0]);
@@ -333,7 +329,7 @@
 
   /* ---- règle des échelles ---- */
   const rail = $('rail'), RAILK = 0.34, railF = l => l >= LMIN ? RAILK + (1 - RAILK) * (l - LMIN) / (LMAX - LMIN) : RAILK * (l - LMICRO) / (LMIN - LMICRO), railL = f => f >= RAILK ? LMIN + (f - RAILK) / (1 - RAILK) * (LMAX - LMIN) : LMICRO + f / RAILK * (LMIN - LMICRO), SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹';
-  for (let d = -35; d <= 26; d++) { if (d < 7 && d % 5 !== 0) continue; const t = document.createElement('div'); t.className = 'tick'; t.style.bottom = railF(d) * 100 + '%'; if (d >= 7 ? d % 3 === 0 : d % 10 === 0 || d === -35) { t.style.width = '13px'; t.innerHTML = '<b>10' + (d < 0 ? '⁻' : '') + String(Math.abs(d)).split('').map(c => SUP[+c]).join('') + ' m</b>'; } $('ticks').appendChild(t); }
+  for (let d = Math.ceil(LMICRO); d <= 26; d++) { if (d < 7 && d % 5 !== 0) continue; const t = document.createElement('div'); t.className = 'tick'; t.style.bottom = railF(d) * 100 + '%'; if (d >= 7 ? d % 3 === 0 : d % 10 === 0) { t.style.width = '13px'; t.innerHTML = '<b>10' + (d < 0 ? '⁻' : '') + String(Math.abs(d)).split('').map(c => SUP[+c]).join('') + ' m</b>'; } $('ticks').appendChild(t); }
   const stopEls = STOPS.map(st => { const b = document.createElement('button'); b.className = 'stop'; b.type = 'button'; b.style.bottom = railF(st.logR) * 100 + '%'; b.innerHTML = '<span></span>'; b.firstChild.textContent = st.name; b.setAttribute('aria-label', 'Aller à : ' + st.name); b.addEventListener('click', () => { goStop(st); showRail(); }); rail.insertBefore(b, $('rail-hit')); return b; });
   let railTimer = 0;
   const showRail = () => { rail.classList.add('show'); clearTimeout(railTimer); railTimer = setTimeout(() => rail.classList.remove('show'), 3200); };
@@ -373,7 +369,7 @@
     });
     const up = e => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (ptrs.size === 0) { canvas.classList.remove('drag'); if (e.type === 'pointerup' && moved < 6 && performance.now() - t0 < 450) tap(e.clientX, e.clientY); } pinch = 0; };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 40 puissances de dix : la molette y va plus vite */ }, { passive: false });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 26 puissances de dix : la molette y va plus vite */ }, { passive: false });
     function labelAt(x, y) { for (const b of placed) if (b[4] && x >= b[0] - 5 && x <= b[1] + 5 && y >= b[2] - 5 && y <= b[3] + 5) { const L = b[4]; if (L.micro) return null; if (L.body) return { body: L.body }; const p = L.get(), q = [0, 0, 0]; if (p && isFinite(p[0]) && Rr.project(p, F, q)) return { x: q[0], y: q[1] }; } return null; }
     S._tap = (x, y) => tap(x, y);
     function tap(x, y) { const now = performance.now(), dbl = now - lastTap[0] < 380 && Math.hypot(x - lastTap[1], y - lastTap[2]) < 26; lastTap = [now, x, y]; let best = null, bd = 30; for (const b of BODIES) { const o = Rr.bodies[b.key]; if (!o.screen) continue; const d = Math.hypot(o.screen[0] - x, o.screen[1] - y) - Math.min(o.px, 200); if (d < bd) { bd = d; best = b.key; } } if (best) { select(null); if (best !== S.focus) focusBody(best); return; }
@@ -668,11 +664,15 @@
         const p = LMCO.peri[0]; if (p) r.push(['Orbite calculée', 'repasse au plus près de la Voie lactée dans ' + fmtYears(p[0] * 1e9) + ', à ' + fmtDist(Number((p[1] * KPC).toPrecision(2)))]); if (LMCO.tMerge) r.push(['Absorption', 'dans ' + fmtYears(LMCO.tMerge * 1e9) + ' (scénario calculé, très sensible à sa masse)']); }
       return r; } };
   }
+  /* R18 : chaque galaxie dit pourquoi elle bouge ou non, et pourquoi elle tourne ou non (décision 14 : sans vitesse mesurée, en place, raison affichée) */
+  function galMotionRows(get, far) { const ph = !far && photoNear({ get });
+    return [['Mouvement dans la simulation', far ? 'S’éloigne avec l’expansion de l’univers (équations de Friedmann) ; à cette distance, aucun déplacement propre n’est mesuré · calculé' : 'En place parmi les autres galaxies (son déplacement dans le ciel n’est pas mesuré) ; s’éloigne avec l’expansion · calculé'],
+      ['Rotation dans la simulation', ph ? 'Non montrée : sa photo réelle est affichée telle quelle, autour d’aujourd’hui ; le sens de rotation n’est dans aucun catalogue · inconnu' : far ? 'Non montrée : dessinée comme un point · inconnu' : 'Non montrée : dessinée comme un point ; le sens de rotation n’est dans aucun catalogue · inconnu']]; }
   function selNear(i) { const P = Rr.pick, get = () => add3(F.gcRel, [P.nPos[i * 3], P.nPos[i * 3 + 1], P.nPos[i * 3 + 2]], MPC * F.cos.a);
-    return { name: NM.near[i] || 'Galaxie', sub: 'Galaxie proche, à distance mesurée', get, rows: () => [['Distance', fmtDist(vlen(get()))], ['Diamètre', fmtDist(P.nLook[i * 2] * 2 * MPC, 2)], ['S’éloigne à', nf(Math.round(F.cos.Hkms * vlen(get()) / MPC), 0) + NBSP + 'km/s (expansion seule)'], ['Décalage vers le rouge', 'z = ' + zStr(F.cos.Hkms * vlen(get()) / MPC / 299792.458) + ' (expansion seule)']].concat(nearExtra(i), skyRow(get())) }; }
+    return { name: NM.near[i] || 'Galaxie', sub: 'Galaxie proche, à distance mesurée', get, rows: () => [['Distance', fmtDist(vlen(get()))], ['Diamètre', fmtDist(P.nLook[i * 2] * 2 * MPC, 2)], ['S’éloigne à', nf(Math.round(F.cos.Hkms * vlen(get()) / MPC), 0) + NBSP + 'km/s (expansion seule)'], ['Décalage vers le rouge', 'z = ' + zStr(F.cos.Hkms * vlen(get()) / MPC / 299792.458) + ' (expansion seule)']].concat(nearExtra(i), galMotionRows(get, false), skyRow(get())) }; }
   function selSurv(i, PP) { const P = PP || Rr.pick, z = P.svInfo[i * 3], kind = P.svInfo[i * 3 + 2], get = () => add3(F.gcRel, [P.svDir[i * 3], P.svDir[i * 3 + 1], P.svDir[i * 3 + 2]], P.svDist[i] * MPC * F.cos.a);
     return { name: kind > 1.5 ? 'Quasar' : 'Galaxie', sub: kind > 1.5 ? 'Noyau de galaxie très lumineux, relevé SDSS ou DESI' : kind > 0.5 ? 'Galaxie d’un relevé profond (6dF, 2dF, SDSS ou DESI)' : 'Galaxie du relevé 2MRS', get, rows: () => { const d = P.svDist[i] * MPC * F.cos.a, v = F.cos.Hkms * d / MPC;
-      return [['Décalage vers le rouge', 'z = ' + sig(z, 3)], ['Couleur', kind > 1.5 ? 'calculée : forme moyenne des quasars (SDSS), décalée de z' + (z > DATA.ZCOL.zq ? ' (tel qu’à z = ' + sig(DATA.ZCOL.zq, 3) + ', au-delà le spectre manque)' : '') : 'calculée : spectre d’une spirale Sb (Kinney 1996) décalé de z ; type réel inconnu' + (z > DATA.ZCOL.zg ? ' (tel qu’à z = ' + sig(DATA.ZCOL.zg, 3) + ', au-delà le spectre manque)' : '')], ['Distance à cet instant', fmtDist(d)], ['Sa lumière a voyagé', fmtYears(lookbackGyr(z) * 1e9)], ['S’éloigne à', v > 299792 ? sig(v / 299792.458, 3) + NBSP + 'fois la vitesse de la lumière : c’est l’espace qui s’étire' : nf(Math.round(v / 10) * 10, 0) + NBSP + 'km/s']]; } }; }
+      return [['Décalage vers le rouge', 'z = ' + sig(z, 3)], ['Couleur', kind > 1.5 ? 'calculée : forme moyenne des quasars (SDSS), décalée de z' + (z > DATA.ZCOL.zq ? ' (tel qu’à z = ' + sig(DATA.ZCOL.zq, 3) + ', au-delà le spectre manque)' : '') : 'calculée : spectre d’une spirale Sb (Kinney 1996) décalé de z ; type réel inconnu' + (z > DATA.ZCOL.zg ? ' (tel qu’à z = ' + sig(DATA.ZCOL.zg, 3) + ', au-delà le spectre manque)' : '')], ['Distance à cet instant', fmtDist(d)], ['Sa lumière a voyagé', fmtYears(lookbackGyr(z) * 1e9)], ['S’éloigne à', v > 299792 ? sig(v / 299792.458, 3) + NBSP + 'fois la vitesse de la lumière : c’est l’espace qui s’étire' : nf(Math.round(v / 10) * 10, 0) + NBSP + 'km/s']].concat(galMotionRows(get, true)); } }; }
   function pickAt(x, y, posOnly) { if (S.logR < 3) return null; let bp = null, lx = 0, ly = 0, lz = 0;      /* posOnly (R3) : rend la position (m) de l'objet sous le point, sans ouvrir de fiche */      // dans l'infiniment petit, on ne sélectionne pas les astres restés derrière le fond
    
     PM.multiplyMatrices(Rr.camera.projectionMatrix, Rr.camera.matrixWorldInverse);
@@ -724,7 +724,7 @@
     if (!sel && !body) { if (!card.hidden) card.hidden = true; return; }
     let rows;
     if (sel) { $('card-title').textContent = sel.name; $('card-sub').textContent = sel.sub; rows = sel.rows(); }
-    else if (mic && mic.rows) { $('card-title').textContent = mic.name; $('card-sub').textContent = mic.sub; rows = mic.rows; }
+    else if (mic && mic.rows) { $('card-title').textContent = mic.name; $('card-sub').textContent = mic.sub; rows = typeof mic.rows === 'function' ? mic.rows() : mic.rows; }
     else { const s = F.sun; $('card-sub').textContent = body.info; rows = body.key === 'sun' ? [['État à cette date', s.phase], ['Rayon', sig(s.R, 3) + NBSP + 'fois l’actuel'], ['Éclat', sig(s.L, 3) + NBSP + 'fois l’actuel'], ['Température', nf(Math.round(s.T / 10) * 10, 0) + NBSP + 'K'], ['Masse', sig(s.M, 3) + NBSP + 'fois l’actuelle']].concat(Math.abs(S.ty) < 1e6 ? sunFacts() : [])
       : body.key === 'moon' ? [['Distance à la Terre', nf(Math.round(vlen(sol.moonGeo) * AU / 1e5) * 100, 0) + NBSP + 'km'], ['Orbite', 'de 363 300 à 405 500 km en moyenne'], ['Excentricité', '0,055'], ['Un tour de la Terre', '27,3 jours'], ['Vitesse sur l’orbite', '1,02 km/s en moyenne']].concat(factRows('moon'), [['Retour de la même phase', 'tous les 29,5 jours'], ['S’éloigne de la Terre de', '3,8 cm par an']]) : planetRows(body.key).concat(factRows(body.key), F.eng[body.key] ? [['État à cette date', 'engloutie par le Soleil']] : []); }
     const keep = innerWidth < 600 ? 4 : 7, many = rows.length > keep + 1, shown = many && !S.more ? rows.slice(0, keep) : rows, dl = $('card-dl'), top = dl.scrollTop; $('card-more').hidden = !many; if (many) $('card-more').textContent = S.more ? 'Moins de détails' : 'Plus de détails (' + (rows.length - keep) + ')';
@@ -1088,12 +1088,14 @@
   function lgApply(tG) { const L = LGO.list; if (!L.length) return; const x = clamp((tG - LGO.t0) / LGO.dt, 0, LGO.n - 1.001), k = x | 0, f = x - k, sh = LGO.sh;
     for (const s of L) { const T = s.tab, j = k * 3, dx = lerp(T[j], T[j + 3], f), dy = lerp(T[j + 1], T[j + 4], f), dz = lerp(T[j + 2], T[j + 5], f), c = s.c, o = (s.i + 1) * 3; c.c[0] = c.c0[0] + dx; c.c[1] = c.c0[1] + dy; c.c[2] = c.c0[2] + dz; sh[o] = dx; sh[o + 1] = dy; sh[o + 2] = dz; }
     F.lgSh = sh; }
-  function lgTurn(gi, r) { const sp = G.lg.spin[gi], c = G.lg.centers[gi]; if (!c || c.own) return;
+  function lgTurn(gi, r) { const sp = G.lg.spin[gi], c = G.lg.centers[gi]; if (!c) return; if (c.own) { r.push(['Rotation sur elle-même', 'Tourne à sa vitesse mesurée, environ 250 km/s (Corbelli et al. 2010), simplifiée en une vitesse constante, autour de son axe mesuré ; le dessin des bras est un schéma · mesuré pour la vitesse']); return; }
     if (sp) { r.push(['Rotation sur elle-même', sp.vTxt + ' : un tour en ' + nf(Math.round(sp.turn[1] / 10) * 10, 0) + ' millions d’années à ' + sp.turn[0] + NBSP + 'kpc du centre']); r.push(['Sens de rotation', sp.sense + ' · mesuré']); r.push(['Rotation dans la simulation', 'Vitesse, axe et sens réels. Le dessin des bras est un schéma : il tourne d’un bloc.']); r.push(['Source de la rotation', sp.src]); }
-    else r.push(['Rotation sur elle-même', 'Non montrée : cette galaxie naine est dessinée comme un nuage sans structure']); }
-  function lgMove(gi, r) { const lv = DATA.LGV && DATA.LGV[gi], c = G.lg.centers[gi]; if (!c || c.own || c.m0) return;
+    else r.push(['Rotation sur elle-même', 'Non montrée : cette galaxie naine est dessinée comme un nuage sans structure · inconnu']); }
+  function lgMove(gi, r) { const lv = DATA.LGV && DATA.LGV[gi], c = G.lg.centers[gi]; if (!c) return;
+    if (c.own) { r.push(['Mouvement dans la simulation', 'Orbite calculée d’après sa vitesse mesurée, sous l’attraction des deux galaxies · scénario']); return; }
+    if (c.m0) { r.push(['Mouvement dans la simulation', MAG.c.indexOf(c) === 0 ? 'Orbite calculée d’après sa vitesse mesurée (Kallivayalil et al. 2013) · scénario pour l’avenir lointain' : 'Suit le Grand Nuage, dont il est compagnon : sa propre orbite n’est pas calculée · calculé avec le Grand Nuage']); return; }
     if (lv) { r.push(['Vitesse par rapport à la Voie lactée', nf(Math.round(Math.hypot(lv[0] + SUN_UVW[0], lv[1] + SUN_UVW[1], lv[2] + SUN_UVW[2])), 0) + NBSP + 'km/s (± ' + lv[3] + ' sur la part mesurée dans le ciel)']); r.push(['Mouvement dans la simulation', 'Orbite calculée d’après cette vitesse, sous l’attraction de la Voie lactée, d’Andromède et du Grand Nuage · Probable']); r.push(['Source de la vitesse', (DATA.LGV_SRC && DATA.LGV_SRC[gi]) || 'Local Volume Database (Pace 2024)']); if (c.g.s > 5) r.push(['Limite du calcul', 'Le freinage par la matière noire d’Andromède n’est pas pris en compte : pour une galaxie aussi massive, l’éloignement après le passage est probablement exagéré']); }
-    else r.push(['Mouvement dans la simulation', c.grp ? 'Suit Andromède, dont elle est satellite : sa propre orbite n’est pas calculée, faute de déplacement mesuré dans le ciel' : 'Déplacement dans le ciel non mesuré, ou trop incertain : galaxie laissée en place']); }
+    else r.push(['Mouvement dans la simulation', c.grp ? 'Suit Andromède, dont elle est satellite : sa propre orbite n’est pas calculée, faute de déplacement mesuré dans le ciel · calculé avec Andromède' : 'Déplacement dans le ciel non mesuré, ou trop incertain : galaxie laissée en place · inconnu']); }
   /* ---- nuage d'Oort vivant : chaque comète du modèle a son orbite autour du Soleil, et chaque étoile du catalogue qui passe à moins de 2 années-lumière la dévie ----
      Le nuage reste hypothétique (personne ne l'a observé directement) : sa forme est un modèle. Ce qui est calculé, c'est sa réponse à la gravité du Soleil et des étoiles de passage. */
   const OO = { el: null, segs: null, enc: [], t: 1e99, st: new Float64Array(6), kv: [0, 0, 0] };
@@ -1166,11 +1168,15 @@
     : 'Quasars observés, fond diffus mesuré par Planck, limites calculées.';
   const EARTH_TXT = 'Sort de la Terre inconnu : engloutie par le Soleil géant selon Schröder et Smith 2008 et Rasio et al. 1996, pourrait survivre selon Rybicki et Denis 2001. À partir du moment où les marées commencent à resserrer son orbite, la Terre et la Lune ne sont plus dessinées.';
   const SYS_END_TXT = 'Inconnu : des étoiles de passage défont le système solaire. Dans les simulations de Zink, Batygin et Adams (2020), l’instabilité se déclenche environ 30 milliards d’années après la mort du Soleil (vers 38 milliards d’années d’ici), puis les éjections s’étalent sur environ 10 milliards d’années ; la dernière planète part en moyenne 100 milliards d’années après la mort du Soleil. L’ordre et les dates de chaque planète ne sont pas connus : plus aucune n’est dessinée.';
+  /* R15 : parts d'impulsion mesurées à la finesse affichée (λ = demi-champ), d'après gen/proton_pdf.js */
+  function pdfNote() { const P = Rr.micro && Rr.micro.pdfAt ? Rr.micro.pdfAt(Math.pow(10, S.logR)) : null; if (!P) return ''; const m = P.mom, pc = x => Math.round(100 * x) + NBSP + '%';
+    if (P.clamp === 'grossier') return 'Zoomez : à partir d’une finesse de 1,5 × 10⁻¹⁶ m, les mesures disent comment l’impulsion du proton se partage entre ses quarks, des paires de quarks et les gluons. À une finesse plus grossière, cette description ne s’applique pas.';
+    return 'Le proton vu à cette finesse : ' + pc(m.uv + m.dv) + ' de son impulsion portée par ses trois quarks principaux, ' + pc(m.sea) + ' par des paires quark-antiquark qui apparaissent et disparaissent, ' + pc(m.g) + ' par les gluons qui les lient (mesures CT18NNLO).' + (P.clamp === 'fin' ? ' Au-delà de cette finesse, les valeurs ne sont pas calculées ici : celles de la plus fine sont gardées.' : ''); }
   function noticeText() {
     const C = S.cosmo, lr = S.logR, age = F.age;
     if (S.lost) return S.lostMsg || '';
     if (Rr.lens && Rr.lens.on && Rr.lens.inside) return 'Inconnu : si près de ' + Rr.lens.name + ', à moins d’une fois et demie la taille de son horizon, la lumière n’est pas calculée ici.';      /* S6 */
-    if (microOn()) return microLevel(lr).note || '';
+    if (microOn()) { const nt = microLevel(lr).note; return (typeof nt === 'function' ? nt() : nt) || ''; }
     if (lr < 17.6 && S.ty >= SYS_END * 1e9) return SYS_END_TXT;      /* vue du système solaire : son état passe avant le calcul d'Andromède */
     if (lr < 13.5 && S.ty / 1e9 >= T_DIV) return EARTH_TXT;      /* R6 : panneau du sort de la Terre, dans le système solaire */
     if (S.dyn && Math.abs((S.dynT !== undefined ? S.dynT : S.ty / 1e9) - S.dyn.t) > 0.04) return 'Calcul de la rencontre avec Andromède : ' + Math.round(clamp((S.dyn.t - S.dyn.t0) / Math.max((S.dynT !== undefined ? S.dynT : S.ty / 1e9) - S.dyn.t0, 1e-6), 0, 1) * 100) + NBSP + '%';
@@ -1405,7 +1411,15 @@
     requestAnimationFrame(step);
   }
   setSpeed(S.speed); syncPlay(); syncSliders();
-  window.__U = { zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
+  /* R9 : conditions de départ du calcul de la fusion, dans le repère galactocentrique d'andromedaOrbit (kpc, km/s), exportées par
+     pipeline/fusion/exporter_conditions.py. Mêmes formules que lgStart (position r0 = Mᵀ·c0, vitesse V + SUN_UVW) et lmcOrbit. */
+  function fusionCI() { const V = DATA.LGV || {}, cen = G.lg.centers, dw = [];
+    for (const k of Object.keys(V)) { const i = +k, c = cen[i]; if (!c || c.own || c.m0) continue; const q = c.c0, v0 = V[k];
+      dw.push({ i, name: c.g.n, pos: [M[0][0] * q[0] + M[1][0] * q[1] + M[2][0] * q[2], M[0][1] * q[0] + M[1][1] * q[1] + M[2][1] * q[2], M[0][2] * q[0] + M[1][2] * q[1] + M[2][2] * q[2]], vel: [v0[0] + SUN_UVW[0], v0[1] + SUN_UVW[1], v0[2] + SUN_UVW[2]] }); }
+    const sun = sunGalAt(Rr.K, 0, [0, 0, 0]);
+    return { m31: { pos: DATA.M31.pos, vel: M31_MEAS[0][1], vel_name: M31_MEAS[0][0], spin: DATA.M31.spin, meas: M31_MEAS }, lmc: DATA.LMC, lmc_spin: (LG_SPIN.find(q => /Grand Nuage/.test(q.key)) || {}).L, m33_spin: (LG_SPIN.find(q => /Triangle/.test(q.key)) || {}).L,
+      dwarfs: dw, sun: { pos: sun, vel: SUN_UVW }, M_GAL2ECL: M, note: 'Axes LG_SPIN dans le repère équatorial (voir 30_gen.js) ; le reste dans le repère galactocentrique d’andromedaOrbit.' }; }
+  window.__U = { selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
   if (!reduced) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
   requestAnimationFrame(now => { last = now; step(now); requestAnimationFrame(() => { $('loader').classList.add('out'); setTimeout(() => $('loader').remove(), 1000); if (!reduced && !S.resumed) { S.anim = { t0: performance.now() / 1000 + 0.3, dur: 5.5, l0: S.logR, l1: STOPS[1].logR, a0: S.az, a1: S.az + 0.5, e0: S.el, e1: 0.6 }; } showRail(); }); });
 })();

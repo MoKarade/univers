@@ -1,0 +1,68 @@
+# R9 : calcul complet de la fusion (docs/fusion-methode.md), en deux morceaux de moins de 6 heures chacun.
+# Les sorties (images clés, fusion.json) sont gardées 90 jours comme fichiers de la tâche.
+name: Fusion - calcul
+
+on:
+  workflow_dispatch:
+    inputs:
+      n: { description: "particules en tout", default: "300000" }
+      milieu: { description: "fin du premier morceau (Ga)", default: "5.0" }
+      fin: { description: "fin du calcul (Ga)", default: "10.0" }
+  # essai court de reprise par morceaux sur les branches de travail (6 000 particules, 0 → 0,1 → 0,2 Ga)
+  push:
+    branches: ["r9-*"]
+    paths: ["pipeline/fusion/calcul.py", "pipeline/fusion/modeles.py", ".github/workflows/fusion-calcul.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  morceau1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Logiciels (AGAMA, pyfalcon)
+        run: |
+          sudo apt-get install -y -qq libgsl-dev > /dev/null
+          python -m pip install --quiet numpy scipy setuptools wheel
+          git clone --depth 1 https://github.com/GalacticDynamics-Oxford/Agama.git /tmp/agama
+          (cd /tmp/agama && python setup.py install --yes > /tmp/agama.log 2>&1 || (tail -40 /tmp/agama.log; exit 1))
+          python -m pip install --no-build-isolation git+https://github.com/GalacticDynamics-Oxford/pyfalcon.git
+      - name: Calcul, premier morceau
+        working-directory: pipeline/fusion
+        run: python calcul.py 0 "${{ inputs.milieu || '0.1' }}" "${{ inputs.n || '6000' }}"
+      - uses: actions/upload-artifact@v4
+        with: { name: fusion-morceau1, path: pipeline/fusion/sortie, retention-days: 7 }
+  morceau2:
+    needs: morceau1
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Logiciels (AGAMA, pyfalcon)
+        run: |
+          sudo apt-get install -y -qq libgsl-dev > /dev/null
+          python -m pip install --quiet numpy scipy setuptools wheel
+          git clone --depth 1 https://github.com/GalacticDynamics-Oxford/Agama.git /tmp/agama
+          (cd /tmp/agama && python setup.py install --yes > /tmp/agama.log 2>&1 || (tail -40 /tmp/agama.log; exit 1))
+          python -m pip install --no-build-isolation git+https://github.com/GalacticDynamics-Oxford/pyfalcon.git
+      - uses: actions/download-artifact@v4
+        with: { name: fusion-morceau1, path: pipeline/fusion/sortie }
+      - name: Calcul, second morceau
+        working-directory: pipeline/fusion
+        run: python calcul.py "${{ inputs.milieu || '0.1' }}" "${{ inputs.fin || '0.2' }}" "${{ inputs.n || '6000' }}"
+      - name: Bilan
+        working-directory: pipeline/fusion/sortie
+        run: |
+          rm -f etat.npz
+          du -ch kf_*.bin | tail -1
+          python -c "import json; m=json.load(open('fusion.json')); print('fusion :', m['fusion_ga'], 'Ga | dérive max :', round(100*m['derive_max'],3), '% | images :', len(m['t']))"
+      - uses: actions/upload-artifact@v4
+        with: { name: fusion-resultat, path: pipeline/fusion/sortie, retention-days: 90 }

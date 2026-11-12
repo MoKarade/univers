@@ -167,15 +167,15 @@ void main(){ vec3 c=uLens>0.5?lensed():texture2D(tMap,vUv).rgb+uBloom*(texture2D
 
 /* ------------------------------------------------------------------ moteur */
 /* ============================================================================
-   L'infiniment petit : de la surface de la Terre à la longueur de Planck.
+   L'infiniment petit : de la surface de la Terre à 10⁻²⁰ m (au-delà : inconnu, rien n'est dessiné).
    Le point visé est l'origine de la scène. Chaque objet est défini en mètres autour de ce point
    (un quark d'un proton du noyau d'oxygène d'une molécule d'eau), puis multiplié par l'échelle vraie F.sT.
    Le décor astronomique reste figé derrière un fond opaque.
-   Mesuré : géométrie de la molécule d'eau, rayon de Bohr, rayons du noyau et du proton, limite de taille des quarks, longueur de Planck.
-   Modèle : position des molécules voisines, détail du nuage d'électrons, arrangement des nucléons, intérieur du proton.
+   Mesuré : géométrie de la molécule d'eau, rayon de Bohr, rayons du noyau et du proton, limite de taille des quarks.
+   Modèle : position des molécules voisines, détail du nuage d'électrons, position de chaque nucléon (tirée dans la répartition mesurée), intérieur du proton.
    ============================================================================ */
 function initMicro(THREE, scene, camera, R, Q) {
-  const ANG = 1e-10, FM = 1e-15, A0 = 0.529177210544, LP = 1.616255e-35, RP = 0.84075, rng = makeRng(4242), big = (Q.oort || 0) >= 10000;
+  const ANG = 1e-10, FM = 1e-15, A0 = 0.529177210544, RP = 0.84075, rng = makeRng(4242), big = (Q.oort || 0) >= 10000;
   const M = { pos: {}, k: 0 }, m4 = new THREE.Matrix4(), ORD = 5000, all = [];
   const vis = (lr, lo, hi, w) => fadeIn(lr, lo - (w || 0.35), lo) * fadeOut(lr, hi, hi + (w || 0.35));
   const gam = (k, s) => { let p = 1; for (let i = 0; i < k; i++) p *= 1 - rng(); return -s * Math.log(p); };
@@ -226,8 +226,13 @@ function initMicro(THREE, scene, camera, R, Q) {
       tv.copy(H2).applyQuaternion(tq); m4.makeScale(1.1 * s, 1.1 * s, 1.1 * s).setPosition(x + tv.x, y + tv.y, z + tv.z); hM.setMatrixAt(2 * i + 1, m4); }
     oM.instanceMatrix.needsUpdate = true; hM.instanceMatrix.needsUpdate = true; }
 
-  // --- nuage d'électrons de la molécule centrale : 10 électrons, densité approchée par des orbitales de Slater (charges effectives de Clementi et Raimondi)
-  const NE = big ? 36000 : 15000, eP = new Float32Array(NE * 3), ePh = new Float32Array(NE);
+  // --- nuage d'électrons de la molécule centrale (R14) : 10 électrons. Points tirés selon la densité CALCULÉE par chimie quantique
+  //     (Hartree-Fock, base aug-cc-pVTZ, PySCF : gen/water_qm.js, pipeline/quantique/eau_pyscf.py), dans le repère de la molécule, puis tournés
+  //     comme la molécule centrale. Sans ces données, repli sur l'ancien modèle approché (orbitales de Slater).
+  const WQ = typeof DATA !== 'undefined' && DATA.WATER_QM ? DATA.WATER_QM.eau : null, WQP = WQ ? new Int16Array(Uint8Array.from(atob(WQ.pts), c => c.charCodeAt(0)).buffer) : null;
+  const NE = WQP ? WQ.n : big ? 36000 : 15000, eP = new Float32Array(NE * 3), ePh = new Float32Array(NE);
+  if (WQP) { const q0 = mol[0].q; for (let i = 0; i < NE; i++) { tv.set(WQP[i * 3] * WQ.q_A, WQP[i * 3 + 1] * WQ.q_A, WQP[i * 3 + 2] * WQ.q_A).applyQuaternion(q0); eP[i * 3] = tv.x; eP[i * 3 + 1] = tv.y; eP[i * 3 + 2] = tv.z; ePh[i] = rng(); } }
+  else
   { const b = hw1.clone().add(hw2).normalize(), nrm = hw1.clone().cross(hw2).normalize(), c54 = Math.cos(54.75 * DEG), s54 = Math.sin(54.75 * DEG);
     const LOB = [hw1.clone().normalize(), hw2.clone().normalize(), b.clone().multiplyScalar(-c54).addScaledVector(nrm, s54), b.clone().multiplyScalar(-c54).addScaledVector(nrm, -s54)];
     for (let i = 0; i < NE; i++) { const u = rng(); let cx = 0, cy = 0, cz = 0, r, d;
@@ -238,49 +243,61 @@ function initMicro(THREE, scene, camera, R, Q) {
   const cloudMat = ptMat([0.25, 0.62, 1.0], 2.4), cloud = mkPts(eP, ePh, cloudMat, 30);
   const nucMat = ptMat([1.0, 0.9, 0.6], 6, 'a'), nucPts = mkPts(new Float32Array([0, 0, 0, hw1.x, hw1.y, hw1.z, hw2.x, hw2.y, hw2.z]), new Float32Array([1, 0.8, 0.8]), nucMat, 32);
 
-  // --- noyau d'oxygène 16 : 8 protons et 8 neutrons en quatre groupes de 2 + 2 (description courante, pas une image)
-  const TET = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map(v => vnorm(v)), nuc = [];
-  TET.forEach(a => { const q = new THREE.Quaternion().setFromAxisAngle(V3(rng.dir()), rng() * TAU); TET.forEach((b, j) => { tv.set(b[0], b[1], b[2]).applyQuaternion(q); nuc.push({ p: [a[0] * 2.11 + tv.x * 1.05, a[1] * 2.11 + tv.y * 1.05, a[2] * 2.11 + tv.z * 1.05], isP: j < 2, ph: rng() * 9, f: 2 + rng() * 2 }); }); });
+  // --- noyau d'oxygène 16 (R16) : 8 protons et 8 neutrons placés au hasard dans la répartition de charge MESURÉE par diffusion d'électrons,
+  //     modèle de l'oscillateur harmonique de de Vries, de Jager et de Vries 1987 : ρ(r) ∝ [1 + α (r/a)²] exp(−(r/a)²), a = 1,833 fm, α = 1,544 [Probable : table originale non relue ; cohérent, redonne 2,718 fm].
+  //     Les nucléons n'ont pas de position fixe : seules la répartition et le rayon sont mesurés. Les centres sont remis à l'échelle pour que leur
+  //     rayon quadratique moyen vaille le rayon des centres de protons : r² = r_ch² − r_p² − (N/Z) r_n² − 3/(4M²) = 2,6991² − 0,84075² + 0,1161 − 0,0331,
+  //     soit 2,581 fm (r_ch : Angeli et Marinova 2013 ; r_p = RP et r_n² = −0,1161 fm² : CODATA 2022 ; terme de Darwin-Foldy). Au tirage, deux centres restent
+  //     à plus de 1,0 fm l'un de l'autre (cœur dur des nucléons, ordre de grandeur) ; après la remise à l'échelle, environ 0,95 fm.
+  const NUC_A = 1.833, NUC_AL = 1.544, NUC_RMS = Math.sqrt(2.6991 * 2.6991 - RP * RP + 0.1161 - 0.0331), nuc = [];
+  { const rhoMax = (() => { let m = 0; for (let r = 0; r < 6; r += 0.01) m = Math.max(m, r * r * (1 + NUC_AL * r * r / (NUC_A * NUC_A)) * Math.exp(-r * r / (NUC_A * NUC_A))); return m; })();
+    const pts = []; let guard = 0;
+    while (pts.length < 16 && guard++ < 100000) { const r = rng() * 6, w = r * r * (1 + NUC_AL * r * r / (NUC_A * NUC_A)) * Math.exp(-r * r / (NUC_A * NUC_A)); if (rng() * rhoMax > w) continue;
+      const d = rng.dir(), p = [d[0] * r, d[1] * r, d[2] * r]; if (pts.some(q => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) < 1.0)) continue; pts.push(p); }
+    const c = [0, 1, 2].map(k => pts.reduce((a, q) => a + q[k], 0) / pts.length); pts.forEach(q => { q[0] -= c[0]; q[1] -= c[1]; q[2] -= c[2]; });
+    const rms = Math.sqrt(pts.reduce((a, q) => a + q[0] * q[0] + q[1] * q[1] + q[2] * q[2], 0) / pts.length), k = NUC_RMS / rms;
+    pts.forEach((q, j) => nuc.push({ p: [q[0] * k, q[1] * k, q[2] * k], isP: j % 2 === 0, ph: rng() * 9, f: 2 + rng() * 2 })); }
+  R.nucRms = () => Math.sqrt(nuc.reduce((a, n) => a + n.p[0] * n.p[0] + n.p[1] * n.p[1] + n.p[2] * n.p[2], 0) / nuc.length);      /* test « noyau » */
   const P0 = nuc[0], QOFF = [-0.18, 0.10, 0.05], CP = [-QOFF[0], -QOFF[1], -QOFF[2]], CN = [CP[0] - P0.p[0], CP[1] - P0.p[1], CP[2] - P0.p[2]];       // centre du proton visé et centre du noyau, en fm, comptés depuis le quark visé
   const prot = nuc.filter(n => n.isP && n !== P0), neut = nuc.filter(n => !n.isP);
   const pM = add(new THREE.InstancedMesh(sphHi, ballMat(0xb8301f), prot.length), 40), nM = add(new THREE.InstancedMesh(sphHi, ballMat(0x6f7890), neut.length), 40), p0M = add(new THREE.Mesh(sphHi, ballMat(0xb8301f)), 41);
   pM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); nM.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const nucleonAt = (n, t, o) => { o[0] = n.p[0] + 0.1 * Math.sin(t * n.f + n.ph); o[1] = n.p[1] + 0.1 * Math.sin(t * n.f * 1.3 + n.ph * 2); o[2] = n.p[2] + 0.1 * Math.cos(t * n.f * 0.8 + n.ph); return o; }, np = [0, 0, 0];
 
-  // --- intérieur du proton : nuage suivant la répartition de charge mesurée, trois quarks, tubes de gluons, paires éphémères (schéma)
+  // --- intérieur du proton (R15) : nuage suivant la répartition de charge mesurée, et des « partons » colorés selon les parts d'impulsion MESURÉES
+  //     (distributions de partons CT18NNLO, gen/proton_pdf.js) à la finesse affichée : quarks de valence u et d, paires quark-antiquark, gluons.
+  //     Chaque point représente une part d'impulsion, pas une particule. Les trois gros points restent des repères des quarks de valence.
   const NPC = big ? 7000 : 3500, pcP = new Float32Array(NPC * 3), pcPh = new Float32Array(NPC);
   for (let i = 0; i < NPC; i++) { const r = gam(3, RP / Math.sqrt(12)), d = rng.dir(); pcP[i * 3] = d[0] * r; pcP[i * 3 + 1] = d[1] * r; pcP[i * 3 + 2] = d[2] * r; pcPh[i] = rng(); }
   const pcMat = ptMat([1.0, 0.55, 0.3], 2.2), pCloud = mkPts(pcP, pcPh, pcMat, 50);
   const qP = new Float32Array(9), qC = new Float32Array(9), qMat = ptMat([1, 1, 1], 16, 'c'), quarks = mkPts(qP, new Float32Array([1, 1, 1]), qMat, 54, qC);
-  const TUBE = 30, tubeP = new Float32Array(3 * (TUBE - 1) * 2 * 3), tubeG = new THREE.BufferGeometry(); tubeG.setAttribute('position', new THREE.BufferAttribute(tubeP, 3));
-  const tubeMat = new THREE.LineBasicMaterial({ color: new THREE.Color(1.0, 0.8, 0.35), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }), tubes = add(new THREE.LineSegments(tubeG, tubeMat), 52);
-  const NSEA = 12, seaP = new Float32Array(NSEA * 6), seaA = new Float32Array(NSEA * 2), seaC = new Float32Array(NSEA * 6), seaMat = ptMat([1, 1, 1], 7, 'c'), sea = mkPts(seaP, seaA, seaMat, 53, seaC);
-  for (let k = 0; k < NSEA; k++) { seaC.set([0.3, 0.9, 1.0, 1.0, 0.35, 0.9], k * 6); }
+  const PDF = (typeof DATA !== 'undefined' && DATA.PROTON_PDF) ? DATA.PROTON_PDF.rows : null;
+  M.pdfAt = lam => { if (!PDF) return null; const R0 = PDF[0], R1 = PDF[PDF.length - 1]; if (lam >= R0.lam) return Object.assign({ clamp: 'grossier' }, R0); if (lam <= R1.lam) return Object.assign({ clamp: 'fin' }, R1);
+    let i = 1; while (PDF[i].lam > lam) i++; const a = PDF[i - 1], b = PDF[i], w = Math.log(lam / a.lam) / Math.log(b.lam / a.lam), mix = k => a.mom[k] + w * (b.mom[k] - a.mom[k]);
+    return { lam, Q: Math.exp(Math.log(a.Q) + w * Math.log(b.Q / a.Q)), mom: { uv: mix('uv'), dv: mix('dv'), sea: mix('sea'), g: mix('g') }, clamp: '' }; };
+  const NPP = big ? 1600 : 800, ppP = new Float32Array(NPP * 3), ppU = new Float32Array(NPP), ppC = new Float32Array(NPP * 3), ppMat = ptMat([1, 1, 1], 4, 'c'), partons = mkPts(ppP, new Float32Array(NPP).fill(1), ppMat, 53, ppC);
+  for (let i = 0; i < NPP; i++) { const r = gam(3, RP / Math.sqrt(12)), d = rng.dir(); ppP[i * 3] = d[0] * r; ppP[i * 3 + 1] = d[1] * r; ppP[i * 3 + 2] = d[2] * r; ppU[i] = rng(); }
+  const PPCOL = [[1.0, 0.2, 0.12], [0.2, 0.4, 1.0], [0.1, 1.0, 0.85], [1.0, 0.85, 0.1]]; let ppKey = '';
+  function partonColors(m) { if (!m) { if (ppKey !== 'gris') { ppKey = 'gris'; for (let i = 0; i < NPP; i++) ppC.set([0.55, 0.55, 0.6], i * 3); partons.geometry.attributes.aC.needsUpdate = true; } return; } const key = [m.uv, m.dv, m.sea].map(x => x.toFixed(3)).join(); if (key === ppKey) return; ppKey = key; const tot = m.uv + m.dv + m.sea + m.g, c1 = m.uv / tot, c2 = c1 + m.dv / tot, c3 = c2 + m.sea / tot;
+    for (let i = 0; i < NPP; i++) { const u = ppU[i], c = PPCOL[u < c1 ? 0 : u < c2 ? 1 : u < c3 ? 2 : 3]; ppC[i * 3] = c[0]; ppC[i * 3 + 1] = c[1]; ppC[i * 3 + 2] = c[2]; } partons.geometry.attributes.aC.needsUpdate = true; }
   const QCOL = [[1.0, 0.25, 0.2], [0.25, 1.0, 0.3], [0.3, 0.45, 1.0]], qpos = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], hsh = x => { const s = Math.sin(x * 127.1) * 43758.5453; return s - Math.floor(s); };
   function protonUpdate(t) {
     qpos[0][0] = QOFF[0]; qpos[0][1] = QOFF[1]; qpos[0][2] = QOFF[2];
     qpos[1][0] = 0.30 * Math.cos(t * 0.9 + 1) + 0.12; qpos[1][1] = 0.30 * Math.sin(t * 1.1 + 2) - 0.1; qpos[1][2] = 0.24 * Math.sin(t * 0.7);
     qpos[2][0] = -0.05 + 0.26 * Math.sin(t * 0.8 + 4); qpos[2][1] = -0.22 + 0.2 * Math.cos(t * 1.0); qpos[2][2] = 0.3 * Math.cos(t * 0.6 + 1);
     const ph = t / 1.6, sh = Math.floor(ph), mix = smoothstep(0.75, 1, ph - sh), J = [(qpos[0][0] + qpos[1][0] + qpos[2][0]) / 3, (qpos[0][1] + qpos[1][1] + qpos[2][1]) / 3, (qpos[0][2] + qpos[1][2] + qpos[2][2]) / 3];
-    for (let i = 0; i < 3; i++) { const a = QCOL[(i + sh) % 3], b = QCOL[(i + sh + 1) % 3]; qP.set(qpos[i], i * 3); qC[i * 3] = lerp(a[0], b[0], mix); qC[i * 3 + 1] = lerp(a[1], b[1], mix); qC[i * 3 + 2] = lerp(a[2], b[2], mix); }      // les quarks échangent leurs « couleurs » en permanence
-    let o = 0; for (let i = 0; i < 3; i++) { const q = qpos[i]; let px = J[0], py = J[1], pz = J[2]; for (let s = 1; s < TUBE; s++) { const u = s / (TUBE - 1), w = 0.012 * Math.sin(u * Math.PI) * Math.sin(u * 16 - t * 5 + i * 2), x = lerp(J[0], q[0], u) + w, y = lerp(J[1], q[1], u) - w, z = lerp(J[2], q[2], u) + w * 0.6; tubeP[o++] = px; tubeP[o++] = py; tubeP[o++] = pz; tubeP[o++] = x; tubeP[o++] = y; tubeP[o++] = z; px = x; py = y; pz = z; } }
-    for (let k = 0; k < NSEA; k++) { const c = t * 0.55 + k * 0.37, cy = Math.floor(c), u = c - cy, r = 0.15 + 0.55 * hsh(cy * 3.1 + k), th = TAU * hsh(cy * 1.7 + k * 5.3), zz = 2 * hsh(cy * 2.3 + k * 9.1) - 1, sx = Math.sqrt(1 - zz * zz), bx = r * sx * Math.cos(th), by = r * sx * Math.sin(th), bz = r * zz, sp = 0.07 * u;
-      seaP.set([bx + sp, by, bz, bx - sp, by, bz], k * 6); seaA[k * 2] = seaA[k * 2 + 1] = Math.sin(Math.PI * u); }
-    quarks.geometry.attributes.position.needsUpdate = true; quarks.geometry.attributes.aC.needsUpdate = true; tubeG.attributes.position.needsUpdate = true; sea.geometry.attributes.position.needsUpdate = true; sea.geometry.attributes.aPh.needsUpdate = true; return J; }
+    for (let i = 0; i < 3; i++) { const c = PPCOL[i < 2 ? 0 : 1]; qP.set(qpos[i], i * 3); qC[i * 3] = c[0]; qC[i * 3 + 1] = c[1]; qC[i * 3 + 2] = c[2]; }      /* repères : deux quarks u (rouge), un d (bleu), comme la légende */
+    quarks.geometry.attributes.position.needsUpdate = true; quarks.geometry.attributes.aC.needsUpdate = true; return J; }
   // le quark visé, seul, quand on descend plus bas : un point sans taille mesurable
   const q1Mat = ptMat([1.0, 0.5, 0.4], 14, 'a'), q1 = mkPts(new Float32Array(3), new Float32Array([1]), q1Mat, 56);
 
-  // --- repères : un cercle par puissance de dix, et des cercles nommés (limites mesurées, hypothèses, longueur de Planck)
+  // --- repères : un cercle par puissance de dix, et des cercles nommés (limites mesurées)
   const circ = new Float32Array(97 * 3); for (let i = 0; i <= 96; i++) { circ[i * 3] = Math.cos(i / 96 * TAU); circ[i * 3 + 1] = Math.sin(i / 96 * TAU); }
   const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.BufferAttribute(circ, 3));
   const ring = (col, ord) => add(new THREE.Line(cg, new THREE.LineBasicMaterial({ color: new THREE.Color(col[0], col[1], col[2]), transparent: true, opacity: 0, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending })), ord);
   const dec = [0, 1, 2, 3, 4, 5].map(() => ring([0.35, 0.45, 0.6], 60));
-  const MARK = [['weak', 2.455e-18, [1.0, 0.7, 0.25]], ['lim', 4.3e-19, [1.0, 0.7, 0.25]], ['lhc', 2e-20, [1.0, 0.7, 0.25]], ['gut', 2e-32, [0.65, 0.45, 1.0]], ['planck', LP, [1.0, 1.0, 1.0]]].map(a => ({ key: a[0], r: a[1], o: ring(a[2], 61) }));
-  // --- longueur de Planck : bouillonnement, vue d'artiste
-  const foamU = { uT: { value: 0 }, uK: { value: 1 }, uOp: { value: 0 } };
-  const foam = add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: foamU, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
-    vertexShader: 'varying vec2 vU; void main(){ vU = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'uniform float uT; uniform float uK; uniform float uOp; varying vec2 vU; float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); } float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); } void main(){ vec2 p = vU * uK; float t = uT * 0.6; float a = n(p + vec2(t, -t * 0.7)) * 0.6 + n(p * 2.1 - vec2(t * 1.3, t)) * 0.3 + n(p * 4.3 + t) * 0.1; float b = smoothstep(0.5, 0.8, a); float e = smoothstep(1.0, 0.55, length(vU)); gl_FragColor = vec4(vec3(0.4, 0.3, 0.85) * b * e * uOp, 1.0); }' })), 5);
+  const MARK = [['weak', 2.455e-18, [1.0, 0.7, 0.25]], ['lim', 4.3e-19, [1.0, 0.7, 0.25]], ['lhc', 2e-20, [1.0, 0.7, 0.25]]].map(a => ({ key: a[0], r: a[1], o: ring(a[2], 61) }));
+  /* R13 : plus de bouillonnement « vue d'artiste » à la longueur de Planck : le zoom s'arrête à 10⁻²⁰ m. */
 
   const mine = new Set(all), hidden = new Set(), far = new Set();
   const cd = new THREE.Vector3(), cu = new THREE.Vector3(), P = M.pos, setP = (k, x, y, z) => { const a = P[k] || (P[k] = [0, 0, 0]); a[0] = x; a[1] = y; a[2] = z; };
@@ -310,16 +327,14 @@ function initMicro(THREE, scene, camera, R, Q) {
       if (p0M.visible) { p0M.position.set(CP[0] * FM * s, CP[1] * FM * s, CP[2] * FM * s); p0M.scale.setScalar(RP * FM * s); p0M.material.opacity = v0; }
       setP('p', CP[0] * FM, CP[1] * FM, CP[2] * FM + RP * FM); }
     // intérieur du proton
-    { const v = vis(lr, -18.0, -14.95, 0.3), on = v > 0.01; pCloud.visible = quarks.visible = tubes.visible = sea.visible = on;
-      if (on) { const J = protonUpdate(t * 1.2); for (const o of [pCloud, quarks, tubes, sea]) { o.position.set(CP[0] * FM * s, CP[1] * FM * s, CP[2] * FM * s); o.scale.setScalar(FM * s); }
-        pcMat.uniforms.uOp.value = v * 0.35; pcMat.uniforms.uPx.value = 2.2 * dpr; pcMat.uniforms.uT.value = t; qMat.uniforms.uOp.value = v * 1.6; qMat.uniforms.uPx.value = 16 * dpr; seaMat.uniforms.uOp.value = v * 0.9; seaMat.uniforms.uPx.value = 7 * dpr; tubeMat.opacity = v * 0.75;
-        for (let i = 0; i < 3; i++) setP('q' + i, (CP[0] + qpos[i][0]) * FM, (CP[1] + qpos[i][1]) * FM, (CP[2] + qpos[i][2]) * FM); setP('glu', (CP[0] + J[0]) * FM, (CP[1] + J[1]) * FM, (CP[2] + J[2]) * FM); } }
+    { const v = vis(lr, -18.0, -14.95, 0.3), on = v > 0.01; pCloud.visible = quarks.visible = partons.visible = on;
+      if (on) { const J = protonUpdate(t * 1.2); for (const o of [pCloud, quarks, partons]) { o.position.set(CP[0] * FM * s, CP[1] * FM * s, CP[2] * FM * s); o.scale.setScalar(FM * s); }
+        pcMat.uniforms.uOp.value = v * 0.35; pcMat.uniforms.uPx.value = 2.2 * dpr; pcMat.uniforms.uT.value = t; qMat.uniforms.uOp.value = v * 1.6; qMat.uniforms.uPx.value = 16 * dpr; { const P = M.pdfAt(Math.pow(10, lr)); if (P) partonColors(P.clamp === 'grossier' ? null : P.mom); } ppMat.uniforms.uOp.value = v * 1.4; ppMat.uniforms.uPx.value = 7 * dpr;
+        for (let i = 0; i < 3; i++) setP('q' + i, (CP[0] + qpos[i][0]) * FM, (CP[1] + qpos[i][1]) * FM, (CP[2] + qpos[i][2]) * FM); } }
     { const v = vis(lr, -22.0, -16.9, 0.4); q1.visible = v > 0.01; if (q1.visible) { q1Mat.uniforms.uOp.value = v * 1.5; q1Mat.uniforms.uPx.value = 14 * dpr; } }
     // cercles repères
     { const dk = vis(lr, -36, -18.4, 0.5), k0 = Math.floor(lr) - 2; dec.forEach((o, j) => { const r = Math.pow(10, k0 + j) * s, a = dk * smoothstep(0.08, 0.5, r) * (1 - smoothstep(6, 14, r)); o.visible = a > 0.01; if (o.visible) { o.quaternion.copy(camera.quaternion); o.scale.setScalar(r); o.material.opacity = a * 0.5; } });
       for (const mk of MARK) { const r = mk.r * s, a = smoothstep(0.06, 0.4, r) * (1 - smoothstep(7, 16, r)); mk.o.visible = a > 0.01; if (mk.o.visible) { mk.o.quaternion.copy(camera.quaternion); mk.o.scale.setScalar(r); mk.o.material.opacity = a * 0.9; } setP(mk.key, cu.x * mk.r, cu.y * mk.r, cu.z * mk.r); } }
-    // bouillonnement à la longueur de Planck
-    { const v = fadeOut(lr, -34.0, -33.0); foam.visible = v > 0.01; if (foam.visible) { foam.quaternion.copy(camera.quaternion); foam.scale.setScalar(1.3 * R.viewUnits / Math.min(1, camera.aspect) * 1.2); foamU.uT.value = t; foamU.uK.value = 1.3 * Math.pow(10, lr) / LP; foamU.uOp.value = v * 0.55; } }
   };
   M.count = { mol: NMOL, electrons: NE };
   return M;
