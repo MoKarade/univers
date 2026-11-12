@@ -920,11 +920,16 @@ void whatYouSee(const Sim& sim) {
         if (sim.replay) ImGui::TextDisabled("Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
         return;
     }
+    // Voie lactée en volume (fil Gaia, docs/gaia-voie-lactee.md) : un modèle, dit comme tel dès qu'on la voit de loin.
+    if (sim.hasMilkyWay && sim.dist > 3000.0) {
+        ImGui::TextDisabled("La Voie lactée : modèle ajusté sur des mesures ; supposés : partage de la lumière au prorata des masses,");
+        ImGui::TextDisabled("lumière ajoutée par les bras, largeur de la barre longue.");
+    }
     if (sim.galaxyGain() > 0.005) {
         ImGui::TextDisabled("Chaque point lointain est une galaxie ou un quasar, placé d'après son décalage vers le rouge mesuré");
         ImGui::TextDisabled("(relevés 2MRS, 6dF, 2dF, SDSS, DESI). Son éclat n'est pas mesuré ici : le point a une taille fixe,");
         ImGui::TextDisabled("qui s'efface avec la distance pour garder l'image lisible (réglage d'affichage, pas une mesure).");
-        ImGui::TextDisabled("La Voie lactée elle-même n'est pas encore dessinée : seules ses étoiles mesurées près du Soleil le sont.");
+        if (!sim.hasMilkyWay) ImGui::TextDisabled("La Voie lactée elle-même n'est pas encore dessinée : seules ses étoiles mesurées près du Soleil le sont.");
     }
 }
 
@@ -1003,7 +1008,9 @@ std::string tourCaption(const Sim& sim, int step) {
         case 3: return "Jupiter, la plus grande planète, et ses lunes.";
         case 4: return "Saturne et ses anneaux.";
         case 5: return "Les étoiles voisines du Soleil, à leur distance mesurée (Hipparcos, Gaia).";
-        case 6: return frInt(static_cast<double>(sim.stars->n)) + " étoiles mesurées autour du Soleil (Hipparcos, Gaia DR3).";
+        case 6:
+            if (sim.hasGaia) return "Les étoiles mesurées autour du Soleil : Hipparcos, et Gaia DR3 pour celles dont la distance est sûre à 10 % près.";
+            return frInt(static_cast<double>(sim.stars->n)) + " étoiles mesurées autour du Soleil (Hipparcos, Gaia DR3).";
         case 7: return "Andromède, la grande galaxie voisine, à sa distance mesurée.";
         default: return "Des millions de galaxies et de quasars, placés d'après leur décalage vers le rouge mesuré.";
     }
