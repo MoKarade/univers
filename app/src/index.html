@@ -190,7 +190,7 @@ body:has(.panel:not([hidden])) #card, body:has(.panel:not([hidden])) #notice{dis
   #time:not(.open){grid-template-areas:"play date more"; padding:8px 10px}
   #n-out, #n-in{display:none}
   #rail{top:calc(var(--top-h, 160px) + 8px); bottom:calc(var(--bar-h) + var(--card-h, 0px) + 80px + env(safe-area-inset-bottom,0px))}
-  #card{position:fixed; left:8px; right:8px; bottom:calc(var(--bar-h) + 20px + env(safe-area-inset-bottom,0px)); margin:0; max-width:none; max-height:46vh; overflow:auto; overscroll-behavior:contain; background:var(--panel); border:1px solid var(--line); border-left:2px solid var(--ice); border-radius:14px; -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px)}
+  #card{position:fixed; left:8px; right:8px; bottom:calc(var(--bar-h) + 20px + env(safe-area-inset-bottom,0px)); margin:0; max-width:none; max-height:min(46vh, calc(100% - var(--top-h, 160px) - var(--bar-h) - 36px)); overflow:auto; overscroll-behavior:contain; background:var(--panel); border:1px solid var(--line); border-left:2px solid var(--ice); border-radius:14px; -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px)}
   #card{display:flex; flex-direction:column; overflow:hidden} #card[hidden]{display:none}      /* la liste défile, titre et boutons restent visibles */
   #card dl{max-height:none; flex:1 1 auto; min-height:0; overflow-y:auto} #card h2, #card p, #card .cbtn{flex:none}
   #nav{bottom:calc(var(--bar-h) + var(--card-h, 0px) + 22px + env(safe-area-inset-bottom,0px))}
