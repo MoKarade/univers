@@ -353,7 +353,7 @@ function lmcOrbit(massScale, fus) {
     for (const e of ex) { if (e[2] === 'min') res.peri.push([e[0], e[1]]); else { res.apo.push([e[0], e[1]]); if (res.peri.length && e[1] < 15 && res.tMerge === null) res.tMerge = e[0]; } }
     if (res.tMerge === null) { const m = ex.find(e => e[2] === 'min' && e[1] < 5); if (m) res.tMerge = m[0]; }
     const p = [0, 0, 0];
-    for (let idx = 0; idx < n; idx++) { const t = T0 + idx * DT; if (t < 0) continue; if (t > FUSC.tEnd || (res.tMerge !== null && t >= res.tMerge)) { tab.set([0, 0, 0], idx * 3); continue; } fusAt(FUSC.c, 4, 3, t, p); tab.set(p, idx * 3); }
+    for (let idx = 0; idx < n; idx++) { const t = T0 + idx * DT; if (t < 0) continue; if (t > FUSC.tEnd) { tab.set([0, 0, 0], idx * 3); continue; }      /* après l'absorption, il reste où le calcul le met (pas de saut au centre) */ fusAt(FUSC.c, 4, 3, t, p); tab.set(p, idx * 3); }
     res.fus = true;
   }
   return res;
