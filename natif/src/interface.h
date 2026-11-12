@@ -205,6 +205,39 @@ int scaleCenter(const Sim& sim) {
     return c >= 0 ? c : 0;
 }
 
+// Éclipse totale de Soleil du 12 août 2026, maximum à 17 h 46 TU : contrôlée contre la NASA par le fil du rendu.
+// La caméra suit la Terre du côté du Soleil, pour voir l'ombre de la Lune sur elle ; le temps est arrêté au maximum.
+constexpr double kEclipse2026Years = 26.61256749562704;
+void showEclipse(Sim& sim, UiState& ui) {
+    const int earth = bodyByName(sim, "Terre");
+    ui.tour = -1;
+    ui.welcome = false;
+    sim.years = kEclipse2026Years;
+    sim.paused = true;
+    sim.backward = false;
+    sim.rate = 1;      // 1 heure par seconde : l'ombre traverse la Terre en quelques secondes
+    sim.refreshEphemeris();
+    if (earth < 0 || !sim.visible(earth)) return;
+    sim.flyTo(earth);
+    // Regard au-dessus de l'ombre : là où l'axe Soleil-Lune touche la Terre (à défaut, le point de l'axe le plus proche).
+    const Vec3 e = sim.position(earth);
+    Vec3 look{-e.x, -e.y, -e.z};      // sans la Lune : regard depuis le Soleil
+    const int moon = bodyByName(sim, "Lune");
+    if (moon >= 0 && sim.visible(moon)) {
+        const Vec3 m = sim.position(moon);
+        const double ml = std::max(std::sqrt(dot(m, m)), 1e-30);
+        const Vec3 d{m.x / ml, m.y / ml, m.z / ml};      // du Soleil vers la Lune, prolongé vers la Terre
+        const Vec3 me = m - e;
+        const double b = dot(me, d), c = dot(me, me), rE = sim.bodies[static_cast<size_t>(earth)].radiusKm / kLyInKm;
+        const double disc = b * b - (c - rE * rE);
+        const double t = disc >= 0 ? -b - std::sqrt(disc) : -b;      // première rencontre avec la sphère, ou point le plus proche
+        look = {me.x + t * d.x, me.y + t * d.y, me.z + t * d.z};
+    }
+    const double r = std::max(std::sqrt(dot(look, look)), 1e-30);
+    sim.yaw = std::atan2(look.y, look.x);
+    sim.pitch = std::asin(std::clamp(look.z / r, -1.0, 1.0));
+}
+
 void startTour(Sim& sim, UiState& ui, int step) {
     ui.welcome = false;
     for (; step < kTourCount; ++step) {
@@ -233,6 +266,10 @@ void firstFrame(Sim& sim, UiState& ui) {
     if (e.rfind("visite:", 0) == 0) {
         startTour(sim, ui, std::atoi(e.substr(7).c_str()));
         sim.stepFlight(Sim::kFlySeconds);      // capture : l'étape est atteinte
+    }
+    if (e == "eclipse") {
+        showEclipse(sim, ui);
+        sim.stepFlight(Sim::kFlySeconds);
     }
     if (e.rfind("vol:", 0) == 0) {      // vol:<nom>:<avancement 0 à 1>
         const size_t cut = e.rfind(':');
@@ -538,6 +575,7 @@ void drawGoToMenu(Sim& sim, UiState& ui) {
     goToMenuBodies(sim, ui);
     ImGui::Separator();
     if (ImGui::MenuItem("Visite guidée")) startTour(sim, ui, 0);
+    if (ImGui::MenuItem("Éclipse de Soleil du 12 août 2026")) showEclipse(sim, ui);
     if (ImGui::MenuItem("Revenir à la vue précédente", "Retour arrière", false, !sim.history.empty())) {
         ui.tour = -1;
         sim.back();
@@ -725,6 +763,7 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
             fb.parent > 0 && fb.naif != eph::kMoon ? "calculé d'après les éphémérides" : "mesuré", s);
         row("Rayon", (fb.radiusKm >= 100 ? frInt(fb.radiusKm) : frNum(fb.radiusKm)) + " km", "mesuré", s);
         if (!fb.hasPhotometry) ImGui::TextDisabled("Son éclat et sa surface ne sont pas renseignés ici : un repère marque sa place.");
+        if (fb.naif == eph::kEarth) row("Lumières de nuit", "vues par satellite (NASA), grossies pour être visibles", "mesuré", s);
     } else if (fb.kind == Kind::Star) {
         // Aujourd'hui la distance est une mesure ; à une autre date, c'est la mesure prolongée en ligne droite.
         row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : mouvement mesuré, prolongé en ligne droite", s);
@@ -773,6 +812,11 @@ void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlag
         sim.back();
     }
     if (!sim.history.empty()) ImGui::SameLine();
+    const uint32_t naifF = static_cast<uint32_t>(sim.bodies[static_cast<size_t>(f)].naif);
+    if ((naifF == eph::kEarth || naifF == eph::kMoon) && sim.bodies[static_cast<size_t>(f)].kind == Kind::Planet) {
+        if (ImGui::Button("Éclipse du 12 août 2026")) showEclipse(sim, ui);
+        ImGui::SameLine();
+    }
     if (f != 0 && sim.visible(0) && ImGui::Button("Revenir au Soleil")) goToBody(sim, ui, 0, 45.0 * kAuInLy);
     ImGui::End();
 }
