@@ -36,11 +36,23 @@ CATALOGUES = {
                  'bll': 2, 'fsrq': 2, 'bcu': 2, 'rdg': 2, 'agn': 2, 'ssrq': 2, 'css': 2, 'nlsy1': 2, 'sey': 2,
                  'snr': 3, 'pwn': 3, 'hmb': 3, 'lmb': 3, 'bin': 3, 'nov': 3, 'sfr': 3, 'glc': 3, 'gc': 3, 'spp': 3,
                  'gal': 4, 'sbg': 4}),
+    'erass1': dict(
+        # Catalogue principal des sources X de la DR1 (bande 0,2–2,3 keV), environ 930 000 sources. Publié seulement en
+        # archive .fits.tar.gz (643 Mo le 12/11/2026) ; lien relevé sur la page, la recherche (motif « Main ») en secours.
+        page='https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/', motif=('eRASS1', 'Main'),
+        urls=['https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/MerloniA_DR1/eRASS1_Main.v1.2.fits.tar.gz'],
+        bande='X', libelle="Sources X d'eROSITA (eRASS1, catalogue principal, 0,2 à 2,3 keV)",
+        reference='Merloni et al. 2024, A&A 682, A34 (eROSITA-DE DR1, catalogue principal eRASS1)',
+        grandeur='flux X de 0,2 à 2,3 keV', unite='erg/cm²/s',
+        cartes=['rass', 'erosita'],
+        colonnes=dict(ra=['RA', 'RA_CORR'], dec=['DEC', 'DEC_CORR'], grandeur=['ML_FLUX_1', 'ML_FLUX_P1', 'ML_FLUX'], classe=None),
+        groupes=['source X ponctuelle ou peu étendue'], classes={}),
     'erass1cl': dict(
         # Le nom exact du fichier n'est pas connu d'avance : il est lu sur la page des catalogues de la DR1 (lien vers un
-        # .fits dont le nom contient « cl » et « primary »).
+        # .fits dont le nom contient « cl » et « primary »). Le 12/11/2026 la page ne donnait qu'une archive .fits.tgz :
+        # lien relevé à la main sur la page (catalogue primaire de Bulbul et al., version 3.2), la recherche reste en secours.
         page='https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/', motif=('cl', 'primary'),
-        urls=[],
+        urls=['https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/BulbulE_DR1/erass1cl_primary_v3.2.fits.tgz'],
         bande='X', libelle="Amas et groupes de galaxies d'eROSITA (eRASS1, confirmés en optique)",
         reference='Bulbul et al. 2024, A&A 685, A106 (eRASS1, amas primaires) ; Merloni et al. 2024, A&A 682, A34',
         grandeur='décalage vers le rouge', unite='z', taille='fixe',
@@ -54,7 +66,7 @@ def trouver_url(page, motif):
     """Lien vers un fichier .fits de la page dont le nom contient tous les mots du motif (le plus récent en premier)."""
     import re, urllib.parse
     html = urllib.request.urlopen(page, timeout=60).read().decode('utf-8', 'replace')
-    liens = [urllib.parse.urljoin(page, h) for h in re.findall(r'href=["\']([^"\']+\.fits(?:\.gz)?)["\']', html, re.I)]
+    liens = [urllib.parse.urljoin(page, h) for h in re.findall(r'href=["\']([^"\']+\.fits(?:\.gz|\.tgz|\.tar\.gz)?)["\']', html, re.I)]
     bons = [l for l in liens if all(m.lower() in l.rsplit('/', 1)[-1].lower() for m in motif)]
     print('  liens trouvés : ' + (', '.join(bons) or 'aucun'), flush=True)
     return sorted(bons, reverse=True)
@@ -76,8 +88,9 @@ def telecharger(urls, chemin):
             print(f'  {url}', flush=True)
             with urllib.request.urlopen(url, timeout=120) as r:
                 octets = r.read()
-            if octets[:6] != b'SIMPLE':
-                print('  pas un fichier FITS', flush=True)
+            # FITS (SIMPLE), gzip (1f 8b : .gz ou .tgz) ; une page d'erreur HTML n'est ni l'un ni l'autre
+            if octets[:6] != b'SIMPLE' and octets[:2] != bytes([0x1F, 0x8B]):
+                print('  pas un fichier FITS ni une archive gzip', flush=True)
                 continue
             with open(chemin + '.part', 'wb') as f:
                 f.write(octets)
@@ -147,7 +160,15 @@ def main():
         raise SystemExit('fichier du catalogue introuvable sur la page')
     c = dict(c, urls=urls)
     chemin = telecharger(urls, os.path.join(sortie, 'cache_catalogues', urls[0].rsplit('/', 1)[1]))
-    if chemin.endswith('.gz'):
+    if chemin.endswith(('.tgz', '.tar.gz')):      # archive : on n'en sort que le fichier .fits, sous son seul nom
+        import tarfile, shutil
+        with tarfile.open(chemin) as tar:
+            membre = next(m for m in tar.getmembers() if m.isfile() and m.name.lower().endswith(('.fits', '.fit')))
+            sortie_fits = os.path.join(os.path.dirname(chemin), os.path.basename(membre.name))
+            with tar.extractfile(membre) as fi, open(sortie_fits, 'wb') as fo:
+                shutil.copyfileobj(fi, fo)
+        chemin = sortie_fits
+    elif chemin.endswith('.gz'):
         import gzip, shutil
         with gzip.open(chemin) as fi, open(chemin[:-3], 'wb') as fo:
             shutil.copyfileobj(fi, fo)
@@ -184,10 +205,12 @@ def main():
     # contrôles : quelques sources connues retrouvées à leur place
     noms = [s.decode('ascii', 'replace').strip() for s in t['Source_Name']] if 'Source_Name' in t else []
     assoc = [s.decode('ascii', 'replace').strip() for s in t['ASSOC1']] if 'ASSOC1' in t else []
-    for cherche in ('Vela', 'Crab', 'Geminga', '3C 454.3', 'LMC'):
+    # le catalogue nomme les pulsars par leur numéro PSR : Vela = PSR J0835-4510, Geminga = PSR J0633+1746
+    for nom_c, cherche in (('Vela', 'PSR J0835-4510'), ('Vela X', 'Vela X'), ('Crab', 'Crab'),
+                           ('Geminga', 'PSR J0633+1746'), ('3C 454.3', '3C 454.3'), ('LMC', 'LMC')):
         for i, a in enumerate(assoc):
             if cherche.lower() in a.lower():
-                print(f'  {cherche:9s} : {noms[i] if noms else i} ({a}), ra {math.degrees(ra[i]):.3f}°, dec {math.degrees(de[i]):.3f}°, '
+                print(f'  {nom_c:9s} : {noms[i] if noms else i} ({a}), ra {math.degrees(ra[i]):.3f}°, dec {math.degrees(de[i]):.3f}°, '
                       f'{g[i]:.3g} {c["unite"]}, classe {cl[i]!r}')
                 break
     if nom == 'erass1cl':      # contrôle : quelques amas connus de la moitié ouest (Coma n'y est pas : l = 58°)
@@ -195,6 +218,11 @@ def main():
             dd = np.degrees(np.arccos(np.clip(np.sin(de) * math.sin(math.radians(d0)) + np.cos(de) * math.cos(math.radians(d0)) * np.cos(ra - math.radians(r0)), -1, 1)))
             i = int(np.argmin(dd))
             print(f'  {nm:20s} : plus proche à {dd[i]:.2f}°, z = {g[i]:.4f}')
+    if nom == 'erass1':        # contrôle : sources X brillantes connues de la moitié ouest du ciel (position SIMBAD, ICRS)
+        for nm, r0, d0 in (('Sco X-1', 244.9795, -15.6402), ('LMC X-1', 84.9116, -69.7433), ('M87', 187.7059, 12.3911)):
+            dd = np.degrees(np.arccos(np.clip(np.sin(de) * math.sin(math.radians(d0)) + np.cos(de) * math.cos(math.radians(d0)) * np.cos(ra - math.radians(r0)), -1, 1)))
+            i = int(np.argmin(dd))
+            print(f'  {nm:20s} : plus proche à {dd[i] * 3600:.1f}", flux {g[i]:.3g} {c["unite"]}')
     print(f'Écrit {dest} : {n} sources ; ' + ', '.join(f'{k} {v}' for k, v in comptes.items()))
 
 
