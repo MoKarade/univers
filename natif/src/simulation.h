@@ -3,6 +3,7 @@
 #include "commun.h"
 #include "cosmologie.h"
 #include "ephemeride.h"
+#include "systeme_solaire.h"
 
 namespace {
 
@@ -79,6 +80,10 @@ struct Sim {
     std::vector<Vec3> planetPos;         // position de chaque astre de type planète à la date courante (années-lumière, centre : Soleil)
     bool ephemValid = false;             // la date courante est dans la plage des éphémérides des planètes
     std::vector<char> planetValid;       // pour chaque astre de type planète ou lune : sa position est connue à la date courante
+    std::vector<char> planetComputed;    // sa position vient du calcul (hors des fichiers de la NASA), pas d'une éphéméride : à dire à l'écran
+    const phys::SystemeSolaire* outer = nullptr;      // calcul du système solaire hors de la plage de la NASA (bibliothèque univers_physique) ; nul tant qu'il n'est pas prêt
+    double outerYears = 1e300;           // date du dernier calcul hors plage (pour ne pas le refaire quand le temps est arrêté)
+    std::vector<Vec3> outerPos;          // son résultat, par astre
     int focus = 0;
     double years = kStartYears;          // années juliennes depuis J2000,0
     int rate = 2;
@@ -219,12 +224,42 @@ struct Sim {
     void refreshEphemeris() {
         ephemValid = spk != nullptr;
         planetValid.assign(bodies.size(), 0);
+        planetComputed.assign(bodies.size(), 0);
         for (size_t i = 0; i < bodies.size(); ++i) {
             if (bodies[i].kind != Kind::Planet) continue;
             planetValid[i] = planetAt(bodies[i].posNaif, years, planetPos[i]) ? 1 : 0;
             if (!planetValid[i] && bodies[i].parent == 0) ephemValid = false;      // une planète sans position : hors de la plage de de440.bsp
         }
+        if (ephemValid || !outer) return;
+        // Hors de la plage de la NASA : positions calculées (gravité mutuelle partie de l'état DE440 aux bornes, puis table
+        // des orbites sur des millions d'années). Les lunes n'y sont pas : elles restent cachées. Un seul calcul par date.
+        if (outerYears != years) {
+            outerYears = years;
+            outerPos.assign(bodies.size(), {0, 0, 0});
+            const auto codes = phys::SystemeSolaire::corps();
+            std::vector<phys::Vec3> out(codes.size());
+            const bool ok = outer->positions(2451545.0 + years * 365.25, out);
+            outerOk_.assign(bodies.size(), 0);
+            for (size_t i = 0; ok && i < bodies.size(); ++i) {
+                const Body& b = bodies[i];
+                if (b.kind != Kind::Planet || b.parent != 0) continue;
+                // Codes du calcul : centres de masse 1 à 9 (3 : Terre + Lune, à 4 700 km au plus du centre de la Terre).
+                const int code = b.naif >= 100 ? b.naif / 100 : b.naif;
+                for (size_t k = 0; k < codes.size(); ++k)
+                    if (codes[k] == code && std::isfinite(out[k].x)) {
+                        outerPos[i] = {out[k].x / kLyInKm, out[k].y / kLyInKm, out[k].z / kLyInKm};
+                        outerOk_[i] = 1;
+                    }
+            }
+        }
+        for (size_t i = 0; i < bodies.size(); ++i)
+            if (i < outerOk_.size() && outerOk_[i] && !planetValid[i]) {
+                planetPos[i] = outerPos[i];
+                planetValid[i] = 1;
+                planetComputed[i] = 1;
+            }
     }
+    std::vector<char> outerOk_;
 
     // Une planète ou une lune n'est montrée que si sa position est connue à la date courante.
     bool visible(int i) const { return bodies[static_cast<size_t>(i)].kind != Kind::Planet || planetValid[static_cast<size_t>(i)]; }

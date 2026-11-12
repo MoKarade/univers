@@ -107,6 +107,27 @@ int runWindow(const WindowOptions& opt) {
     Sim sim;
     sim.stars = &stars;
     sim.spk = hasSpk ? &spk : nullptr;
+    // Système solaire hors de la plage de la NASA : préparé dans un fil à part (quelques dizaines de secondes), branché
+    // dès qu'il est prêt. En attendant, hors de 1550-2650, les planètes restent cachées et l'écran le dit.
+    phys::SystemeSolaire outer;
+    std::atomic<bool> outerReady{false};
+    std::thread outerThread;
+    if (hasSpk)
+        outerThread = std::thread([&]() {
+            const phys::SourceDe440 source = [&](int naif, double jd, phys::Vec3& p, phys::Vec3& v) {
+                eph::Vec a, w;
+                if (!spk.state(naif, eph::etOfJd(jd), a, w)) return false;
+                a = eph::toEcliptic(a);
+                w = eph::toEcliptic(w);
+                p = {a.x, a.y, a.z};
+                v = {w.x, w.y, w.z};
+                return true;
+            };
+            if (outer.construire(source, 20000.0)) {
+                outer.chargerTable(dataDir + "/orbites_planetes.bin");      // facultatif : au-delà de ±20 000 ans
+                outerReady = true;
+            }
+        });
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
     if (!opt.target.empty()) {
         bool found = false;
@@ -252,6 +273,11 @@ int runWindow(const WindowOptions& opt) {
         return true;
     };
 
+    if (test && hasSpk && !sim.ephemValid && outerThread.joinable()) {      // contrôle à une date hors de la plage de la NASA : on attend le calcul
+        outerThread.join();
+        if (outerReady) sim.outer = &outer;
+        sim.refreshEphemeris();
+    }
     auto last = std::chrono::steady_clock::now();
     const auto start = last;
     int frame = 0, shown = 0;
@@ -279,6 +305,7 @@ int runWindow(const WindowOptions& opt) {
         if (input.space) sim.paused = !sim.paused;
         if (input.home) sim.follow(0);
         input.space = input.home = false;
+        if (!sim.outer && outerReady) sim.outer = &outer;
         sim.advance(dt);
         const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost()), sc.extent.height, sim.years);
@@ -384,6 +411,7 @@ int runWindow(const WindowOptions& opt) {
         if (test && frame >= opt.testFrames) break;
     }
     vkDeviceWaitIdle(g.dev);
+    if (outerThread.joinable()) outerThread.join();
     if (test) {
         const double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         if (!opt.capture.empty()) writeCapture(g, final, sc.extent, opt.capture);
