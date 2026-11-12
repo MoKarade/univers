@@ -194,6 +194,7 @@ int runWindow(const WindowOptions& opt) {
     sim.refreshEphemeris();
     if (sim.focus != 0) sim.follow(sim.focus);
     if (opt.dist > 0) sim.dist = opt.dist;
+    if (const char* vue = std::getenv("UNIVERS_VUE")) sim.bestLook = std::string(vue) == "meilleur";      // contrôle : vue choisie au départ
     if (test) {
         sim.paused = true;
         sim.touched = true;      // contrôle : image fixe, reproductible

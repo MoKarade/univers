@@ -5,12 +5,16 @@ loin, ces différences dessinent des rayons autour du Soleil. Mesuré : ni un tr
 ni la poussière estimée par Gaia, ni un tri en volume ne les retirent.
 
 Ce qui est fait : aucune étoile n'est ajoutée ni déplacée. Pour chaque case (tranche de magnitude absolue d'une magnitude,
-coquille de 250 pc autour du Soleil, case de ciel d'environ 1° en longitude galactique × 0,022 en sinus de la latitude), le
-nombre de sources est comparé à sa moyenne glissante sur 15° en longitude et 5 cases en latitude. Le poids de chaque source
+coquille de 250 pc autour du Soleil, degré de longitude galactique, toutes latitudes ensemble), le nombre de sources est
+comparé à sa moyenne glissante sur 61° de longitude. Le poids de chaque source
 est ce rapport, borné entre 0,25 et 4.
-HYPOTHÈSE (dite à l'écran) : à même distance et même type d'étoile, le nombre d'étoiles varie lentement d'un degré à l'autre.
-Elle efface aussi les vraies structures plus petites que 15° à une distance donnée (amas : éclat ramené à la moyenne locale,
+HYPOTHÈSE (dite à l'écran) : à même distance et même type d'étoile, le nombre d'étoiles varie lentement d'une direction à l'autre.
+Elle efface aussi les vraies structures plus petites que 60° à une distance donnée (amas : éclat ramené à la moyenne locale,
 au plus 4 fois moins).
+Mesuré sur les 98,3 M étoiles (scripts de mesure hors dépôt, eval_reeq.py et eval2.py), entre 2 et 4 kpc : rayons fins (1 à 15°)
+0,046 -> 0,006 dex (hasard : 0,010), rayons larges (15 à 90°) 0,072 -> 0,030 ; 18 % de la lumière change de place (moitié en
+plus, moitié en moins). Fenêtre de 15° : les rayons larges restaient (0,063), invisibles en moins dans l'appli ; 121° : 23 %.
+Des cases plus fines (latitude découpée) bruitent le résultat : 33 à 39 % de la lumière bougerait, pour un gain nul.
 
 Le poids est rangé en décalage de magnitude, Δm = -2,5 log10(poids), en millièmes de magnitude (entier 16 bits signé).
 """
@@ -22,8 +26,8 @@ LY_PER_PC = 3.2615638
 A_GAL = np.array([[-0.0548755604162154, -0.8734370902348850, -0.4838350155487132],
                   [+0.4941094278755837, -0.4448296299600112, +0.7469822444972189],
                   [-0.8676661490190047, -0.1980763734312015, +0.4559837761750669]])
-N_L, N_B, N_SH, N_M = 360, 90, 40, 20
-COQUILLE_PC, LISSAGE_L, LISSAGE_B = 250.0, 15, 5
+N_L, N_B, N_SH, N_M = 360, 1, 40, 20
+COQUILLE_PC, LISSAGE_L, LISSAGE_B = 250.0, 61, 1
 POIDS_MIN, POIDS_MAX = 0.25, 4.0
 
 
