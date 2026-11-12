@@ -10,6 +10,12 @@ target_link_libraries(essai_systeme_solaire PRIVATE univers_physique)
 target_compile_options(essai_systeme_solaire PRIVATE -Wall -Wextra)
 target_link_options(essai_systeme_solaire PRIVATE -static)
 
+# Essai : la Lune de Meeus contre DE440.
+add_executable(essai_lune essais/essai_lune.cpp)
+target_include_directories(essai_lune PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_link_libraries(essai_lune PRIVATE univers_physique)
+target_compile_options(essai_lune PRIVATE -Wall -Wextra)
+target_link_options(essai_lune PRIVATE -static)
 # Essai : orbites des étoiles dans la Voie lactée (barre comprise), comparées à la page.
 add_executable(essai_galaxie essais/essai_galaxie.cpp)
 target_link_libraries(essai_galaxie PRIVATE univers_physique)
