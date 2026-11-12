@@ -10,9 +10,9 @@ Aucune valeur n'est modifiée : seuls BSCALE et BZERO du fichier sont appliqués
 c'est un trou de couverture du relevé, montré comme tel à l'écran. Les tuiles absentes du serveur (relevé partiel, par
 exemple eROSITA DR1 qui ne couvre que la moitié ouest de la Galaxie) sont des trous aussi.
 
-Usage : python ciel_bandes.py <dossier_sortie> <nom> [--ordre 2] [--simultanes 8] [--cache <dossier>]
+Usage : python ciel_bandes.py <dossier_sortie> <nom> [--ordre N | --nside-max 2048] [--simultanes 8] [--cache <dossier>]
         python ciel_bandes.py <dossier_sortie> --liste
-Le <nom> est une clé de RELEVES ci-dessous. --ordre 2 donne Nside 2048 pour des tuiles de 512 pixels (1,7 minute d'arc).
+Le <nom> est une clé de RELEVES ci-dessous. Par défaut, l'ordre HiPS le plus fin sans dépasser Nside 2048 (1,7 minute d'arc).
 """
 import sys as _sys
 _sys.stdout.reconfigure(encoding='utf-8')
@@ -36,6 +36,160 @@ RELEVES = {
         mesure="Colonne d'hydrogène neutre intégrée sur la ligne de visée (raie à 21 cm, de -600 à +600 km/s)",
         unite='atomes/cm²', resolution_arcmin=16.2, longueur_onde='21 cm',
         reference='HI4PI Collaboration, Ben Bekhti et al. 2016, A&A 594, A116 (relevés EBHIS et GASS)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    # --- Micro-ondes : Planck, 3e publication (PR3, 2018), cartes de la mission complète. Unités de l'archive de l'ESA
+    # (Planck Legacy Archive) : K_CMB de 30 à 353 GHz, MJy/sr à 545 et 857 GHz. Sous 217 GHz, c'est surtout le fond
+    # diffus cosmologique (valeurs autour de zéro, d'où l'échelle linéaire) ; au-dessus, la poussière de la Galaxie.
+    'planck30': dict(
+        hips='CDS/P/PLANCK/R3/LFI30', bande='micro-ondes', libelle='Micro-ondes 30 GHz (Planck)',
+        mesure="Brillance du ciel à 30 GHz (surtout synchrotron et fond cosmologique)",
+        unite='K_CMB', resolution_arcmin=32.3, longueur_onde='1 cm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='lin'),
+    'planck44': dict(
+        hips='CDS/P/PLANCK/R3/LFI44', bande='micro-ondes', libelle='Micro-ondes 44 GHz (Planck)',
+        mesure="Brillance du ciel à 44 GHz",
+        unite='K_CMB', resolution_arcmin=27.0, longueur_onde='6,8 mm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='lin'),
+    'planck70': dict(
+        hips='CDS/P/PLANCK/R3/LFI70', bande='micro-ondes', libelle='Micro-ondes 70 GHz (Planck)',
+        mesure="Brillance du ciel à 70 GHz (fond diffus cosmologique)",
+        unite='K_CMB', resolution_arcmin=13.2, longueur_onde='4,3 mm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='lin'),
+    'planck100': dict(
+        hips='CDS/P/PLANCK/R3/HFI100', bande='micro-ondes', libelle='Micro-ondes 100 GHz (Planck)',
+        mesure="Brillance du ciel à 100 GHz (fond diffus cosmologique)",
+        unite='K_CMB', resolution_arcmin=9.7, longueur_onde='3 mm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='lin'),
+    'planck143': dict(
+        hips='CDS/P/PLANCK/R3/HFI143', bande='micro-ondes', libelle='Micro-ondes 143 GHz (Planck)',
+        mesure="Brillance du ciel à 143 GHz (fond diffus cosmologique)",
+        unite='K_CMB', resolution_arcmin=7.3, longueur_onde='2,1 mm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='lin'),
+    'planck217': dict(
+        hips='CDS/P/PLANCK/R3/HFI217', bande='micro-ondes', libelle='Micro-ondes 217 GHz (Planck)',
+        mesure="Brillance du ciel à 217 GHz",
+        unite='K_CMB', resolution_arcmin=5.0, longueur_onde='1,4 mm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='lin'),
+    'planck353': dict(
+        hips='CDS/P/PLANCK/R3/HFI353', bande='micro-ondes', libelle='Micro-ondes 353 GHz (Planck)',
+        mesure="Brillance du ciel à 353 GHz (surtout la poussière froide de la Galaxie)",
+        unite='K_CMB', resolution_arcmin=4.9, longueur_onde='850 µm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    'planck545': dict(
+        hips='CDS/P/PLANCK/R3/HFI545', bande='micro-ondes', libelle='Micro-ondes 545 GHz (Planck)',
+        mesure="Brillance du ciel à 545 GHz (poussière froide)",
+        unite='MJy/sr', resolution_arcmin=4.8, longueur_onde='550 µm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    'planck857': dict(
+        hips='CDS/P/PLANCK/R3/HFI857', bande='micro-ondes', libelle='Micro-ondes 857 GHz (Planck)',
+        mesure="Brillance du ciel à 857 GHz (poussière froide)",
+        unite='MJy/sr', resolution_arcmin=4.6, longueur_onde='350 µm',
+        reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
+        couverture_publiee='tout le ciel', echelle='log'),
+
+    # --- Infrarouge lointain : AKARI, instrument FIS (JAXA), relevé du ciel entier.
+    'akari90': dict(
+        hips='CDS/P/AKARI/FIS/WideS', bande='infrarouge', libelle='Infrarouge lointain 90 µm (AKARI)',
+        mesure='Brillance du ciel à 90 µm (poussière tiède chauffée par les étoiles)', unite='MJy/sr',
+        resolution_arcmin=1.3, longueur_onde='90 µm',
+        reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier)',
+        couverture_publiee='98 % du ciel', echelle='log'),
+    'akari140': dict(
+        hips='CDS/P/AKARI/FIS/WideL', bande='infrarouge', libelle='Infrarouge lointain 140 µm (AKARI)',
+        mesure='Brillance du ciel à 140 µm (poussière froide)', unite='MJy/sr',
+        resolution_arcmin=1.5, longueur_onde='140 µm',
+        reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier)',
+        couverture_publiee='98 % du ciel', echelle='log'),
+    # --- Infrarouge moyen et proche : WISE (NASA) et 2MASS. Valeurs en unités brutes du détecteur (DN), comme publiées.
+    'wise12': dict(
+        hips='CDS/P/allWISE/W3', bande='infrarouge', libelle='Infrarouge moyen 12 µm (WISE)',
+        mesure='Brillance du ciel à 12 µm (grains de poussière chauds, molécules aromatiques)', unite='DN (unité du détecteur)',
+        resolution_arcmin=6.5 / 60, longueur_onde='12 µm',
+        reference='Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    'wise22': dict(
+        hips='CDS/P/allWISE/W4', bande='infrarouge', libelle='Infrarouge moyen 22 µm (WISE)',
+        mesure='Brillance du ciel à 22 µm', unite='DN (unité du détecteur)',
+        resolution_arcmin=12.0 / 60, longueur_onde='22 µm',
+        reference='Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    'wise3': dict(
+        hips='CDS/P/allWISE/W1', bande='infrarouge', libelle='Infrarouge proche 3,4 µm (WISE)',
+        mesure='Brillance du ciel à 3,4 µm (surtout la lumière des étoiles)', unite='DN (unité du détecteur)',
+        resolution_arcmin=6.1 / 60, longueur_onde='3,4 µm',
+        reference='Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    '2massk': dict(
+        hips='CDS/P/2MASS/K', bande='infrarouge', libelle='Infrarouge proche 2,2 µm (2MASS K)',
+        mesure='Brillance du ciel en bande Ks (2,2 µm)', unite='DN (unité du détecteur)',
+        resolution_arcmin=2.5 / 60, longueur_onde='2,2 µm',
+        reference='Skrutskie et al. 2006, AJ 131, 1163 (2MASS)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    # --- Visible : la raie Hα de l'hydrogène ionisé (les étoiles visibles sont déjà dessinées une à une par Gaia).
+    'halpha': dict(
+        hips='CDS/P/Finkbeiner', bande='visible', libelle='Visible : raie Hα (hydrogène ionisé)',
+        mesure="Brillance de la raie Hα à 656 nm (gaz ionisé par les étoiles chaudes)", unite='R (rayleighs)',
+        resolution_arcmin=6.0, longueur_onde='656 nm',
+        reference='Finkbeiner 2003, ApJS 146, 407 (assemblage des relevés WHAM, VTSS et SHASSA)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    # --- Ultraviolet : GALEX (NASA). Le plan de la Galaxie a été évité (étoiles trop brillantes pour les détecteurs).
+    'galexfuv': dict(
+        hips='CDS/P/GALEXGR6_7/FUV', bande='ultraviolet', libelle='Ultraviolet lointain 154 nm (GALEX)',
+        mesure='Brillance du ciel en ultraviolet lointain (étoiles chaudes, lumière diffusée par la poussière)',
+        unite='MJy/sr × 2,04', resolution_arcmin=4.2 / 60, longueur_onde='154 nm',
+        reference='Martin et al. 2005, ApJ 619, L1 ; Bianchi et al. 2017, ApJS 230, 24 (GALEX GR6/7)',
+        couverture_publiee='environ 2/3 du ciel, plan galactique évité', echelle='log'),
+    'galexnuv': dict(
+        hips='CDS/P/GALEXGR6_7/NUV', bande='ultraviolet', libelle='Ultraviolet proche 231 nm (GALEX)',
+        mesure='Brillance du ciel en ultraviolet proche', unite='MJy/sr × 0,72',
+        resolution_arcmin=5.3 / 60, longueur_onde='231 nm',
+        reference='Martin et al. 2005, ApJ 619, L1 ; Bianchi et al. 2017, ApJS 230, 24 (GALEX GR6/7)',
+        couverture_publiee='environ 3/4 du ciel, plan galactique évité', echelle='log'),
+    # --- Rayons X.
+    'rass': dict(
+        hips='CDS/P/RASS', bande='X', libelle='Rayons X mous 0,1 à 2,4 keV (ROSAT)',
+        mesure='Photons X comptés (gaz à un million de degrés, restes de supernovas, amas de galaxies)',
+        unite='coups (unité du relevé)', resolution_arcmin=1.8, longueur_onde='0,5 à 12 nm',
+        reference='Voges et al. 1999, A&A 349, 389 (ROSAT All-Sky Survey, MPE)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    'erosita': dict(
+        hips='erosita/dr1/rate/024', bande='X', libelle='Rayons X 0,2 à 2,3 keV (eROSITA DR1)',
+        mesure='Taux de photons X comptés', unite='coups/s par pixel',
+        resolution_arcmin=0.5, longueur_onde='0,5 à 6 nm',
+        reference='Merloni et al. 2024, A&A 682, A34 (eROSITA-DE DR1, MPE)',
+        couverture_publiee='moitié du ciel seulement : longitudes galactiques 180° à 360° (droits allemands)', echelle='log'),
+    'integral': dict(
+        hips='CDS/P/INTGAL/35', bande='X', libelle='Rayons X durs 17 à 35 keV (INTEGRAL)',
+        mesure='Photons X durs comptés (trous noirs et étoiles à neutrons qui avalent de la matière)',
+        unite='unité du relevé (non précisée par la fiche)', resolution_arcmin=12.0, longueur_onde='0,04 à 0,07 nm',
+        reference='Krivonos et al. 2012, A&A 545, A27 (INTEGRAL/IBIS, plan galactique, IKI)',
+        couverture_publiee='bande autour du plan de la Galaxie (31 % du ciel)', echelle='lin'),
+    # --- Rayons gamma : Fermi-LAT (NASA), cartes de SkyView (HEASARC).
+    'fermi1': dict(
+        hips='CDS/P/Fermi/3', bande='gamma', libelle='Gamma 300 MeV à 1 GeV (Fermi-LAT)',
+        mesure='Photons gamma comptés (300 MeV à 1 GeV)', unite='coups (unité du relevé)',
+        resolution_arcmin=60.0, longueur_onde='moins de 1e-6 nm',
+        reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    'fermi2': dict(
+        hips='CDS/P/Fermi/4', bande='gamma', libelle='Gamma 1 à 3 GeV (Fermi-LAT)',
+        mesure='Photons gamma comptés (1 à 3 GeV)', unite='coups (unité du relevé)',
+        resolution_arcmin=30.0, longueur_onde='moins de 1e-6 nm',
+        reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
+        couverture_publiee='tout le ciel', echelle='log'),
+    'fermi3': dict(
+        hips='CDS/P/Fermi/5', bande='gamma', libelle='Gamma 3 à 300 GeV (Fermi-LAT)',
+        mesure='Photons gamma comptés (3 à 300 GeV)', unite='coups (unité du relevé)',
+        resolution_arcmin=10.0, longueur_onde='moins de 1e-6 nm',
+        reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
         couverture_publiee='tout le ciel', echelle='log'),
 }
 
@@ -236,7 +390,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('sortie')
     ap.add_argument('nom', nargs='?')
-    ap.add_argument('--ordre', type=int, default=2)
+    ap.add_argument('--ordre', type=int, help='ordre HiPS imposé (sinon : le plus fin sans dépasser --nside-max)')
+    ap.add_argument('--nside-max', type=int, default=2048)
     ap.add_argument('--simultanes', type=int, default=8)
     ap.add_argument('--cache')
     ap.add_argument('--liste', action='store_true')
@@ -250,7 +405,8 @@ def main():
     adresse = p['hips_service_url'].rstrip('/')
     w = int(p.get('hips_tile_width', 512))
     ordre_max = int(p.get('hips_order', a.ordre))
-    ordre = min(a.ordre, ordre_max)
+    ordre = a.ordre if a.ordre is not None else max(0, min(ordre_max, int(math.log2(a.nside_max // w)) if a.nside_max >= w else 0))
+    ordre = min(ordre, ordre_max)
     repere = p.get('hips_frame', 'equatorial')
     nside = w << ordre
     ntuiles = 12 * 4 ** ordre
