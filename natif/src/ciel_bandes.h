@@ -223,7 +223,9 @@ public:
         srcCount_ = 0;
         catalogs.clear();
         std::vector<uint32_t> all;
-        const std::filesystem::path dir = std::filesystem::path(mapPath).parent_path();
+        // chemin relatif sans dossier (« ciel_fermi3.bin ») : parent_path() est vide ; on cherche alors à côté, pas à la racine
+        std::filesystem::path dir = std::filesystem::path(mapPath).parent_path();
+        if (dir.empty()) dir = ".";
         std::vector<std::string> files;
         std::error_code ec;
         for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {

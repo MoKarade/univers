@@ -184,10 +184,12 @@ def main():
     # contrôles : quelques sources connues retrouvées à leur place
     noms = [s.decode('ascii', 'replace').strip() for s in t['Source_Name']] if 'Source_Name' in t else []
     assoc = [s.decode('ascii', 'replace').strip() for s in t['ASSOC1']] if 'ASSOC1' in t else []
-    for cherche in ('Vela', 'Crab', 'Geminga', '3C 454.3', 'LMC'):
+    # le catalogue nomme les pulsars par leur numéro PSR : Vela = PSR J0835-4510, Geminga = PSR J0633+1746
+    for nom_c, cherche in (('Vela', 'PSR J0835-4510'), ('Vela X', 'Vela X'), ('Crab', 'Crab'),
+                           ('Geminga', 'PSR J0633+1746'), ('3C 454.3', '3C 454.3'), ('LMC', 'LMC')):
         for i, a in enumerate(assoc):
             if cherche.lower() in a.lower():
-                print(f'  {cherche:9s} : {noms[i] if noms else i} ({a}), ra {math.degrees(ra[i]):.3f}°, dec {math.degrees(de[i]):.3f}°, '
+                print(f'  {nom_c:9s} : {noms[i] if noms else i} ({a}), ra {math.degrees(ra[i]):.3f}°, dec {math.degrees(de[i]):.3f}°, '
                       f'{g[i]:.3g} {c["unite"]}, classe {cl[i]!r}')
                 break
     if nom == 'erass1cl':      # contrôle : quelques amas connus de la moitié ouest (Coma n'y est pas : l = 58°)
