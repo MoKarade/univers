@@ -514,7 +514,7 @@
     const B = Rr[tag], raw = NM[tag][i] || '', parts = raw.split('~'), nm = parts[0] ? parts[0] + (parts[1] ? ' (' + parts[1] + ')' : '') : (parts[1] ? 'Astéroïde ' + parts[1] : 'Objet sans nom');
     const get = () => [B.pos[i * 3] * AU * F.orb, B.pos[i * 3 + 1] * AU * F.orb, B.pos[i * 3 + 2] * AU * F.orb], a = B.a[i], e = B.e[i], kd = KNOWN_D[parts[0]];
     const dia = kd || 1329 / Math.sqrt(tag === 'AST' ? 0.14 : 0.08) * Math.pow(10, -B.H[i] / 5);
-    return { name: nm, sub: (parts[0] === 'Pluton' || parts[0] === 'Éris' || parts[0] === 'Cérès' || parts[0] === 'Hauméa' || parts[0] === 'Makémaké' ? 'Planète naine' : CLS_FR[CLSB[tag][i]] || 'Petit corps'), get, orbit: { e, P: [B.P[i * 3], B.P[i * 3 + 1], B.P[i * 3 + 2]], Q: [B.Q[i * 3], B.Q[i * 3 + 1], B.Q[i * 3 + 2]] }, rows: () => [['Distance au Soleil', sig(vlen(get()) / AU, 4) + NBSP + 'UA'], ['Orbite', 'de ' + sig(a * (1 - e), 3) + ' à ' + sig(a * (1 + e), 3) + NBSP + 'UA'], ['Excentricité', sig(e, 3)], ['Inclinaison', sig(B.inc[i] / DEG, 3) + '°'], ['Un tour du Soleil', fmtYears(Math.pow(a, 1.5))], ['Vitesse actuelle', sig(orbSpeed(vlen(get()) / AU / (F.orb || 1), a), 3) + NBSP + 'km/s'], ['Diamètre', (kd ? '' : 'environ ') + nf(Math.round(dia / (dia > 100 ? 10 : 1)) * (dia > 100 ? 10 : 1), 0) + NBSP + 'km' + (kd ? '' : ' (estimé d’après l’éclat)')]] };
+    return sbAdapt({ name: nm, sub: (parts[0] === 'Pluton' || parts[0] === 'Éris' || parts[0] === 'Cérès' || parts[0] === 'Hauméa' || parts[0] === 'Makémaké' ? 'Planète naine' : CLS_FR[CLSB[tag][i]] || 'Petit corps'), get, orbit: { e, P: [B.P[i * 3], B.P[i * 3 + 1], B.P[i * 3 + 2]], Q: [B.Q[i * 3], B.Q[i * 3 + 1], B.Q[i * 3 + 2]] }, rows: () => [['Distance au Soleil', sig(vlen(get()) / AU, 4) + NBSP + 'UA'], ['Orbite', 'de ' + sig(a * (1 - e), 3) + ' à ' + sig(a * (1 + e), 3) + NBSP + 'UA'], ['Excentricité', sig(e, 3)], ['Inclinaison', sig(B.inc[i] / DEG, 3) + '°'], ['Un tour du Soleil', fmtYears(Math.pow(a, 1.5))], ['Vitesse actuelle', sig(orbSpeed(vlen(get()) / AU / (F.orb || 1), a), 3) + NBSP + 'km/s'], ['Diamètre', (kd ? '' : 'environ ') + nf(Math.round(dia / (dia > 100 ? 10 : 1)) * (dia > 100 ? 10 : 1), 0) + NBSP + 'km' + (kd ? '' : ' (estimé d’après l’éclat)')]] }, sbBodies(B, i));
   }
   // ---- compléments de fiche : orbite, vitesse, décalage spectral, trous noirs
   const zStr = z => (z < 0 ? '−' : '+') + Math.abs(z).toFixed(Math.abs(z) < 0.001 ? 6 : 4).replace('.', ',');
@@ -598,7 +598,7 @@
     const get = () => { const E = keplerE(wrapPi(T.el[j + 1] + T.el[j + 2] * (F.jd - T.epoch)), e), x = Math.cos(E) - e, y = Math.sin(E), k = AU * (F.orb || 1); return [(P[0] * x + Q[0] * y) * k, (P[1] * x + Q[1] * y) * k, (P[2] * x + Q[2] * y) * k]; };
     const nm = () => { const t = TL.astN ? TL.astN[i] : null; if (!t) return 'Astéroïde'; const q = t.split('~'); return q[0] ? q[0] + ' (' + q[1] + ')' : 'Astéroïde ' + q[1]; };
     const o = { name: nm(), sub: 'Astéroïde', get, orbit: { e, P, Q }, rows: () => [['Distance au Soleil', sig(vlen(get()) / AU, 4) + NBSP + 'UA'], ['Orbite', 'de ' + sig(a * (1 - e), 3) + ' à ' + sig(a * (1 + e), 3) + NBSP + 'UA'], ['Excentricité', sig(e, 3)], ['Inclinaison', sig(inc, 3) + '°'], ['Un tour du Soleil', fmtYears(Math.pow(a, 1.5))], ['Vitesse actuelle', sig(orbSpeed(vlen(get()) / AU / (F.orb || 1), a), 3) + NBSP + 'km/s'], ['Diamètre estimé', sig(1329 / Math.sqrt(0.14) * Math.pow(10, -H / 5), 2) + NBSP + 'km (d’après son éclat)']] };
-    loadAstNames().then(() => { o.name = nm(); if (S.sel === o) renderCard(); }); return orbPlus(o); }
+    loadAstNames().then(() => { o.name = nm(); if (S.sel === o) renderCard(); }); return orbPlus(sbAdapt(o, sbTile(T, i))); }
   function selStarT(T, i) {      // étoile reçue en flux : mouvement en ligne droite, suivie sur quelques millions d'années
     const j = i * 3, MV = T.mag[i], bv = T.ci[i] / 80 - 0.5, L = starLife(MV, bv, i + 500000, 0), get = () => { const kv = S.ty * 2 * KMS_LY_YR; return [(T.pos[j] + T.vel[j] * kv) * LY, (T.pos[j + 1] + T.vel[j + 1] * kv) * LY, (T.pos[j + 2] + T.vel[j + 2] * kv) * LY]; };
     return { name: 'Étoile du catalogue Gaia', sub: 'Étoile ' + STAR_CLASS[L[5]] + ', type ' + bvSpectral(bv), get, rows: () => [['Distance', fmtDist(vlen(get()))], ['Éclat', fmtTimes(Math.pow(10, 0.4 * (4.83 - MV))) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(L[4], 2) + NBSP + 'fois le Soleil'], ['Vitesse', sig(2 * Math.hypot(T.vel[j], T.vel[j + 1], T.vel[j + 2]), 3) + NBSP + 'km/s par rapport au Soleil']].concat(starExtra(get(), [2 * T.vel[j], 2 * T.vel[j + 1], 2 * T.vel[j + 2]], MV, bv)) };
@@ -617,9 +617,49 @@
   const CFIX = {}; { const fx = DATA.COM_FIX || {}; for (const k in fx) { const i = COMN.indexOf(k); if (i >= 0 && fx[k].next) CFIX[i] = fx[k].next; } }
   function selComet(i) {
     const B = Rr.COM, a = B.a[i], e = B.e[i], Pd = TAU / B.n[i], get = () => [B.pos[i * 3] * AU * F.orb, B.pos[i * 3 + 1] * AU * F.orb, B.pos[i * 3 + 2] * AU * F.orb];
-    return { name: COMN[i] || 'Comète', sub: COM_FR[DATA.COM_CLSN[COMC[i]]] || 'Comète', get, orbit: { e, P: [a * B.P[i * 3], a * B.P[i * 3 + 1], a * B.P[i * 3 + 2]], Q: [a * Math.sqrt(1 - e * e) * B.Q[i * 3], a * Math.sqrt(1 - e * e) * B.Q[i * 3 + 1], a * Math.sqrt(1 - e * e) * B.Q[i * 3 + 2]] }, rows: () => { const nx = B.tp[i] + Math.ceil((F.days - B.tp[i]) / Pd) * Pd;
+    return sbAdapt({ name: COMN[i] || 'Comète', sub: COM_FR[DATA.COM_CLSN[COMC[i]]] || 'Comète', get, orbit: { e, P: [a * B.P[i * 3], a * B.P[i * 3 + 1], a * B.P[i * 3 + 2]], Q: [a * Math.sqrt(1 - e * e) * B.Q[i * 3], a * Math.sqrt(1 - e * e) * B.Q[i * 3 + 1], a * Math.sqrt(1 - e * e) * B.Q[i * 3 + 2]] }, rows: () => { const nx = B.tp[i] + Math.ceil((F.days - B.tp[i]) / Pd) * Pd;
       return [['Distance au Soleil', sig(vlen(get()) / AU, 4) + NBSP + 'UA'], ['Orbite', 'de ' + sig(a * (1 - e), 3) + ' à ' + sig(a * (1 + e), 3) + NBSP + 'UA'], ['Inclinaison', sig(B.inc[i] / DEG, 3) + '°'], ['Excentricité', sig(e, 4)], ['Un tour du Soleil', fmtYears(Math.pow(a, 1.5))], ['Vitesse actuelle', sig(orbSpeed(vlen(get()) / AU / (F.orb || 1), a), 3) + NBSP + 'km/s'],
-        ['Prochain passage près du Soleil', CFIX[i] && Math.abs(S.ty) < 20 && F.jd < CFIX[i] ? jdDate(CFIX[i]) + ' (calcul du JPL, attraction des planètes comprise)' : Math.abs(S.ty) < 3000 ? 'vers ' + Math.round(2000 + nx / 365.25) + ' (sans l’attraction des planètes)' : 'non suivi aussi loin dans le temps']]; } };
+        ['Prochain passage près du Soleil', CFIX[i] && Math.abs(S.ty) < 20 && F.jd < CFIX[i] ? jdDate(CFIX[i]) + ' (calcul du JPL, attraction des planètes comprise)' : Math.abs(S.ty) < 3000 ? 'vers ' + Math.round(2000 + nx / 365.25) + ' (sans l’attraction des planètes)' : 'non suivi aussi loin dans le temps']]; } }, sbComet(B, i));
+  }
+  /* ---- G3 : le petit corps touché est tiré par les planètes (22_smallbody.js).
+     Sa trajectoire est calculée par morceaux, 100 ans de part et d'autre de la date de ses éléments ; à chaque image,
+     le point qui le dessine reçoit ses éléments osculateurs du moment, pour être exactement à la place calculée. */
+  const SB_SPAN = 100 * 365.25, SBK = { o: null, s6: new Float64Array(6), k: 0, j: 0 };
+  const sbTdb = () => F.jd + deltaT((F.jd - JD_J2000) / 36525) / DAY_S;      /* l'horloge de la page est en temps civil ; le calcul en temps des éphémérides */
+  function sbBodies(B, i) { return { epoch: B.epoch, s0: () => sbStateFromPQ([B.P[i * 3], B.P[i * 3 + 1], B.P[i * 3 + 2]], [B.Q[i * 3], B.Q[i * 3 + 1], B.Q[i * 3 + 2]], B.e[i], B.M0[i], B.n[i]),
+    keep: () => ({ P: B.P.slice(i * 3, i * 3 + 3), Q: B.Q.slice(i * 3, i * 3 + 3), e: B.e[i], M0: B.M0[i], n: B.n[i] }),
+    put: o => { B.P.set(o.P, i * 3); B.Q.set(o.Q, i * 3); B.e[i] = o.e; B.n[i] = o.n; B.M0[i] = o.M0 !== undefined ? o.M0 : o.M - o.n * (F.jd - B.epoch); } }; }
+  function sbTile(T, i) { const j = i * 3; return { epoch: T.epoch, s0: () => sbStateFromPQ([T.pos[j], T.pos[j + 1], T.pos[j + 2]], [T.q[j], T.q[j + 1], T.q[j + 2]], T.el[j], T.el[j + 1], T.el[j + 2]),
+    keep: () => ({ P: T.pos.slice(j, j + 3), Q: T.q.slice(j, j + 3), e: T.el[j], M0: T.el[j + 1], n: T.el[j + 2] }),
+    put: o => { T.pos.set(o.P, j); T.q.set(o.Q, j); T.el[j] = o.e; T.el[j + 2] = o.n; T.el[j + 1] = o.M0 !== undefined ? o.M0 : wrapPi(o.M - o.n * (F.jd - T.epoch)); Rr.patchTile(T, i); } }; }
+  function sbComet(C, i) { if (!(C.e[i] < 0.99)) return null; const j = i * 3, a = C.a[i], e = C.e[i];
+    return { epoch: JD_J2000 + C.tp[i], s0: () => sbStateFromPQ([C.P[j] * a, C.P[j + 1] * a, C.P[j + 2] * a], [C.Q[j] * a * Math.sqrt(1 - e * e), C.Q[j + 1] * a * Math.sqrt(1 - e * e), C.Q[j + 2] * a * Math.sqrt(1 - e * e)], e, 0, C.n[i]),
+      keep: () => ({ Pu: C.P.slice(j, j + 3), Qu: C.Q.slice(j, j + 3), a: C.a[i], e: C.e[i], n: C.n[i], tp: C.tp[i] }),
+      put: o => { C.P.set(o.Pu, j); C.Q.set(o.Qu, j); C.a[i] = o.a; C.e[i] = o.e; C.n[i] = o.n; C.tp[i] = o.tp !== undefined ? o.tp : F.days - o.M / o.n; } }; }
+  /* Branche le calcul sur la fiche o : position, orbite dessinée et lignes de la fiche. */
+  function sbAdapt(o, ad) {
+    if (!ad || !DATA.VSOP) return o; o.sbAd = ad; const g0 = o.get, r0 = o.rows;
+    o.get = () => { const T = o.sbT; if (T && Math.abs(S.ty) < 3000 && !S.solOff && F.orb === 1) { const p = T.posAt(sbTdb()); if (p) return [p[0] * AU, p[1] * AU, p[2] * AU]; } return g0(); };
+    o.rows = () => r0().concat(sbRows(o));
+    return o;
+  }
+  function sbRows(o) { const T = o.sbT; if (!T) return []; const yr = jd => Math.round(2000 + (jd - JD_J2000) / 365.25), now = sbTdb(), inWin = now >= T.lo && now <= T.hi;
+    const r = [['Trajectoire', T.done() ? (inWin && Math.abs(S.ty) < 3000 ? 'calculée ici avec l’attraction du Soleil, des planètes et de la Lune, de ' + yr(T.lo) + ' à ' + yr(T.hi) + ' (sans la poussée des gaz ni de la chaleur, comprises dans les calculs du JPL)' : 'hors de la période calculée (' + yr(T.lo) + ' à ' + yr(T.hi) + ') : orbite sans l’attraction des planètes') : 'calcul de l’attraction des planètes : ' + Math.round(T.progress() * 100) + ' %']];
+    const ap = T.app.slice().sort((a, b) => a.jd - b.jd);
+    if (ap.length) r.push(['Passages près de la Terre (calculés)', ap.slice(0, 6).map(a => jdDate(a.jd - deltaT((a.jd - JD_J2000) / 36525) / DAY_S).replace(/^le /, '') + ' : ' + nf(Math.round(a.dist * AU / 1e6) * 1000, 0) + NBSP + 'km du centre de la Terre').join(' ; ') + (ap.length > 6 ? ' ; et ' + (ap.length - 6) + ' autres' : '')]);
+    else if (T.done()) r.push(['Passages près de la Terre (calculés)', 'aucun à moins de 7,5 millions de km de ' + yr(T.lo) + ' à ' + yr(T.hi)]);
+    return r; }
+  function sbSelect(o) {
+    const prev = SBK.o; if (prev && prev !== o && prev.sbKeep) { prev.sbAd.put(prev.sbKeep); prev.sbKeep = null; }
+    SBK.o = o && o.sbAd ? o : null; if (!SBK.o || o.sbT) return;
+    const ad = o.sbAd; o.sbKeep = ad.keep(); o.sbT = sbTrack(ad.epoch, ad.s0(), SB_SPAN);
+  }
+  function sbFrame() { const o = SBK.o; if (!o || !o.sbT) return; const T = o.sbT;
+    if (!T.done()) { T.tick(6); if (S.sel === o && (++SBK.k & 15) === 0) renderCard(); if (T.done() && S.sel === o) renderCard(); }
+    const ok = Math.abs(S.ty) < 3000 && !S.solOff && F.orb === 1 && T.posAt(sbTdb(), SBK.s6);
+    const el = ok ? sbOsc(SBK.s6) : null;
+    if (el) { o.sbAd.put(el); if (o.orbit && (++SBK.j & 31) === 0) { o.orbit.e = el.e; o.orbit.P = el.P; o.orbit.Q = el.Q; if (S.sel === o) Rr.setSelOrbit(o.orbit); } }
+    else if (o.sbKeep) o.sbAd.put(o.sbKeep);
   }
   // Chaque planète est placée sur son orbite réelle : taille, forme et durée mesurées. L'inclinaison vient des transits quand il y en a ;
   // l'orientation sur le ciel n'est jamais mesurée : elle est tirée une fois pour toutes, par système. La position sur l'orbite vient des dates de transit ou de passage au plus près.
@@ -733,7 +773,7 @@
   /* R1 : l'objet touché devient le centre du zoom (molette, pincement, boutons, barre), sans changer l'échelle. Un événement de la chronologie
      n'a pas de position : il ne devient pas un centre. Fermer la fiche (select(null)) rend le centre en douceur (S.ck, 0,9 s). */
   function centerOn(o) { if (!o || o.isEvent) return; const p = o.get(); if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) return; zoffReset(); S.center = o; renderCard(); }
-  function select(o) { S.sel = o; if (!o) S.center = null; if (o && o.exoI !== undefined) setExoSystem(o.exoI, o.exoC ? o.get : null); Rr.setSelOrbit(o && o.orbit ? o.orbit : null); renderCard(); }
+  function select(o) { sbSelect(o); S.sel = o; if (!o) S.center = null; if (o && o.exoI !== undefined) setExoSystem(o.exoI, o.exoC ? o.get : null); Rr.setSelOrbit(o && o.orbit ? o.orbit : null); renderCard(); }
   /* G1 : le Soleil tourne autour du centre de masse du système solaire, tiré par les planètes (21_nbody.js). */
   function baryRow() { if (!sol.precise) return []; const b = sunBaryOffset(sol), km = vlen(b) * AU / 1e3;
     return [['Centre de masse du système solaire', 'à ' + nf(Math.round(km / 1000) * 1000, 0) + NBSP + 'km du centre du Soleil (' + sig(km / (695700 * F.sun.R), 2) + NBSP + 'fois son rayon). Calculé : chaque planète tire le Soleil, qui tourne autour de ce point, surtout à cause de Jupiter et Saturne (masses : éphéméride JPL DE440)']]; }
@@ -1454,7 +1494,7 @@
     S.curFo = fo;
     const wF = fadeOut(S.logR, 13.4, 14.4), wG = smoothstep(2, 50, R / (1000 * LY));
     for (let i = 0; i < 3; i++) F.tg[i] = fo[i] * wF + F.gcRel[i] * wG;
-    F.selPos = S.sel && S.sel !== S.center ? S.sel.get() : null;      /* l'objet sélectionné et suivi porte le repère de R2 (updateFollow) au lieu de l'anneau 3D */ if (F.selPos && !isFinite(F.selPos[0])) F.selPos = null;
+    sbFrame(); F.selPos = S.sel && S.sel !== S.center ? S.sel.get() : null;      /* l'objet sélectionné et suivi porte le repère de R2 (updateFollow) au lieu de l'anneau 3D */ if (F.selPos && !isFinite(F.selPos[0])) F.selPos = null;
     const ck0 = S.ck; S.ck = clamp(S.ck + (S.center ? dt : -dt) / 0.9, 0, 1); if (S.center) S.cpos = S.center.get();
     if (S.ck > 0 && S.cpos) { const k = ease(S.ck); for (let i = 0; i < 3; i++) F.tg[i] = lerp(F.tg[i], S.cpos[i], k); }
     if (S.zoff && (microOn() || (S.focus !== 'sun' && S.logR < 14.4))) zoffReset();      /* revenu près d'un astre suivi ou dans l'infiniment petit : le zoom se recentre sur lui (en glissant) */

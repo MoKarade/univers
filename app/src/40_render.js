@@ -479,7 +479,10 @@ function createRenderer(canvas, Q, generated) {
   { const base = R.setSurvey; R.setSurvey = lut => { R.survLut = lut; base(lut); for (const T of R.tiles) if (T.kind === 'gal') T.redist(); }; }
   const flushTile = T => {       // n'envoie à la carte graphique que les objets arrivés depuis la dernière image
     if (T.full) { for (const [nm] of T.attrs) { const a = T.g.attributes[nm]; a.updateRange.offset = 0; a.updateRange.count = -1; a.needsUpdate = true; } T.full = false; T.sent = T.n; }
-    else if (T.n > T.sent) { for (const [nm, sz] of T.attrs) { const a = T.g.attributes[nm]; a.updateRange.offset = T.sent * sz; a.updateRange.count = (T.n - T.sent) * sz; a.needsUpdate = true; } T.sent = T.n; } };
+    else if (T.n > T.sent) { for (const [nm, sz] of T.attrs) { const a = T.g.attributes[nm]; a.updateRange.offset = T.sent * sz; a.updateRange.count = (T.n - T.sent) * sz; a.needsUpdate = true; } T.sent = T.n; }
+    else if (T.patch !== undefined && T.patch < T.n) { for (const [nm, sz] of T.attrs) { const a = T.g.attributes[nm]; a.updateRange.offset = T.patch * sz; a.updateRange.count = sz; a.needsUpdate = true; } }      /* G3 : un seul objet mis à jour (petit corps tiré par les planètes) */
+    T.patch = undefined; };
+  R.patchTile = (T, i) => { T.patch = i; };
   // --- cellules : une fois un morceau d'étoiles reçu en entier, il est réparti en blocs compacts de l'espace, chacun trié par éclat.
   //     À chaque image, on ne dessine que les blocs situés dans le champ de vue et, dans chacun, que les étoiles assez brillantes pour être visibles.
   // --- astéroïdes en flux : la position sur l'orbite (équation de Kepler) est résolue par la carte graphique, pour chaque point, à chaque image
