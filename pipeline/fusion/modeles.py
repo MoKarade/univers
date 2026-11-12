@@ -28,7 +28,7 @@ def _nfw_shape(r):
 MS_NFW = (V0 * V0 - _v2_baryons(R0)) / _nfw_shape(R0) / G     # ≈ 5,60e11 M☉, comme GAL.GMs / G dans la page
 
 
-def galaxie(nom, nh, nd, nb, k_mass=1.0, k_r=1.0, halo='nfw', mh=None, ah=None, md=None, rd=None, mb=None, ab=None):
+def galaxie(nom, nh, nd, nb, k_mass=1.0, k_r=1.0, halo='nfw', mh=None, ah=None, md=None, rd=None, mb=None, ab=None, k_eps=1.0):
     """Échantillonne une galaxie à l'équilibre. Rend un dict de tableaux : pos, vel, m, eps, kind (0 halo, 1 disque, 2 bulbe)."""
     comps, dens = [], []
     if halo == 'nfw':
@@ -64,7 +64,8 @@ def galaxie(nom, nh, nd, nb, k_mass=1.0, k_r=1.0, halo='nfw', mh=None, ah=None, 
         out.append((xv, m, 0.1 * k_r, 2))
     pos = np.concatenate([o[0][:, :3] for o in out]); vel = np.concatenate([o[0][:, 3:] for o in out])
     mass = np.concatenate([o[1] for o in out])
-    eps = np.concatenate([np.full(len(o[1]), o[2]) for o in out]); kind = np.concatenate([np.full(len(o[1]), o[3], dtype=np.int8) for o in out])
+    eps = np.concatenate([np.full(len(o[1]), o[2] * k_eps) for o in out]);      # k_eps : adoucissement réduit quand les particules sont plus nombreuses
+    kind = np.concatenate([np.full(len(o[1]), o[3], dtype=np.int8) for o in out])
     print(f'{nom} : {len(mass)} particules, masse {mass.sum():.3e} M☉, vitesse circulaire à 2 Rd : {vc:.0f} km/s')
     return dict(pos=pos, vel=vel, m=mass, eps=eps, kind=kind)
 

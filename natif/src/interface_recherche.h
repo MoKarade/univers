@@ -46,6 +46,8 @@ void addAsteroidResults(const Sim& sim, UiState& ui, std::vector<int>& found) {
 }
 
 void lightButton(Sim& sim, UiState& ui);      // interface_lumiere.h
+void faceOnButton(Sim& sim, UiState& ui);     // interface_bras.h
+void viewModeButton(Sim& sim);                // interface_bras.h
 
 // Aller à un résultat : un astre de la liste, ou un astéroïde du catalogue (désigné d'abord).
 void goToResult(Sim& sim, UiState& ui, int r);
@@ -222,6 +224,7 @@ void drawGoToMenu(Sim& sim, UiState& ui) {
         ImGui::TextDisabled("contrôlées contre le catalogue des éclipses de la NASA.");
         ImGui::EndMenu();
     }
+    if (ui.gwCount > 0 && ImGui::MenuItem("Ondes gravitationnelles détectées", std::to_string(ui.gwCount).c_str())) ui.gwOpen = true;
     if (ImGui::MenuItem("Revenir à la vue précédente", "Retour arrière", false, !sim.history.empty())) {
         ui.tour = -1;
         sim.back();
@@ -251,6 +254,9 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toutes les commandes (F1)");
     ui.searchRight = ImGui::GetItemRectMax().x;
     lightButton(sim, ui);
+    faceOnButton(sim, ui);
+    ImGui::SameLine();
+    viewModeButton(sim);
     drawGoToMenu(sim, ui);
     drawSearchResults(sim, ui, active, entered);
     ImGui::End();

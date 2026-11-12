@@ -285,6 +285,7 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     else if (fb.kind == Kind::Asteroid) ImGui::TextDisabled("Source : JPL Small-Body Database (NASA).");
     else if (fb.kind == Kind::Galaxy && sim.deepTime() && fb.name != "Centre de la Voie lactée")
         ImGui::TextDisabled("Position : calcul complet de la rencontre avec Andromède (scénario), parti des mesures de McConnachie 2012.");
+    else if (fb.kind == Kind::Galaxy && fb.priority >= 9) ImGui::TextDisabled("Sources : Cosmicflows-4 (Tully et al. 2023, distances) ; OpenNGC (noms).");
     else if (fb.kind == Kind::Galaxy) ImGui::TextDisabled("Sources : Karachentsev et al. 2013 ; McConnachie 2012.");
     else ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
 }

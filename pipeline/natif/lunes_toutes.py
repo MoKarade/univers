@@ -68,6 +68,12 @@ def main() -> None:
                 if kind in TYPES_LUS:
                     moons[code] = kind
     names = {int(b): a.strip() for a, b in re.findall(r'^\s*(?:Bodies:)?\s*([^()\n]+?) \((\d+)\) w\.r\.t', fetch(SUMMARIES, 'aa_summaries.txt'), re.M)}
+    # Lunes récentes (ex. sat480, 2026) : leurs noms sont dans le commentaire du fichier lui-même (bloc FK de la NASA).
+    for f in sorted(glob.glob(os.path.join(kernels, '*.bsp'))):
+        with open(f, 'rb') as d:
+            texte = d.read(200_000).decode('latin-1')
+        for nom, code in re.findall(r"NAIF_BODY_NAME\s*\+=\s*\(\s*'([^']+)'\s*\)\s*NAIF_BODY_CODE\s*\+=\s*\(\s*(\d+)\s*\)", texte):
+            names.setdefault(int(code), nom.strip())
     fr = {code: nom for code, nom, _ in LUNES}
     radius: dict[int, float] = {}
     pck = fetch(PCK, 'pck00011.tpc')

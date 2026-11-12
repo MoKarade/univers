@@ -51,6 +51,8 @@ void raysNote(const Sim& sim) {
     ImGui::EndTooltip();
 }
 
+void armLegend(const Sim& sim);      // interface_bras.h
+
 void whatYouSee(const Sim& sim) {
     if (const char* grain = grainLine(sim)) ImGui::TextUnformatted(grain);
     const double boost = sim.brightnessBoost();
@@ -109,6 +111,7 @@ void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fix
     ImGui::TextUnformatted(where.c_str());
     if (const int k = eclipseNow(sim.years); k >= 0) ImGui::TextDisabled("%s, de Soleil : %s.", kEclipses[k].label, kEclipseStatus);
     whatYouSee(sim);
+    armLegend(sim);
     ImGui::TextDisabled("Clic sur un astre : y aller   •   Molette : zoomer   •   Glisser : tourner   •   Tape un nom : chercher   •   F1 : aide");
     ImGui::End();
 }

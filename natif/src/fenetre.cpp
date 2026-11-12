@@ -14,12 +14,14 @@
 #include "clones.h"
 #include "fenetre.h"
 #include "orbites_gpu.h"
+#include "fusion_nuage.h"
 #include "fusion_points.h"
 #include "gaia.h"
 #include "galaxies.h"
 #include "interface.h"
 #include "points_planetes.h"
 #include "spheres.h"
+#include "traceurs_bras.h"
 #include "voie_lactee.h"
 #include "rendu_fenetre.h"
 
@@ -156,6 +158,7 @@ int runWindow(const WindowOptions& opt) {
             }
         });
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
+    loadGravWaves(dataDir + "/ondes_gravitationnelles.tsv");      // ondes gravitationnelles (GWOSC) : fenêtre ouverte depuis « Aller à »
     if (!opt.target.empty()) {
         bool found = false;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
@@ -182,8 +185,10 @@ int runWindow(const WindowOptions& opt) {
     // Calcul complet de la rencontre avec Andromède (dossier fusion/ à côté des données) : facultatif.
     phys::fusion::Rejeu replay;
     // Calcul de la fusion : celui à 3 millions de particules (dossier fusion-3m) s'il est là, sinon celui à 300 000.
-    const std::string fusionDir = dataDir + (std::filesystem::exists(dataDir + "/fusion-3m/fusion_centres.bin") ? "/fusion-3m" : "/fusion");
-    const bool hasReplay = replay.charger(fusionDir + "/fusion_centres.bin", fusionDir);
+    // Dans l'ordre : le calcul à un million d'étoiles affichées (fusion-toutes), celui à 3 millions de particules, le premier.
+    const std::string fusionDir = dataDir + (std::filesystem::exists(dataDir + "/fusion-toutes/fusion_centres.bin") ? "/fusion-toutes"
+                                             : std::filesystem::exists(dataDir + "/fusion-3m/fusion_centres.bin") ? "/fusion-3m" : "/fusion");
+    const bool hasReplay = replay.charger(fusionDir + "/fusion_centres.bin", "");      // centres et traceurs ; les étoiles : fusion_nuage.h
     sim.linkReplay(hasReplay ? &replay : nullptr, fusionDir + "/fusion_noms.tsv");
     if (opt.hasYears) sim.years = opt.years;
     sim.refreshEphemeris();
@@ -272,6 +277,7 @@ int runWindow(const WindowOptions& opt) {
     sim.skyBandInfos = &skyBands;
     int skyLoaded = -1;
     if (opt.skyBand >= 0) sim.skyBand = opt.skyBand;
+    if (opt.wholeGalaxy) sim.wholeGalaxy = true;
     OrbitGpu orbits;      // orbite exacte de chaque étoile, calculée sur la carte graphique
     orbits.create(g, stars, sr, HdrTarget::kFormat);
     PlanetPoints planets;
@@ -288,7 +294,22 @@ int runWindow(const WindowOptions& opt) {
     const auto rapportCompletude = completude::rapport(completude::compter(sim, galaxies.count, gaia.count, gaia.cellCount ? dataDir + "/gaia_agrege.bin" : "", gaiaOk ? dataDir + "/gaia.bin" : "", dataDir));
     sim.completeness = &rapportCompletude;
     FusionPoints fusionPoints;
-    fusionPoints.create(g, hasReplay ? static_cast<uint32_t>(replay.nombreEtoiles()) : 0);
+    fusionPoints.create(g, 0);      // remplacé par fusionCloud (les images du calcul ne sont plus chargées en mémoire)
+    FusionCloud fusionCloud;
+    if (hasReplay) fusionCloud.create(g, fusionDir, HdrTarget::kFormat);
+    double fusionShare = 0;
+    // Voie lactée seule, calculée en entier par le fil physique (toutes ses étoiles s'attirent : les bras naissent d'eux-mêmes).
+    // Elle apparaît entre 200 et 400 millions d'années, quand le dessin mesuré des bras s'efface, et cède la place au calcul
+    // de la rencontre avec Andromède en même temps que les étoiles mesurées (Sim::starShare). Bras calculés : leur place
+    // n'est pas prévisible, l'écran le dit.
+    FusionCloud loneGalaxy;
+    const bool hasLoneGalaxy = loneGalaxy.create(g, dataDir + "/voie-lactee-seule", HdrTarget::kFormat);
+    double loneShare = 0;
+    ArmTracerPoints armTracers;      // masers et amas mesurés qui tracent les bras spiraux
+    if (armTracers.create(g, dataDir + "/traceurs_bras.tsv")) {
+        sim.armTracers = &armTracers.tracers;
+        sim.armTracerWorld = &armTracers.world;
+    }
     ClonePoints clones;      // nuage des 10 000 scénarios du Groupe local (précalculés par le fil physique)
     if (clones.create(g, dataDir + "/clones_groupe_local.bin")) {
         sim.cloneCount = clones.n;
@@ -491,7 +512,16 @@ int runWindow(const WindowOptions& opt) {
                                       sim.deepTime() ? "rejeu du calcul de la rencontre avec Andromède (fait à l'avance sur la carte graphique)" : "positions mesurées"});
             if (sim.replay)
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
-                                          "points du calcul fait à l'avance : un scénario, pas des étoiles mesurées"});
+                                          fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
+                                                               : "points du calcul fait à l'avance (un scénario) ; éclat d'affichage fixe, pas encore à l'échelle des étoiles mesurées"});
+            if (hasLoneGalaxy)
+                sim.calcStates.push_back({"Voie lactée entière calculée", loneGalaxy.count ? CalcMode::Precomputed : CalcMode::Hidden, 0,
+                                          "calcul fait à l'avance où toutes les étoiles de la Galaxie s'attirent : bras calculés, position non prévisible"});
+            if (sim.armTracers)
+                sim.calcStates.push_back({"Traceurs des bras spiraux", !armTracers.count ? CalcMode::Hidden : std::fabs(sim.years - kStartYears) < 3.0e4 ? CalcMode::Measured : CalcMode::Approx, 0,
+                                          std::fabs(sim.years - kStartYears) < 3.0e4
+                                              ? "masers à parallaxe radio (Reid et al. 2019) et amas ouverts datés (Hunt & Reffert 2023) : positions mesurées"
+                                              : "dessin mesuré aujourd'hui, tourné d'un bloc à la vitesse mesurée des bras (28,2 ± 2,1 km/s par kpc, Dias et al. 2019) : approché, les bras se déforment aussi"});
             if (sim.cloneCount)
                 sim.calcStates.push_back({"Scénarios du Groupe local", clones.count ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           "10 000 routes possibles des galaxies voisines, calculées à l'avance d'après l'incertitude des mesures"});
@@ -515,7 +545,18 @@ int runWindow(const WindowOptions& opt) {
         }
         sim.skyLegend = sim.skyBand >= 0 ? sky.legend(std::sqrt(dot(cam.pos, cam.pos))) : std::vector<std::string>{};
         fusionPoints.update(sim, cam, pc.par[0]);
+        // Étoiles du calcul de la fusion : la part que les étoiles mesurées leur laissent (Sim::starShare), éteinte quand on
+        // regarde de trop près (moins de 3 000 années-lumière : un point du calcul n'est pas une étoile).
+        fusionShare = (sim.wholeGalaxy ? 1.0 : 1.0 - sim.starShare()) * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0);
+        fusionCloud.update(g, sim.replayGa(), fusionShare);
+        loneShare = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) *
+                                        sim.starShare() * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0)
+                                  : 0.0;
+        loneGalaxy.update(g, sim.replayGa(), loneShare);
+        sim.loneGalaxyShare = loneGalaxy.count ? loneShare : 0.0;
         if (milkyWayCentre >= 0) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
+        if (milkyWayCentre >= 0) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
+        sim.armTracersShown = armTracers.count > 0;
         tasksTimer += dt;
         if (tasksTimer > 2.0) {      // calculs de fond du PC : relus toutes les 2 secondes
             tasksTimer = 0;
@@ -569,12 +610,17 @@ int runWindow(const WindowOptions& opt) {
             orbiting.par[0] *= static_cast<float>(sim.starShare());
             orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years));      // années depuis J2000, date des positions
         }
-        if (!skyOnly && (fusionPoints.count || clones.count)) {
+        if (!skyOnly && loneGalaxy.count && milkyWayCentre >= 0)
+            loneGalaxy.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, loneShare, sc.extent.width, sc.extent.height);
+        if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0)
+            fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height);
+        if (!skyOnly && (fusionPoints.count || clones.count || armTracers.count)) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
             still.par[2] = 0;
             sr.bind(cmd, still, sc.extent.width, sc.extent.height);
             fusionPoints.draw(cmd);
             clones.draw(cmd);
+            armTracers.draw(cmd);
         }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
                        sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // cachés dans une autre lumière : on ne les voit qu'en lumière visible
@@ -650,6 +696,8 @@ int runWindow(const WindowOptions& opt) {
             const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             std::printf("clic sur un asteroide : %.1f ms pour %llu orbites (trouve : %d)\n", ms, static_cast<unsigned long long>(sim.asteroidCat->n), k);
         }
+        std::printf("premier passage d'Andromede : %.3f milliards d'annees ; etoiles mesurees montrees jusqu'a %.3f (fondu depuis %.3f) ; part des etoiles mesurees a cette date : %.2f\n",
+                    sim.firstPassageGa, sim.starEraEndYears / 1.0e9, sim.starEraFadeYears / 1.0e9, sim.starShare());
         std::printf("fenetre cachee %ux%u : %d images en %.3f s, soit %.1f images par seconde ; astre suivi : %s ; date : %s ; ephemerides : %s\nPASSE\n",
                     sc.extent.width, sc.extent.height, frame, total, frame / total, sim.bodies[static_cast<size_t>(sim.focus)].name.c_str(),
                     frDate(sim.years).c_str(), !hasSpk ? spkError.c_str() : sim.ephemValid ? "lues" : "hors plage");
@@ -667,7 +715,10 @@ int runWindow(const WindowOptions& opt) {
     gaia.release(g);
     milkyWay.release(g);
     fusionPoints.release(g);
+    fusionCloud.release(g);
+    loneGalaxy.release(g);
     clones.release(g);
+    armTracers.release(g);
     asteroids.release(g);
     galaxies.release(g);
     spheres.release(g);
