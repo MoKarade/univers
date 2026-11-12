@@ -46,12 +46,15 @@ def main() -> None:
     sun = meta.get('magnitude_soleil')
     mag = np.zeros(n, '<f4')
     bv = np.full(n, np.nan, '<f4')
-    physique = int(bool(masses) and sun is not None and all(g in ml for g in GALAXIES))
+    presentes = [g for g, c in zip(GALAXIES, counts) if int(c) > 0]      # un calcul peut ne contenir que la Voie lactée
+    physique = int(bool(masses) and sun is not None and all(ml.get(g) is not None and g in masses for g in presentes))
     start = 0
     for g, c in zip(GALAXIES, counts):
         sl = slice(start, start + int(c))
         start += int(c)
-        if g in bv_gal:
+        if int(c) == 0:
+            continue
+        if bv_gal.get(g) is not None:      # null : pas de couleur sourcée (NaN)
             bv[sl] = float(bv_gal[g])
         if physique:
             m = np.array([masses[g].get(COMPOSANTE.get(int(k), 'disque'), masses[g]['disque']) for k in (1, 2)])

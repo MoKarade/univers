@@ -6,7 +6,7 @@ Dossier C:\\dev\\Univers-PC\\avancement\\ : un fichier NOM.txt (UTF-8) par tâch
 terminé, échec), detail=. Les valeurs sont LUES dans les journaux des calculs (aucune estimation).
 Usage : python avancement.py   (s'arrête seul quand toutes les tâches sont terminées ou en échec)
 """
-import datetime as dt, glob, os, re, time
+import datetime as dt, glob, os, re, sys, time
 
 DOSSIER = r'C:\dev\Univers-PC\avancement'
 NATIF = r'C:\tmp\natif'
@@ -72,9 +72,47 @@ def chaos():
     return etat
 
 
+def convertir_fusion(d):
+    """Dès que le calcul a écrit un nouveau paquet d'images (fusion.json plus récent), refait les fichiers que l'appli lit."""
+    import subprocess
+    js, cb = os.path.join(d, 'fusion.json'), os.path.join(d, 'fusion_centres.bin')
+    if not os.path.exists(js) or (os.path.exists(cb) and os.path.getmtime(cb) >= os.path.getmtime(js)): return
+    ici = os.path.dirname(os.path.abspath(__file__))
+    for args in ([os.path.join(ici, 'fusion_bin.py'), d, cb + '.tmp'], [os.path.join(ici, 'fusion_particules.py'), d]):
+        subprocess.run([sys.executable, '-I'] + args, capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if os.path.exists(cb + '.tmp'): os.replace(cb + '.tmp', cb)
+
+
+def calcul_particules(dossier, fichier, nom, total, detail):
+    j = os.path.join(NATIF, dossier, 'journal.txt')
+    if not os.path.exists(j): return 'terminé'
+    convertir_fusion(os.path.join(NATIF, dossier))
+    lignes = open(j, encoding='utf-8', errors='replace').read().splitlines()
+    t = 0.0
+    for l in reversed(lignes):
+        m = re.search(r't =\s*([\d.]+) Ga', l)
+        if m: t = float(m.group(1)); break
+    fini = any(l.startswith('{') and 'fusion_ga' in l for l in lignes)
+    pause = any('occupée' in l for l in lignes[-3:])
+    etat = 'terminé' if fini else 'en pause' if pause else 'en cours' if actif(j, 900) else 'en pause'
+    ecrire(fichier, nom=nom, fait=total if fini else t, total=total, unite='milliards d’années', debut=iso(os.path.getctime(j)), maj=iso(time.time()),
+           etat=etat, detail=detail)
+    return etat
+
+
+def fusion():
+    return calcul_particules('fusion-toutes', 'fusion_toutes_etoiles', 'Fusion Voie lactée–Andromède, 1 million d’étoiles gardées', 10,
+                             '3 millions de particules qui s’attirent toutes, sur la carte graphique')
+
+
+def voie_lactee():
+    return calcul_particules('voie-lactee-seule', 'voie_lactee_bras', 'Voie lactée seule : naissance des bras et de la barre', 4.7,
+                             '10,5 millions de particules qui s’attirent toutes, sur la carte graphique')
+
+
 def main():
     while True:
-        etats = [telechargement(), horizon(), chaos()]
+        etats = [telechargement(), horizon(), chaos(), fusion(), voie_lactee()]
         if all(e in ('terminé', 'échec') for e in etats): break
         time.sleep(20)
 

@@ -197,7 +197,8 @@ struct Sim {
     // étoiles, avec les étoiles mesurées par-dessus : plus de bascule entre l'ère des mesures et celle de la fusion.
     const std::vector<ArmTracer>* armTracers = nullptr;      // traceurs mesurés des bras spiraux (nul : fichier absent)
     double armPatternKmsKpc = 28.2, armPatternErrorKmsKpc = 2.1;      // vitesse de rotation du dessin des bras (Dias et al. 2019)
-    bool armTracersShown = false;                            // dessinés à cette image (près d'aujourd'hui, vus d'assez loin)
+    bool armTracersShown = false;
+    double loneGalaxyShare = 0;      // part montrée de la Voie lactée entière calculée (0 : pas montrée ou fichier absent)                            // dessinés à cette image (près d'aujourd'hui, vus d'assez loin)
     bool wholeGalaxy = false;
     std::vector<TaskProgress> tasks;     // calculs de fond du PC (avancement.h), relus toutes les 2 secondes
     // Scénarios du Groupe local (clones.h) : nombre, part qui finit par une fusion Voie lactée-Andromède, et date de cette

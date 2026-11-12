@@ -9,7 +9,7 @@ import json, os, struct, sys
 src, dst = sys.argv[1], sys.argv[2]
 m = json.load(open(os.path.join(src, 'fusion.json'), encoding='utf-8'))
 n, T = len(m['t']), len(m['traceurs'])
-hdr = [1, n, m['t'][1] - m['t'][0], 4, T, m['quantum_kpc'], m['fusion_ga'], m['derive_max']] + m['affichees']
+hdr = [1, n, m['t'][1] - m['t'][0], 4, T, m['quantum_kpc'], float('nan') if m['fusion_ga'] is None else m['fusion_ga'], m['derive_max']] + m['affichees']      # pas de fusion (Voie lactée seule, calcul en cours) : NaN
 b = struct.pack('<%dd' % len(hdr), *hdr)
 b += struct.pack('<%dd' % (n * 12), *[x for c in m['centres'] for g in c for x in g])
 b += struct.pack('<%dd' % (n * T * 3), *[x for c in m['traceurs_pos'] for g in c for x in g])

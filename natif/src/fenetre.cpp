@@ -293,6 +293,13 @@ int runWindow(const WindowOptions& opt) {
     FusionCloud fusionCloud;
     if (hasReplay) fusionCloud.create(g, fusionDir, HdrTarget::kFormat);
     double fusionShare = 0;
+    // Voie lactée seule, calculée en entier par le fil physique (toutes ses étoiles s'attirent : les bras naissent d'eux-mêmes).
+    // Elle apparaît entre 200 et 400 millions d'années, quand le dessin mesuré des bras s'efface, et cède la place au calcul
+    // de la rencontre avec Andromède en même temps que les étoiles mesurées (Sim::starShare). Bras calculés : leur place
+    // n'est pas prévisible, l'écran le dit.
+    FusionCloud loneGalaxy;
+    const bool hasLoneGalaxy = loneGalaxy.create(g, dataDir + "/voie-lactee-seule", HdrTarget::kFormat);
+    double loneShare = 0;
     ArmTracerPoints armTracers;      // masers et amas mesurés qui tracent les bras spiraux
     if (armTracers.create(g, dataDir + "/traceurs_bras.tsv")) sim.armTracers = &armTracers.tracers;
     ClonePoints clones;      // nuage des 10 000 scénarios du Groupe local (précalculés par le fil physique)
@@ -499,6 +506,9 @@ int runWindow(const WindowOptions& opt) {
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
                                                                : "points du calcul fait à l'avance (un scénario) ; éclat d'affichage fixe, pas encore à l'échelle des étoiles mesurées"});
+            if (hasLoneGalaxy)
+                sim.calcStates.push_back({"Voie lactée entière calculée", loneGalaxy.count ? CalcMode::Precomputed : CalcMode::Hidden, 0,
+                                          "calcul fait à l'avance où toutes les étoiles de la Galaxie s'attirent : bras calculés, position non prévisible"});
             if (sim.armTracers)
                 sim.calcStates.push_back({"Traceurs des bras spiraux", !armTracers.count ? CalcMode::Hidden : std::fabs(sim.years - kStartYears) < 3.0e4 ? CalcMode::Measured : CalcMode::Approx, 0,
                                           std::fabs(sim.years - kStartYears) < 3.0e4
@@ -531,6 +541,11 @@ int runWindow(const WindowOptions& opt) {
         // regarde de trop près (moins de 3 000 années-lumière : un point du calcul n'est pas une étoile).
         fusionShare = (sim.wholeGalaxy ? 1.0 : 1.0 - sim.starShare()) * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0);
         fusionCloud.update(g, sim.replayGa(), fusionShare);
+        loneShare = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) *
+                                        sim.starShare() * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0)
+                                  : 0.0;
+        loneGalaxy.update(g, sim.replayGa(), loneShare);
+        sim.loneGalaxyShare = loneGalaxy.count ? loneShare : 0.0;
         if (milkyWayCentre >= 0) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
         if (milkyWayCentre >= 0) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
         sim.armTracersShown = armTracers.count > 0;
@@ -586,6 +601,8 @@ int runWindow(const WindowOptions& opt) {
             orbiting.par[0] *= static_cast<float>(sim.starShare());
             orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years));      // années depuis J2000, date des positions
         }
+        if (!skyOnly && loneGalaxy.count && milkyWayCentre >= 0)
+            loneGalaxy.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, loneShare, sc.extent.width, sc.extent.height);
         if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0)
             fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height);
         if (!skyOnly && (fusionPoints.count || clones.count || armTracers.count)) {
@@ -690,6 +707,7 @@ int runWindow(const WindowOptions& opt) {
     milkyWay.release(g);
     fusionPoints.release(g);
     fusionCloud.release(g);
+    loneGalaxy.release(g);
     clones.release(g);
     armTracers.release(g);
     asteroids.release(g);
