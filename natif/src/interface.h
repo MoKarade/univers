@@ -911,7 +911,20 @@ void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlag
 
 // ---------------------------------------------------------------- bas de l'écran
 
+// Un à un ou en somme (demande de Marc, 12/11 : « quand on augmente les distances on généralise au fur et à mesure ») :
+// de près chaque point est un objet mesuré ; en s'éloignant, chaque pixel additionne la lumière de plus en plus d'étoiles
+// mesurées (éclat par pixel constant au-delà de 300 al, simulation.h). La vue lointaine est leur somme, jamais un modèle.
+const char* grainLine(const Sim& sim) {
+    if (sim.deepTime()) return nullptr;
+    if (sim.dist < 0.05) return "Ici, chaque point ou disque est un astre mesuré, un par un.";
+    if (sim.dist < 300.0) return "Ici, chaque point est une étoile mesurée, une par une.";
+    if (sim.dist < 6.0e5)
+        return "Ici, chaque pixel additionne la lumière d'étoiles mesurées, de plus en plus nombreuses en s'éloignant : c'est leur somme, rien n'est ajouté.";
+    return "Ici, chaque point lointain est une galaxie mesurée, une par une.";
+}
+
 void whatYouSee(const Sim& sim) {
+    if (const char* grain = grainLine(sim)) ImGui::TextUnformatted(grain);
     const double boost = sim.brightnessBoost();
     if (boost > 1.5 && sim.dist < 1.0e5) ImGui::TextDisabled("Éclat des étoiles multiplié par %s pour qu'elles restent visibles de si loin.", frNum(boost, 2).c_str());
     if (sim.asteroidCount && sim.asteroidGain(sim.asteroidEpochJd) > 0.01)
