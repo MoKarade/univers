@@ -151,25 +151,38 @@ class Carte:
         return out
 
     def attendre(self):
-        """Laisse la carte à Marc : toutes les 30 s, on s'arrête une seconde ; si la carte reste occupée par un
-        autre programme (un jeu), on attend qu'elle se libère. Aucune fenêtre n'est ouverte."""
+        """Laisse la carte à Marc : toutes les 30 s, si une application est en plein écran au premier plan (un jeu, une
+        vidéo), on attend qu'elle ne le soit plus. Ce test ne confond pas Marc avec nos autres calculs sur la carte
+        (l'ancien test, sur l'occupation de la carte, les prenait pour un jeu et les calculs se mettaient en pause les
+        uns pour les autres). Aucune fenêtre n'est ouverte."""
         if time.time() - self.t_check < 30: return
-        import subprocess
-        self.cp.cuda.Stream.null.synchronize()
-        while True:
-            time.sleep(1.0)
-            try:
-                u = int(subprocess.run(['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
-                                       capture_output=True, text=True, timeout=20, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout.split()[0])
-            except Exception as e:      # mesure impossible : on le dit et on continue
-                print(f'  (occupation de la carte illisible : {e})', flush=True); break
-            if u < SEUIL_OCCUPATION: break
-            print(f'  carte graphique occupée à {u} % par un autre programme : pause de 60 s', flush=True)
-            time.sleep(60)
         self.t_check = time.time()
+        while plein_ecran():
+            print('  application en plein écran au premier plan : pause de 60 s', flush=True)
+            time.sleep(60)
 
 
-SEUIL_OCCUPATION = 35      # % d'occupation de la carte, mesurée pendant notre pause, au-delà duquel on attend
+def plein_ecran():
+    """Vrai si la fenêtre au premier plan couvre tout son écran (et n'est pas le bureau de Windows)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        h = u.GetForegroundWindow()
+        if not h: return False
+        cls = ctypes.create_unicode_buffer(64); u.GetClassNameW(h, cls, 64)
+        if cls.value in ('Progman', 'WorkerW', 'Shell_TrayWnd'): return False
+        r = wintypes.RECT(); u.GetWindowRect(h, ctypes.byref(r))
+        class MI(ctypes.Structure):
+            _fields_ = [('cbSize', wintypes.DWORD), ('rcMonitor', wintypes.RECT), ('rcWork', wintypes.RECT), ('dwFlags', wintypes.DWORD)]
+        mi = MI(); mi.cbSize = ctypes.sizeof(MI)
+        if not u.GetMonitorInfoW(u.MonitorFromWindow(h, 2), ctypes.byref(mi)): return False
+        m = mi.rcMonitor
+        return r.left <= m.left and r.top <= m.top and r.right >= m.right and r.bottom >= m.bottom
+    except Exception:
+        return False
+
+
 
 
 def main():
