@@ -85,6 +85,21 @@ function nbKick(S, h) {
     }
   }
   if (NB_GR_K) nbGr(S, h / 2);
+  nbMoonRing(S, h);
+}
+/* La Lune autour de la Terre, moyennée sur son orbite : le couple Terre-Lune n'est pas un point, mais un anneau
+   (masse réduite μ = m_T m_L / (m_T + m_L), rayon quadratique moyen ρ) dont le Soleil tire les deux côtés
+   différemment. Potentiel d'un anneau d'axe n (pôle de l'écliptique) : U = G M☉ μ ρ² P2(r̂·n) / (2 r³).
+   Sans ce terme, le périhélie de la Terre avance d'environ 8″ par siècle de trop peu, et les cycles de son
+   orbite se décalent de plusieurs degrés par million d'années (Quinn, Tremaine et Duncan 1991, AJ 101, 2287).
+   Lune : demi-grand axe 384 400 km, excentricité 0,0549 ; masses DE440. */
+const NB_MOON_A = 384400 / 149597870.7, NB_MOON_RHO2 = NB_MOON_A * NB_MOON_A * (1 + 1.5 * 0.0549 * 0.0549), NB_MU_EM = 8.8876924467071033e-10 * 1.0931894624024351e-11 / (8.9970116036316091e-10 * 8.9970116036316091e-10);
+let NB_MOON_ON = 1;
+function nbMoonRing(S, h) {
+  const i = S.embI !== undefined ? S.embI : (S.embI = S.names ? S.names.indexOf('emb') : -1); if (i < 0 || !NB_MOON_ON) return;
+  const i3 = i * 3, x = S.Q[i3], y = S.Q[i3 + 1], z = S.Q[i3 + 2], r2 = x * x + y * y + z * z, r = Math.sqrt(r2), r5 = r2 * r2 * r, r7 = r5 * r2;
+  const k = -h * NB_GM_SUN * NB_MU_EM * NB_MOON_RHO2 / 4, z2 = z * z;      /* a = −∇U / m, ∇U = (K/2)(…), K = G M☉ μ ρ² / 2 */
+  S.V[i3] += k * x * (3 / r5 - 15 * z2 / r7); S.V[i3 + 1] += k * y * (3 / r5 - 15 * z2 / r7); S.V[i3 + 2] += k * z * (9 / r5 - 15 * z2 / r7);
 }
 /* Relativité générale, premier ordre post-newtonien autour du Soleil (Schwarzschild, jauge harmonique) :
    a = GM/(c² r³) [ (4 GM/r − v²) r + 4 (r·v) v ], v vitesse héliocentrique (Anderson et al. 1975 ; c'est aussi

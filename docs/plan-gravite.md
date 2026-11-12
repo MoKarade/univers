@@ -36,3 +36,15 @@ Tout ce qui est lourd (G6, tables de G2 et G3 pour les longues durées) est calc
 3. G6 (fusion : calcul complet puis rejoué).
 
 Chaque étape suit la boucle de `CLAUDE.md` (construire, quatre critiques, résumé).
+
+## État au 12 novembre 2026 (fait sur la branche `gravite-mutuelle`)
+
+- **G2, calcul** : `app/src/21_nbody.js`. Soleil, 8 planètes (barycentres), Pluton, Cérès, Vesta, Pallas, Hygie s'attirent tous ; Wisdom-Holman en coordonnées héliocentriques démocratiques, pas de 4 jours, relativité du Soleil (post-newtonien, Anderson et al. 1975), anneau Terre-Lune (Quinn, Tremaine et Duncan 1991). Départ : JPL Horizons (DE440) au 10 novembre 2026 ; vitesses calées sur DE440 de 1650 à 2450 (`pipeline/gravite/ajuste.js`, facteur 1,9 × 10⁻⁶ pour Mercure, ≤ 2 × 10⁻⁷ ailleurs).
+  Mesuré (`app/test/nbody.test.js`) : à 1850, 2000, 2126 et 2350 (dates non utilisées pour le calage), écart à Horizons ≤ 2,6″ (Mercure), ≤ 0,5″ (Vénus), ≤ 0,1″ (Terre), ≤ 1,2″ (astéroïdes) ; énergie conservée à 4 × 10⁻⁸ sur 10 000 ans ; avance relativiste du périhélie de Mercure 42,8″ par siècle (attendu 42,98″) ; aller-retour sur 1 000 ans : 0,6 km.
+- **G2, temps longs** : `pipeline/gravite/long.js` (points de reprise tous les 10 000 ans), comparé à La2004 par `pipeline/gravite/compare_la2004.js`. Résultat : voir plus bas quand le calcul est fini. Pas encore branché dans la page.
+- **G1** : fiche du Soleil, ligne « Centre de masse du système solaire » (VSOP87 + masses DE440). Écart à Horizons ≤ 170 km de 1650 à 2450 (`app/test/bary.test.js`).
+- **G3** : `app/src/22_smallbody.js`. Astéroïde ou comète = particule test tirée par le Soleil, les planètes, la Terre et la Lune séparément, relativité comprise ; Dormand-Prince 5(4) à pas adaptatif. Mesuré (`app/test/petits.test.js`) : 10 rapprochements de la Terre de la liste CNEOS (astéroïdes de plus de ≈ 300 m, moins de 0,01 UA d'ici 2045), dont Apophis le 13 avril 2029 : 38 027 km contre 38 011 km, à 0,3 min ; tous à moins d'une minute et 0,05 % de Horizons. Périhélie de Halley en 2061 à 0,05 jour de Horizons. Pour 536531, la liste CNEOS vient d'une orbite plus ancienne (16 min d'écart avec Horizons, que le calcul suit).
+  Dans la page : l'astéroïde ou la comète touché (catalogue embarqué ou tuiles) suit sa trajectoire calculée, 100 ans de part et d'autre de la date de ses éléments ; le point dessiné reçoit à chaque image ses éléments osculateurs (écart point-calcul : 19 km pour Vesta, 190 km pour Halley, précision des nombres en simple précision) ; la fiche liste les passages à moins de 7,5 millions de km de la Terre. Non calculés, et dit : poussée des gaz des comètes, effet Yarkovsky.
+- **Événements** : passages de Mercure et de Vénus devant le Soleil, 1600 à 2300, calculés par la page (`app/src/23_events.js`, `gen/transits.js`) ; contrôle (`app/test/evenements.test.js`) : de 2026 à 2200, les 23 passages de Mercure et les 2 de Vénus du catalogue de la NASA, aucun de plus, milieu à 2,3 min au plus, distance des centres à 0,5″. De 1600 à 2300 : 94 et 12 passages, comme le catalogue.
+
+Pas encore fait : G2 branché dans la page au-delà de ±3 000 ans, G4, G5, G6.
