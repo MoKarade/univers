@@ -23,24 +23,30 @@ const char* grainLine(const Sim& sim) {
     return "Ici, chaque point lointain est une galaxie mesurée, une par une.";
 }
 
-// Les rayons autour du Soleil, vus de loin (fil Gaia, mesure du 12/11/2026, docs/gaia-rayons.md) : ce sont surtout les
-// ombres de la poussière proche et les limites de Gaia, pas le flou des distances. Une ligne courte ; le survol explique.
+// Les rayons autour du Soleil, vus de loin (fil Gaia, mesure du 12/11/2026, docs/gaia-rayons.md) : Gaia ne mesure pas aussi
+// loin dans toutes les directions. Une ligne courte ; le survol explique.
 void raysNote(const Sim& sim) {
-    ImGui::TextDisabled("Rayons autour du Soleil : là où Gaia voit loin ou non (poussière, couverture), pas une vraie structure (survol : pourquoi).");
+    if (sim.bestLook && sim.gaiaRebalancedCount)
+        ImGui::TextDisabled("Meilleur rendu : éclat des étoiles Gaia rééquilibré d'une direction à l'autre (%s de la lumière), hypothèse (survol).",
+                            (frNum(100.0 * sim.gaiaRebalancedShift, 2) + " %").c_str());
+    else
+        ImGui::TextDisabled("Rayons autour du Soleil : là où Gaia voit loin ou non (poussière, balayage), pas une vraie structure (survol : pourquoi).");
     if (!ImGui::IsItemHovered()) return;
     ImGui::BeginTooltip();
     ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
     ImGui::TextUnformatted("Pourquoi des rayons autour du Soleil ?");
     ImGui::Separator();
-    ImGui::TextWrapped("%s", "On ne voit ici que les étoiles que Gaia a mesurées depuis la Terre. Derrière un nuage de poussière proche, les "
-                       "étoiles lointaines sont trop faibles pour que Gaia mesure leur distance : il en manque, dans un cône qui part du "
-                       "Soleil. Ailleurs, Gaia voit plus loin. Vu de loin, ces cônes pleins et vides dessinent des rayons. Ce n'est pas "
-                       "le flou des distances : avec un tri plus strict, les rayons restent les mêmes (mesuré).");
-    if (sim.gaiaDustCount)
-        ImGui::TextWrapped("La poussière entre chaque étoile et le Soleil, estimée par Gaia pour %s étoiles, est retirée de leur éclat vu de "
-                           "loin : celles qui sont derrière un nuage reprennent leur éclat. Les étoiles que Gaia n'a pas vues ne sont pas ajoutées.",
-                           frInt(static_cast<double>(sim.gaiaDustCount)).c_str());
-    ImGui::TextDisabled("Sources : Gaia DR3 (Gaia Collaboration 2023) ; poussière GSP-Phot (Andrae et al. 2023).");
+    ImGui::TextWrapped("%s", "On ne voit ici que les étoiles dont Gaia a mesuré la distance depuis la Terre. Selon la direction, Gaia en mesure "
+                       "plus ou moins loin : la poussière proche cache les étoiles faibles, et le satellite n'a pas regardé toutes les "
+                       "parties du ciel le même nombre de fois. Vu de loin, ces différences dessinent des rayons qui partent du Soleil. "
+                       "Ce n'est ni le flou des distances ni une vraie structure (mesuré : un tri plus strict ne les change pas).");
+    if (sim.gaiaRebalancedCount)
+        ImGui::TextWrapped("En vue « meilleur rendu » (bouton Vue, touche F4), l'éclat de %s étoiles est rééquilibré vu de loin : chaque morceau "
+                           "de ciel, à une distance donnée, est ramené à la moyenne de ses voisins sur 15°. HYPOTHÈSE : à même distance, le "
+                           "nombre d'étoiles varie lentement d'une direction à l'autre. Aucune étoile n'est ajoutée ni déplacée ; vu du "
+                           "Soleil, le ciel reste celui mesuré. En vue « 100 % mesuré », rien n'est corrigé.",
+                           frInt(static_cast<double>(sim.gaiaRebalancedCount)).c_str());
+    ImGui::TextDisabled("Source : Gaia DR3 (Gaia Collaboration 2023).");
     ImGui::PopTextWrapPos();
     ImGui::EndTooltip();
 }

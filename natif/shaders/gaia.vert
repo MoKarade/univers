@@ -43,12 +43,8 @@ void main() {
     float d = max(length(p), 1e-12);
     float m = unpackHalf2x16(r.w).x + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0;
     uint pas = (r.w >> 16) & 255u;
-    if ((flags & 4u) != 0u) {      /* poussière Soleil-étoile estimée par Gaia, retirée vue d'ailleurs (gaia_fiable.glsl) */
-        float w = gfPoidsPoussiere(pc.camHi.xyz + pc.camLo.xyz, pos);
-        uint pq = q.y >> 16;
-        m -= w * 0.01 * float(pq & 1023u);
-        if (pas < 254u) pas = uint(max(0.0, float(pas) - w * float(pq >> 10) + 0.5));
-    }
+    /* éclat rééquilibré vu de loin (gaia_fiable.glsl) : HYPOTHÈSE, décalage en millièmes de magnitude */
+    if ((flags & 4u) != 0u && (pc.cellBase & GF_MODE_RENDU) != 0u) m += gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, pos) * 0.001 * float(int(q.y) >> 16);
     float flux = pc.par.x * pow(10.0, -0.4 * m) * garde;
     float size = clamp(1.5 + 1.2 * log2(1.0 + flux), 1.5, 14.0) * pc.par.y / 1080.0;
     vCol = colorOf[pas].rgb * min(flux, 3.0e4) / (size * size);

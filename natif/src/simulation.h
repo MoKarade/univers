@@ -478,7 +478,8 @@ struct Sim {
     uint64_t gaiaCount = 0;      // nombre d'étoiles du catalogue Gaia chargé (0 : absent)
     uint64_t gaiaReliableCount = 0;      // étoiles Gaia à orbite fiable (gaia.h, docs/gaia-rayons.md) : seules à avancer loin d'aujourd'hui
     double gaiaReliableLight = 0;        // part de leur lumière
-    uint64_t gaiaDustCount = 0;          // étoiles Gaia dont la poussière Soleil-étoile est estimée (retirée vue de loin)
+    uint64_t gaiaRebalancedCount = 0;    // étoiles Gaia à l'éclat rééquilibré vu de loin (hypothèse, docs/gaia-rayons.md)
+    double gaiaRebalancedShift = 0;      // part de la lumière déplacée
     bool hasGaia = false, hasGaiaAggregate = false, hasMilkyWay = false;      // catalogue Gaia et Voie lactée en volume chargés (pour les textes de l'interface)
     const phys::fusion::Rejeu* replay = nullptr;
     // Indicateur de complétude et de précision par échelle (completude.h), calculé une fois au chargement ; nul avant.
