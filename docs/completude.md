@@ -29,6 +29,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 | Sondes qui quittent le système solaire | 5 (Pioneer 10 et 11, Voyager 1 et 2, New Horizons) | NASA |
 | Objets à moins de 10 pc | 540 (étoiles, naines brunes, exoplanètes) | Reylé et al. 2021, [A&A 650, A201](https://arxiv.org/abs/2104.14972) |
 | Sources Gaia DR3 | 1 811 709 771 | [ESA, Gaia DR3](https://www.cosmos.esa.int/web/gaia/dr3) |
+| Sources Gaia additionnées par case | 1 707 918 961 (toutes les autres sources avec magnitude G) | gaia_agreger.py, archive de l'ESA, 12/11/2026 (docs/gaia-voie-lactee.md) |
 | Étoiles de la Voie lactée | 100 à 400 milliards (estimation) | NASA Goddard, Blueshift |
 | Galaxies à moins de 1 Mpc | 113 confirmées | [Local Volume Database](https://github.com/apace7/local_volume_database) v1.1.2 (Pace, 04/11/2026), module de distance |
 | Galaxies de l'univers observable | 200 milliards à 2 000 milliards (estimation) | Lauer et al. 2021 ; Conselice et al. 2016 |
@@ -39,7 +40,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 |---|---|---|---|
 | Système solaire | 99,7 % (9 planètes et Pluton, 16 lunes sur 461, 1 580 289 astéroïdes sur 1 580 368, 0 comète, 5 sondes sur 5) | planètes < 1 mm, Lune 282 m, Triton 255 km, sondes 0,7 km au plus, astéroïdes < 300 000 km (10 corps dont Cérès et Vesta) | éphémérides de la NASA ; astéroïdes calculés ici |
 | Étoiles voisines | 87 % (470 sur 540) | arrondi du fichier : pas de 198 UA à 10 pc | positions mesurées ; 41 149 étoiles sans vitesse radiale |
-| Voie lactée | avec gaia.bin : 5,4 % de Gaia DR3 (98 337 323 étoiles) ; 0,025 à 0,098 % de l'estimation (sans : 0,34 %) | distance à mieux que 10 % (Gaia, parallaxe > 10 σ) | étoiles mesurées ; galaxie : modèle ajusté sur des mesures, 3 hypothèses (lumière au prorata des masses, lumière des bras, largeur de la barre longue) |
+| Voie lactée | avec gaia.bin et gaia_agrege.bin : 99,6 % des sources de Gaia DR3 (98 278 356 vues une à une, 1 707 918 961 additionnées par case, non vues une à une ; 920 197 143 de celles-ci placées à leur distance) | une à une : distance à mieux que 10 % ; additionnées : 31 % de leur lumière sans distance mesurée | étoiles et sommes mesurées ; aucun modèle de la galaxie (choix de Marc, 12/11) |
 | Groupe local | 62 % (70 sur 113) | erreur par galaxie non gardée | mesuré aujourd'hui ; calculé dans le temps profond |
 | Univers lointain | 5 566 702 objets ; 0,00028 à 0,0028 % de l'estimation | décalage arrondi à 9,5 km/s × (1 + z) | distance 100 % calculée |
 

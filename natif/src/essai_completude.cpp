@@ -87,6 +87,17 @@ int main(int argc, char** argv) {
     bool sansModele = true;
     for (const Ligne& l : rs[2].lignes) sansModele = sansModele && l.nature != Nature::Suppose && l.nature != Nature::Ajuste;
     verifie(sansModele && rs[2].mesure.find("pas dessinée") != std::string::npos, "Gaia sans Voie lactée modèle : rien de supposé ni d'ajusté");
+    // Lumière additionnée des autres sources Gaia (gaia_agrege.bin). Attendu (numpy, 12/11) : 920 197 143 sources dans les
+    // cases placées à leur distance, 31,3 % de la lumière sans distance.
+    sim.hasGaia = true;
+    sim.hasMilkyWay = false;
+    const Comptes ca = compter(sim, 5566702, nGaia, dir + "/gaia_agrege.bin");
+    verifie(ca.agrege && ca.additionneesPlacees == 920197143, "gaia_agrege.bin : 920 197 143 sources placées (numpy : 920 197 143)");
+    verifie(std::fabs(ca.lumiereSansDistance - (1 - 0.6870550175944111)) < 1e-9, "lumière sans distance : 31,3 % (numpy)");
+    const auto ra = rapport(ca);
+    verifie(std::fabs(ra[2].part - (98278356.0 + 1707918961.0) / 1811709771.0) < 1e-15, "Voie lactée : (une à une + additionnées) / Gaia DR3");
+    std::printf("Voie lactée avec les sources additionnées : %s\n  %s\n", ra[2].complet.c_str(), ra[2].precision.c_str());
+    verifie(!compter(sim, 5566702, nGaia, dir + "/absent.bin").agrege, "gaia_agrege.bin absent : rien d'additionné");
     sim.hasGaia = sim.hasMilkyWay = false;
     verifie(compter(sim, 5566702, nGaia).etoilesGaia == 0, "sans Gaia chargé : compte de gaia.bin ignoré");
 
