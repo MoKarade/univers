@@ -388,7 +388,9 @@ int runWindow(const WindowOptions& opt) {
         beginPass(cmd, hdr.view, sc.extent);
         galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
         if (!sim.deepTime()) {      // état mesuré : montré à moins de 3 millions d'années d'aujourd'hui
-            milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
+            // La lumière étalée de la Galaxie garde le même éclat par pixel à toute distance : pas de multiplication d'éclat
+            // pour elle (celle des étoiles ne sert qu'à garder visibles des points qui pâlissent avec la distance).
+            milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, kExposure, sim.years);
             gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
         }
         if (!sim.deepTime()) sr.draw(cmd, pc, sc.extent.width, sc.extent.height);      // étoiles mesurées : à moins de 3 millions d'années d'aujourd'hui

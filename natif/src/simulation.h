@@ -516,7 +516,11 @@ struct Sim {
 
     // Les étoiles pâlissent en 1/d² : loin de tout, on multiplie leur éclat pour qu'elles restent visibles, et on le dit.
     double brightnessBoost() const {
-        const double k = std::clamp(dist / 30.0, 1.0, 10.0);      // plafonné à 100 fois : au-delà de 300 années-lumière le nuage d'étoiles se resserre à l'écran et l'éclat par pixel reste constant (mesuré : saturation en blanc au-delà)
+        // Jusqu'à 300 années-lumière l'éclat est multiplié pour compenser la distance (au plus 100 fois). Entre 3 000 et
+        // 30 000 années-lumière la multiplication s'efface : vue de loin, la Galaxie est montrée par sa lumière d'ensemble
+        // (voie_lactee.h), et des étoiles grossies y feraient une tache trompeuse autour du Soleil (constaté par capture).
+        double k = std::clamp(dist / 30.0, 1.0, 10.0);
+        if (dist > 3000.0) k = 1.0 + (k - 1.0) * std::clamp(1.0 - std::log10(dist / 3000.0), 0.0, 1.0);
         return k * k;
     }
     // Astéroïdes : montrés à l'échelle du système solaire (plein éclat jusqu'à 60 fois la distance Terre-Soleil, éteints

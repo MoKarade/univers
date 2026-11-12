@@ -251,3 +251,14 @@ documente pas) ; magnitude absolue et couleur du Soleil (valeurs nominales usuel
 - Lumières de nuit de la Terre : carte « Black Marble » de la NASA (via Solar System Scope), montrée du côté nuit ;
   son éclat est un réglage d'affichage (dit dans le code ; à dire à l'écran par le fil interface).
 - Option de contrôle ajoutée : `--vue longitude,latitude` (direction d'où l'on regarde l'astre suivi).
+
+## Gaia et Voie lactée branchés (12 novembre 2026, 17 h 20 UTC)
+
+- PR #54 du fil « Voie lactée et étoiles Gaia » intégrée : `GaiaRenderer` (98 278 356 étoiles Gaia DR3, niveaux de
+  détail) et `MilkyWayRenderer` (lumière d'ensemble de la Galaxie, modèle ajusté sur des mesures ; trois points
+  supposés, voir `docs/gaia-voie-lactee.md`). Fichiers facultatifs `gaia.bin` (2,36 Go) et `voie_lactee.bin`.
+- Choix d'affichage de ce fil : la Galaxie diffuse n'a pas d'éclat multiplié ; la multiplication d'éclat des étoiles
+  (au plus 100 fois) s'efface entre 3 000 et 30 000 années-lumière (sinon, tache trompeuse autour du Soleil, constatée
+  par capture). Gaia et la Voie lactée ne sont montrées qu'à moins de 3 millions d'années d'aujourd'hui.
+- Question posée à Marc : la Voie lactée « modèle » contient trois points supposés ; la garder affichée (dite comme
+  telle) ou la retirer, au nom de sa règle « rien de supposé pour le présent ».
