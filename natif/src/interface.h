@@ -921,15 +921,19 @@ void whatYouSee(const Sim& sim) {
         return;
     }
     // Voie lactée en volume (fil Gaia, docs/gaia-voie-lactee.md) : un modèle, dit comme tel dès qu'on la voit de loin.
+    // Choix de Marc (12/11) : pour l'état présent, seulement du mesuré. Sans la lueur d'ensemble, l'écran le dit.
     if (sim.hasMilkyWay && sim.dist > 3000.0) {
         ImGui::TextDisabled("La Voie lactée : modèle ajusté sur des mesures ; supposés : partage de la lumière au prorata des masses,");
         ImGui::TextDisabled("lumière ajoutée par les bras, largeur de la barre longue.");
+    } else if (sim.dist > 3000.0) {
+        ImGui::TextDisabled(sim.hasGaia ? "Voie lactée : seules les étoiles mesurées par Gaia sont montrées ; sa lumière d'ensemble n'est pas dessinée,"
+                                        : "Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
+        ImGui::TextDisabled("car elle demanderait un modèle.");
     }
     if (sim.galaxyGain() > 0.005) {
         ImGui::TextDisabled("Chaque point lointain est une galaxie ou un quasar, placé d'après son décalage vers le rouge mesuré");
         ImGui::TextDisabled("(relevés 2MRS, 6dF, 2dF, SDSS, DESI). Son éclat n'est pas mesuré ici : le point a une taille fixe,");
         ImGui::TextDisabled("qui s'efface avec la distance pour garder l'image lisible (réglage d'affichage, pas une mesure).");
-        if (!sim.hasMilkyWay) ImGui::TextDisabled("La Voie lactée elle-même n'est pas encore dessinée : seules ses étoiles mesurées près du Soleil le sont.");
     }
 }
 
