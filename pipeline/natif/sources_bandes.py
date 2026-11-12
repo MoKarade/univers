@@ -10,7 +10,7 @@ Catalogue pris en charge :
   4fgl : Fermi-LAT, 4e catalogue, 4e publication (4FGL-DR4, 14 ans d'observation), Ballet et al. 2023, arXiv:2307.12546.
          Fichier gll_psc_v35.fit du centre de science de Fermi (NASA), 7 194 sources.
 
-Usage : python sources_bandes.py <dossier_sortie> 4fgl
+Usage : python sources_bandes.py <dossier_sortie> 4fgl|erass1cl
 Format : « UNIVSRC1 », 4 entiers 32 bits (nombre de sources, longueur de la fiche JSON, 0, 0), fiche JSON (UTF-8), des zéros
 jusqu'à un multiple de 16 octets, puis par source 8 nombres de 32 bits : x, y, z (direction, équatorial ICRS, flottants),
 grandeur (flottant), groupe (entier), 3 entiers à zéro.
@@ -27,6 +27,7 @@ CATALOGUES = {
         bande='gamma', libelle='Sources gamma du catalogue Fermi-LAT 4FGL-DR4',
         reference='Ballet et al. 2023, arXiv:2307.12546 (4FGL-DR4) ; Abdollahi et al. 2022, ApJS 260, 53 (4FGL-DR3)',
         grandeur="Flux d'énergie de 100 MeV à 100 GeV", unite='erg/cm²/s',
+        cartes=['fermi1', 'fermi2', 'fermi3'],
         colonnes=dict(ra='RAJ2000', dec='DEJ2000', grandeur='Energy_Flux100', classe='CLASS1'),
         # Groupes de la classe donnée par l'équipe de Fermi (CLASS1 ; majuscules = identifiée, minuscules = associée).
         groupes=['non identifiée', 'pulsar', 'noyau actif de galaxie (blazar, radiogalaxie…)',
@@ -35,7 +36,35 @@ CATALOGUES = {
                  'bll': 2, 'fsrq': 2, 'bcu': 2, 'rdg': 2, 'agn': 2, 'ssrq': 2, 'css': 2, 'nlsy1': 2, 'sey': 2,
                  'snr': 3, 'pwn': 3, 'hmb': 3, 'lmb': 3, 'bin': 3, 'nov': 3, 'sfr': 3, 'glc': 3, 'gc': 3, 'spp': 3,
                  'gal': 4, 'sbg': 4}),
+    'erass1cl': dict(
+        # Le nom exact du fichier n'est pas connu d'avance : il est lu sur la page des catalogues de la DR1 (lien vers un
+        # .fits dont le nom contient « cl » et « primary »).
+        page='https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/', motif=('cl', 'primary'),
+        urls=[],
+        bande='X', libelle="Amas et groupes de galaxies d'eROSITA (eRASS1, confirmés en optique)",
+        reference='Bulbul et al. 2024, A&A 685, A106 (eRASS1, amas primaires) ; Merloni et al. 2024, A&A 682, A34',
+        grandeur='décalage vers le rouge', unite='z', taille='fixe',
+        cartes=['rass', 'erosita'],
+        colonnes=dict(ra=['RA', 'RA_XFIT', 'RA_X'], dec=['DEC', 'DEC_XFIT', 'DEC_X'], grandeur=['BEST_Z', 'Z_BEST', 'Z'], classe=None),
+        groupes=['amas ou groupe de galaxies'], classes={}),
 }
+
+
+def trouver_url(page, motif):
+    """Lien vers un fichier .fits de la page dont le nom contient tous les mots du motif (le plus récent en premier)."""
+    import re, urllib.parse
+    html = urllib.request.urlopen(page, timeout=60).read().decode('utf-8', 'replace')
+    liens = [urllib.parse.urljoin(page, h) for h in re.findall(r'href=["\']([^"\']+\.fits(?:\.gz)?)["\']', html, re.I)]
+    bons = [l for l in liens if all(m.lower() in l.rsplit('/', 1)[-1].lower() for m in motif)]
+    print('  liens trouvés : ' + (', '.join(bons) or 'aucun'), flush=True)
+    return sorted(bons, reverse=True)
+
+
+def colonne(t, noms):
+    for n in ([noms] if isinstance(noms, str) else noms):
+        if n in t:
+            return n
+    raise SystemExit(f'colonne absente : {noms} (colonnes du fichier : {", ".join(list(t)[:40])}…)')
 
 
 def telecharger(urls, chemin):
@@ -113,13 +142,22 @@ def main():
         raise SystemExit('usage : sources_bandes.py <dossier_sortie> ' + '|'.join(CATALOGUES))
     sortie, nom = sys.argv[1], sys.argv[2]
     c = CATALOGUES[nom]
-    chemin = telecharger(c['urls'], os.path.join(sortie, 'cache_catalogues', c['urls'][0].rsplit('/', 1)[1]))
+    urls = c['urls'] or trouver_url(c['page'], c['motif'])
+    if not urls:
+        raise SystemExit('fichier du catalogue introuvable sur la page')
+    c = dict(c, urls=urls)
+    chemin = telecharger(urls, os.path.join(sortie, 'cache_catalogues', urls[0].rsplit('/', 1)[1]))
+    if chemin.endswith('.gz'):
+        import gzip, shutil
+        with gzip.open(chemin) as fi, open(chemin[:-3], 'wb') as fo:
+            shutil.copyfileobj(fi, fo)
+        chemin = chemin[:-3]
     t = lire_table(chemin)
     col = c['colonnes']
-    ra = np.radians(t[col['ra']].astype(np.float64))
-    de = np.radians(t[col['dec']].astype(np.float64))
-    g = t[col['grandeur']].astype(np.float64)
-    cl = [s.decode('ascii', 'replace').strip().lower() for s in t[col['classe']]]
+    ra = np.radians(t[colonne(t, col['ra'])].astype(np.float64))
+    de = np.radians(t[colonne(t, col['dec'])].astype(np.float64))
+    g = t[colonne(t, col['grandeur'])].astype(np.float64)
+    cl = [s.decode('ascii', 'replace').strip().lower() for s in t[col['classe']]] if col['classe'] else [''] * len(ra)
     groupe = np.array([c['classes'].get(x, 0) for x in cl], dtype=np.uint32)
     n = len(ra)
     rec = np.zeros((n, 8), dtype=np.float32)
@@ -130,12 +168,12 @@ def main():
     rec.view(np.uint32)[:, 4] = groupe
     ok = np.isfinite(g) & (g > 0)
     comptes = {c['groupes'][k]: int(np.sum(groupe == k)) for k in range(len(c['groupes']))}
-    meta = dict(nom=nom, bande=c['bande'], libelle=c['libelle'], reference=c['reference'], grandeur=c['grandeur'],
+    meta = dict(nom=nom, cartes=c['cartes'], taille=c.get('taille', 'grandeur'), bande=c['bande'], libelle=c['libelle'], reference=c['reference'], grandeur=c['grandeur'],
                 unite=c['unite'], nombre=n, groupes=c['groupes'], comptes=comptes, source=c['urls'][0],
                 grandeur_min=float(np.min(g[ok])), grandeur_max=float(np.max(g[ok])),
                 grandeur_p50=float(np.median(g[ok])), date=time.strftime('%Y-%m-%d'), outil='pipeline/natif/sources_bandes.py')
     js = json.dumps(meta, ensure_ascii=False).encode('utf-8')
-    dest = os.path.join(sortie, f'sources_{c["bande"]}.bin')
+    dest = os.path.join(sortie, f'sources_{nom}.bin')
     with open(dest + '.part', 'wb') as f:
         f.write(b'UNIVSRC1')
         f.write(struct.pack('<IIII', n, len(js), 0, 0))
@@ -152,6 +190,11 @@ def main():
                 print(f'  {cherche:9s} : {noms[i] if noms else i} ({a}), ra {math.degrees(ra[i]):.3f}°, dec {math.degrees(de[i]):.3f}°, '
                       f'{g[i]:.3g} {c["unite"]}, classe {cl[i]!r}')
                 break
+    if nom == 'erass1cl':      # contrôle : quelques amas connus de la moitié ouest (Coma n'y est pas : l = 58°)
+        for nm, r0, d0 in (('Virgo (M87)', 187.706, 12.391), ('Fornax (NGC 1399)', 54.621, -35.450), ('Abell 3627 (Norma)', 243.894, -60.866)):
+            dd = np.degrees(np.arccos(np.clip(np.sin(de) * math.sin(math.radians(d0)) + np.cos(de) * math.cos(math.radians(d0)) * np.cos(ra - math.radians(r0)), -1, 1)))
+            i = int(np.argmin(dd))
+            print(f'  {nm:20s} : plus proche à {dd[i]:.2f}°, z = {g[i]:.4f}')
     print(f'Écrit {dest} : {n} sources ; ' + ', '.join(f'{k} {v}' for k, v in comptes.items()))
 
 

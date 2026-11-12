@@ -1,7 +1,7 @@
 #version 450
 /* Sources d'un catalogue de la bande (ciel_bandes.h) : un cercle par source, à sa direction mesurée (équatorial ICRS),
    vue depuis le Soleil comme la carte. Taille selon la grandeur mesurée (flux), rapportée à la médiane du catalogue :
-   +3 pixels par facteur 10. Couleur selon la nature donnée par l'équipe du catalogue. */
+   +3 pixels par facteur 10 (ou taille fixe quand la grandeur n'est pas un flux). Couleur selon la nature donnée par l'équipe du catalogue. */
 layout(std140, set = 0, binding = 0) uniform U {
     vec4 right, up, fwd, scale, grid, eqRight, eqUp, eqFwd, proj;
 } u;
@@ -17,6 +17,6 @@ void main() {
     float y = -dot(q.d.xyz, u.eqUp.xyz) / z * u.proj.y;
     gl_Position = vec4(x, y, 0.5, 1.0);
     float rel = log(max(q.d.w, 1e-38) / u.proj.w) / log(10.0);
-    gl_PointSize = clamp(7.0 + 3.0 * rel, 5.0, 24.0) * u.grid.w;
+    gl_PointSize = (u.proj.z > 0.5 ? 8.0 : clamp(7.0 + 3.0 * rel, 5.0, 24.0)) * u.grid.w;
     vCol = COL[min(q.m.x, 4u)] * u.scale.w;
 }

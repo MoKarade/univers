@@ -31,7 +31,8 @@ struct SkySourcesInfo {
     std::string label, reference, quantity, unit;
     std::vector<std::pair<std::string, int>> groups;      // nom du groupe, nombre de sources
     uint32_t count = 0;
-    double median = 0;
+    double median = 0, minimum = 0, maximum = 0;
+    bool fixedSize = false;      // tous les cercles de même taille (la grandeur n'est pas un éclat, par exemple un décalage vers le rouge)
 };
 
 // Fiche d'une bande, lue dans le JSON du fichier. Les textes sont ceux du script : source, mesure, unité, référence.
@@ -207,30 +208,45 @@ public:
         return true;
     }
 
-    // Catalogue de sources de la même famille de bande, dans le même dossier : sources_<bande>.bin (facultatif).
+    // Catalogue de sources fait pour cette carte, dans le même dossier : un fichier sources_*.bin dont la fiche nomme la
+    // carte dans « cartes » (facultatif ; le premier trouvé).
     void loadSources(const Gpu& g, const std::string& mapPath) {
         if (srcCount_) destroy(g, src_);
         srcCount_ = 0;
         sources = SkySourcesInfo{};
-        const std::string dir = std::filesystem::path(mapPath).parent_path().string();
-        std::ifstream f(dir + "/sources_" + info.band + ".bin", std::ios::binary);
-        if (!f) return;
+        const std::filesystem::path dir = std::filesystem::path(mapPath).parent_path();
+        std::error_code ec;
+        for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+            const std::string name = e.path().filename().string();
+            if (name.rfind("sources_", 0) != 0 || e.path().extension() != ".bin") continue;
+            if (readSources(g, e.path().string())) return;
+        }
+    }
+
+    bool readSources(const Gpu& g, const std::string& path) {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) return false;
         char magic[8];
         uint32_t h[4];
         f.read(magic, 8);
         f.read(reinterpret_cast<char*>(h), sizeof(h));
-        if (!f || std::memcmp(magic, "UNIVSRC1", 8) != 0 || h[0] == 0) return;
+        if (!f || std::memcmp(magic, "UNIVSRC1", 8) != 0 || h[0] == 0) return false;
         std::string js(h[1], '\0');
         f.read(js.data(), h[1]);
+        const size_t cp = js.find("\"cartes\": [");
+        if (cp == std::string::npos || js.find("\"" + info.key + "\"", cp) > js.find(']', cp)) return false;
         f.seekg(static_cast<std::streamoff>((24 + h[1] + 15) / 16 * 16));
         std::vector<uint32_t> rec(static_cast<size_t>(h[0]) * 8);
         f.read(reinterpret_cast<char*>(rec.data()), static_cast<std::streamsize>(rec.size() * 4));
-        if (!f) return;
+        if (!f) return false;
         sources.label = jsonString(js, "libelle");
         sources.reference = jsonString(js, "reference");
         sources.quantity = jsonString(js, "grandeur");
         sources.unit = jsonString(js, "unite");
         sources.median = jsonNumber(js, "grandeur_p50", 1.0);
+        sources.minimum = jsonNumber(js, "grandeur_min");
+        sources.maximum = jsonNumber(js, "grandeur_max");
+        sources.fixedSize = jsonString(js, "taille") == "fixe";
         sources.count = h[0];
         const size_t gp = js.find("\"groupes\": [");
         if (gp != std::string::npos) {      // noms des groupes, dans l'ordre des numéros, puis leurs nombres dans « comptes »
@@ -247,6 +263,7 @@ public:
         }
         src_ = uploadStorage(g, rec.data(), rec.size() * 4);
         srcCount_ = h[0];
+        return true;
     }
 
     void writeSets(const Gpu& g, VkDeviceSize mapBytes) {
@@ -300,8 +317,12 @@ public:
         l.push_back(b);
         if (sources.count) {
             static const char* colors[] = {"blanc", "cyan", "vert", "rose", "bleu"};
-            std::snprintf(b, sizeof b, "Cercles : %u sources, %s (%s) ; taille selon le %s. Direction mesurée, distance non montrée.",
-                          sources.count, sources.label.c_str(), sources.reference.c_str(), sources.quantity.c_str());
+            if (sources.fixedSize)
+                std::snprintf(b, sizeof b, "Cercles : %u sources, %s (%s) ; %s mesuré de %.3g à %.3g. Direction mesurée, distance non montrée ici.",
+                              sources.count, sources.label.c_str(), sources.reference.c_str(), sources.quantity.c_str(), sources.minimum, sources.maximum);
+            else
+                std::snprintf(b, sizeof b, "Cercles : %u sources, %s (%s) ; taille selon le %s. Direction mesurée, distance non montrée.",
+                              sources.count, sources.label.c_str(), sources.reference.c_str(), sources.quantity.c_str());
             l.push_back(b);
             std::string g;
             for (size_t k = 0; k < sources.groups.size() && k < 5; ++k) {
@@ -362,6 +383,7 @@ public:
         }
         u.proj[0] = static_cast<float>(1.0 / (cam.tanHalf * cam.aspect));
         u.proj[1] = static_cast<float>(1.0 / cam.tanHalf);
+        u.proj[2] = sources.fixedSize ? 1.0f : 0.0f;
         u.proj[3] = static_cast<float>(sources.median > 0 ? sources.median : 1.0);
         u.grid[3] = static_cast<float>(height / 1080.0);
         std::memcpy(mapped_[ring_], &u, sizeof(u));
