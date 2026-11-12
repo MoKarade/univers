@@ -2,10 +2,12 @@
 // Dessine une image hors écran, mesure la cadence, écrit l'image (PPM) et compte les étoiles dessinées.
 //
 //   essai_gaia <gaia.bin> <etoiles.bin> <image.ppm> [--camera x,y,z] [--vers x,y,z] [--images n] [--flux-min f]
-//              [--champ degres] [--taille LxH] [--expo e] [--date annees depuis J2000]
+//              [--champ degres] [--taille LxH] [--expo e] [--date annees depuis J2000] [--voie-lactee voie_lactee.bin]
+// gaia.bin peut valoir « - » : sans étoiles Gaia (catalogue de la page complet).
 // Positions en années-lumière, repère écliptique J2000 centré sur le Soleil.
 #include "commun.h"
 #include "gaia.h"
+#include "voie_lactee.h"
 
 namespace {
 Vec3 parseVec(const char* s) {
@@ -23,7 +25,8 @@ int main(int argc, char** argv) {
     double fov = 60.0, years = 26.0;
     uint32_t width = 1920, height = 1080;
     bool toSet = false;
-    for (int i = 4; i < argc; ++i) {
+    std::string mwPath;
+    for (int i = 4; i + 1 < argc; i += 2) {
         const std::string k = argv[i];
         const char* v = i + 1 < argc ? argv[i + 1] : "";
         if (k == "--camera") eye = parseVec(v);
@@ -34,8 +37,8 @@ int main(int argc, char** argv) {
         else if (k == "--taille") std::sscanf(v, "%ux%u", &width, &height);
         else if (k == "--expo") exposure = static_cast<float>(std::atof(v));
         else if (k == "--date") years = std::atof(v);
+        else if (k == "--voie-lactee") mwPath = v;
         else fail("option inconnue : " + k);
-        ++i;
     }
     if (!toSet) {      // par défaut : vers le centre galactique (l = 0, b = 0), d'après la direction connue en écliptique
         const double lam = 266.8517 * kPi / 180.0, bet = -5.6077 * kPi / 180.0;      // Sgr A* (ICRS 17 h 45 min 40,04 s, -29° 00′ 28,1″) tourné en écliptique J2000
@@ -45,12 +48,15 @@ int main(int argc, char** argv) {
     GaiaRenderer gaia;
     gaia.fluxMin = fluxMin;
     auto t0 = std::chrono::steady_clock::now();
-    if (!gaia.create(g, argv[1], HdrTarget::kFormat)) fail("gaia.bin absent, incomplet ou trop grand pour un tampon");
+    const bool withGaia = std::string(argv[1]) != "-";
+    if (withGaia && !gaia.create(g, argv[1], HdrTarget::kFormat)) fail("gaia.bin absent, incomplet ou trop grand pour un tampon");
+    MilkyWayRenderer mw;
+    if (!mwPath.empty() && !mw.create(g, mwPath, HdrTarget::kFormat)) fail("voie_lactee.bin absent ou illisible");
     std::printf("gaia : %llu etoiles chargees en %.1f s\n", static_cast<unsigned long long>(gaia.count),
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
     const Stars stars = openStars(argv[2]);
     StarRenderer sr;
-    sr.create(g, stars, HdrTarget::kFormat, true);
+    sr.create(g, stars, HdrTarget::kFormat, withGaia);
     std::printf("catalogue principal : %u etoiles (avec le Soleil)\n", sr.count);
 
     HdrTarget target;
@@ -75,6 +81,7 @@ int main(int argc, char** argv) {
         ri.colorAttachmentCount = 1;
         ri.pColorAttachments = &color;
         vkCmdBeginRendering(cmd, &ri);
+        mw.draw(cmd, cam, width, height, exposure, years);
         gaia.draw(cmd, cam, width, height, exposure, years);
         sr.draw(cmd, pc, width, height);
         vkCmdEndRendering(cmd);
@@ -121,5 +128,6 @@ int main(int argc, char** argv) {
     target.release(g);
     sr.release(g);
     gaia.release(g);
+    mw.release(g);
     return 0;
 }
