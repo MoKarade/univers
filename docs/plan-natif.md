@@ -104,3 +104,30 @@ charges demande à Vulkan [Certain : lu par le programme].
 - Pas fait : la fenêtre et la caméra libre, le mouvement propre (vitesses déjà dans le fichier), la poussière,
   les étoiles frôleuses éteintes en double (`isPasser`).
 - Durée mesurée : N0 et N1 hors écran, de la décision de Marc à ce point, environ 30 minutes de travail (14 h 10 à 14 h 37 UTC).
+
+## Décision de Marc, 12 novembre 2026, 15 h 06 UTC : tout réécrire en natif (chemin 2)
+
+Marc a rejeté la fenêtre d'étoiles (« je veux un vrai simulateur comme la version en ligne mais beaucoup plus
+précis ») puis choisi, entre « le simulateur de la page dans une fenêtre PC d'abord » (recommandé) et « tout réécrire
+pour le PC », le second. Dit à Marc : environ dix fois le travail du 12 novembre avant d'égaler la page (600 ko de
+code dans la page, 60 ko écrits ce jour-là), durée inconnue. La page en ligne continue de vivre à côté.
+
+Étapes, chacune visible dans « Univers PC » (elles remplacent N2 et N3) :
+
+| Étape | Ce que Marc voit | Reprend de la page |
+|---|---|---|
+| E1. Socle | Zoom continu du Soleil aux étoiles autour de l'objet choisi, temps qui défile (pause, vitesses, date), recherche, fiche de l'objet, noms à l'écran, étoiles qui se déplacent | `60_app.js` (navigation, temps, fiches), mouvements propres |
+| E2. Système solaire | Soleil, planètes et Lune à leur place à toute date, orbites, surfaces, lunes | `20_physics.js`, `21_nbody.js`, `gen/ephem.js`, textures |
+| E3. Petits corps et sondes | 123 530 astéroïdes, comètes, 5 sondes et leurs survols | `22_smallbody.js`, tuiles `a1`, `data10.js` |
+| E4. Galaxies | 5,57 millions de galaxies et quasars, Groupe local, photos, Voie lactée | tuiles `g1` à `g3`, `data3/4/14.js` |
+| E5. Temps profond | Orbites des étoiles dans la Galaxie, vie du Soleil, avenir lointain | `25_future.js`, `26_orbits.js` |
+| E6. Fusion avec Andromède | Le calcul à 3 millions de particules, toutes affichées | A1 (en cours), `fusion.json` |
+| E7. Cosmologie | Expansion, énergie noire réglable recalculée en direct, cône de lumière, fond diffus | `20_physics.js`, `29_cone.js`, `data19.js` |
+| E8. Trous noirs et poussière | Lumière déviée (avec rotation), poussière mesurée en 3D | `27_lens.js`, `28_dust.js` |
+| E9. Infiniment petit | Du mètre au proton | `initMicro`, `water_qm.js`, `proton_pdf.js` |
+| E10. Frise et événements | Les 190 événements, éclipses, passages | `EV_RAW`, `23_events.js` |
+
+Règles : chaque calcul porté de la page garde ses contrôles (mêmes références NASA et JPL que `app/test`). Interface :
+Dear ImGui (demandé par le cahier des charges), habillée aux couleurs de la page, tout expliqué à l'écran (Marc ne
+lit pas les commandes dans le chat ; la molette est un zoom). Contrôle sans fenêtre visible : l'appli rend son image
+finale, interface comprise, dans un fichier (`--fenetre-test`), relu à l'œil et par des mesures.
