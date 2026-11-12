@@ -12,6 +12,7 @@ Rien n'est inventé : le rapport masse/lumière et l'indice de couleur B−V de 
 (clés numériques « masse_lumiere » : {galaxie: valeur}, « magnitude_soleil » : valeur de la même bande,
 « bv » : {galaxie: valeur}, avec leurs sources en texte à côté). Tant que le fil physique ne les a pas fournies, le
 fichier est écrit avec « physique = 0 » (l'appli garde un éclat d'affichage fixe et le dit) et sans teinte (blanc).
+Les particules de matière noire (composante 0, si le calcul les garde) reçoivent la magnitude 99 : aucune lumière.
 Les étoiles sont rangées par galaxie (fusion.json, « affichees » : MW, M31, M33, LMC) ; composantes.bin dit disque (1)
 ou bulbe (2).
 
@@ -57,6 +58,9 @@ def main() -> None:
             m = np.array([masses[g].get(COMPOSANTE.get(int(k), 'disque'), masses[g]['disque']) for k in (1, 2)])
             mass = np.where(comp[sl] == 2, m[1], m[0])
             mag[sl] = float(sun) - 2.5 * np.log10(mass / float(ml[g]))
+        halo = np.nonzero(comp[sl] == 0)[0] + sl.start      # matière noire (composante 0) : aucune lumière
+        mag[halo] = 99.0
+        bv[halo] = np.nan
     with open(os.path.join(d, 'particules.bin'), 'wb') as f:
         head = b'UNIVFPT1' + np.array([n, physique], '<u4').tobytes()
         f.write(head + b'\0' * (64 - len(head)))
