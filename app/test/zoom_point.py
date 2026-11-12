@@ -4,7 +4,9 @@
 Sans objet touché, la molette vise le point sous le curseur. On se place dans la vue « Étoiles proches », on choisit
 l'étoile nommée la plus proche de 30 % de la largeur depuis le bord gauche, on pose le curseur dessus, puis on zoome
 de deux puissances de dix vers l'avant, puis vers l'arrière, avec la vraie molette (crans d'un dixième de puissance).
-Après chaque cran, l'étoile doit rester sous le curseur à 3 px près. Ensuite « Accueil » doit annuler le décalage.
+Après chaque cran vers l'avant, l'étoile doit rester sous le curseur à 3 px près. Vers l'arrière, le zoom reste centré :
+le décalage ne change pas (retour de Marc du 12/11/2026 : « ça zoome ou dézoome au milieu de rien »). Ensuite « Accueil »
+doit annuler le décalage. Enfin, zoomer au-dessus d'un ciel sans objet à 40 px ne crée aucun décalage.
 
 Témoin : U_URL=<page construite depuis main avant R3> doit échouer (l'étoile glisse hors du curseur).
 Lancer : python3 app/build.py puis python3 app/test/zoom_point.py   (PYTHONIOENCODING=utf-8 sous Windows)
@@ -46,16 +48,21 @@ def main():
         cx, cy = st['x'], st['y']
         pg.mouse.move(cx, cy)
         for sens, mot in ((-1, 'avance'), (+1, 'recul ')):
-            worst, l0 = 0.0, pg.evaluate('__U.S.logR')
+            worst, l0, z0 = 0.0, pg.evaluate('__U.S.logR'), pg.evaluate('JSON.stringify(__U.S.zoff)')
             for _ in range(N):
                 pg.mouse.wheel(0, sens * WHEEL); frames(pg, 1)
                 m = pg.evaluate(WHERE)
                 if not m: worst = 999; break
                 worst = max(worst, abs(m['x'] - cx), abs(m['y'] - cy))
             l1 = pg.evaluate('__U.S.logR')
-            ok = worst <= LIMIT_PX and abs(abs(l1 - l0) - N * STEP) < 0.02
+            if sens < 0:
+                ok = worst <= LIMIT_PX and abs(abs(l1 - l0) - N * STEP) < 0.02
+                print(f"{'PASSE' if ok else 'ÉCHEC'}  {mot} 10^{l0:.2f} → 10^{l1:.2f} m : l'étoile s'écarte du curseur de {worst:.1f} px au pire (limite {LIMIT_PX:.0f})")
+            else:
+                same = pg.evaluate('JSON.stringify(__U.S.zoff)') == z0
+                ok = same and abs(abs(l1 - l0) - N * STEP) < 0.02
+                print(f"{'PASSE' if ok else 'ÉCHEC'}  {mot} 10^{l0:.2f} → 10^{l1:.2f} m : zoom centré, décalage {'inchangé' if same else 'modifié'}")
             bad += 0 if ok else 1
-            print(f"{'PASSE' if ok else 'ÉCHEC'}  {mot} 10^{l0:.2f} → 10^{l1:.2f} m : l'étoile s'écarte du curseur de {worst:.1f} px au pire (limite {LIMIT_PX:.0f})")
         if pg.evaluate("typeof __U.zoffReset === 'function'"):
             pg.mouse.wheel(0, -5 * WHEEL); frames(pg, 2)
             had = pg.evaluate('!!__U.S.zoff')
@@ -67,13 +74,14 @@ def main():
             pg.evaluate("__U.focusBody('earth')"); pg.wait_for_function('!__U.S.anim', timeout=180000); frames(pg, 3)
             pg.evaluate("__U.S.anim = null; __U.S.logR = 15.0"); frames(pg, 2)
             pg.mouse.move(W * 0.62, H * 0.35)      # hors de la fiche (à gauche) et des noms
-            for _ in range(5): pg.mouse.wheel(0, 2 * WHEEL); frames(pg, 1)
+            near = pg.evaluate(f"(() => {{ const p = __U.pickAt({W * 0.62}, {H * 0.35}, true), sc = [0, 0, 0]; return !!p && __U.Rr.project(p, __U.F, sc) && Math.hypot(sc[0] - {W * 0.62}, sc[1] - {H * 0.35}) < 40; }})()")
+            for _ in range(5): pg.mouse.wheel(0, -2 * WHEEL); frames(pg, 1)
             had = pg.evaluate('!!__U.S.zoff')
             pg.evaluate("__U.goTo(9, { noHist: true, instant: true })"); frames(pg, 2); pg.wait_for_timeout(1500); frames(pg, 2)
             m = pg.evaluate("""(() => { const U = __U, sc = [0, 0, 0]; return U.Rr.project(U.bodyPosM('earth'), U.F, sc) ? Math.hypot(sc[0] - U.Rr.cssW / 2, sc[1] - U.Rr.cssH / 2) : 9999; })()""")
-            ok = had and m < 3
+            ok = m < 3 and (near or not had)
             bad += 0 if ok else 1
-            print(f"{'PASSE' if ok else 'ÉCHEC'}  Terre suivie, recul vers un point puis retour à 10^9 m : Terre à {m:.1f} px du centre (décalage créé : {'oui' if had else 'non'})")
+            print(f"{'PASSE' if ok else 'ÉCHEC'}  Terre suivie, avance au-dessus du ciel ({'objet' if near else 'aucun objet'} à 40 px) puis retour à 10^9 m : Terre à {m:.1f} px du centre (décalage créé : {'oui' if had else 'non'})")
         b.close()
     print('zoom-point :', 'PASSE' if bad == 0 else f'ÉCHEC ({bad})')
     sys.exit(1 if bad else 0)
