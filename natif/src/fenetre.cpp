@@ -11,10 +11,12 @@
 #include "asteroides.h"
 #include "fenetre.h"
 #include "fusion_points.h"
+#include "gaia.h"
 #include "galaxies.h"
 #include "interface.h"
 #include "points_planetes.h"
 #include "spheres.h"
+#include "voie_lactee.h"
 #include "rendu_fenetre.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -193,8 +195,16 @@ int runWindow(const WindowOptions& opt) {
         if (input.quit) return 0;
         Sleep(50);
     }
+    // Étoiles Gaia (98 millions) et Voie lactée en volume (fil « Voie lactée et étoiles Gaia ») : facultatifs. Quand Gaia est
+    // là, le dessin d'origine ne garde que le catalogue principal (Gaia en a retiré les doublons).
+    GaiaRenderer gaia;
+    const bool gaiaOk = gaia.create(g, dataDir + "/gaia.bin", HdrTarget::kFormat);
+    MilkyWayRenderer milkyWay;
+    milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
+    sim.hasGaia = gaiaOk;
+    sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
-    sr.create(g, stars, HdrTarget::kFormat);
+    sr.create(g, stars, HdrTarget::kFormat, gaiaOk);
     PlanetPoints planets;
     planets.create(g);
     GalaxyFile galaxyFile;
@@ -377,6 +387,10 @@ int runWindow(const WindowOptions& opt) {
                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, hdr.view, sc.extent);
         galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
+        if (!sim.deepTime()) {      // état mesuré : montré à moins de 3 millions d'années d'aujourd'hui
+            milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
+            gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
+        }
         if (!sim.deepTime()) sr.draw(cmd, pc, sc.extent.width, sc.extent.height);      // étoiles mesurées : à moins de 3 millions d'années d'aujourd'hui
         if (fusionPoints.count) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
@@ -464,6 +478,8 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     planets.release(g);
+    gaia.release(g);
+    milkyWay.release(g);
     fusionPoints.release(g);
     asteroids.release(g);
     galaxies.release(g);

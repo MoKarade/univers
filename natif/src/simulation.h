@@ -311,6 +311,7 @@ struct Sim {
     // la fin du calcul de la fusion), seules les galaxies dont le mouvement est calculé sont montrées : celles du calcul
     // complet de la rencontre avec Andromède (phys::fusion::Rejeu). Le repère reste celui d'aujourd'hui, attaché au centre
     // de la Voie lactée : l'origine est l'endroit où se trouve le Soleil aujourd'hui par rapport à ce centre.
+    bool hasGaia = false, hasMilkyWay = false;      // catalogue Gaia et Voie lactée en volume chargés (pour les textes de l'interface)
     const phys::fusion::Rejeu* replay = nullptr;
     // Indicateur de complétude et de précision par échelle (completude.h), calculé une fois au chargement ; nul avant.
     const std::array<completude::Echelle, 5>* completeness = nullptr;
