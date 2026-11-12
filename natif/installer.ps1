@@ -32,7 +32,7 @@ foreach ($f in 'etoiles.bin', 'etoiles.json', 'etoiles_noms.tsv', 'galaxies.bin'
 # Éphémérides de la NASA (JPL DE440), téléchargées du NAIF : 114 Mo, lues telles quelles par le simulateur.
 if (Test-Path "$Ephem") { Copier-SiChange "$Ephem" "$Cible\de440.bsp" }
 # Éphémérides des lunes (NAIF), si elles ont été téléchargées à côté de celles des planètes.
-foreach ($f in 'mar099s.bsp', 'jup365.bsp', 'sat441.bsp', 'nep097.bsp', 'plu060.bsp') {
+foreach ($f in 'mar099s.bsp', 'jup365.bsp', 'sat441.bsp', 'nep097.bsp', 'plu060.bsp', 'ura184_part-3.bsp', 'ura116xl.bsp', 'sat415.bsp', 'nep104.bsp', 'nep105.bsp', 'jup347.bsp', 'jup348.bsp', 'jup349.bsp', 'sat455.bsp', 'sat456.bsp', 'sat457.bsp', 'sat459.bsp') {
     $src = Join-Path (Split-Path $Ephem) $f
     if (Test-Path $src) { Copier-SiChange $src "$Cible\$f" }
 }

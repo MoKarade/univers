@@ -44,9 +44,18 @@ struct Catalogue {
     std::string label(size_t k) const {
         const std::string& t = names[k];
         const size_t cut = t.find('~');
-        const std::string name = t.substr(0, cut), id = cut == std::string::npos ? "" : t.substr(cut + 1);
+        const std::string name = t.substr(0, cut);
+        std::string id = cut == std::string::npos ? "" : t.substr(cut + 1);
+        const bool comet = isComet(k);
+        if (comet) id.resize(id.size() - 2);      // retire « ~c »
+        if (comet) return name.empty() ? "Comète " + id : id + "/" + name;      // « 1P/Halley », comme les astronomes
         if (name.empty()) return id.empty() ? "Astéroïde" : "Astéroïde " + id;
         return id.empty() ? name : name + " (" + id + ")";
+    }
+    // Comète : sa ligne de nom finit par « ~c » (asteroides_jpl.py).
+    bool isComet(size_t k) const {
+        const std::string& t = names[k];
+        return t.size() >= 2 && t[t.size() - 2] == '~' && t[t.size() - 1] == 'c';
     }
     double magnitudeH(size_t k) const { return cols[9][k]; }
     double semiMajorAxisAu(size_t k) const {      // n = k_Gauss / a^1,5

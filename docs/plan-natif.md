@@ -289,3 +289,11 @@ des sources Gaia à distance moins sûre (fil Gaia), texte qui dit à chaque éc
 - Fait : `pipeline/natif/asteroides_jpl.py` télécharge la base complète du JPL (Small-Body Database) : 1 580 289 astéroïdes écrits sur 1 580 297 (8 écartés, orbite non elliptique), 63,2 Mo, même format.
 - Contrôle (`--controle`) : 10 corps comparés à JPL Horizons, tous sous 0,002 UA (dont Cérès, Pallas, Vesta, Hygie).
 - Affichage : les points se fondent en anneau dès 2,5 fois la distance Terre-Soleil (au lieu de 8), sinon la ceinture blanchissait. Clic : le calcul d'orbite s'arrête dès qu'il est exact.
+
+## Lunes : toutes celles dont la NASA publie la trajectoire (12 novembre 2026)
+
+- Fait : `pipeline/natif/lunes_toutes.py` liste les lunes présentes dans les fichiers de la NASA (NAIF) : 437 lunes (Mars 2, Jupiter 116, Saturne 290, Uranus 15, Neptune 9, Pluton 5), au lieu de 20. Fichiers ajoutés : jup347, jup348, jup349, sat415, sat455, sat456, sat457, sat459, ura184_part-3, ura116xl, nep104, nep105 (environ 3,9 Go).
+- Rayon : mesuré pour 53 lunes (table du JPL, sinon pck00011) ; non mesuré pour 384, qui restent des points (rayon 0 dans lunes.tsv, rien d'inventé).
+- Doublons : une lune présente sous deux codes (provisoire et définitif) n'est chargée qu'une fois (moins de 1 000 km d'écart).
+- Contrôle (ref_lunes_petites.txt, JPL Horizons) : Himalia, Ananke, Phoebe, S/2003 J 2, S/2004 S 31, S/2023 S 62 : écart nul ; Titania, Miranda, Sycorax : 1 225 km, le même pour les trois (centre de masse d'Uranus de de440.bsp contre celui de Horizons), Néréide 290 km (même cause).
+- Manquent encore : les petites lunes intérieures d'Uranus (ura184 parties 1 et 2, 3,8 Go) et de Neptune (nep098, 4,2 Go).

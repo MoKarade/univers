@@ -104,7 +104,9 @@ int runWindow(const WindowOptions& opt) {
     std::string spkError;
     const bool hasSpk = spk.add(dataDir + "/de440.bsp", spkError);      // absent : le simulateur le dit à l'écran et montre les étoiles
     if (hasSpk)      // lunes : chaque fichier présent ajoute les siennes ; un fichier absent ne bloque rien
-        for (const char* f : {"mar099s.bsp", "jup365.bsp", "sat441.bsp", "nep097.bsp", "plu060.bsp"}) {
+        for (const char* f : {"mar099s.bsp", "jup365.bsp", "sat441.bsp", "nep097.bsp", "plu060.bsp",      // grandes lunes
+                              "ura184_part-3.bsp", "ura116xl.bsp", "sat415.bsp", "nep104.bsp", "nep105.bsp",      // lunes d'Uranus, petites lunes proches
+                              "jup347.bsp", "jup348.bsp", "jup349.bsp", "sat455.bsp", "sat456.bsp", "sat457.bsp", "sat459.bsp"}) {      // lunes lointaines
             std::string ignored;
             spk.add(dataDir + "/" + f, ignored);
         }

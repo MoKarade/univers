@@ -172,6 +172,16 @@ struct Sim {
                 if (parent < 0 || !planetAt(code, years, a) || !planetAt(bodies[static_cast<size_t>(parent)].posNaif, years, pa) ||
                     !planetAt(code, years + step, b2) || !planetAt(bodies[static_cast<size_t>(parent)].posNaif, years + step, pb))
                     continue;      // fichier d'éphémérides de cette lune absent : elle n'est pas montrée
+                // Une même lune peut figurer deux fois dans les fichiers de la NASA (code provisoire, puis code définitif) :
+                // si une lune déjà chargée de la même planète est à moins de 1 000 km, c'est elle, on ne la double pas.
+                bool twin = false;
+                for (size_t j = 0; j < bodies.size() && !twin; ++j) {
+                    Vec3 o;
+                    if (bodies[j].kind != Kind::Planet || bodies[j].parent != parent || !planetAt(bodies[j].posNaif, years, o)) continue;
+                    const Vec3 gap = o - a;
+                    twin = std::sqrt(dot(gap, gap)) * kLyInKm < 1000.0;
+                }
+                if (twin) continue;
                 Body m;
                 m.name = name;
                 m.kind = Kind::Planet;
@@ -487,6 +497,7 @@ struct Sim {
         double arrive = 50.0;                                                 // étoile : on garde ou on se rapproche à 50 années-lumière
         if (b.kind == Kind::Sun) arrive = 45.0 * kAuInLy;
         if (b.kind == Kind::Planet) arrive = 6.0 * b.radiusKm / kLyInKm;      // planète ou lune : elle remplit un bon tiers de l'écran
+        if (b.kind == Kind::Planet && b.radiusKm <= 0) arrive = 1.0e6 / kLyInKm;      // lune de rayon non mesuré (un point) : à un million de km
         if (b.kind == Kind::Asteroid) arrive = 0.05 * kAuInLy;                // astéroïde (un point) : on voit ses voisins de la ceinture
         if (b.kind == Kind::Probe) arrive = 3.0e6 / kLyInKm;                  // sonde (un point) : on voit son voisinage, à 3 millions de km
         double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
@@ -611,6 +622,7 @@ struct Sim {
         if (!asteroidCat || asteroidBody < 0 || k < 0 || static_cast<uint64_t>(k) >= asteroidCat->n) return -1;
         asteroidSel = k;
         bodies[static_cast<size_t>(asteroidBody)].name = asteroidCat->label(static_cast<size_t>(k));
+        bodies[static_cast<size_t>(asteroidBody)].natureText = asteroidCat->isComet(static_cast<size_t>(k)) ? "comète" : "astéroïde";
         refreshEphemeris();
         return asteroidBody;
     }
