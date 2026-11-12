@@ -89,7 +89,9 @@ struct Comptes {
     bool voisinageGaia = false;        // gaia.bin lu près du Soleil (ce que l'appli dessine quand Gaia est chargé)
     uint64_t gaia10pc = 0, gaia10pcVitesseRadiale = 0;      // étoiles de gaia.bin à moins de 10 pc, dont vitesse radiale mesurée
     uint64_t doublons10pc = 0;         // paires de deux catalogues différents à moins de kDoublonLy
-    uint64_t principalSansVitesseRadiale = 0;      // composante radiale nulle (< 0,2 km/s) : vitesse radiale non mesurée
+    uint64_t principalSansVitesseRadiale = 0;      // catalogue principal : vitesse radiale non mesurée
+    bool sansVitesseRadialeLu = false; // true : nombre lu dans etoiles_sans_vr.txt (exact) ; false : repéré par la composante
+                                       // radiale nulle (< 0,2 km/s) dans etoiles.bin (ancien fichier, approché)
     int galaxiesGroupeLocal = 0;       // galaxies nommées à moins de 1 Mpc du Soleil
     uint64_t galaxiesReleves = 0;      // galaxies et quasars des relevés (galaxies.bin)
 };
@@ -230,10 +232,22 @@ inline Comptes lireGaiaVoisinage(Comptes c, const std::string& chemin) {
 }
 
 // etoilesGaia : nombre d'étoiles de gaia.bin (GaiaRenderer::count) ; pris seulement si sim.hasGaia.
+// etoiles_sans_vr.txt (pipeline/natif/etoiles_hyg.py), à côté de etoiles.bin : une ligne, le nombre exact d'étoiles du
+// catalogue principal sans vitesse radiale mesurée (ni HYG ni SIMBAD). Rend c inchangé si le fichier manque.
+inline Comptes lireSansVitesseRadiale(Comptes c, const std::string& chemin) {
+    std::ifstream f(chemin);
+    unsigned long long n = 0;
+    if (!(f >> n)) return c;
+    c.principalSansVitesseRadiale = n;
+    c.sansVitesseRadialeLu = true;
+    return c;
+}
+
 // fichierGaia : chemin de gaia.bin quand gaia.h l'a chargé ; vide sinon (le voisinage est alors compté dans etoiles.bin).
 // fichierAgrege : chemin de gaia_agrege.bin quand gaia.h l'a chargé (GaiaRenderer::cellCount > 0) ; vide sinon.
 template <class SimT>
-Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia = 0, const std::string& fichierAgrege = "", const std::string& fichierGaia = "") {
+Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia = 0, const std::string& fichierAgrege = "", const std::string& fichierGaia = "",
+                const std::string& dossierDonnees = "") {
     Comptes c;
     c.etoilesGaia = sim.hasGaia ? etoilesGaia : 0;
     c.voieLactee = sim.hasMilkyWay;
@@ -269,6 +283,7 @@ Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia 
         const auto* s = sim.stars;
         c = compterEtoiles(c, s->x(), s->y(), s->z(), s->vel(0), s->vel(1), s->vel(2), s->n, parCatalogue);
     }
+    if (!dossierDonnees.empty()) c = lireSansVitesseRadiale(c, dossierDonnees + "/etoiles_sans_vr.txt");      // après le comptage d'etoiles.bin
     return c;
 }
 
@@ -364,6 +379,15 @@ inline Echelle systemeSolaire(const Comptes& c) {
     return e;
 }
 
+// Étoiles du catalogue principal sans vitesse radiale mesurée (leur mouvement le long de la ligne de visée est compté nul).
+inline Ligne ligneSansVitesseRadiale(const Comptes& c) {
+    if (c.sansVitesseRadialeLu)
+        return {"Vitesse radiale absente (mise à zéro), catalogue principal", sur(double(c.principalSansVitesseRadiale), double(c.etoilesCatalogue[0])),
+                Nature::Mesure, "etoiles_sans_vr.txt : ni HYG v4.1 ni SIMBAD n'en ont (pipeline/natif/etoiles_hyg.py)"};
+    return {"Vitesse radiale absente (mise à zéro), catalogue principal", entier(double(c.principalSansVitesseRadiale)) + " (repérées, nombre approché)",
+            Nature::Calcule, "composante radiale < 0,2 km/s dans etoiles.bin (etoiles_sans_vr.txt absent)"};
+}
+
 // Avec gaia.bin : ce qui est dessiné, c'est le catalogue principal (dont Gaia a retiré ses copies : même direction à 40″,
 // magnitude à 2 près) et les étoiles de gaia.bin. Sans lui : etoiles.bin, doublons entre catalogues repérés à 0,02 al.
 inline Echelle voisinageGaia(const Comptes& c) {
@@ -383,8 +407,8 @@ inline Echelle voisinageGaia(const Comptes& c) {
         {"Étoiles du catalogue principal à moins de 10 pc", entier(double(principal)), Nature::Mesure, "etoiles.bin (HYG ; copies Gaia retirées)"},
         {"Objets connus à moins de 10 pc", entier(kObjets10pc) + " étoiles, naines brunes et exoplanètes", Nature::Mesure, "Reylé et al. 2021, A&A 650, A201"},
         {"Vitesse radiale mesurée (Gaia)", sur(double(c.gaia10pcVitesseRadiale), double(c.gaia10pc)), Nature::Mesure, "drapeau de gaia.bin"},
-        {"Vitesse radiale absente (mise à zéro)", entier(double(sansVr)) + " étoiles Gaia ; catalogue principal : voir la Voie lactée", Nature::Inconnu,
-         "drapeau de gaia.bin"},
+        {"Vitesse radiale absente (mise à zéro), Gaia", entier(double(sansVr)) + " étoiles", Nature::Mesure, "drapeau de gaia.bin"},
+        ligneSansVitesseRadiale(c),
         {"Arrondi du fichier, catalogue principal", "direction 19,8″ × 9,9″, distance 0,019 %", Nature::Calcule, "entiers de 16 bits (pipeline/natif/etoiles.py)"},
     };
     e.manques = {
@@ -410,8 +434,7 @@ inline Echelle voisinage(const Comptes& c) {
         {"Dont paires en double probables", entier(double(c.doublons10pc)) + " (deux catalogues, moins de 0,02 al d'écart)", Nature::Calcule, "compté au chargement"},
         {"Objets connus à moins de 10 pc", entier(kObjets10pc) + " étoiles, naines brunes et exoplanètes", Nature::Mesure, "Reylé et al. 2021, A&A 650, A201"},
         {"Arrondi du fichier", "direction 19,8″ × 9,9″, distance 0,019 %", Nature::Calcule, "entiers de 16 bits (pipeline/natif/etoiles.py)"},
-        {"Vitesse radiale absente (mise à zéro)", entier(double(c.principalSansVitesseRadiale)) + " étoiles du catalogue principal", Nature::Calcule,
-         "composante radiale < 0,2 km/s dans etoiles.bin ; Gaia : indiscernable dans le fichier"},
+        ligneSansVitesseRadiale(c),
     };
     e.manques = {
         "Retirer les doublons entre catalogues (garder la mesure Gaia)",
@@ -453,6 +476,7 @@ inline Echelle voieLactee(const Comptes& c) {
             {"Erreur de distance, Gaia", "< 10 % (1 σ)", Nature::Mesure, "sélection parallaxe > 10 fois son erreur (pipeline/natif/gaia_telecharger.py)"},
             {"Vitesse radiale mesurée", sur(kGaiaVitessesRadiales, double(c.etoilesGaia)) + " ; les autres : comptée nulle", Nature::Mesure,
              "gaia.bin du 12/11/2026 (docs/gaia-voie-lactee.md)"},
+            ligneSansVitesseRadiale(c),
         };
         if (c.agrege) {
             e.lignes.push_back({"Autres sources, additionnées par case (pas vues une à une)", entier(additionnees) + " sources", Nature::Mesure,
@@ -501,7 +525,7 @@ inline Echelle groupeLocal(const Comptes& c) {
     // nommées qu'au moment du recoupement ; sinon, simple comparaison des nombres, et le recoupement est à refaire.
     const bool recoupe = c.galaxiesGroupeLocal == gl::kNommeesAuRecoupement;
     const double present = recoupe ? gl::kAppariees : c.galaxiesGroupeLocal;
-    e.part = present / kGalaxiesGroupeLocal;
+    e.part = std::min(1.0, present / kGalaxiesGroupeLocal);
     e.complet = pourcent(e.part) + " des galaxies connues à moins de 1 Mpc (" + entier(present) + " sur " + entier(kGalaxiesGroupeLocal) + ")";
     e.precision = "erreur de distance de chaque galaxie : non gardée";
     e.mesure = "positions mesurées aujourd'hui ; calculées dans le temps profond";
@@ -517,12 +541,13 @@ inline Echelle groupeLocal(const Comptes& c) {
         e.lignes.push_back({"Montrées ici, absentes de la LVDB à moins de 1 Mpc", hors, Nature::Mesure, "nature débattue ou distance différente"});
     }
     e.manques.clear();
-    if (recoupe) {
+    if (recoupe && gl::kManquantesN > 0) {
         std::string noms;
         for (int i = 0; i < gl::kManquantesN; ++i) noms += std::string(i ? ", " : "") + gl::kManquantes[i].nom;
         e.manques.push_back(entier(gl::kManquantesN) + " galaxies naines, de la plus proche à la plus lointaine : " + noms);
-    } else {
-        e.manques.push_back(entier(kGalaxiesGroupeLocal - present) + " galaxies de la Local Volume Database (relancer completude_groupe_local.py pour les nommer)");
+    } else if (!recoupe) {
+        e.manques.push_back(entier(std::max(0.0, kGalaxiesGroupeLocal - present)) +
+                            " galaxies de la Local Volume Database, peut-être (relancer completude_groupe_local.py pour les nommer)");
     }
     e.manques.push_back("Garder l'erreur de distance de chaque galaxie");
     e.manques.push_back("Formes et étoiles des galaxies proches");
