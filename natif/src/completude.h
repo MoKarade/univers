@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,7 @@ constexpr double kCometesConnues = 4088;                   // JPL SBDB, requête
 constexpr int kSondesSortie = 5;                           // NASA : Pioneer 10 et 11, Voyager 1 et 2, New Horizons (sortie du système solaire)
 constexpr double kObjets10pc = 540;                        // Reylé et al. 2021, A&A 650 A201 : étoiles, naines brunes, exoplanètes
 constexpr double kSourcesGaiaDr3 = 1811709771;             // ESA, Gaia DR3 (cosmos.esa.int/web/gaia/dr3)
+constexpr double kGaiaSourcesAdditionnees = 1707918961;    // gaia_agreger.py du 12/11/2026 : toutes les autres sources avec magnitude G
 constexpr double kGaiaVitessesRadiales = 25878867;         // gaia.bin du 12/11/2026 : vitesses radiales mesurées (docs/gaia-voie-lactee.md)
 constexpr double kEtoilesVoieLacteeMin = 1.0e11, kEtoilesVoieLacteeMax = 4.0e11;   // NASA Goddard (Blueshift) : estimation
 constexpr double kGalaxiesGroupeLocal = 113;               // Local Volume Database v1.1.2 (Pace, 04/11/2026) : confirmées, < 1 Mpc
@@ -75,6 +77,9 @@ struct Comptes {
     uint64_t etoilesCatalogue[3] = {}; // principal (HYG / Hipparcos), Gaia embarqué, Gaia en flux
     uint64_t etoilesGaia = 0;          // gaia.bin (Gaia DR3, parallaxe > 10 fois son erreur) quand il est chargé ; 0 sinon
     bool voieLactee = false;           // Voie lactée dessinée en volume (voie_lactee.bin)
+    bool agrege = false;               // lumière additionnée des autres sources Gaia chargée (gaia_agrege.bin)
+    uint64_t additionneesPlacees = 0;  // sources additionnées dans une case placée à sa distance (compté dans le fichier)
+    double lumiereSansDistance = 0;    // part de la lumière additionnée sans distance mesurée (en-tête du fichier)
     uint64_t etoiles10pc = 0;
     uint64_t doublons10pc = 0;         // paires de deux catalogues différents à moins de kDoublonLy
     uint64_t principalSansVitesseRadiale = 0;      // composante radiale nulle (< 0,2 km/s) : vitesse radiale non mesurée
@@ -121,12 +126,45 @@ inline Comptes compterEtoiles(Comptes c, const float* x, const float* y, const f
 }
 
 // Astres de l'appli (Sim de simulation.h, gardé en paramètre pour ne pas dépendre de ses détails) et fichier d'étoiles.
+// gaia_agrege.bin (gaia.h, pipeline/natif/gaia_agrege_convertir.py) : en-tête de 64 octets (« UNIVGAG1 », cases (u64),
+// pixels du ciel (u32), niveau (u32), lumière des cases et lumière sans distance (f64)), puis cases de 32 octets dont
+// le dernier entier (u32) est le nombre de sources. Rend c inchangé si le fichier manque ou ne se lit pas.
+inline Comptes lireAgrege(Comptes c, const std::string& chemin) {
+    std::ifstream f(chemin, std::ios::binary);
+    char h[64] = {};
+    f.read(h, 64);
+    if (!f || std::memcmp(h, "UNIVGAG1", 8) != 0) return c;
+    uint64_t cases = 0;
+    double lumiere3d = 0, lumiereCiel = 0;
+    std::memcpy(&cases, h + 8, 8);
+    std::memcpy(&lumiere3d, h + 24, 8);
+    std::memcpy(&lumiereCiel, h + 32, 8);
+    std::vector<char> bloc(32 * 65536);
+    uint64_t sources = 0;
+    for (uint64_t lu = 0; lu < cases;) {
+        const uint64_t k = std::min<uint64_t>(65536, cases - lu);
+        if (!f.read(bloc.data(), static_cast<std::streamsize>(k * 32))) return c;
+        for (uint64_t i = 0; i < k; ++i) {
+            uint32_t n = 0;
+            std::memcpy(&n, bloc.data() + i * 32 + 28, 4);
+            sources += n;
+        }
+        lu += k;
+    }
+    c.agrege = true;
+    c.additionneesPlacees = sources;
+    c.lumiereSansDistance = lumiere3d + lumiereCiel > 0 ? lumiereCiel / (lumiere3d + lumiereCiel) : 0;
+    return c;
+}
+
 // etoilesGaia : nombre d'étoiles de gaia.bin (GaiaRenderer::count) ; pris seulement si sim.hasGaia.
+// fichierAgrege : chemin de gaia_agrege.bin quand gaia.h l'a chargé (GaiaRenderer::cellCount > 0) ; vide sinon.
 template <class SimT>
-Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia = 0) {
+Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia = 0, const std::string& fichierAgrege = "") {
     Comptes c;
     c.etoilesGaia = sim.hasGaia ? etoilesGaia : 0;
     c.voieLactee = sim.hasMilkyWay;
+    if (sim.hasGaia && !fichierAgrege.empty()) c = lireAgrege(c, fichierAgrege);
     c.asteroides = sim.asteroidCount;
     c.galaxiesReleves = galaxiesReleves;
     for (const auto& b : sim.bodies) {
@@ -276,9 +314,16 @@ inline Echelle voieLactee(const Comptes& c) {
     Echelle e;
     e.nom = "Voie lactée";
     const double n = etoilesDessinees(c);
-    e.part = n / kSourcesGaiaDr3;
-    e.complet = pourcent(e.part) + " des sources de Gaia DR3 (" + entier(n) + " étoiles)";
-    e.precision = c.etoilesGaia ? "distance à mieux que 10 % (Gaia : parallaxe 10 fois son erreur)"
+    const double additionnees = c.agrege ? kGaiaSourcesAdditionnees : 0;
+    e.part = (c.agrege ? double(c.etoilesGaia) + additionnees : n) / kSourcesGaiaDr3;      /* additionnées : Gaia seul (le catalogue principal y est déjà) */
+    if (c.agrege)
+        e.complet = pourcent(e.part) + " des sources de Gaia DR3 : " + entier(double(c.etoilesGaia)) + " vues une à une, " +
+                    entier(additionnees) + " additionnées par case";
+    else
+        e.complet = pourcent(e.part) + " des sources de Gaia DR3 (" + entier(n) + " étoiles)";
+    e.precision = c.agrege ? "une à une : distance à mieux que 10 % ; additionnées : " + pourcent(c.lumiereSansDistance) +
+                                 " de leur lumière sans distance mesurée"
+                : c.etoilesGaia ? "distance à mieux que 10 % (Gaia : parallaxe 10 fois son erreur)"
                                 : "distance à mieux que 20 % (Gaia : parallaxe 5 fois son erreur)";
     e.mesure = c.voieLactee ? "étoiles mesurées ; galaxie dessinée par un modèle ajusté sur des mesures (3 hypothèses)"
                             : "étoiles mesurées ; la Voie lactée elle-même n'est pas dessinée";
@@ -291,6 +336,14 @@ inline Echelle voieLactee(const Comptes& c) {
             {"Vitesse radiale mesurée", sur(kGaiaVitessesRadiales, double(c.etoilesGaia)) + " ; les autres : comptée nulle", Nature::Mesure,
              "gaia.bin du 12/11/2026 (docs/gaia-voie-lactee.md)"},
         };
+        if (c.agrege) {
+            e.lignes.push_back({"Autres sources, additionnées par case (pas vues une à une)", entier(additionnees) + " sources", Nature::Mesure,
+                                "gaia_agreger.py (archive de l'ESA), 12/11/2026"});
+            e.lignes.push_back({"Dont placées à leur distance", entier(double(c.additionneesPlacees)) + " (case de 0,21 deg² × un dixième de décade en distance)",
+                                Nature::Mesure, "gaia_agrege.bin (compté au chargement)"});
+            e.lignes.push_back({"Lumière additionnée sans distance mesurée", pourcent(c.lumiereSansDistance) + " (montrée seulement vue du Soleil)",
+                                Nature::Inconnu, "gaia_agrege.bin : parallaxe absente, négative, ou erreur > 100 %"});
+        }
     } else {
         e.lignes = {
             {"Étoiles présentes", entier(n) + " (principal " + entier(double(c.etoilesCatalogue[0])) + ", Gaia " +
@@ -309,8 +362,14 @@ inline Echelle voieLactee(const Comptes& c) {
         e.lignes.push_back({"Lumière ajoutée par les bras", "disque doublé sur leur axe", Nature::Suppose, "docs/gaia-voie-lactee.md"});
         e.lignes.push_back({"Largeur de la barre longue", "0,5 kpc", Nature::Suppose, "docs/gaia-voie-lactee.md"});
     }
-    e.manques = {"Le reste de Gaia DR3 (" + entier(kSourcesGaiaDr3 - n) + " sources, dont celles à parallaxe moins sûre)",
-                 "Garder l'erreur de distance de chaque étoile dans le fichier"};
+    if (c.agrege)
+        e.manques = {"Distance des sources additionnées sans parallaxe utilisable (" + pourcent(c.lumiereSansDistance) + " de leur lumière)",
+                     "Voir une à une les " + entier(additionnees) + " sources additionnées",
+                     "Les " + entier(kSourcesGaiaDr3 - double(c.etoilesGaia) - additionnees) + " sources de Gaia DR3 sans magnitude G ni couleur",
+                     "Garder l'erreur de distance de chaque étoile dans le fichier"};
+    else
+        e.manques = {"Le reste de Gaia DR3 (" + entier(kSourcesGaiaDr3 - n) + " sources, dont celles à parallaxe moins sûre)",
+                     "Garder l'erreur de distance de chaque étoile dans le fichier"};
     if (c.voieLactee) e.manques.push_back("Remplacer les trois hypothèses du modèle de la galaxie par des mesures");
     else e.manques.push_back("Dessiner la Voie lactée (disque, bras, gaz) d'après des cartes mesurées");
     return e;
