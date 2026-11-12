@@ -1563,7 +1563,7 @@
       if (!S.dyn) { S.dyn = dynInit(G.gal, Q.gal, G.m31dyn, S.orbit, S.tOn, sunGalAt(Rr.K, S.tOn, [0, 0, 0]), Rr.m31Rot, Q.dynN, Q.dyn31, G.m31.N - 70); Rr.setDyn(S.dyn); }
       { const tD = tG, t0p = performance.now(); let n = 0; S.dynT = tD;      /* plus de plafond : après la fusion, les étoiles continuent de tourner dans la galaxie résultante (avant, l'image se figeait 3 milliards d'années après la fusion) */
         if (S.dyn.tail) tailAdvance(S.dyn, tD, 14, DTAB); else do dynAdvance(S.dyn, S.orbit, tD, Math.abs(tD - S.dyn.t) > 0.06 ? Q.dynSteps * 3 : Q.dynSteps, DTAB); while (Math.abs(tD - S.dyn.t) > 0.06 && performance.now() - t0p < 14 && ++n < 60); }
-      sunGal[0] = S.dyn.x[0]; sunGal[1] = S.dyn.x[1]; sunGal[2] = S.dyn.x[2]; F.dyn = S.dyn; F.mergeK = 1; }
+      sunGal[0] = S.dyn.x[0]; sunGal[1] = S.dyn.x[1]; sunGal[2] = S.dyn.x[2]; F.dyn = S.dyn; F.mergeK = 1; if (S.dyn.tail) { F.hideId = FUS_M33 + 1; F.lmcGone = 1; } }
     } else { S.dyn = null; S.rep = null; S.repSun = null; F.dyn = null; F.mergeK = 0; S.dynT = undefined; }
 
     const g = mulM(M, [-sunGal[0], -sunGal[1], -sunGal[2]]); F.gcRel[0] = g[0] * KPC; F.gcRel[1] = g[1] * KPC; F.gcRel[2] = g[2] * KPC;

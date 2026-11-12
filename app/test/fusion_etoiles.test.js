@@ -24,6 +24,6 @@ setTimeout(() => {
     for (let j = 0; j < n * 3; j++) D.x[j] = a[j] * I.Q;
     for (let i = 0; i < n; i++) { const j = i * 3, R = Math.max(Math.hypot(D.x[j], D.x[j + 1]), 0.3), vc = vCirc(R, true) * KMS_KPC_GYR * 1.5; D.v[j] = vc * D.x[j + 1] / R; D.v[j + 1] = -vc * D.x[j] / R; }
     let worst = 0; for (let k = 0; k < 5; k++) { const t0 = performance.now(); tailAdvance(D, 12, 14, T); worst = Math.max(worst, performance.now() - t0); }
-    ok(worst < 40, `tailAdvance : appel le plus long ${worst.toFixed(1)} ms pour un budget de 14 ms (tranches de 5 Ma)`); }
+    ok(worst < 30, `tailAdvance : appel le plus long ${worst.toFixed(1)} ms pour un budget de 14 ms (tranches de 5 Ma)`); }
   process.exit(fail ? 1 : 0);
 }, 50);
