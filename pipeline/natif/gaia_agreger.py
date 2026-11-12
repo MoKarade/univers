@@ -5,6 +5,8 @@ Les 98 millions d'étoiles à distance sûre (parallaxe / erreur > 10) sont dess
 (environ 1,7 milliard) ont une distance mal mesurée ou pas de parallaxe : leur lumière G est additionnée, sans modèle,
 par case :
 - ciel : pixel HEALPix de niveau 7 (emboîté, 196 608 pixels de 0,21 deg²), tiré du numéro de la source ;
+- vitesses (cases en volume) : somme et somme des carrés des vitesses sur le ciel (est, nord) tirées des mouvements
+  propres et de la parallaxe, et de la vitesse radiale quand Gaia l'a mesurée (avec leur nombre) : moyenne et dispersion ;
 - distance : tranche de parallaxe, pb = floor(10 log10(parallaxe en mas)) (un dixième de décade), seulement pour les
   sources dont la parallaxe vaut plus de 5 fois son erreur (distance à mieux que 20 %) ;
   toutes les autres (parallaxe moins sûre, négative ou absente) : distance inconnue, « ciel seul », par pixel.
@@ -27,13 +29,17 @@ NIVEAU = 7
 POE_MIN = 5      # distance placée en volume seulement si la parallaxe vaut plus de 5 fois son erreur (règle de Marc : rien de supposé)
 DIV = 2 ** 35 * 4 ** (12 - NIVEAU)      # source_id // DIV = pixel HEALPix de niveau 7
 F = 'POWER(10, -0.4*phot_g_mean_mag)'
+K = '4.740470446'      # km/s pour 1 mas/an et 1 mas de parallaxe
+VA, VD = f'{K}*pmra/parallax', f'{K}*pmdec/parallax'      # vitesses sur le ciel (est, nord), mesurées
+VITESSES = (f'SUM({VA}) AS sva, SUM({VA}*{VA}) AS sva2, SUM({VD}) AS svd, SUM({VD}*{VD}) AS svd2, '
+            f'SUM(radial_velocity) AS srv, COUNT(radial_velocity) AS nrv, SUM(radial_velocity*radial_velocity) AS srv2')
 AGREGATS = (f'COUNT(*) AS n, SUM({F}) AS f, SUM({F}*bp_rp) AS fc, SUM({F}*(bp_rp*0+1)) AS fcn')
 
 
 def requetes(debut, fin):
     base = f'FROM gaiadr3.gaia_source WHERE source_id >= {debut} AND source_id < {fin} AND phot_g_mean_mag IS NOT NULL'
     a = (f'SELECT source_id/{DIV} AS hp, FLOOR(10*LOG10(parallax)) AS pb, {AGREGATS}, SUM({F}*parallax_error/parallax) AS fe '
-         f'{base} AND parallax_over_error > {POE_MIN} AND parallax_over_error <= 10 GROUP BY hp, pb')
+         f', {VITESSES} {base} AND parallax_over_error > {POE_MIN} AND parallax_over_error <= 10 GROUP BY hp, pb')
     b = (f'SELECT source_id/{DIV} AS hp, {AGREGATS} {base} AND (parallax IS NULL OR parallax_over_error <= {POE_MIN}) GROUP BY hp')
     return a, b
 

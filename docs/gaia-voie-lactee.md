@@ -134,3 +134,16 @@ atif\essai-mw\orbites_4dates.png.
 - Coût mesuré (carte partagée avec l'appli de Marc et la fusion) : 27 ms par pas d'un million d'années pour les 98 M.
   À 10 Ma par seconde, environ 27 % de la carte. Non fait : n'avancer que les feuilles visibles (proposition 2).
 - Écart connu : la lueur de la Voie lactée suit encore le Soleil des épicycles (orbite::decalageSoleil), pas le Soleil exact.
+
+### La lumière additionnée bouge avec le temps (12 novembre 2026, 21 h UTC)
+
+- `gaia_agreger.py` : en plus de la lumière, chaque case reçoit la somme et la somme des carrés des vitesses sur le ciel
+  tirées des mouvements propres MESURÉS, et des vitesses radiales mesurées (avec leur nombre). `gaia_agrege.bin` v2 :
+  48 octets par case (vitesse moyenne, dispersion). Dispersion des vitesses sur le ciel dans une case : médiane 46 km/s
+  (pondérée par la lumière) ; vitesse radiale mesurée dans 726 298 cases (71 % de la lumière) ; ailleurs comptée nulle
+  [supposition, comme pour les étoiles].
+- Les cases sont suivies par `orbites_pas.comp` comme des étoiles (états après les étoiles, Soleil en dernier) et
+  dessinées à toute date ; seule la part « ciel seul » (sans distance ni vitesse) reste limitée au présent (± 3 Ma).
+- Feuilles avancées seulement si dessinées, par tours équitables (un pas par feuille en retard et par tour, voisines
+  regroupées en un calcul, une barrière par tour) ; les feuilles pas encore rattrapées sont dessinées en épicycles.
+  Mesuré : 18,8 ms par pas pour tout avancer (au lieu de 27) ; contrôle inchangé (médian 0,008 pc à 99 Ma).
