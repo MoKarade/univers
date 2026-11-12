@@ -429,9 +429,10 @@ function createRenderer(canvas, Q, generated) {
   R.starPos = sPos;
   const starsU = starU();
   // vie et mouvement de chaque étoile : destin estimé d'après l'éclat et la couleur, vitesse mesurée
-  const sHip = new Uint32Array(sN), sLife = new Float32Array(sN * 3), sFate = new Float32Array(sN), sMass = new Float32Array(sN), sCls = new Uint8Array(sN), sBv = new Float32Array(sN);
+  const sHip = new Uint32Array(sN), sSrc = new Uint8Array(sN), sRange = new Float32Array(sN * 2), sLife = new Float32Array(sN * 3), sFate = new Float32Array(sN), sMass = new Float32Array(sN), sCls = new Uint8Array(sN), sBv = new Float32Array(sN);
   sHip.set(new Uint32Array(b64ToBytes(DATA.STARS_HIP).buffer).subarray(0, sN0));
-  for (let i = 0; i < sN; i++) { sBv[i] = i < sN0 ? sAux[i * 2 + 1] / 100 - 0.5 : XS[i - sN0].bv; const L = starLife(sMag[i], sBv[i], i, sHip[i]); sLife.set([clamp(L[0], -2e5, 2e5), clamp(L[1], -2e5, 2e5), clamp(L[2], -2e5, 2e5)], i * 3); sFate[i] = L[3]; sMass[i] = L[4]; sCls[i] = L[5]; }
+  const lifeAll = () => { for (let i = 0; i < sN; i++) { sBv[i] = i < sN0 ? sAux[i * 2 + 1] / 100 - 0.5 : XS[i - sN0].bv; const L = starLife(sMag[i], sBv[i], i, sHip[i]); sLife.set([clamp(L[0], -2e5, 2e5), clamp(L[1], -2e5, 2e5), clamp(L[2], -2e5, 2e5)], i * 3); sFate[i] = L[3]; sMass[i] = L[4]; sCls[i] = L[5]; sSrc[i] = L[6]; sRange[i * 2] = L[7]; sRange[i * 2 + 1] = L[8]; } };
+  lifeAll();
   const vq = new Int16Array(sN * 3), Mg = DATA.M_GAL2ECL; vq.set(new Int16Array(b64ToBytes(DATA.STARS_VEL).buffer).subarray(0, sN0 * 3)); XS.forEach((o, k) => { for (let a = 0; a < 3; a++) vq[(sN0 + k) * 3 + a] = Math.round(20 * (Mg[0][a] * o.v[0] + Mg[1][a] * o.v[1] + Mg[2][a] * o.v[2])); });
   const K = initStarKin(sPos, sN, DATA.SGRA_GAL.map(x => -x * GAL.R0), vq); R.K = K; orbInit(K, DATA.SGRA_GAL.map(x => -x * GAL.R0));
   // trajectoire publiée (instant, distance et vitesse du passage) pour chaque étoile frôleuse, ajoutée ou déjà présente
@@ -439,8 +440,10 @@ function createRenderer(canvas, Q, generated) {
   R.passers = (DATA.PASSERS || []).map(o => { const i = o.i >= 0 ? o.i : sN0 + XS.indexOf(o); K.lin[i] = 1; for (let a = 0; a < 3; a++) { K.p0[i * 3 + a] = o.p[a]; sPos[i * 3 + a] = o.p[a]; K.ve[i * 3 + a] = o.v[a] * KMS_LY_YR; } K.vkms[i] = o.vk; sMass[i] = o.m; if (!DATA.STAR_NAMES[i]) DATA.STAR_NAMES[i] = o.n; return Object.assign({ idx: i }, o); });
   // les étoiles frôleuses sont dessinées par le catalogue principal : leurs copies dans les autres catalogues Gaia sont éteintes (même direction à 0,02 degré près, même distance à 1,2 % près)
   const PNOW = (DATA.PASSERS || []).filter(o => o.G <= 13.2).map(o => { const d = Math.hypot(o.now[0], o.now[1], o.now[2]); return [o.now[0], o.now[1], o.now[2], 0.012 * d + 0.03, d]; });
-  const isPasser = (x, y, z) => { for (let q = 0; q < PNOW.length; q++) { const w = PNOW[q]; if (Math.abs(x - w[0]) < w[3] && Math.abs(y - w[1]) < w[3] && Math.abs(z - w[2]) < w[3]) { const d = Math.hypot(x, y, z); if ((x * w[0] + y * w[1] + z * w[2]) / (d * w[4]) > 1 - 8e-8 && Math.abs(d / w[4] - 1) < 0.012) return true; } } return false; }; R.star = { N: sN, mag: sMag, bv: sBv, hip: sHip, life: sLife, fate: sFate, mass: sMass, cls: sCls };
+  const isPasser = (x, y, z) => { for (let q = 0; q < PNOW.length; q++) { const w = PNOW[q]; if (Math.abs(x - w[0]) < w[3] && Math.abs(y - w[1]) < w[3] && Math.abs(z - w[2]) < w[3]) { const d = Math.hypot(x, y, z); if ((x * w[0] + y * w[1] + z * w[2]) / (d * w[4]) > 1 - 8e-8 && Math.abs(d / w[4] - 1) < 0.012) return true; } } return false; }; R.star = { N: sN, mag: sMag, bv: sBv, hip: sHip, life: sLife, fate: sFate, mass: sMass, cls: sCls, src: sSrc, range: sRange };
   const stars = pts({ position: [sPos, 3], aMag: [sMag, 1], aCol: [sCol, 3], aLife: [sLife, 3], aFate: [sFate, 1] }, mk(SH.star, starsU), 8); starsU.uEvolve.value = 1;
+  R.relife = () => { lifeAll(); for (const o of R.passers) sMass[o.idx] = o.m;      /* masses publiées des étoiles frôleuses (Bailer-Jones 2022) gardées */
+    stars.geometry.attributes.aLife.needsUpdate = true; stars.geometry.attributes.aFate.needsUpdate = true; };      /* âges Gaia arrivés : destins recalculés */
   let starCursor = 0, starPassT = 1e99, starDone = 0;
   // --- Gaia DR3 : toutes les étoiles plus faibles que le premier catalogue, jusqu'à la magnitude limite du jeu de données
   const gN = Math.round(DATA.GAIA_N * (Q.gaia || 1)), gGeo = new Uint16Array(b64ToBytes(DATA.GAIA_GEO).buffer), gAux = b64ToBytes(DATA.GAIA_AUX), gPos = new Float32Array(gN * 3), gMag = new Float32Array(gN), gCol = new Float32Array(gN * 3), gBv = new Float32Array(gN), gLife = new Float32Array(gN * 3), gFate = new Float32Array(gN), gMass = new Float32Array(gN), gCls = new Uint8Array(gN);
