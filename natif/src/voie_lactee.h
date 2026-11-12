@@ -4,11 +4,11 @@
 // Rendu : pour chaque pixel, un rayon traverse la grille (192 pas, décalés au hasard d'un pixel à l'autre) ; la lumière de
 // chaque pas est atténuée par la poussière rencontrée avant lui. La grille ne contient que la lumière qui manque aux étoiles
 // dessinées une à une (Gaia DR3, catalogue principal) : rien n'est compté deux fois. Le bulbe et la barre sont calculés
-// dans le shader, tournés de l'angle du moment (barre : 39 km/s/kpc, même valeur que le fil de la gravité ; à remplacer
-// par barAngleAt de natif/physique/galaxie_orbites.h quand il sera dans appli-pc).
+// dans le shader, tournés de l'angle du moment (phys::galaxie::barAngleAt, natif/physique/galaxie_orbites.h).
 // Les étoiles ne sont pas assombries ici : leurs magnitudes mesurées contiennent déjà la poussière vue du Soleil.
 #pragma once
 #include "commun.h"
+#include "../physique/galaxie_orbites.h"
 
 namespace {
 
@@ -67,10 +67,9 @@ public:
         return true;
     }
 
-    // Angle de la barre (rad, depuis l'axe x galactique vers y), years : années depuis J2000,0.
-    double barAngle(double years) const {
-        return par.barAngle2000 - par.barOmega * 1.0227 * years * 1e-9;      // 1 km/s/kpc = 1,0227 rad par milliard d'années ; sens horaire vu du nord
-    }
+    // Angle de la barre (rad, depuis l'axe x galactique vers y), years : années depuis J2000,0. Même fonction que les
+    // orbites des étoiles du fil de la gravité (natif/physique/galaxie_orbites.h).
+    double barAngle(double years) const { return phys::galaxie::barAngleAt(years * 1e-9); }
 
     // Dans la passe en grande dynamique, avant les étoiles. exposure : la même que pour les étoiles.
     void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, double years) {

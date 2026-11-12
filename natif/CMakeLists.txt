@@ -111,7 +111,7 @@ target_link_options(essai_sondes PRIVATE -static)
 
 # Contrôle sans fenêtre des étoiles Gaia DR3 (gaia.h) : image hors écran, cadence, étoiles dessinées.
 add_executable(essai_gaia src/essai_gaia.cpp)
-target_link_libraries(essai_gaia PRIVATE volk)
+target_link_libraries(essai_gaia PRIVATE volk univers_physique)
 target_compile_options(essai_gaia PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(essai_gaia PRIVATE -static)
 add_dependencies(essai_gaia shaders)
