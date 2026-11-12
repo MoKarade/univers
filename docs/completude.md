@@ -39,7 +39,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 |---|---|---|---|
 | Système solaire | 7,8 % (9 planètes et Pluton, 16 lunes sur 461, 123 530 astéroïdes sur 1 580 289, 0 comète, 5 sondes sur 5) | planètes < 1 mm, Lune 282 m, Triton 255 km, sondes 0,7 km au plus, astéroïdes 25 000 à 93 000 km après 154 jours | éphémérides de la NASA ; astéroïdes calculés ici |
 | Étoiles voisines | 87 % (470 sur 540) | arrondi du fichier : pas de 198 UA à 10 pc | positions mesurées ; 41 149 étoiles sans vitesse radiale |
-| Voie lactée | 0,34 % de Gaia DR3 ; 0,0015 à 0,0062 % de l'estimation | distance à mieux que 20 % (Gaia) | positions mesurées ; galaxie elle-même non dessinée |
+| Voie lactée | avec gaia.bin : 5,4 % de Gaia DR3 (98 337 323 étoiles) ; 0,025 à 0,098 % de l'estimation (sans : 0,34 %) | distance à mieux que 10 % (Gaia, parallaxe > 10 σ) | étoiles mesurées ; galaxie : modèle ajusté sur des mesures, 3 hypothèses (lumière au prorata des masses, lumière des bras, largeur de la barre longue) |
 | Groupe local | 62 % (70 sur 113) | erreur par galaxie non gardée | mesuré aujourd'hui ; calculé dans le temps profond |
 | Univers lointain | 5 566 702 objets ; 0,00028 à 0,0028 % de l'estimation | décalage arrondi à 9,5 km/s × (1 + z) | distance 100 % calculée |
 
@@ -59,8 +59,8 @@ Système solaire
 - Marquer les étoiles sans vitesse radiale mesurée (aujourd'hui mise à zéro, donc supposée dans le temps).
 
 Voie lactée
-- Le reste de Gaia DR3 ; l'erreur de distance de chaque étoile dans le fichier ; le dessin de la galaxie d'après des
-  cartes mesurées.
+- Le reste de Gaia DR3 ; l'erreur de distance de chaque étoile dans le fichier ; remplacer les trois hypothèses du modèle
+  de la galaxie par des mesures (docs/gaia-voie-lactee.md).
 
 Groupe local
 - 43 galaxies naines de la Local Volume Database ; l'erreur de distance de chaque galaxie ; leurs formes.

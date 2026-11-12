@@ -5,6 +5,7 @@
 // dont 15 avec un fichier de la NASA installé (pas Uranus), plus la Lune.
 // Usage : essai_completude <dossier des données de l'appli, par ex. C:\dev\Univers-PC>
 #include <cstdio>
+#include <fstream>
 
 #include "simulation.h"
 #include "completude.h"
@@ -57,6 +58,31 @@ int main(int argc, char** argv) {
     sim.loadBodies(dir + "/etoiles_noms.tsv", dir + "/galaxies_noms.tsv", dir + "/planetes.tsv", dir + "/lunes.tsv");
 
     const Comptes c = compter(sim, 5566702);      // en-tête de galaxies.bin (lu par galaxies.h dans l'appli)
+
+    // Avec Gaia et la Voie lactée chargés (gaia.bin : en-tête lu ici comme le fait gaia.h).
+    uint64_t nGaia = 0;
+    {
+        std::ifstream gf(dir + "/gaia.bin", std::ios::binary);
+        char h[16] = {};
+        gf.read(h, 16);
+        if (gf && std::memcmp(h, "UNIVGAI1", 8) == 0) std::memcpy(&nGaia, h + 8, 8);
+    }
+    verifie(nGaia == 98278356, "gaia.bin : 98 278 356 étoiles (docs/gaia-voie-lactee.md)");
+    sim.hasGaia = nGaia > 0;
+    sim.hasMilkyWay = true;
+    const auto rg = rapport(compter(sim, 5566702, nGaia));
+    verifie(std::fabs(rg[2].part - (58967.0 + 98278356.0) / 1811709771.0) < 1e-15, "Voie lactée avec Gaia : (58 967 + 98 278 356) / Gaia DR3");
+    std::printf("Voie lactée avec Gaia : %s\n  %s\n  %s\n", rg[2].complet.c_str(), rg[2].precision.c_str(), rg[2].mesure.c_str());
+    for (const Ligne& l : rg[2].lignes) std::printf("    - %s : %s [%s]\n", l.quoi.c_str(), l.valeur.c_str(), motNature(l.nature));
+    // Choix de Marc (12/11) : lueur modèle retirée. Gaia chargé sans Voie lactée : aucune ligne « supposé » ni « ajusté ».
+    sim.hasMilkyWay = false;
+    const auto rs = rapport(compter(sim, 5566702, nGaia));
+    bool sansModele = true;
+    for (const Ligne& l : rs[2].lignes) sansModele = sansModele && l.nature != Nature::Suppose && l.nature != Nature::Ajuste;
+    verifie(sansModele && rs[2].mesure.find("pas dessinée") != std::string::npos, "Gaia sans Voie lactée modèle : rien de supposé ni d'ajusté");
+    sim.hasGaia = sim.hasMilkyWay = false;
+    verifie(compter(sim, 5566702, nGaia).etoilesGaia == 0, "sans Gaia chargé : compte de gaia.bin ignoré");
+
     std::printf("sondes %d, planètes %d, lunes %d, étoiles %llu, à moins de 10 pc %llu, doublons %llu, sans vitesse radiale %llu, Groupe local %d\n",
                 c.sondes, c.planetes, lunesPresentes(c), (unsigned long long)c.etoiles, (unsigned long long)c.etoiles10pc,
                 (unsigned long long)c.doublons10pc, (unsigned long long)c.principalSansVitesseRadiale, c.galaxiesGroupeLocal);
