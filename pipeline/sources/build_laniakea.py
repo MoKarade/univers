@@ -35,6 +35,7 @@ COTE = 1000.0                        # Mpc/h
 N = 128
 H_PAGE = 0.674
 ETIQUETTE_LANIAKEA = 1
+Q = 0.025                            # pas des sommets enregistrés, en Mpc
 EPS = math.radians(84381.448 / 3600.0)   # obliquité J2000, comme pipeline/build_data2.py
 RX = np.array([[1, 0, 0], [0, math.cos(EPS), math.sin(EPS)], [0, -math.sin(EPS), math.cos(EPS)]])
 ATTRACTEURS = {1: ('Laniakea', (-62, -8, 39), 1.9), 2: ('Apus', (-125, -23, -31), 9.5), 3: ('Hercule', (-39, 70, 78), 3.1),
@@ -116,31 +117,54 @@ def main(raw):
     inter = p[2:, 1:-1, 1:-1] & p[:-2, 1:-1, 1:-1] & p[1:-1, 2:, 1:-1] & p[1:-1, :-2, 1:-1] & p[1:-1, 1:-1, 2:] & p[1:-1, 1:-1, :-2]
     bord = np.argwhere(lan & ~inter)
     pas = COTE / N
-    # points de la frontière : centre de chaque face entre une cellule de Laniakea et une cellule voisine hors de Laniakea
-    faces = []
-    for k in range(3):
-        for sgn in (-1, 1):
-            vois = np.roll(lan, -sgn, axis=k)
-            if sgn > 0:
-                vois[(slice(None),) * k + (-1,)] = False
-            else:
-                vois[(slice(None),) * k + (0,)] = False
-            f = np.argwhere(lan & ~vois).astype(float) + 0.5
-            f[:, k] += 0.5 * sgn
-            faces.append(f)
-    faces = np.concatenate(faces)
+    # surface de la frontière (et non plus des points sur la grille : vus de loin, ils dessinaient le quadrillage des
+    # cellules au lieu de la frontière). Le masque est sur-échantillonné 2 fois (copie des cellules), lissé d'une cellule
+    # (gaussienne sigma = 1 cellule d'origine), puis on en tire l'isosurface dont le volume enfermé égale celui des
+    # cellules de Laniakea (niveau trouvé par dichotomie). La grille ne connaît la frontière qu'à une cellule près :
+    # le lissage enlève les marches de l'escalier, il n'ajoute aucun détail.
+    from scipy.ndimage import gaussian_filter
+    from skimage.measure import marching_cubes
+    SUR = 2
+    fin = np.repeat(np.repeat(np.repeat(np.pad(lan, 2), SUR, 0), SUR, 1), SUR, 2).astype(float)
+    lisse = gaussian_filter(fin, sigma=float(SUR))
+    vol_cel = lan.sum() * pas ** 3
+
+    def surface(niveau):
+        som, tr, _, _ = marching_cubes(lisse, level=niveau)
+        som = (som + 0.5) / SUR - 2      # indices fins -> coordonnées en cellules d'origine (bord de cellule = entier)
+        a0, a1, a2 = (som[tr[:, k]] - c for k in range(3))
+        return som, tr, abs(np.einsum('ij,ij->i', a0, np.cross(a1, a2)).sum()) / 6 * pas ** 3
+
+    bas, haut = 0.2, 0.5
+    for _ in range(30):
+        mil = 0.5 * (bas + haut)
+        if surface(mil)[2] > vol_cel:
+            bas = mil
+        else:
+            haut = mil
+    sommets, tris, vol_surf = surface(0.5 * (bas + haut))
+    print('surface : niveau %.3f, %d sommets, %d triangles, volume enfermé %.3f millions (Mpc/h)^3 (cellules %.3f)'
+          % (0.5 * (bas + haut), len(sommets), len(tris), vol_surf / 1e6, vol_cel / 1e6))
+    if abs(vol_surf / vol_cel - 1) > 0.01 or len(sommets) > 65535:
+        raise SystemExit('surface trop éloignée des cellules ou trop grande : rien écrit')
+    faces = sommets
     sg = (faces - c) * pas
     vol = lan.sum() * pas ** 3
     r_eq = (3 * vol / (4 * math.pi)) ** (1 / 3)
     centre_sg = (np.argwhere(lan).mean(axis=0) + 0.5 - c) * pas
-    print('Laniakea : %d cellules, rayon équivalent %.0f Mpc/h, %d cellules de bord, %d faces, centre SG %s Mpc/h'
-          % (lan.sum(), r_eq, len(bord), len(faces), np.round(centre_sg, 1)))
-    pos = sg_vers_page(sg).astype('<f4')
+    print('Laniakea : %d cellules, rayon équivalent %.0f Mpc/h, %d cellules de bord, centre SG %s Mpc/h'
+          % (lan.sum(), r_eq, len(bord), np.round(centre_sg, 1)))
+    pos = sg_vers_page(sg)
+    if np.abs(pos).max() / Q > 32767:
+        raise SystemExit('sommet hors de portée des entiers 16 bits : rien écrit')
     centre = sg_vers_page(centre_sg[None, :])[0]
     attracteur = sg_vers_page(np.array([ATTRACTEURS[1][1]], dtype=float))[0]
     payload = {'LANIAKEA': {
-        'pos': base64.b64encode(np.ascontiguousarray(pos).tobytes()).decode(),   # Mpc comobiles, écliptique J2000
-        'n': int(len(pos)),
+        # sommets en entiers 16 bits, pas de Q Mpc (0,025 Mpc, bien plus fin que la cellule de 11,6 Mpc) : poids de la page
+        'pos': base64.b64encode(np.ascontiguousarray(np.round(pos / Q).astype('<i2')).tobytes()).decode(),   # Mpc comobiles / Q, écliptique J2000
+        'q': Q,
+        'tri': base64.b64encode(np.ascontiguousarray(tris.astype('<u2')).tobytes()).decode(),   # triangles (indices des sommets)
+        'n': int(len(pos)), 'ntri': int(len(tris)),
         'centre': [round(float(x), 2) for x in centre],
         'attracteur': [round(float(x), 2) for x in attracteur],   # Dupuy et Courtois 2023, table 1 : [-62, -8, 39] Mpc/h
         'r_eq_mpc_h': round(float(r_eq), 1),
