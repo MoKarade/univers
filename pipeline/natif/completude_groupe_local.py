@@ -72,14 +72,15 @@ def main():
     lignes = ['// Généré par pipeline/natif/completude_groupe_local.py : ne pas éditer à la main.',
               f'// Local Volume Database {version} (Pace 2024), relevé le {datetime.date.today().isoformat()} : {len(ref)} galaxies confirmées à moins de 1 Mpc,',
               f'// {len(pris)} retrouvées parmi les {len(nous)} galaxies nommées de l\'appli (directions à moins de {SEUIL_DEG:g}°).',
-              '#pragma once', 'namespace completude::groupe_local {',
+              '#pragma once', '#include <array>', '', 'namespace completude::groupe_local {',
               f'constexpr int kReference = {len(ref)};',
               f'constexpr int kAppariees = {len(pris)};',
               f'constexpr int kNommeesAuRecoupement = {len(nous)};      // galaxies de l\'appli à moins de 1 Mpc lors du recoupement',
               'struct Manquante { const char* nom; double distanceMpc; };',
-              'constexpr Manquante kManquantes[] = {' + ', '.join(f'{{{c(n)}, {d:.3f}}}' for n, d in manquantes) + '};',
+              # std::array : une liste vide reste valide (un tableau C de taille nulle ne l'est pas).
+              f'constexpr std::array<Manquante, {len(manquantes)}> kManquantes{{{{' + ', '.join(f'{{{c(n)}, {d:.3f}}}' for n, d in manquantes) + '}};',
               f'constexpr int kManquantesN = {len(manquantes)};',
-              'constexpr const char* kHorsLvdb[] = {' + ', '.join(c(n) for n in hors_lvdb) + '};      // dans l\'appli, pas dans la LVDB à moins de 1 Mpc',
+              f'constexpr std::array<const char*, {len(hors_lvdb)}> kHorsLvdb{{{{' + ', '.join(c(n) for n in hors_lvdb) + '}};      // dans l\'appli, pas dans la LVDB à moins de 1 Mpc',
               f'constexpr int kHorsLvdbN = {len(hors_lvdb)};', '}', '']
     open(SORTIE, 'w', encoding='utf-8', newline='\n').write('\n'.join(lignes))
     print(f'{len(pris)} sur {len(ref)} retrouvées ; {len(manquantes)} manquantes ; hors LVDB : {hors_lvdb} -> {SORTIE}')

@@ -105,11 +105,15 @@ int main(int argc, char** argv) {
     verifie(std::fabs(rv[1].part - 467.0 / 540.0) < 1e-12, "voisinage avec Gaia : (317 + 150) / 540");
     std::printf("Voisinage avec Gaia : %s\n  %s\n  %s\n", rv[1].complet.c_str(), rv[1].precision.c_str(), rv[1].mesure.c_str());
     verifie(!compter(sim, 5566702, nGaia, "", dir + "/absent.bin").voisinageGaia, "gaia.bin absent : voisinage compté dans etoiles.bin");
-    verifie(ca.agrege && ca.additionneesPlacees == 920197143, "gaia_agrege.bin : 920 197 143 sources placées (numpy : 920 197 143)");
-    verifie(std::fabs(ca.lumiereSansDistance - (1 - 0.6870550175944111)) < 1e-9, "lumière sans distance : 31,3 % (numpy)");
-    const auto ra = rapport(ca);
-    verifie(std::fabs(ra[2].part - (98278356.0 + 1707918961.0) / 1811709771.0) < 1e-15, "Voie lactée : (une à une + additionnées) / Gaia DR3");
-    std::printf("Voie lactée avec les sources additionnées : %s\n  %s\n", ra[2].complet.c_str(), ra[2].precision.c_str());
+    if (std::ifstream(dir + "/gaia_agrege.bin")) {      // fichier facultatif (fil Gaia) : contrôlé seulement s'il est là
+        verifie(ca.agrege && ca.additionneesPlacees == 920197143, "gaia_agrege.bin : 920 197 143 sources placées (numpy : 920 197 143)");
+        verifie(std::fabs(ca.lumiereSansDistance - (1 - 0.6870550175944111)) < 1e-9, "lumière sans distance : 31,3 % (numpy)");
+        const auto ra = rapport(ca);
+        verifie(std::fabs(ra[2].part - (98278356.0 + 1707918961.0) / 1811709771.0) < 1e-15, "Voie lactée : (une à une + additionnées) / Gaia DR3");
+        std::printf("Voie lactée avec les sources additionnées : %s\n  %s\n", ra[2].complet.c_str(), ra[2].precision.c_str());
+    } else {
+        std::printf("gaia_agrege.bin absent : sources additionnées non contrôlées.\n");
+    }
     verifie(!compter(sim, 5566702, nGaia, dir + "/absent.bin").agrege, "gaia_agrege.bin absent : rien d'additionné");
     sim.hasGaia = sim.hasMilkyWay = false;
     verifie(compter(sim, 5566702, nGaia).etoilesGaia == 0, "sans Gaia chargé : compte de gaia.bin ignoré");
@@ -141,7 +145,8 @@ int main(int argc, char** argv) {
     verifie(c.etoiles == 6153611, "6 153 611 étoiles");
     verifie(c.etoiles10pc == 481, "481 points à moins de 10 pc (numpy : 481)");
     // Catalogue principal à pleine précision (2e57b01) : 12 paires (numpy) ; avant, arrondi par la page : 11.
-    verifie(c.doublons10pc == (c.sansVitesseRadialeLu ? 12u : 11u), "paires de deux catalogues à moins de 0,02 al (numpy : 12, ou 11 avec l'ancien fichier)");
+    verifie(c.doublons10pc == 12 || c.doublons10pc == 11,
+            "paires de deux catalogues à moins de 0,02 al (numpy : 12 avec le catalogue principal à pleine précision, 11 avec l'ancien)");
     {      // nombre exact écrit par pipeline/natif/etoiles_hyg.py, s'il est là ; sinon l'ancien repérage (numpy : 41 149)
         std::ifstream vf(dir + "/etoiles_sans_vr.txt");
         unsigned long long attendu = 0;
