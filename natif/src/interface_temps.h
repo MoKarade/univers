@@ -63,7 +63,19 @@ void dateJumpPopup(Sim& sim, UiState& ui) {
 
 // Loin d'aujourd'hui : ce qui est montré, et d'où cela vient (fil natif, 87c910e : orbites des étoiles jusqu'à 1 milliard
 // d'années, puis fondu vers le calcul de la fusion entre 800 millions et 1 milliard d'années, Sim::starShare).
+// Hors d'aujourd'hui, ce qui est supposé dans le mouvement des étoiles Gaia (texte du fil Gaia, PR #77).
+void gaiaMotionNote(const Sim& sim) {
+    if (std::fabs(sim.years - kStartYears) < 1.0) return;
+    if (sim.hasGaia && sim.gaiaCount > completude::kGaiaVitessesRadiales && sim.starShare() > 0)
+        ImGui::TextDisabled("%s millions d'étoiles Gaia n'ont pas de vitesse mesurée le long de la ligne de visée : pour leur mouvement dans le temps, "
+                            "elle est comptée nulle (supposition). Leur position d'aujourd'hui reste mesurée.",
+                            frInt((static_cast<double>(sim.gaiaCount) - completude::kGaiaVitessesRadiales) / 1.0e6).c_str());
+    if (sim.hasGaiaAggregate && sim.deepTime())
+        ImGui::TextDisabled("Lumière additionnée des autres sources Gaia : sans vitesses mesurées, montrée seulement au présent (à 3 millions d'années près).");
+}
+
 void deepTimeNote(const Sim& sim) {
+    gaiaMotionNote(sim);
     if (!sim.deepTime()) return;
     if (sim.starShare() > 0) {
         ImGui::TextDisabled("Étoiles : position de départ mesurée, orbite autour de la Galaxie calculée dans un potentiel [modèle] ; "
