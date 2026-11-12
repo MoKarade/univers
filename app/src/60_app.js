@@ -356,7 +356,7 @@
   /* ---- commandes sur la scène ---- */
   /* R3 : sans objet touché, la molette vise le point sous le curseur et le pincement le milieu des doigts. Ce point W (m, repère du Soleil)
      reste fixe à l'écran : la cible de la caméra glisse de (W − cible)(1 − k), k étant le rapport d'échelle. W est l'objet sous le point
-     s'il y en a un à 8 px près (planète, étoile, galaxie… même recherche que le toucher), sinon le point du plan de visée. Le décalage
+     s'il y en a un à 40 px près (planète, étoile, galaxie… même recherche que le toucher) ; sinon, et en dézoomant, le zoom reste centré. Le décalage
      (S.zoff) s'annule, en glissant, sur « Accueil », un arrêt de la barre, ou quand on touche un objet. */
   let zAnc = null;
   function zoffReset() { zAnc = null; if (!S.zoff) return; S.zoff = null; if (S.lastTg) S.cbl = { from: S.lastTg, t0: performance.now() / 1000 }; }
@@ -364,9 +364,8 @@
     if (zAnc && now - zAnc.t < 400 && Math.hypot(x - zAnc.x, y - zAnc.y) < 3) { zAnc.t = now; return zAnc.W; }      /* même geste : même point */
     let W = null; const sc = [0, 0, 0];
     for (const b of BODIES) { const o = Rr.bodies[b.key]; if (o.screen && Math.hypot(o.screen[0] - x, o.screen[1] - y) < Math.min(o.px, 200) + 6) { W = bodyPosM(b.key); break; } }
-    if (!W) { const p = pickAt(x, y, true); if (p && Rr.project(p, F, sc) && Math.hypot(sc[0] - x, sc[1] - y) < 8) W = p; }
-    if (!W) { const c = Rr.camPos, v = new THREE.Vector3(x / Rr.cssW * 2 - 1, 1 - y / Rr.cssH * 2, 0.5).unproject(Rr.camera), dir = v.sub(c).normalize(), n = c.clone().normalize(), dn = dir.dot(n);
-      if (Math.abs(dn) < 1e-6) return null; const t = -c.dot(n) / dn; W = [(c.x + t * dir.x) / F.s + F.tg[0], (c.y + t * dir.y) / F.s + F.tg[1], (c.z + t * dir.z) / F.s + F.tg[2]]; }
+    if (!W) { const p = pickAt(x, y, true); if (p && Rr.project(p, F, sc) && Math.hypot(sc[0] - x, sc[1] - y) < 40) W = p; }      /* objet le plus proche du curseur, à 40 px près */
+    if (!W) return null;      /* retour de Marc (12/11) : plus de zoom vers un point vide ; sans objet près du curseur, le zoom reste centré */
     zAnc = { x, y, t: now, W }; return W; }
   /* R12 : vitesse de zoom constante par puissance de dix, sauf dans les étendues où rien ne change à l'écran : traversées trois fois plus vite, et le panneau le dit.
      Étendues repérées par mesure (écart moyen entre deux images successives, un quart de puissance de dix d'écart, inférieur à 3 sur 255 : docs/r12-zoom.md). */
@@ -379,6 +378,7 @@
   const zFast = lr => microOn() ? ZFAST.find(z => lr > z.lo && lr < z.hi) || null : null;
   function zoomAt(dl, x, y) { if (zFast(S.logR)) dl *= ZFAST_K; const l0 = S.logR, l1 = clampZoom(l0 + dl); S.anim = null; S.logR = l1;
     if (S.center || microOn() || (S.focus !== 'sun' && l0 < 14.4) || !(l1 !== l0) || !F.s) return;      /* objet touché ou astre suivi : le zoom reste centré sur lui (R1) */
+    if (l1 > l0) return;      /* dézoomer reste centré : on recule depuis ce qu'on regarde */
     const W = anchorAt(x, y); if (!W || !isFinite(W[0])) return; const k = Math.pow(10, l1 - l0), z = S.zoff || [0, 0, 0];
     for (let i = 0; i < 3; i++) { const dz = (W[i] - F.tg[i]) * (1 - k); z[i] += dz; F.tg[i] += dz; } S.zoff = z; F.s /= k; }      /* F.tg et F.s suivent tout de suite : plusieurs crans dans la même image restent justes */
   { const ptrs = new Map(); let pinch = 0, moved = 0, t0 = 0, lastTap = [0, 0, 0];
