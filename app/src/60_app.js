@@ -1519,7 +1519,7 @@
     sunGalAt(Rr.K, F.tEff, sunGal);
     if (S.tOn !== null && tG >= S.tOn) {            // rencontre rapprochée : les étoiles des deux galaxies sont simulées une à une
       if (!S.dyn) { if (!G.m31dyn) G.m31dyn = Q.dyn31 + 70 > G.m31.N ? genDiskGalaxy(23, Q.dyn31 + 70, 24) : G.m31; S.dyn = dynInit(G.gal, Q.gal, G.m31dyn, S.orbit, S.tOn, sunGalAt(Rr.K, S.tOn, [0, 0, 0]), Rr.m31Rot, Q.dynN, Q.dyn31, G.m31.N - 70); Rr.setDyn(S.dyn); }
-      { const tD = Math.min(tG, (S.orbit.tMerge || S.tOn + 6) + 3), t0p = performance.now(); let n = 0; S.dynT = tD;      // une fois les galaxies fusionnées et calmées, inutile de calculer plus loin
+      { const tD = tG, t0p = performance.now(); let n = 0; S.dynT = tD;      /* plus de plafond : après la fusion, les étoiles continuent de tourner dans la galaxie résultante (avant, l'image se figeait 3 milliards d'années après la fusion) */
         do dynAdvance(S.dyn, S.orbit, tD, Math.abs(tD - S.dyn.t) > 0.06 ? Q.dynSteps * 3 : Q.dynSteps, DTAB); while (Math.abs(tD - S.dyn.t) > 0.06 && performance.now() - t0p < 14 && ++n < 60); }
       sunGal[0] = S.dyn.x[0]; sunGal[1] = S.dyn.x[1]; sunGal[2] = S.dyn.x[2]; F.dyn = S.dyn; F.mergeK = 1;
     } else { S.dyn = null; F.dyn = null; F.mergeK = 0; S.dynT = undefined; }
