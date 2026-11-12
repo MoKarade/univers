@@ -199,6 +199,7 @@ int runWindow(const WindowOptions& opt) {
         sim.paused = false;
         sim.refreshEphemeris();
     }
+    int loops = 0;
     bool holdOn = false;             // la date demandée n'est pas encore calculée : la date montrée la rejoint
     double holdGoal = 0, lastShown = sim.years;
 
@@ -464,7 +465,7 @@ int runWindow(const WindowOptions& opt) {
             const double w = orbite::poidsOrbite(sim.years), share = sim.starShare();
             sim.calcStates.clear();
             sim.calcStates.push_back({"Planètes et lunes", sim.ephemValid ? CalcMode::Measured : sim.outer ? CalcMode::Exact : CalcMode::Hidden, 0,
-                                      sim.ephemValid ? "éphémérides de la NASA, lues telles quelles" : sim.outer ? std::string("calculé ici (gravité mutuelle), ") + sim.planetMethod : "hors des dates connues"});
+                                      sim.ephemValid ? "éphémérides de la NASA, lues telles quelles" : sim.outer ? std::string("calculé ici (gravité mutuelle)") + (sim.planetMethod[0] ? std::string(", ") + sim.planetMethod : std::string()) : "hors des dates connues"});
             if (asteroids.ready)
                 sim.calcStates.push_back({"Astéroïdes et comètes", sim.asteroidGain(asteroids.epochJd) > 0 ? CalcMode::Approx : CalcMode::Hidden, 0,
                                           "orbite mesurée, suivie sans l'attraction des planètes ; montrés à moins de 300 ans de leurs mesures"});
@@ -618,7 +619,8 @@ int runWindow(const WindowOptions& opt) {
         else if (pr != VK_SUCCESS) fail("affichage", pr);
 
         ++frame;
-        if (test && (holdOn || pathActive || (gaiaOk && gaia.orbitLagSteps() != 0))) frame = 0;      // contrôle : les images ne comptent qu'une fois la date atteinte et calculée
+        if (test && (holdOn || pathActive || (gaiaOk && gaia.orbitLagSteps() != 0))) frame = 0;
+        if (test && opt.stopAfter > 0 && ++loops >= opt.stopAfter) break;      // contrôle : image prise en route, calcul en cours compris      // contrôle : les images ne comptent qu'une fois la date atteinte et calculée
         ++shown;
         titleTimer += dt;
         if (!test && titleTimer > 0.5) {
