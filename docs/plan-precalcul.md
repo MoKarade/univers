@@ -12,7 +12,7 @@ Règle de vérité : chaque chiffre ci-dessous est **[mesuré]** (sur ce PC, ou 
 | Étoiles, vitesse de la barre (33 à 41 km/s/kpc) | modèle | [mesuré] 0,13 kpc à 100 Ma ; 1 kpc à 500 Ma (médiane) |
 | Étoiles, bras spiraux | modèle : leur vitesse n'est pas établie, ils ne sont pas dans le calcul | non chiffrable sans eux |
 | Étoiles sans vitesse radiale mesurée | **mesure** manquante : une composante de la vitesse est inconnue | à chiffrer avec les clones (§1) |
-| Fusion Voie lactée–Andromède | **mesure** du mouvement propre d'Andromède (48,9 ± 10,5 ; −36,9 ± 8,1 µas/an, Salomon 2021) et des masses | [publié, Sawala et al. 2025, Nature Astronomy] fusion dans 54 % des cas en 10 Ga ; médiane 7,6 Ga pour les cas qui fusionnent. Plus de particules ne change pas cette probabilité. |
+| Fusion Voie lactée–Andromède | **mesure** du mouvement propre d’Andromède (Wu et al. 2025 : 45,9 ± 8,1 ; −20,5 ± 6,6 µas/an) et des masses | [mesuré ici, reproduit Wu et al. 2026] fusion dans 90 % des cas en 10 Ga ; date médiane 6,4 Ga, de 4,9 à 7,6 Ga (16 à 84 %). Plus de particules ne change pas cette fourchette. |
 | Système solaire au-delà d'environ 50 Ma | **chaos** : deux départs écartés de quelques mètres divergent complètement | [publié, Laskar et al. 2011, La2010] horizon d'environ 50 Ma, à confirmer ici par des clones |
 | Lunes des planètes géantes hors des fichiers NASA | pas de théorie valable sur des siècles | inconnu (déjà caché dans l'appli) |
 
@@ -54,16 +54,18 @@ Conséquence pour l'affichage : au-delà de l'horizon, l'appli montre le nuage d
 ## Résultats
 
 ### Clones du Groupe local (12/11/2026) [mesuré]
-`pipeline/fusion/groupe_local_clones.py` reprend le code public de Sawala et al. 2025, vectorisé : 5 000 tirages, 4 galaxies, 98 s sur le processeur. Résultats dans `pipeline/fusion/resultats/clones_groupe_local.json`.
+`pipeline/fusion/groupe_local_clones.py` reprend le code public de Sawala et al. 2025, vectorisé, et le fait tourner sur le processeur. Il a deux variantes :
+- **sawala2025** : mouvement propre de M31 de Salomon et al. 2021. 5 000 tirages, 98 s.
+- **wu2026** (par défaut) : Wu, Huang, Zhang, Sun & Shao 2026, arXiv:2603.22863. Mouvement propre de M31 de Wu et al. 2025 (45,9 ± 8,1 ; −20,5 ± 6,6 µas/an), le plus récent et le plus précis, déjà retenu par la page et par R9. 10 000 tirages, 214 s.
 
-| Galaxies | Ici | Sawala et al. 2025 |
+| Variante | Ici | Publié |
 |---|---|---|
-| Voie lactée + M31 | 43,3 % | ~44 % (« un peu moins de la moitié ») |
-| + M33 | 62,3 % | ~2/3 |
-| + LMC | 35,8 % | un peu plus d'1/3 |
-| + M33 + LMC | **52,6 %** ; médiane 7,57 unités (7,40 Ga) | « un peu plus de 50 % » ; médiane 7,6 |
-| LMC absorbée par la Voie lactée | 99,8 % | toujours |
-| M33 absorbée par M31 | 85,8 % | ~86 % |
+| sawala2025, Voie lactée + M31 | 43,3 % | ~44 % |
+| sawala2025, + M33 | 62,3 % | ~2/3 |
+| sawala2025, + LMC | 35,8 % | un peu plus d'1/3 |
+| sawala2025, 4 galaxies | 52,6 % ; médiane 7,57 unités | « un peu plus de 50 % » ; 7,6 |
+| **wu2026, 4 galaxies** | **90,1 % ; médiane 6,53 unités (6,38 Ga)** | **90 % ; 6,5 (+1,3 −1,5)** |
 
-- Dates de fusion, en vrais Ga (l'unité de temps du carnet vaut 0,978 Ga) : 5 % → 5,65 ; 16 % → 6,36 ; médiane 7,40 ; 84 % → 8,67 ; 95 % → 9,33.
-- Notre rejeu R9 (fusion à 5,44 Ga) tombe dans les 4 % les plus précoces des cas qui fusionnent. Il ne représente pas ce que disent les mesures. Réserve : R9 date la fusion à la coalescence des centres, Sawala à un passage sous 20 kpc.
+- Les deux publications sont reproduites. Avec les mesures les plus récentes (wu2026), en vrais Ga (l'unité de temps du carnet vaut 0,978 Ga) : la fusion a lieu dans 90 % des cas. Dates : 5 % → 4,43 ; 16 % → 4,89 ; médiane 6,38 ; 84 % → 7,63 ; 95 % → 8,52. M33 rejoint M31 dans 19 % des cas ; le Grand Nuage est absorbé par la Voie lactée dans 99,7 %.
+- Notre rejeu R9 (fusion à 5,44 Ga, avec le mouvement propre central de Wu et al. 2025) tombe au 28ᵉ centile des cas qui fusionnent : c'est un scénario plausible. Réserve : R9 date la fusion à la coalescence des centres, les clones à un passage sous 20 kpc.
+- La limite vient des mesures. L'erreur sur le mouvement propre de M31 (±8 µas/an) fait varier la date de fusion de ±1,4 Ga (16 à 84 %). Plus de particules n'y change rien.

@@ -13,7 +13,7 @@ Rien n'est changé dans la physique :
 - Unités du carnet : kpc, km/s, 10^10 masses solaires, G = 43007 ; l'unité de temps est donc kpc/(km/s) = 0,9778 Ga
   (le carnet l'appelle « Gyr »). Les dates écrites ici sont converties en vrais milliards d'années (Ga).
 
-Usage : python groupe_local_clones.py [--n 5000] [--galaxies MW,M31,M33,LMC] [--sortie dossier]
+Usage : python groupe_local_clones.py [--variante wu2026|sawala2025] [--n 5000] [--galaxies MW,M31,M33,LMC] [--sortie dossier]
 """
 import argparse, json, math, os, sys, time
 import numpy as np
@@ -35,23 +35,32 @@ TABLE = {
     'M33': dict(m=(30, 10), c=(10, 2), dmod=(24.67, 0.07), pmra=(31, 19), pmdec=(-29, 16), vr=(-179.2, 1.8)),
     'LMC': dict(m=(15, 5), c=(10, 2), dmod=(18.477, 0.026), pmra=(1910, 20), pmdec=(229, 47), vr=(262.2, 3.4)),
 }
+# Variante « wu2026 » : Wu, Huang, Zhang, Sun & Shao 2026 (arXiv:2603.22863, « The Fate of the Milky Way–Andromeda System:
+# To Merge or Not? »), tableau 1 : mouvement propre de M31 de Wu et al. 2025 (A&A 701, A265, supergéantes, Gaia DR3) ;
+# M33 : moyenne pondérée Wu et al. 2025 et VLBA (Brunthaler) ; concentration de M31 15 ± 2,5 ; le reste comme Sawala.
+# Leur résultat publié : fusion dans 90 % des cas, médiane 6,5 (+1,3 −1,5) Ga (10 000 tirages).
+VARIANTES = {
+    'sawala2025': {},
+    'wu2026': {('M31', 'pmra'): (45.9, 8.1), ('M31', 'pmdec'): (-20.5, 6.6), ('M31', 'c'): (15.0, 2.5),
+               ('M33', 'pmra'): (30.6, 5.7), ('M33', 'pmdec'): (19.0, 5.7)},
+}
 # Directions (ICRS, degrés) renvoyées par SkyCoord.from_name le 12/11/2026 (service Sesame).
 DIRECTION = {'M31': (10.6847083, 41.26875), 'M33': (23.46206906218, 30.66017511198), 'LMC': (80.89417, -69.75611)}
 # Ordre des graines du carnet (CreateICs) : MW m,c ; M31 dmod,pmra,pmdec,vr,m,c ; LMC ... ; M33 ... (6 chacune).
 ORDRE_GRAINES = [('MW', 'm'), ('MW', 'c')] + [(g, k) for g in ('M31', 'LMC', 'M33') for k in ('dmod', 'pmra', 'pmdec', 'vr', 'm', 'c')]
 
 
-def tirages(n, clip):
+def tirages(n, clip, variante='sawala2025'):
     out = {}
     for seed, (gal, k) in enumerate(ORDRE_GRAINES):
-        mu, s = TABLE[gal][k]
+        mu, s = VARIANTES[variante].get((gal, k), TABLE[gal][k])
         np.random.seed(seed)
         out[(gal, k)] = truncnorm(-clip, clip, loc=mu, scale=s).rvs(n)
     return out
 
 
-def conditions_initiales(galaxies, n, clip):
-    t = tirages(n, clip)
+def conditions_initiales(galaxies, n, clip, variante='sawala2025'):
+    t = tirages(n, clip, variante)
     galactocentric_frame_defaults.set('v4.0')
     N = len(galaxies)
     pos, vel = np.zeros((n, N, 3)), np.zeros((n, N, 3))
@@ -163,10 +172,11 @@ def main():
     p.add_argument('--galaxies', default='MW,M31,M33,LMC')
     p.add_argument('--clip', type=float, default=2.0)
     p.add_argument('--sortie', default='')
+    p.add_argument('--variante', default='wu2026', choices=sorted(VARIANTES))
     a = p.parse_args()
     gals = a.galaxies.split(',')
     t0 = time.time()
-    m, c, pos, vel = conditions_initiales(gals, a.n, a.clip)
+    m, c, pos, vel = conditions_initiales(gals, a.n, a.clip, a.variante)
     fusion, existe, traj = integre(m, c, pos, vel)
     # Date de la fusion MW–M31 comme le carnet : premier pas où la Voie lactée OU Andromède n'existe plus.
     # (Une absorption de M31 par la Voie lactée, ou l'inverse ; M33 absorbée par M31 ne compte pas.)
@@ -176,7 +186,7 @@ def main():
         t_mw_m31 = np.minimum(t_mw_m31, np.where(m[:, k] > m[:, 1], fusion[:, 1, k], np.inf))
     ok = np.isfinite(t_mw_m31)
     tg = t_mw_m31[ok] * UNITE_GA
-    res = dict(galaxies=gals, n=a.n, clip=a.clip, probabilite_fusion=float(ok.mean()),
+    res = dict(variante=a.variante, galaxies=gals, n=a.n, clip=a.clip, probabilite_fusion=float(ok.mean()),
                mediane_unites_carnet=float(np.median(t_mw_m31[ok])) if ok.any() else None,
                mediane_ga=float(np.median(tg)) if ok.any() else None,
                quantiles_ga={q: float(np.quantile(tg, q)) for q in (0.05, 0.16, 0.5, 0.84, 0.95)} if ok.any() else None,
