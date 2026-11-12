@@ -4,8 +4,9 @@
 // Celestial Mechanics and Dynamical Astronomy 130, 22) : direction du pôle nord (ascension droite a0, déclinaison
 // d0, repère ICRF) et angle W du méridien d'origine, fonctions linéaires du temps. Les petits termes périodiques
 // (nutation, librations) ne sont pas repris : quelques degrés au plus pour la Lune, bien moins pour les planètes.
-// [Probable : coefficients recopiés de mémoire. Contrôlés ici pour la Terre (point où le Soleil est au zénith)
-//  et pour la Lune (face tournée vers la Terre) par essai_orientation ; les autres astres ne sont pas contrôlés.]
+// Coefficients relus contre le fichier officiel de la NASA (NAIF, pck00011.tpc) par
+// pipeline/natif/controle_orientation.py : les onze astres sont conformes. Contrôle de bout en bout par
+// essai_orientation : Terre (point où le Soleil est au zénith) et Lune (face tournée vers la Terre).
 #pragma once
 #include <cmath>
 

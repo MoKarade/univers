@@ -102,7 +102,7 @@ int runWindow(const WindowOptions& opt) {
     Sim sim;
     sim.stars = &stars;
     sim.spk = hasSpk ? &spk : nullptr;
-    sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv");
+    sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv");
     if (!opt.target.empty()) {
         bool found = false;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)

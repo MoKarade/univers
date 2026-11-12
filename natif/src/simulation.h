@@ -27,8 +27,10 @@ struct Body {
     int64_t star = -1;          // étoile : numéro dans le catalogue
     int naif = 0;               // planète : code du corps dans les éphémérides de la NASA
     int parent = -1;            // lune : numéro de l'astre autour duquel elle tourne (pour le tracé de l'orbite)
-    double h = 0;               // planète : magnitude à 1 UA du Soleil et de l'observateur, pleine phase
-    double bv = 0.65;           // indice de couleur B-V
+    double h = 0;               // planète : magnitude V(1,0), à 1 UA du Soleil et de l'observateur, pleine phase (fiche NASA)
+    bool hasPhotometry = false; // planète : éclat lu dans planetes.tsv ; sinon elle n'est pas dessinée en point
+    int tint[3] = {-1, -1, -1}; // planète : teinte moyenne de sa carte de surface (valeurs d'écran) ; -1 : pas de carte
+    double bv = 0.65;           // étoile : indice de couleur B-V
     double periodYears = 0;     // planète : durée d'un tour (pour tracer l'orbite)
     double radiusKm = 0;        // rayon moyen
     const char* nature = "";
@@ -38,28 +40,27 @@ struct Body {
     const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
 };
 
-// Planètes : magnitude H et couleur B-V d'après Mallama et Hilton 2018 (Astronomy and Computing 25, 10) et
-// l'Astronomical Almanac ; rayons moyens UAI 2015 ; périodes sidérales NASA (fiches « Planetary Fact Sheet »).
-// [Probable : valeurs recopiées de mémoire, à relire contre les sources avant de s'en servir pour autre chose
-//  que l'éclat des points et le tracé des orbites.]
+// Planètes : rayon moyen et durée d'un tour, relus contre la fiche « Planetary Fact Sheet » de la NASA
+// (docs/plan-natif.md). L'éclat (magnitude V(1,0)) et la teinte ne sont pas écrits ici : ils sont lus dans
+// planetes.tsv, que pipeline/natif/planetes.py tire des fiches de la NASA et des cartes de surface.
 struct PlanetRow {
     const char* name;
     int naif;
-    double h, bv, periodYears, radiusKm;
+    double periodYears, radiusKm;
     const char* nature;
 };
 constexpr PlanetRow kPlanets[] = {
-    {"Mercure", eph::kMercury, -0.613, 0.93, 0.2408467, 2439.4, "planète rocheuse"},
-    {"Vénus", eph::kVenus, -4.384, 0.82, 0.61519726, 6051.8, "planète rocheuse"},
-    {"Terre", eph::kEarth, -3.99, 0.33, 1.0000174, 6371.0, "planète rocheuse"},
-    {"Mars", eph::kMarsBary, -1.601, 1.36, 1.8808476, 3389.5, "planète rocheuse"},
-    {"Jupiter", eph::kJupiterBary, -9.395, 0.83, 11.862615, 69911.0, "géante gazeuse"},
-    {"Saturne", eph::kSaturnBary, -8.914, 1.04, 29.447498, 58232.0, "géante gazeuse"},
-    {"Uranus", eph::kUranusBary, -7.110, 0.56, 84.016846, 25362.0, "géante de glace"},
-    {"Neptune", eph::kNeptuneBary, -7.00, 0.41, 164.79132, 24622.0, "géante de glace"},
-    {"Pluton", eph::kPlutoBary, -1.0, 0.82, 247.92065, 1188.3, "planète naine"},
+    {"Mercure", eph::kMercury, 0.2408467, 2439.4, "planète rocheuse"},
+    {"Vénus", eph::kVenus, 0.61519726, 6051.8, "planète rocheuse"},
+    {"Terre", eph::kEarth, 1.0000174, 6371.0, "planète rocheuse"},
+    {"Mars", eph::kMarsBary, 1.8808476, 3389.5, "planète rocheuse"},
+    {"Jupiter", eph::kJupiterBary, 11.862615, 69911.0, "géante gazeuse"},
+    {"Saturne", eph::kSaturnBary, 29.447498, 58232.0, "géante gazeuse"},
+    {"Uranus", eph::kUranusBary, 84.016846, 25362.0, "géante de glace"},
+    {"Neptune", eph::kNeptuneBary, 164.79132, 24622.0, "géante de glace"},
+    {"Pluton", eph::kPlutoBary, 247.92065, 1188.3, "planète naine"},
 };
-constexpr PlanetRow kMoon = {"Lune", eph::kMoon, 0.28, 0.92, 27.321661 / 365.25, 1737.4, "satellite de la Terre"};
+constexpr PlanetRow kMoon = {"Lune", eph::kMoon, 27.321661 / 365.25, 1737.4, "satellite de la Terre"};
 
 struct Rate {
     const char* label;
@@ -89,7 +90,7 @@ struct Sim {
     bool cosmologyDirty = true;          // les distances des galaxies sont à recalculer
 
     // Le Soleil, les planètes (si les éphémérides sont là), puis les étoiles nommées (etoiles_noms.tsv).
-    void loadBodies(const std::string& namesPath, const std::string& galaxiesPath) {
+    void loadBodies(const std::string& namesPath, const std::string& galaxiesPath, const std::string& photometryPath) {
         bodies.clear();
         Body sun;
         sun.name = "Soleil";
@@ -105,8 +106,6 @@ struct Sim {
                 b.kind = Kind::Planet;
                 b.naif = r.naif;
                 b.parent = parent;
-                b.h = r.h;
-                b.bv = r.bv;
                 b.periodYears = r.periodYears;
                 b.radiusKm = r.radiusKm;
                 b.nature = r.nature;
@@ -120,8 +119,23 @@ struct Sim {
             }
             add(kMoon, earth);
         }
-        std::ifstream f(namesPath);
         std::string line;
+        // Éclat et teinte des planètes (planetes.tsv : code NAIF, magnitude V(1,0), rouge, vert, bleu).
+        std::ifstream pf(photometryPath);
+        while (std::getline(pf, line)) {
+            int naif = 0, r = -1, g = -1, bl = -1;
+            double h = 0;
+            if (std::sscanf(line.c_str(), "%d %lf %d %d %d", &naif, &h, &r, &g, &bl) != 5) continue;
+            for (Body& b : bodies)
+                if (b.kind == Kind::Planet && b.naif == naif) {
+                    b.h = h;
+                    b.hasPhotometry = true;
+                    b.tint[0] = r;
+                    b.tint[1] = g;
+                    b.tint[2] = bl;
+                }
+        }
+        std::ifstream f(namesPath);
         while (std::getline(f, line)) {
             const size_t a = line.find('\t'), b = line.find('\t', a + 1);
             if (a == std::string::npos) continue;
@@ -198,6 +212,7 @@ struct Sim {
         const Vec3 p = position(i), d = p - from;
         const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
         if (b.kind == Kind::Planet) {
+            if (!b.hasPhotometry) return 99.0;      // éclat non renseigné : on ne l'invente pas
             const double r = std::max(std::sqrt(dot(p, p)), 1e-15);
             const double cosA = std::clamp((dot(p, d)) / (r * dist), -1.0, 1.0);      // angle Soleil-planète-observateur
             const double alpha = std::acos(cosA);

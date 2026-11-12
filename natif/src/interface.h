@@ -277,7 +277,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     }
     if (fb.kind == Kind::Sun || fb.kind == Kind::Star)
         row("Température", frInt(4600.0 * (1.0 / (0.92 * fb.bv + 1.7) + 1.0 / (0.92 * fb.bv + 0.62))) + " K en surface", "calculé d'après la couleur");
-    if (fb.kind != Kind::Galaxy) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé");
+    if (fb.kind != Kind::Galaxy && (fb.kind != Kind::Planet || fb.hasPhotometry)) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé");
     ImGui::Separator();
     if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
     else if (fb.kind == Kind::Galaxy) ImGui::TextDisabled("Sources : Karachentsev et al. 2013 ; McConnachie 2012.");

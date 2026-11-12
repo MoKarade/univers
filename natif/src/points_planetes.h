@@ -28,15 +28,17 @@ struct PlanetPoints {
         if (!sim.ephemValid) return;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()) && count < kMax; ++i) {
             const Body& b = sim.bodies[static_cast<size_t>(i)];
-            if (b.kind != Kind::Planet || asSphere[static_cast<size_t>(i)]) continue;
+            if (b.kind != Kind::Planet || !b.hasPhotometry || asSphere[static_cast<size_t>(i)]) continue;
             const Vec3 p = sim.position(i), d = p - cam.pos;
             const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
             cols[0][count] = static_cast<float>(p.x);
             cols[1][count] = static_cast<float>(p.y);
             cols[2][count] = static_cast<float>(p.z);
             cols[3][count] = static_cast<float>(sim.apparentMag(i, cam.pos) - 5.0 * std::log10(dist / 3.2615638) + 5.0);
-            const auto c = colorOfBv(b.bv);
-            std::memcpy(&cols[4][count], c.data(), 4);
+            // Teinte moyenne de la carte de surface ; sans carte (Pluton) : blanc, aucune teinte n'est avancée.
+            const uint8_t c[4] = {static_cast<uint8_t>(b.tint[0] < 0 ? 255 : b.tint[0]), static_cast<uint8_t>(b.tint[1] < 0 ? 255 : b.tint[1]),
+                                  static_cast<uint8_t>(b.tint[2] < 0 ? 255 : b.tint[2]), 255};
+            std::memcpy(&cols[4][count], c, 4);
             cols[5][count] = cols[6][count] = cols[7][count] = 0;
             ++count;
         }

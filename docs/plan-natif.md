@@ -203,5 +203,11 @@ Relu contre la fiche « Planetary Fact Sheet » de la NASA (nssdc.gsfc.nasa.gov/
 - durées des orbites : conformes à mieux que 0,7 % ;
 - vitesses de rotation utilisées pour orienter les astres (orientation.h) : conformes aux durées de rotation de la
   NASA pour Mercure, Vénus, Mars, Jupiter, Saturne, Uranus, Neptune et Pluton.
-Pas encore relu [À vérifier] : magnitudes H et couleurs B-V des planètes (éclat des points vus de loin), direction
-des pôles hors Terre et Lune, étendue de l'image des anneaux.
+Ensuite, le même jour :
+- direction des pôles et méridiens des onze astres : conformes au fichier officiel de la NASA (NAIF, pck00011.tpc),
+  contrôle automatique `pipeline/natif/controle_orientation.py` [Certain] ;
+- éclat des planètes vues comme des points : plus rien de mémoire ; `pipeline/natif/planetes.py` lit la magnitude
+  V(1,0) dans les fiches de la NASA et tire la teinte de la moyenne de chaque carte de surface (`planetes.tsv`).
+  Deux valeurs de mémoire étaient fausses : Lune (+0,28 au lieu de −0,08) et Neptune (−7,00 au lieu de −6,94).
+Reste [À vérifier] : étendue de l'image des anneaux de Saturne (calée sur deux repères mesurés, la source ne la
+documente pas) ; magnitude absolue et couleur du Soleil (valeurs nominales usuelles, non relues).
