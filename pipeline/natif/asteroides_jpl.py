@@ -16,9 +16,9 @@ Même format que asteroides.py : « UNIVAST1 », n, date commune, puis Px, Py, P
 « Nom~désignation », un par ligne, les comètes à la fin avec « ~c » en plus (« Halley~1P~c »). Sans magnitude H
 (toutes les comètes) : 99, le point le plus petit.
 Avec --controle : astéroïdes comparés à JPL Horizons (ref_asteroides.json, 154 jours après) et à Cérès, Pallas, Vesta,
-Hygie de app/test/nbody_ref.json, écart exigé sous 0,002 UA ; comètes comparées à ref_cometes.json, écart MESURÉ et
-affiché, exigé sous 0,5 UA (orbite suivie sans l'attraction des planètes ni les jets de la comète, parfois depuis des
-dizaines d'années).
+Hygie de app/test/nbody_ref.json ; comètes comparées à ref_cometes.json ; écart exigé sous 0,002 UA.
+Comètes : l'orbite de la base date parfois de dizaines d'années (écart mesuré jusqu'à 0,67 UA) ; on prend donc l'orbite
+à jour lue dans Horizons par cometes_horizons.py, et on écarte les comètes pour lesquelles Horizons n'en rend pas.
 Usage : python asteroides_jpl.py <dossier de sortie> [--controle]
 """
 import json
@@ -77,6 +77,11 @@ def main() -> None:
                     com[col][k] = el[key]
                 com[6][k] = hz['jd']
                 a_jour += 1
+        # Sans orbite à jour (Horizons n'en rend pas) : la comète serait mal placée (mesuré : jusqu'à 0,67 UA), on l'écarte.
+        garde = np.array([nm.split('~')[1] in hz['corps'] for nm in names_c])
+        ecartes_c += int((~garde).sum())
+        com = [x[garde] for x in com]
+        names_c = [nm for nm, g in zip(names_c, garde) if g]
     n_ast, n_com = len(names), len(names_c)
     a, e, inc, om, w, ma, ep, H = (np.concatenate([x, y]) for x, y in zip(ast, com))
     names += names_c
@@ -100,7 +105,7 @@ def main() -> None:
     with open(os.path.join(sortie, 'asteroides_noms.txt'), 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(names) + '\n')
     print(f'{n_ast} astéroïdes écrits ({ecartes_a} écartés : orbite non elliptique ou incomplète) et {n_com} comètes '
-          f'({ecartes_c} écartées : disparues, ou passées une seule fois sur une orbite ouverte) ; '
+          f'({ecartes_c} écartées : disparues, passées une seule fois sur une orbite ouverte, ou sans orbite à jour) ; '
           f'{a_jour} comètes avec une orbite à jour (Horizons) ; date commune JJ {epoch} ; {os.path.getsize(path) / 1e6:.1f} Mo')
     if '--controle' in sys.argv:
         here = os.path.dirname(os.path.abspath(__file__))
@@ -115,11 +120,11 @@ def main() -> None:
         tests = [(num, ref['jd'], np.array(v), 0.002) for num, v in ref['corps'].items()]
         tests += [(num, nb[key]['jd'], np.array(nb[key]['r']) - np.array(nb['sun']['r']), 0.002)
                   for key, num in (('ceres', '1'), ('pallas', '2'), ('vesta', '4'), ('hygiea', '10'))]
-        tests += [(num, refc['jd'], np.array(v), 0.5) for num, v in refc['corps'].items()]
+        tests += [(num, refc['jd'], np.array(v), 0.0021) for num, v in refc['corps'].items()]
         good_all, judged = True, 0
         for num, jd, want, limit in tests:
             i = number.get(num)
-            if limit > 0.1:      # comète : chercher parmi les comètes (« 1P » et l'astéroïde 1 ne se confondent pas, mais par sûreté)
+            if limit > 0.002:      # comète : chercher parmi les comètes (« 1P » et l'astéroïde 1 ne se confondent pas, mais par sûreté)
                 i = next((k for k in range(n_ast, len(names)) if names[k].split('~')[1] == num), None)
             if i is None:
                 print(f'{num} : absent du catalogue')

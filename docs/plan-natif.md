@@ -297,3 +297,9 @@ des sources Gaia à distance moins sûre (fil Gaia), texte qui dit à chaque éc
 - Doublons : une lune présente sous deux codes (provisoire et définitif) n'est chargée qu'une fois (moins de 1 000 km d'écart).
 - Contrôle (ref_lunes_petites.txt, JPL Horizons) : Himalia, Ananke, Phoebe, S/2003 J 2, S/2004 S 31, S/2023 S 62 : écart nul ; Titania, Miranda, Sycorax : 1 225 km, le même pour les trois (centre de masse d'Uranus de de440.bsp contre celui de Horizons), Néréide 290 km (même cause).
 - Manquent encore : les petites lunes intérieures d'Uranus (ura184 parties 1 et 2, 3,8 Go) et de Neptune (nep098, 4,2 Go).
+
+## Comètes (12 novembre 2026)
+
+- Fait : 1 778 comètes ajoutées au catalogue des astéroïdes (noms finissant par « ~c », affichées « 1P/Halley »). Base du JPL : 4 088 comètes ; écartées : 39 disparues, 2 244 passées une seule fois sur une orbite ouverte, 27 sans orbite à jour.
+- Méthode : l'orbite de la base, suivie telle quelle, plaçait mal les comètes (mesuré : jusqu'à 0,67 UA pour 9P/Tempel). `cometes_horizons.py` lit donc l'orbite à jour de chacune dans JPL Horizons (une requête par comète, 25 minutes mesurées).
+- Contrôle : 8 comètes comparées à Horizons 157 jours après, toutes sous 0,001 UA (Halley 16 000 km).
