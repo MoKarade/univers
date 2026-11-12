@@ -191,6 +191,8 @@ def main():
         if os.path.exists(dpath):
             with np.load(dpath) as z:
                 p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; meta = json.loads(str(z['meta']))
+            if len(meta['galaxies']) < 4:      # départ « Voie lactée seule » d'avant la mise en forme à 4 galaxies
+                meta['galaxies'] = ['mw', 'm31', 'm33', 'lmc']; meta['affichees'] = (meta['affichees'] + [0, 0, 0])[:4]
         else:
             p, gid, show, meta = construire(int(args[2]) if len(args) > 2 else 300000)
         if '--toutes' in sys.argv:      # toutes les étoiles, dans l'ordre des galaxies (le tirage du départ est remplacé)
