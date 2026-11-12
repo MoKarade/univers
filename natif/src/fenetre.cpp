@@ -218,6 +218,7 @@ int runWindow(const WindowOptions& opt) {
     MilkyWayRenderer milkyWay;
     if (kShowModelledMilkyWay) milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
     sim.hasGaia = gaiaOk;
+    sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
     sim.gaiaCount = gaiaOk ? gaia.count : 0;
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
