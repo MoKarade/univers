@@ -92,17 +92,40 @@ const MS_MASS = [40, 17, 7, 3.5, 2.5, 1.9, 1.5, 1.3, 1.1, 1.0, 0.9, 0.85, 0.7, 0
 const MS_MV = [-5.5, -4.0, -1.5, 0.0, 1.0, 1.9, 2.6, 3.5, 4.4, 4.8, 5.5, 5.9, 7.3, 8.8, 11.5, 15.0];
 const STAR_CLASS = ['naine (séquence principale)', 'géante', 'supergéante', 'naine blanche'];
 const STAR_FATE_OVERRIDE = { 27989: 0.1 };     // Bételgeuse : explosion attendue d'ici 100 000 ans environ (ordre de grandeur)
+/* --------------------------------------------------------------------------
+   Durée de vie des étoiles : modèles d'évolution MIST v1.2 (Choi et al. 2016 ; Dotter 2016), [Fe/H] = 0 (gen/mist_life.js).
+   Âge : mesuré par Gaia DR3 (FLAME, Creevey et al. 2023) pour 38 987 étoiles Hipparcos (fichier joint, flameLoad) ; la date
+   montrée est celle de l'âge et de la masse centraux, la fiche donne la fourchette. Sans âge mesuré : âge tiré dans la
+   fourchette possible (statistique), et la fiche dit « inconnu » avec la fourchette.
+   -------------------------------------------------------------------------- */
+let FLAME = null;
+function flameLoad(txt) { const b = b64ToBytes(txt.trim()), dv = new DataView(b.buffer, b.byteOffset, b.length), n = b.length / 16, m = new Map();
+  for (let k = 0; k < n; k++) { const o = k * 16, u = q => dv.getUint16(o + 4 + q * 2, true); m.set(dv.getInt32(o, true), [u(0), u(1), u(2), u(3) / 1000, u(4) / 1000, u(5) / 1000]); }      /* âges en Ma, masses en M☉ */
+  FLAME = m; return m; }
+/** Fin de la séquence principale et fin de vie (Ma) pour une masse (M☉), interpolées en log dans la grille MIST. */
+function mistLife(m) {
+  const R = DATA.MIST_LIFE ? DATA.MIST_LIFE.rows.filter(r => r[1]) : null; if (!R) return [1e4 * Math.pow(m, -2.5), 1.12e4 * Math.pow(m, -2.5)];
+  const x = clamp(m, R[0][0], R[R.length - 1][0]); let k = 0; while (k < R.length - 2 && R[k + 1][0] < x) k++;
+  const f = Math.log(x / R[k][0]) / Math.log(R[k + 1][0] / R[k][0]), L = (a, b) => Math.exp(Math.log(a) + (Math.log(b) - Math.log(a)) * f);
+  return [L(R[k][1], R[k + 1][1]), L(R[k][2], R[k + 1][2])];
+}
+/* Destin selon la masse initiale : supernova au-dessus de 9 M☉, naine blanche sous 7 ; entre les deux, inconnu (limite
+   discutée, Doherty et al. 2017) : montrée comme une naine blanche, et dit dans la fiche. */
+const SN_MIN = 9, SN_UNC = 7;
 function starLife(MV, bv, i, hip) {
-  const h = hash01(i), h2 = hash01(i * 31 + 5), msMv = interp(MS_BV, MS_MV, bv);
-  let cls = 0, mass, tMS, tB, tM, tD;
+  const h = hash01(i), h2 = hash01(i * 31 + 5), msMv = interp(MS_BV, MS_MV, bv), F = FLAME && hip ? FLAME.get(hip) : null;
+  let cls = 0, mass, tMS, tB, tM, tD, src = 0, lo = 0, hi = 0;
   if (MV < -3.5) cls = 2; else if (MV > msMv + 3.5 && bv < 1.0) cls = 3; else if (MV < msMv - 2.2 && bv > 0.45) cls = 1;
-  if (cls === 0) { mass = interp(MS_BV, MS_MASS, bv); tMS = Math.max(1e4 * Math.pow(mass, -2.5), 3); const age = (0.03 + 0.94 * h) * Math.min(tMS, 12000); tB = -age; tM = tB + tMS; tD = tM + Math.max(0.12 * tMS, 0.5); }
-  else if (cls === 1) { mass = 1.2 + 1.3 * h2; tMS = 1e4 * Math.pow(mass, -2.5); const dur = 0.12 * tMS; tM = -h * dur; tD = tM + dur; tB = tM - tMS; }
-  else if (cls === 2) { mass = clamp(9 + (-3.5 - MV) * 3.5, 9, 40); tMS = Math.max(1e4 * Math.pow(mass, -2.5), 3); const dur = 0.1 * tMS; tM = -h * dur; tD = tM + dur; tB = tM - tMS; }
+  if (F && cls !== 3) {      /* âge et masse mesurés : dates centrales ; fourchette de la fin de séquence principale par les bornes à 16 et 84 % */
+    src = 1; mass = F[3]; const age = F[0], [ms, end] = mistLife(mass); tMS = ms; tB = -age; tM = ms - age; tD = end - age;
+    lo = mistLife(F[5])[0] - F[2]; hi = mistLife(F[4])[0] - F[1];
+  } else if (cls === 0) { mass = interp(MS_BV, MS_MASS, bv); const [ms, end] = mistLife(mass); tMS = Math.max(ms, 3); const amax = Math.min(tMS, 12000), age = (0.03 + 0.94 * h) * amax; tB = -age; tM = tB + tMS; tD = tB + Math.max(end, tMS * 1.12); lo = tMS - 0.97 * amax; hi = tMS - 0.03 * amax; }
+  else if (cls === 1) { mass = 1.2 + 1.3 * h2; const [ms, end] = mistLife(mass); tMS = ms; const dur = end - ms; tM = -h * dur; tD = tM + dur; tB = tM - tMS; lo = 0; hi = dur; }
+  else if (cls === 2) { mass = clamp(9 + (-3.5 - MV) * 3.5, 9, 40); const [ms, end] = mistLife(mass); tMS = Math.max(ms, 3); const dur = Math.max(end - ms, 0.1 * tMS); tM = -h * dur; tD = tM + dur; tB = tM - tMS; lo = 0; hi = dur; }
   else { mass = 0.6; tD = -(100 + 5000 * h); tM = tD - 300; tB = tD - 3000; }
   if (STAR_FATE_OVERRIDE[hip] !== undefined) { const d = STAR_FATE_OVERRIDE[hip] - tD; tD += d; tM += d; tB += d; }
-  const sn = cls !== 3 && mass >= 8;
-  return [tB, tM, tD, cls === 3 ? 4 : (cls === 0 ? 0 : 2) + (sn ? 1 : 0), mass, cls];
+  const sn = cls !== 3 && mass >= SN_MIN;
+  return [tB, tM, tD, cls === 3 ? 4 : (cls === 0 ? 0 : 2) + (sn ? 1 : 0), mass, cls, src, lo, hi];
 }
 const bvTemp = bv => 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62));
 const bvSpectral = bv => bv < -0.30 ? 'O' : bv < -0.02 ? 'B' : bv < 0.30 ? 'A' : bv < 0.58 ? 'F' : bv < 0.81 ? 'G' : bv < 1.40 ? 'K' : 'M';
