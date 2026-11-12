@@ -1039,6 +1039,11 @@
       else { n = 'Onde gravitationnelle ' + g.n; d = 'Détection publiée. Masses et distance pas encore disponibles dans l’interface de GWOSC.'; }
       if (!sure) d += ' Probabilité d’origine astrophysique : ' + pct(g.pa) + '.';
       dyn.push([g.t.slice(0, 16), 'O', 3, n, d, sure ? 'C' : 'P', src + g.cat, 'e', { sim: 'Détection réelle. Sa position sur le ciel n’est pas affichée : les zones de localisation ne sont pas encore chargées.' }]); } }
+  /* Lot G : passages de Mercure et de Vénus devant le Soleil, calculés par la page (gen/transits.js, 23_events.js). */
+  function transitEvents(dyn) { const T = DATA.TRANSITS; if (!T) return; const iso = jd => new Date((jd - 2440587.5) * 864e5).toISOString().slice(0, 16);
+    const hand = EV_RAW.filter(r => typeof r[0] === 'string' && /ransit/.test(r[3])).map(r => isoJd(r[0]));      /* passages déjà décrits à la main (texte historique) : gardés, pas de doublon */
+    for (const [k, nm, imp] of [['mercury', 'Mercure', 3], ['venus', 'Vénus', 1]]) for (const [jd, sep, rS] of T[k]) if (!hand.some(h => Math.abs(h - jd) < 1))
+      dyn.push([iso(jd), 'S', imp, nm + ' passe devant le Soleil', 'Vue de la Terre, ' + (k === 'venus' ? 'Vénus' : 'Mercure') + ' traverse le disque du Soleil en quelques heures. Calculé ici : au milieu du passage, son centre est à ' + nf(Math.round(sep), 0) + '″ de celui du Soleil (rayon apparent ' + nf(Math.round(rS), 0) + '″).', 'C', 'Calcul de la page (VSOP87) ; contrôlé contre le catalogue de la NASA (F. Espenak) : même minute à 3 min près de 2026 à 2200', 'i', { sp: 6 * 3600 / YEAR_S, lead: 2 / 365.25 }]); }
   function buildEvents() { const O = S.orbit, C = S.cosmo, p = O.peri[0], L10 = Math.log10, dyn = []; if (!OO.el) oortInit();
     dyn.push([0, 'H', 1, 'Aujourd’hui', 'L’instant présent, à l’ouverture de la page.', 'C', 'Horloge de l’appareil', 's', { now: true, sp: 20 / 365.25 }]);
     dyn.push([EV_AC[0], 'G', 2, 'Alpha du Centaure au plus près du Soleil', 'Le système d’étoiles le plus proche passe à ' + sig(EV_AC[1], 2) + ' années-lumière, puis s’éloigne.', 'C', 'Calculé ici d’après la position et la vitesse mesurées (Hipparcos, Gaia)', 'n', { sp: 2500, lead: 9000 }]);
@@ -1063,7 +1068,7 @@
     { const ta = cosmoCross(a => C.acc(a)), td = cosmoCross(a => C.par.OL * Math.pow(a, -3 * (1 + C.par.w)) - C.par.Om / (a * a * a));
       if (ta !== null) dyn.push([ta, 'U', 1, 'L’expansion se met à accélérer', 'La matière s’est assez diluée pour que l’énergie noire l’emporte sur la gravité : l’expansion, qui ralentissait, accélère.', 'P', 'Date calculée avec le modèle cosmologique de la page ; découverte : Riess et al. 1998, Perlmutter et al. 1999', 'w']);
       if (td !== null) dyn.push([td, 'U', 2, 'L’énergie noire devient majoritaire', 'Sa densité dépasse celle de la matière.', 'P', 'Date calculée avec le modèle cosmologique de la page', 'w']); }
-    gwEvents(dyn);
+    gwEvents(dyn); transitEvents(dyn);
     EVL = evResolve(EV_RAW.concat(dyn)); evList();
     $('s-vt').value = S.vt; $('o-vt').textContent = nf(Math.round(S.vt), 0) + NBSP + 'km/s';
     $('vt-hint').textContent = 'Les mesures publiées donnent de 34 à 76 km/s, avec une incertitude d’une trentaine de km/s. ' + (p ? 'Avec ' + nf(Math.round(S.vt), 0) + ' km/s : au plus près dans ' + fmtYears(p[0] * 1e9) + ', à ' + fmtDist(Number((p[1] * KPC).toPrecision(2))) + '. ' : '') + (O.tMerge ? 'Fusion dans ' + fmtYears(O.tMerge * 1e9) + '.' : 'Pas de fusion avant 14 milliards d’années.') + ' Les études récentes donnent entre une chance sur deux et neuf sur dix de fusion d’ici 10 milliards d’années.';
