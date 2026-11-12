@@ -68,16 +68,20 @@ function moTrack(P, s0, jd0, span) {
   const key = jd => Math.round((jd - jd0) / CP);
   T.at = (jd, ms) => {
     if (!(Math.abs(jd - jd0) <= span)) return null;
-    const t0 = Date.now(), k = key(jd);
-    if (!cps.has(k)) {      /* construire les points de reprise vers k, à partir du plus proche déjà connu */
+    const t0 = Date.now(), left = () => Math.max(1, ms - (Date.now() - t0));
+    /* lecture continue : l'état courant avance jusqu'à l'heure affichée ; s'il n'y est pas encore, dernière position calculée */
+    if (T.cur && Math.abs(T.cur.y.jd - jd) <= 400) { if (Math.abs(T.cur.y.jd - jd) > 1e-9 && !moStepper(P, T.cur.y, jd).run(left())) return T.last; T.last = Float64Array.from(T.cur.y.s); T.lastJd = jd; return T.last; }
+    /* saut lointain : on repart du point de reprise le plus proche (construit à la demande, tous les 100 jours) */
+    const k = key(jd);
+    if (!cps.has(k)) {
       const dir = Math.sign(k) || 1; let j = k; while (!cps.has(j)) j -= dir;
       if (!T.busy || T.busy.from !== j) { const y = { jd: jd0 + j * CP, s: Float64Array.from(cps.get(j)) }; T.busy = { from: j, y, st: moStepper(P, y, jd0 + (j + dir) * CP) }; }
       if (T.busy.st.run(ms)) { cps.set(T.busy.from + dir, Float64Array.from(T.busy.y.s)); T.busy = null; }
       return null;
     }
-    if (!T.cur || Math.abs(T.cur.y.jd - jd) > CP) { const y = { jd: jd0 + k * CP, s: Float64Array.from(cps.get(k)) }; T.cur = { y }; }
-    if (Math.abs(T.cur.y.jd - jd) > 1e-9) { const st = moStepper(P, T.cur.y, jd); if (!st.run(Math.max(1, ms - (Date.now() - t0)))) return null; }
-    return T.cur.y.s;
+    T.cur = { y: { jd: jd0 + k * CP, s: Float64Array.from(cps.get(k)) } };
+    if (!moStepper(P, T.cur.y, jd).run(left())) return null;
+    T.last = Float64Array.from(T.cur.y.s); return T.last;
   };
   return T;
 }

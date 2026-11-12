@@ -3,7 +3,7 @@
 États (km, km/s) relatifs au centre de Jupiter (500@599), écliptique J2000, TDB, à l'époque de départ et à des dates de contrôle."""
 import json, os, re, time, urllib.parse, urllib.request
 H = 'https://ssd.jpl.nasa.gov/api/horizons.api'
-EPOCH, CHECKS = '2026-11-10', ['1976-11-10', '2016-11-10', '2027-11-10', '2036-11-10', '2076-11-10']
+EPOCH, CHECKS = '2026-11-10', ['1976-11-10', '2016-11-10', '2021-11-10', '2024-11-10', '2027-11-10', '2029-11-10', '2031-11-10', '2034-11-10', '2036-11-10', '2076-11-10']
 def state(cmd, date, center='500@599'):
     q = {'format': 'text', 'COMMAND': f"'{cmd}'", 'OBJ_DATA': "'NO'", 'MAKE_EPHEM': "'YES'", 'EPHEM_TYPE': "'VECTORS'", 'CENTER': f"'{center}'",
          'TLIST': f"'{date}'", 'TLIST_TYPE': "'CAL'", 'TIME_TYPE': "'TDB'", 'REF_PLANE': "'ECLIPTIC'", 'REF_SYSTEM': "'ICRF'", 'VEC_TABLE': "'2'", 'OUT_UNITS': "'KM-S'", 'CSV_FORMAT': "'YES'"}
