@@ -191,6 +191,53 @@ function fusExtrema(k) { const F = FUSC, d = [], out = [], W = 10;      /* extre
     else if (d[i] === hi && hi - lo > 2 && out.length && out[out.length - 1][2] !== 'max') out.push([F.t[i], d[i], 'max']); }
   return out; }
 
+/* R10 : les étoiles du calcul complet (30 000 étoiles affichées : 12 000 de la Voie lactée, 15 000 d'Andromède, 2 000 du
+   Triangle, 1 000 du Grand Nuage), une image toutes les 20 Ma, relatives au centre de la Voie lactée, en paquets de 25 images
+   (pipeline/fusion/exporter_images.py), chargés à la demande. Entre deux images, chaque étoile va en ligne droite :
+   pour les étoiles du centre (un tour en 50 à 100 Ma), c'est une corde de leur orbite. */
+let FUSI = null;
+function fusImagesInit(meta) { FUSI = { meta, packs: [], n: meta.t.length, dt: meta.t[1] - meta.t[0], NS: meta.etoiles, Q: meta.quantum_kpc, cnt: meta.par_galaxie, per: meta.paquets[0].images }; return FUSI; }
+const fusPackOf = k => Math.floor(k / FUSI.per);
+function fusFrame(k) { const P = FUSI.packs[fusPackOf(k)]; if (!P || !P.data) return null; const o = (k - P.first) * FUSI.NS * 3; return P.data.subarray(o, o + FUSI.NS * 3); }
+/** Demande les paquets des images k et k + 1 (et le suivant, à l'avance) ; libère les paquets éloignés. fetcher(paquet) → Promise du texte base64. */
+function fusWant(t, fetcher) {
+  const k = clamp(Math.floor(t / FUSI.dt), 0, FUSI.n - 1), want = new Set([fusPackOf(k), fusPackOf(Math.min(k + 1, FUSI.n - 1)), fusPackOf(Math.min(k + FUSI.per, FUSI.n - 1))]);
+  FUSI.packs.forEach((P, p) => { if (P && !want.has(p) && Math.abs(p - fusPackOf(k)) > 1) FUSI.packs[p] = null; });
+  for (const p of want) if (!FUSI.packs[p]) { const pk = FUSI.meta.paquets[p], P = FUSI.packs[p] = { first: pk.premiere, data: null };
+    fetcher(pk).then(txt => { const b = b64ToBytes(txt.trim()); P.data = new Int16Array(b.buffer, b.byteOffset, b.length / 2); }).catch(e => { console.warn('Image du calcul de la fusion non chargée :', e.message); if (FUSI.packs[p] === P) FUSI.packs[p] = null; }); }
+}
+/** Positions (kpc, centrées sur la Voie lactée) à la date t, interpolées entre deux images ; false si elles ne sont pas encore chargées. */
+function fusFill(out, t, off) {
+  const x = clamp(t / FUSI.dt, 0, FUSI.n - 1.0001), k = x | 0, f = x - k, a = fusFrame(k), b = fusFrame(k + 1), q = FUSI.Q, o = (off || 0) * 3; if (!a || !b) return false;
+  for (let j = 0; j < a.length; j++) out[o + j] = (a[j] + (b[j] - a[j]) * f) * q;
+  return true;
+}
+/** Après la dernière image (10 Ga) : chaque étoile continue dans la galaxie résultante, immobile et sphérique (les deux
+    halos de la page confondus, cœur de 0,3 kpc à densité constante). Pas propre à chaque étoile (2 % de son temps de
+    traversée, sans descendre sous 2 Ma) ; le cœur à densité constante évite le coup de fouet d'un centre ponctuel, qui faisait gonfler la galaxie.
+    Avance d'au plus 0,2 Ga ou de ms millisecondes par appel ; renvoie true quand tTarget est atteint. */
+function tailAdvance(D, tTarget, ms, T) {
+  const t0p = performance.now(), ta = T.a, tb = T.b, nt = T.n - 2, x = D.x, v = D.v, ga = r => { const rr = Math.max(r, 0.3) * 10, q = Math.min(rr | 0, nt), f = Math.min(rr, nt) - q; return (ta[q] + (ta[q + 1] - ta[q]) * f) + (tb[q] + (tb[q + 1] - tb[q]) * f); };
+  while (Math.abs(tTarget - D.t) > 1e-9 && performance.now() - t0p < ms) {
+    const H = clamp(tTarget - D.t, -0.2, 0.2);
+    for (let j = 0; j < D.n * 3; j += 3) {
+      let left = H;
+      while (Math.abs(left) > 1e-12) {
+        const r = Math.max(Math.hypot(x[j], x[j + 1], x[j + 2]), 0.3), vc = Math.sqrt(ga(r)) * r, h = Math.sign(left) * Math.min(Math.abs(left), Math.max(0.02 * r / Math.max(vc, 1), 0.0005));      /* au plus fin 0,5 Ma : le cœur à densité constante reste stable à ce pas */
+        let g = ga(Math.hypot(x[j], x[j + 1], x[j + 2])); v[j] -= g * x[j] * h / 2; v[j + 1] -= g * x[j + 1] * h / 2; v[j + 2] -= g * x[j + 2] * h / 2;
+        x[j] += v[j] * h; x[j + 1] += v[j + 1] * h; x[j + 2] += v[j + 2] * h;
+        g = ga(Math.hypot(x[j], x[j + 1], x[j + 2])); v[j] -= g * x[j] * h / 2; v[j + 1] -= g * x[j + 1] * h / 2; v[j + 2] -= g * x[j + 2] * h / 2;
+        left -= h;
+      }
+    }
+    D.t += H;
+  }
+  for (let j = 0; j < D.n * 3; j++) D.out[j] = x[j];
+  return Math.abs(tTarget - D.t) <= 1e-9;
+}
+/** Part des images nécessaires à la date t déjà chargées (0 à 1). */
+function fusReady(t) { const k = clamp(Math.floor(t / FUSI.dt), 0, FUSI.n - 2); return (fusFrame(k) ? 0.5 : 0) + (fusFrame(k + 1) ? 0.5 : 0); }
+
 function andromedaOrbit(C, vtKms, Vin, fus) {
   const P = DATA.M31.pos, V = Vin || DATA.M31.vel, r0 = Math.hypot(P[0], P[1], P[2]), u = [P[0] / r0, P[1] / r0, P[2] / r0], vr = V[0] * u[0] + V[1] * u[1] + V[2] * u[2];
   const vt = [V[0] - vr * u[0], V[1] - vr * u[1], V[2] - vr * u[2]], vt0 = Math.hypot(vt[0], vt[1], vt[2]), sc = vtKms === undefined ? 1 : vtKms / vt0;
