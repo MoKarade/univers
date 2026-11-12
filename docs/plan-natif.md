@@ -269,3 +269,16 @@ Réponse à la question « garder la Voie lactée dessinée (modèle) ? ». Appl
 (modèle avec trois points supposés) n'est plus montrée (`kShowModelledMilkyWay = false` dans `fenetre.cpp`) ; seules
 les étoiles mesurées de Gaia le sont. Règle pour toute la suite : pour le présent, rien qui ne soit mesuré ; et le plus
 possible de ce qui est mesuré. L'évolution dans le temps reste du calculé, dit comme tel.
+
+## Consigne de Marc, 12 novembre 2026, 18 h 07 UTC : détailler de près, regrouper en s'éloignant
+
+« plus de détails, quand on augmente les distances on généralise au fur et à mesure, comme une vrai simulation ».
+Principe retenu pour toute l'appli : de près, chaque objet mesuré ; de loin, leur somme (lumière ou nombre par pixel),
+jamais un modèle. Fait :
+- étoiles : éclat multiplié tenu à 100 au-delà de 300 années-lumière ; les étoiles se fondent en leur lumière
+  d'ensemble à éclat par pixel constant, et le nuage mesuré rapetisse (captures à 300, 3 000, 20 000, 90 000 et
+  600 000 années-lumière) ;
+- astéroïdes : au-delà de 8 fois la distance Terre-Soleil, l'éclat de chaque point baisse comme 1/d² : la ceinture
+  devient un anneau puis une tache, au lieu de s'éteindre (captures à 7, 25 et 100 fois la distance Terre-Soleil).
+À faire dans le même esprit : plus de détail de près (noms et fiches des astéroïdes, comètes, lunes d'Uranus), somme
+des sources Gaia à distance moins sûre (fil Gaia), texte qui dit à chaque échelle si l'on voit des objets ou leur somme.

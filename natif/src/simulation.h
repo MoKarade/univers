@@ -526,11 +526,13 @@ struct Sim {
         const double k = std::clamp(dist / 30.0, 1.0, 10.0);
         return k * k;
     }
-    // Astéroïdes : montrés à l'échelle du système solaire (plein éclat jusqu'à 60 fois la distance Terre-Soleil, éteints
-    // à 600), et seulement à moins de 300 ans de la date de leurs orbites : au-delà, l'orbite simple ne vaut plus.
+    // Astéroïdes : un point chacun de près ; au-delà de 8 fois la distance Terre-Soleil, l'éclat de chaque point baisse
+    // comme l'inverse du carré de la distance, si bien que la ceinture garde le même éclat par pixel pendant que ses
+    // points se fondent en un anneau, puis en une tache (même principe que pour les étoiles : on regroupe en s'éloignant).
+    // Montrés seulement à moins de 300 ans de la date de leurs orbites : au-delà, l'orbite simple ne vaut plus.
     double asteroidGain(double epochJd) const {
         const double au = dist / kAuInLy;
-        const double fade = std::clamp((std::log10(600.0) - std::log10(std::max(au, 1e-9))) / (std::log10(600.0) - std::log10(60.0)), 0.0, 1.0);
+        const double fade = std::min(1.0, (8.0 / std::max(au, 1e-9)) * (8.0 / std::max(au, 1e-9)));
         const double epochYears = (epochJd - 2451545.0) / 365.25;
         return std::fabs(years - epochYears) < 300.0 ? 0.30 * fade : 0.0;
     }
