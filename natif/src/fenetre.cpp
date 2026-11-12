@@ -149,8 +149,14 @@ int runWindow(const WindowOptions& opt) {
                 found = true;
             }
         if (!found && sim.asteroidCat) {      // sinon : un astéroïde du catalogue (ex. Ceres)
-            const std::vector<int> k = sim.asteroidCat->search(opt.target, 1);
-            const int body = k.empty() ? -1 : sim.selectAsteroid(k[0]);
+            const std::vector<int> k = sim.asteroidCat->search(opt.target, 50);
+            int pick = k.empty() ? -1 : k[0];
+            for (int c : k)      // une comète passe devant un astéroïde du même nom (1P/Halley avant Halley (2688))
+                if (sim.asteroidCat->isComet(static_cast<size_t>(c))) {
+                    pick = c;
+                    break;
+                }
+            const int body = pick < 0 ? -1 : sim.selectAsteroid(pick);
             if (body >= 0) {
                 sim.focus = body;
                 found = true;
