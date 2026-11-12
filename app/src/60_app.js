@@ -343,7 +343,16 @@
     if (!W) { const c = Rr.camPos, v = new THREE.Vector3(x / Rr.cssW * 2 - 1, 1 - y / Rr.cssH * 2, 0.5).unproject(Rr.camera), dir = v.sub(c).normalize(), n = c.clone().normalize(), dn = dir.dot(n);
       if (Math.abs(dn) < 1e-6) return null; const t = -c.dot(n) / dn; W = [(c.x + t * dir.x) / F.s + F.tg[0], (c.y + t * dir.y) / F.s + F.tg[1], (c.z + t * dir.z) / F.s + F.tg[2]]; }
     zAnc = { x, y, t: now, W }; return W; }
-  function zoomAt(dl, x, y) { const l0 = S.logR, l1 = clampZoom(l0 + dl); S.anim = null; S.logR = l1;
+  /* R12 : vitesse de zoom constante par puissance de dix, sauf dans les étendues où rien ne change à l'écran : traversées trois fois plus vite, et le panneau le dit.
+     Étendues repérées par mesure (écart moyen entre deux images successives, un quart de puissance de dix d'écart, inférieur à 3 sur 255 : docs/r12-zoom.md). */
+  const ZFAST = [{ lo: 3.3, hi: 5.5, txt: 'Traversée rapide : quand le champ passe de 600 km à 4 km, la simulation n’a pas d’image plus fine du sol ; rien ne change à l’écran.' },
+    { lo: 0.5, hi: 2.0, txt: 'Traversée rapide : quand le champ passe de 200 m à 6 m, rien n’est dessiné, faute de donnée réelle à cette finesse.' },
+    { lo: -2.3, hi: 0.0, txt: 'Traversée rapide : quand le champ passe de 2 m à 1 cm, la gouttelette approche sans rien montrer de nouveau.' },
+    { lo: -8.0, hi: -4.5, txt: 'Traversée rapide : quand le champ passe de 60 micromètres à 20 nanomètres, l’eau liquide paraît la même. Rien de nouveau avant les molécules.' },
+    { lo: -13.4, hi: -12.6, txt: 'Traversée rapide : entre les électrons et le noyau, rien. Presque tout l’atome est vide.' },
+    { lo: -19.3, hi: -17.2, txt: 'Traversée rapide : le quark reste un point, rien de nouveau jusqu’à la limite du connu.' }], ZFAST_K = 3;
+  const zFast = lr => microOn() ? ZFAST.find(z => lr > z.lo && lr < z.hi) || null : null;
+  function zoomAt(dl, x, y) { if (zFast(S.logR)) dl *= ZFAST_K; const l0 = S.logR, l1 = clampZoom(l0 + dl); S.anim = null; S.logR = l1;
     if (S.center || microOn() || (S.focus !== 'sun' && l0 < 14.4) || !(l1 !== l0) || !F.s) return;      /* objet touché ou astre suivi : le zoom reste centré sur lui (R1) */
     const W = anchorAt(x, y); if (!W || !isFinite(W[0])) return; const k = Math.pow(10, l1 - l0), z = S.zoff || [0, 0, 0];
     for (let i = 0; i < 3; i++) { const dz = (W[i] - F.tg[i]) * (1 - k); z[i] += dz; F.tg[i] += dz; } S.zoff = z; F.s /= k; }      /* F.tg et F.s suivent tout de suite : plusieurs crans dans la même image restent justes */
@@ -358,7 +367,7 @@
     });
     const up = e => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (ptrs.size === 0) { canvas.classList.remove('drag'); if (e.type === 'pointerup' && moved < 6 && performance.now() - t0 < 450) tap(e.clientX, e.clientY); } pinch = 0; };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013) * (S.logR < -19.5 ? 3 : S.logR < 2.5 ? 1.6 : 1), e.clientX, e.clientY); /* l'infiniment petit couvre 26 puissances de dix : la molette y va plus vite */ }, { passive: false });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY * (e.deltaMode === 1 ? 0.035 : e.ctrlKey ? 0.006 : 0.0013), e.clientX, e.clientY); /* R12 : même vitesse partout ; seules les étendues vides vont plus vite (zoomAt) */ }, { passive: false });
     function labelAt(x, y) { for (const b of placed) if (b[4] && x >= b[0] - 5 && x <= b[1] + 5 && y >= b[2] - 5 && y <= b[3] + 5) { const L = b[4]; if (L.micro) return null; if (L.body) return { body: L.body }; const p = L.get(), q = [0, 0, 0]; if (p && isFinite(p[0]) && Rr.project(p, F, q)) return { x: q[0], y: q[1] }; } return null; }
     S._tap = (x, y) => tap(x, y);
     function tap(x, y) { const now = performance.now(), dbl = now - lastTap[0] < 380 && Math.hypot(x - lastTap[1], y - lastTap[2]) < 26; lastTap = [now, x, y]; let best = null, bd = 30; for (const b of BODIES) { const o = Rr.bodies[b.key]; if (!o.screen) continue; const d = Math.hypot(o.screen[0] - x, o.screen[1] - y) - Math.min(o.px, 200); if (d < bd) { bd = d; best = b.key; } } if (best) { select(null); if (best !== S.focus) focusBody(best); return; }
@@ -399,6 +408,12 @@
       S.opts.simWeb = box.checked;
     }); }
   $('c-lite').addEventListener('change', e => { S.lite = e.target.checked; resize(); });
+  /* R12 : compteur d'images par seconde, à lire sur le téléphone. Choix gardé sur cet appareil. */
+  const FPS = { on: false, n: 0, t0: 0, v: 0 };
+  const fpsShow = on => { FPS.on = on; $('fps').hidden = !on; $('c-fps').checked = on; FPS.n = 0; FPS.t0 = 0; try { localStorage.setItem('univers-fps', on ? '1' : '0'); } catch (err) {} };
+  $('c-fps').addEventListener('change', e => fpsShow(e.target.checked));
+  { let on = false; try { on = localStorage.getItem('univers-fps') === '1'; } catch (err) {} fpsShow(on); }
+  function fpsTick(now) { if (!FPS.t0) { FPS.t0 = now; FPS.n = 0; return; } FPS.n++; if (now - FPS.t0 >= 1000) { FPS.v = FPS.n * 1000 / (now - FPS.t0); FPS.n = 0; FPS.t0 = now; if (FPS.on) $('fps').textContent = Math.round(FPS.v) + ' images/s'; } }
   $('n-stars').textContent = nf(starTotal(), 0); $('n-bodies').textContent = nf(DATA.AST_N + DATA.TNO_N, 0); $('n-comets').textContent = nf(DATA.COM_N, 0); $('n-bh').textContent = nf(DATA.BHS.n + DATA.BHM.n + 1, 0); $('n-exo').textContent = nf(DATA.EXO_N, 0); $('n-psr').textContent = nf(DATA.PSR_N, 0); $('n-clusters').textContent = nf(DATA.CLUSTERS_N[0] + DATA.CLUSTERS_N[1], 0); $('n-near').textContent = nf(DATA.LOCAL.length + DATA.NEAR_N, 0); $('n-surv').textContent = nf(DATA.SURV_N[0] + DATA.SURV_N[1] + DATA.SURV_N[2], 0);
 
   /* ---- cosmologie : curseurs, courbes, lectures ---- */
@@ -1192,6 +1207,7 @@
     const C = S.cosmo, lr = S.logR, age = F.age;
     if (S.lost) return S.lostMsg || '';
     if (Rr.lens && Rr.lens.on && Rr.lens.inside) return 'Inconnu : si près de ' + Rr.lens.name + ', à moins d’une fois et demie la taille de son horizon, la lumière n’est pas calculée ici.';      /* S6 */
+    if (microOn() && zFast(lr)) return zFast(lr).txt;
     if (microOn()) { const nt = microLevel(lr).note; return (typeof nt === 'function' ? nt() : nt) || ''; }
     if (lr < 17.6 && S.ty >= SYS_END * 1e9) return SYS_END_TXT;      /* vue du système solaire : son état passe avant le calcul d'Andromède */
     if (lr < 13.5 && S.ty / 1e9 >= T_DIV) return EARTH_TXT;      /* R6 : panneau du sort de la Terre, dans le système solaire */
@@ -1361,6 +1377,7 @@
   /* ---- boucle ---- */
   let last = performance.now(), hudT = 0, frames = 0;
   function step(now) {
+    fpsTick(now);
     const wall = now / 1000, dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000)); last = now;
     if (S.anim) { const A = S.anim, k = clamp((wall - A.t0) / A.dur, 0, 1), e = ease(k); S.logR = lerp(A.l0, A.l1, e); S.az = lerp(A.a0, A.a1, e); S.el = lerp(A.e0, A.e1, e); if (k >= 1) S.anim = null; }
     S.logR = clampZoom(S.logR);
@@ -1436,7 +1453,7 @@
     const sun = sunGalAt(Rr.K, 0, [0, 0, 0]);
     return { m31: { pos: DATA.M31.pos, vel: M31_MEAS[0][1], vel_name: M31_MEAS[0][0], spin: DATA.M31.spin, meas: M31_MEAS }, lmc: DATA.LMC, lmc_spin: (LG_SPIN.find(q => /Grand Nuage/.test(q.key)) || {}).L, m33_spin: (LG_SPIN.find(q => /Triangle/.test(q.key)) || {}).L,
       dwarfs: dw, sun: { pos: sun, vel: SUN_UVW }, M_GAL2ECL: M, note: 'Axes LG_SPIN dans le repère équatorial (voir 30_gen.js) ; le reste dans le repère galactocentrique d’andromedaOrbit.' }; }
-  window.__U = { lgRadial, LGR, gcRelKpc0, selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
+  window.__U = { FPS, ZFAST, zFast, lgRadial, LGR, gcRelKpc0, selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
   if (!reduced) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
   requestAnimationFrame(now => { last = now; step(now); requestAnimationFrame(() => { $('loader').classList.add('out'); setTimeout(() => $('loader').remove(), 1000); if (!reduced && !S.resumed) { S.anim = { t0: performance.now() / 1000 + 0.3, dur: 5.5, l0: S.logR, l1: STOPS[1].logR, a0: S.az, a1: S.az + 0.5, e0: S.el, e1: 0.6 }; } showRail(); }); });
 })();
