@@ -200,6 +200,7 @@ Gpu createGpu(bool window = false) {
     on13.dynamicRendering = VK_TRUE;
     VkPhysicalDeviceFeatures feats{};
     feats.largePoints = VK_TRUE;
+    feats.samplerAnisotropy = VK_TRUE;      // cartes de surface nettes en vue rasante
     VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &on13};
     dci.queueCreateInfoCount = 1;
     dci.pQueueCreateInfos = &qci;

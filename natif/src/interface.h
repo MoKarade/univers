@@ -78,6 +78,13 @@ bool projectLoose(const Camera& cam, Vec3 p, float w, float h, ImVec2& out) {
     return std::fabs(out.x) < 1.0e5f && std::fabs(out.y) < 1.0e5f;
 }
 
+// Rayon apparent du disque d'un astre, en pixels (0 pour une étoile lointaine).
+double discRadiusPx(const Sim& sim, const Camera& cam, int i, float h) {
+    const Vec3 d = sim.position(i) - cam.pos;
+    const double dist = std::max(std::sqrt(dot(d, d)), 1e-30);
+    return (sim.bodies[static_cast<size_t>(i)].radiusKm / kLyInKm) / dist / (2.0 * cam.tanHalf / h);
+}
+
 // Orbites : la trajectoire réelle lue dans les éphémérides sur un tour centré sur la date courante.
 struct OrbitCache {
     static constexpr int kPoints = 240;
@@ -135,6 +142,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
             const Vec3 toParent = parent - cam.pos;
             const double size = std::sqrt(dot(pts[0], pts[0])) / std::max(std::sqrt(dot(toParent, toParent)), 1e-30) * h;
             if (size < 6 || size > 60.0 * h) continue;
+            if (discRadiusPx(sim, cam, i, h) > 14) continue;      // l'astre est vu de près : son orbite ne lui passe pas sur le visage
             ImVec2 prev;
             bool hasPrev = false;
             for (const Vec3& rel : pts) {
@@ -158,6 +166,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
         double px = 0, py = 0;
         if (!cam.project(sim.position(i), w, h, px, py)) continue;
         const bool isFocus = i == sim.focus;
+        if (isFocus && discRadiusPx(sim, cam, i, h) > 14) continue;      // vu de près : la fiche porte déjà son nom
         if (!isFocus) {
             if (b.kind == Kind::Star && sim.apparentMag(i, cam.pos) - boostMag > 4.5) continue;      // trop pâle d'ici pour mériter un nom
             if (b.kind == Kind::Planet) {      // un nom par planète seulement quand elle se détache de son astre parent

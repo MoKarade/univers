@@ -11,6 +11,7 @@
 #include "fenetre.h"
 #include "interface.h"
 #include "points_planetes.h"
+#include "spheres.h"
 #include "rendu_fenetre.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -160,6 +161,14 @@ int runWindow(const WindowOptions& opt) {
     sr.create(g, stars, HdrTarget::kFormat);
     PlanetPoints planets;
     planets.create(g);
+    SphereRenderer spheres;
+    spheres.create(g, HdrTarget::kFormat, dataDir + "/textures");
+    std::vector<bool> asSphere;
+    if (test)      // contrôle : on attend les cartes de surface, pour une image reproductible
+        for (int tries = 0; tries < 3000 && !spheres.allLoaded(); ++tries) {
+            spheres.uploadPending(g);
+            Sleep(10);
+        }
     Target hdr, final;
     auto createTargets = [&]() {
         hdr.create(g, HdrTarget::kFormat, sc.extent, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -260,7 +269,10 @@ int runWindow(const WindowOptions& opt) {
         const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost()), sc.extent.height, sim.years);
 
-        planets.update(sim, cam);
+        vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
+        spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
+        spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
+        planets.update(sim, cam, asSphere);
 
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -292,6 +304,7 @@ int runWindow(const WindowOptions& opt) {
         beginPass(cmd, hdr.view, sc.extent);
         sr.draw(cmd, pc, sc.extent.width, sc.extent.height);
         planets.draw(cmd);
+        spheres.draw(cmd, sc.extent.width, sc.extent.height);
         vkCmdEndRendering(cmd);
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
@@ -365,6 +378,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     planets.release(g);
+    spheres.release(g);
     sr.release(g);
     hdr.release(g);
     final.release(g);

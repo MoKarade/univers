@@ -22,12 +22,13 @@ struct PlanetPoints {
         }
     }
 
-    void update(const Sim& sim, const Camera& cam) {
+    // asSphere : astres déjà dessinés en sphère cette image (spheres.h) ; ils ne sont pas redessinés en point.
+    void update(const Sim& sim, const Camera& cam, const std::vector<bool>& asSphere) {
         count = 0;
         if (!sim.ephemValid) return;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()) && count < kMax; ++i) {
             const Body& b = sim.bodies[static_cast<size_t>(i)];
-            if (b.kind != Kind::Planet) continue;
+            if (b.kind != Kind::Planet || asSphere[static_cast<size_t>(i)]) continue;
             const Vec3 p = sim.position(i), d = p - cam.pos;
             const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
             cols[0][count] = static_cast<float>(p.x);

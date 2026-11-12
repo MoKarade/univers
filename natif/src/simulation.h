@@ -200,8 +200,8 @@ struct Sim {
         refreshEphemeris();
         if (!visible(focus)) focus = 0;       // l'astre suivi n'a plus de position connue : retour au Soleil
     }
-    double minDist(int i) const {      // on ne descend pas sous trois rayons de l'astre (les surfaces viennent ensuite)
-        return std::max(3.0 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
+    double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
+        return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }
     void zoom(double notches) { dist = std::clamp(dist * std::pow(0.8, notches), minDist(focus), 4.0e5); }
     void orbit(double dx, double dy) {
@@ -215,7 +215,7 @@ struct Sim {
         // Distance d'arrivée : de quoi voir l'astre dans son voisinage.
         double arrive = 50.0;                                                       // étoile : on garde ou on se rapproche à 50 années-lumière
         if (b.kind == Kind::Sun) arrive = 45.0 * kAuInLy;
-        if (b.kind == Kind::Planet) arrive = b.parent > 0 ? 0.01 * kAuInLy : 0.5 * kAuInLy;
+        if (b.kind == Kind::Planet) arrive = 6.0 * b.radiusKm / kLyInKm;      // planète ou lune : elle remplit un bon tiers de l'écran
         dist = std::clamp(std::min(dist, arrive), minDist(i), 4.0e5);
     }
 };

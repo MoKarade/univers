@@ -150,3 +150,16 @@ finale, interface comprise, dans un fichier (`--fenetre-test`), relu à l'œil e
 - Approximations dites dans le code : phase de Lambert pour l'éclat des planètes ; TDB − UTC fixé à 69,184 s ;
   magnitudes H, couleurs et rayons recopiés de mémoire [Probable], à relire contre les sources.
 - Contrôle visuel sans fenêtre : `univers.exe etoiles.bin --fenetre-test 60 --capture f.ppm --cible Terre --distance 1e-7`.
+
+## E2 : surfaces (12 novembre 2026, 15 h 50 UTC)
+
+- `natif/src/orientation.h` : axe et méridien d'origine de chaque astre (modèle UAI). `essai_orientation` avec DE440
+  [Certain] : Terre, 12 novembre 2026 à 12 h TU, Soleil au zénith à −17,77° de latitude et −3,87° de longitude
+  (attendu −17,8° et −3,95°) ; équinoxe du 20 mars 2026 : latitude 0,002° ; Lune : le point tourné vers la Terre
+  reste à moins de 7,4° et 5,2° du centre de la face visible sur 60 dates. Les autres astres : non contrôlés.
+- `natif/src/spheres.h`, `shaders/sphere.frag` : sphère exacte par pixel (pas de maillage), carte de surface,
+  éclairage par le Soleil (surface mate), bord adouci, Soleil avec assombrissement du bord. Cartes Solar System
+  Scope (CC BY 4.0) en 8192 × 4096, décodées dans un fil à part ; installées dans `C:\dev\Univers-PC\textures`.
+- Dit dans le code : l'exposition des surfaces est un réglage d'affichage (en vraie lumière l'image serait blanche).
+- Reste : anneaux de Saturne, nuages et nuit de la Terre, ombres et éclipses, lunes des géantes, Pluton (pas de
+  carte), dates hors 1550-2650.

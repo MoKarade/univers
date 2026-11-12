@@ -13,6 +13,12 @@ FetchContent_Declare(volk GIT_REPOSITORY https://github.com/zeux/volk.git GIT_TA
 FetchContent_MakeAvailable(vulkan_headers)
 # Dear ImGui (Omar Cornut, licence MIT) : interface. Version figée ; pas de CMake fourni, les sources sont listées ici.
 FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.91.9b GIT_SHALLOW ON)
+# stb_image (Sean Barrett, domaine public) : lecture des cartes de surface en JPEG et PNG.
+FetchContent_Declare(stb GIT_REPOSITORY https://github.com/nothings/stb.git GIT_TAG master GIT_SHALLOW ON)
+FetchContent_GetProperties(stb)
+if(NOT stb_POPULATED)
+  FetchContent_Populate(stb)
+endif()
 FetchContent_GetProperties(imgui)
 if(NOT imgui_POPULATED)
   FetchContent_Populate(imgui)
@@ -32,7 +38,7 @@ find_program(GLSLANG glslang REQUIRED)
 set(SPV_DIR ${CMAKE_BINARY_DIR}/spv)
 file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
-foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag)
+foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
     DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} VERBATIM)
@@ -56,7 +62,8 @@ target_link_libraries(imgui PUBLIC volk dwmapi gdi32)
 
 # univers : avec console (contrôles). UniversPC : le même programme sans console, lancé par le raccourci du Bureau.
 foreach(T univers UniversPC)
-  add_executable(${T} src/univers.cpp src/fenetre.cpp)
+  add_executable(${T} src/univers.cpp src/fenetre.cpp src/stb_impl.cpp)
+  target_include_directories(${T} PRIVATE ${stb_SOURCE_DIR})
   target_link_libraries(${T} PRIVATE volk imgui)
   target_compile_options(${T} PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
   add_dependencies(${T} shaders)
@@ -68,3 +75,8 @@ target_link_options(UniversPC PRIVATE -static -mwindows)
 add_executable(essai_ephem src/essai_ephem.cpp)
 target_compile_options(essai_ephem PRIVATE -Wall -Wextra)
 target_link_options(essai_ephem PRIVATE -static)
+
+# Contrôle de l'orientation des astres (Terre : Soleil au zénith ; Lune : face tournée vers la Terre).
+add_executable(essai_orientation src/essai_orientation.cpp)
+target_compile_options(essai_orientation PRIVATE -Wall -Wextra)
+target_link_options(essai_orientation PRIVATE -static)

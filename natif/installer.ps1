@@ -15,7 +15,9 @@ foreach ($exe in 'univers.exe', 'UniversPC.exe') {
     }
 }
 Get-ChildItem $Cible -Filter '*.ancien-*' | ForEach-Object { try { Remove-Item $_.FullName -Force } catch {} }      # anciens programmes qui ne tournent plus
-Copy-Item "$Build\spv\etoiles.*.spv", "$Build\spv\ecran.*.spv" "$Cible\spv" -Force
+Copy-Item "$Build\spv\etoiles.*.spv", "$Build\spv\ecran.*.spv", "$Build\spv\sphere.*.spv" "$Cible\spv" -Force
+# Cartes de surface (Solar System Scope, CC BY 4.0), rangées avec les données.
+if (Test-Path "$Donnees\textures") { New-Item -ItemType Directory -Force "$Cible\textures" | Out-Null; Copy-Item "$Donnees\textures\*" "$Cible\textures" -Force }
 Copy-Item "$Donnees\etoiles.bin", "$Donnees\etoiles.json", "$Donnees\etoiles_noms.tsv" $Cible -Force
 # Éphémérides de la NASA (JPL DE440), téléchargées du NAIF : 114 Mo, lues telles quelles par le simulateur.
 if (Test-Path "$Ephem") { Copy-Item "$Ephem" "$Cible\de440.bsp" -Force }
