@@ -261,9 +261,14 @@ def proprietes(hips_id, adresse=None):
 def lire_fits(octets):
     """Image FITS d'une tuile : tableau [ligne][colonne] en float64, NaN là où rien n'est mesuré. Ligne 0 = bas de l'image
     (premier pixel écrit dans le fichier, convention FITS)."""
+    if octets[:2] == bytes([0x1F, 0x8B]):      # tuile compressée en gzip (IRSA le 12/11/2026 : WISE W1, GALEX)
+        import gzip
+        octets = gzip.decompress(octets)
     entete, i = {}, 0
     while True:
         bloc = octets[i:i + 2880]
+        if len(bloc) < 2880:      # fin du fichier sans carte END : pas un FITS (avant : boucle sans fin)
+            raise ValueError('en-tête FITS incomplet ou fichier non FITS')
         i += 2880
         fin = False
         for j in range(0, 2880, 80):

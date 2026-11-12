@@ -36,6 +36,17 @@ CATALOGUES = {
                  'bll': 2, 'fsrq': 2, 'bcu': 2, 'rdg': 2, 'agn': 2, 'ssrq': 2, 'css': 2, 'nlsy1': 2, 'sey': 2,
                  'snr': 3, 'pwn': 3, 'hmb': 3, 'lmb': 3, 'bin': 3, 'nov': 3, 'sfr': 3, 'glc': 3, 'gc': 3, 'spp': 3,
                  'gal': 4, 'sbg': 4}),
+    'erass1': dict(
+        # Catalogue principal des sources X de la DR1 (bande 0,2–2,3 keV), environ 930 000 sources. Publié seulement en
+        # archive .fits.tar.gz (643 Mo le 12/11/2026) ; lien relevé sur la page, la recherche (motif « Main ») en secours.
+        page='https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/', motif=('eRASS1', 'Main'),
+        urls=['https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/MerloniA_DR1/eRASS1_Main.v1.2.fits.tar.gz'],
+        bande='X', libelle="Sources X d'eROSITA (eRASS1, catalogue principal, 0,2 à 2,3 keV)",
+        reference='Merloni et al. 2024, A&A 682, A34 (eROSITA-DE DR1, catalogue principal eRASS1)',
+        grandeur='flux X de 0,2 à 2,3 keV', unite='erg/cm²/s',
+        cartes=['rass', 'erosita'],
+        colonnes=dict(ra=['RA', 'RA_CORR'], dec=['DEC', 'DEC_CORR'], grandeur=['ML_FLUX_1', 'ML_FLUX_P1', 'ML_FLUX'], classe=None),
+        groupes=['source X ponctuelle ou peu étendue'], classes={}),
     'erass1cl': dict(
         # Le nom exact du fichier n'est pas connu d'avance : il est lu sur la page des catalogues de la DR1 (lien vers un
         # .fits dont le nom contient « cl » et « primary »). Le 12/11/2026 la page ne donnait qu'une archive .fits.tgz :
@@ -207,6 +218,11 @@ def main():
             dd = np.degrees(np.arccos(np.clip(np.sin(de) * math.sin(math.radians(d0)) + np.cos(de) * math.cos(math.radians(d0)) * np.cos(ra - math.radians(r0)), -1, 1)))
             i = int(np.argmin(dd))
             print(f'  {nm:20s} : plus proche à {dd[i]:.2f}°, z = {g[i]:.4f}')
+    if nom == 'erass1':        # contrôle : sources X brillantes connues de la moitié ouest du ciel (position SIMBAD, ICRS)
+        for nm, r0, d0 in (('Sco X-1', 244.9795, -15.6402), ('LMC X-1', 84.9116, -69.7433), ('M87', 187.7059, 12.3911)):
+            dd = np.degrees(np.arccos(np.clip(np.sin(de) * math.sin(math.radians(d0)) + np.cos(de) * math.cos(math.radians(d0)) * np.cos(ra - math.radians(r0)), -1, 1)))
+            i = int(np.argmin(dd))
+            print(f'  {nm:20s} : plus proche à {dd[i] * 3600:.1f}", flux {g[i]:.3g} {c["unite"]}')
     print(f'Écrit {dest} : {n} sources ; ' + ', '.join(f'{k} {v}' for k, v in comptes.items()))
 
 
