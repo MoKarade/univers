@@ -25,6 +25,10 @@ def main() -> None:
             dst = os.path.join(drive, os.path.basename(p))
             taille = os.path.getsize(p)
             shutil.copyfile(p, dst + '.part')
+            for _ in range(60):      # le lecteur du Drive annonce la taille avec un peu de retard (constaté le 12/11/2026)
+                if os.path.getsize(dst + '.part') == taille:
+                    break
+                time.sleep(1)
             if os.path.getsize(dst + '.part') != taille:
                 raise SystemExit(f'{p} : taille différente après copie')
             os.replace(dst + '.part', dst)

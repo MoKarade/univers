@@ -190,6 +190,9 @@ struct Sim {
     // Lumière choisie pour le ciel : -1 = visible (étoiles et galaxies mesurées) ; sinon rang dans skyBandLabels (cartes du
     // ciel mesurées dans une autre lumière, fenetre.cpp). skyLegend : texte de la carte montrée, à afficher en permanence.
     int skyBand = -1;
+    // Choix de Marc (12/11/2026) : « 100 % mesuré » (par défaut) ou « meilleur rendu ». En meilleur rendu, des corrections
+    // NON mesurées peuvent s'appliquer (ex. éclat Gaia rééquilibré par direction) ; chacune le dit à l'écran.
+    bool bestLook = false;
     std::vector<std::string> skyBandLabels, skyLegend;
     const std::vector<SkyBandInfo>* skyBandInfos = nullptr;      // fiches des cartes (famille, échelle, unité), pour l'interface
     // Proposition faite à Marc le 12 novembre 2026 (en attente de sa réponse, donc coupé par défaut) : montrer à toutes les

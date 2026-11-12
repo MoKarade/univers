@@ -149,4 +149,13 @@ void faceOnButton(Sim& sim, UiState& ui) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Voir la Voie lactée d'en haut, avec ses bras mesurés");
 }
 
+// Bascule globale « 100 % mesuré » / « meilleur rendu » (choix de Marc, 12/11/2026), touche F4.
+void viewModeButton(Sim& sim) {
+    if (ImGui::Button(sim.bestLook ? "Vue : meilleur rendu" : "Vue : 100 % mesuré")) sim.bestLook = !sim.bestLook;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(sim.bestLook ? "Meilleur rendu : quelques corrections NON mesurées sont permises pour une plus belle image ;\nchacune est dite à l'écran. Clic ou F4 : revenir à 100 %% mesuré."
+                                       : "100 %% mesuré : seulement ce qui a été mesuré, et ce qui en est calculé.\nClic ou F4 : meilleur rendu (quelques corrections non mesurées, signalées).");
+    if (!ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F4, false)) sim.bestLook = !sim.bestLook;
+}
+
 }  // namespace
