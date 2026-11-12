@@ -205,14 +205,39 @@ int scaleCenter(const Sim& sim) {
     return c >= 0 ? c : 0;
 }
 
-// Éclipse totale de Soleil du 12 août 2026, maximum à 17 h 46 TU : contrôlée contre la NASA par le fil du rendu.
-// La caméra suit la Terre du côté du Soleil, pour voir l'ombre de la Lune sur elle ; le temps est arrêté au maximum.
-constexpr double kEclipse2026Years = 26.61256749562704;
-void showEclipse(Sim& sim, UiState& ui) {
+// Éclipses de Soleil : maximum de chacune (années juliennes depuis J2000, temps universel), calculé d'après les
+// éphémérides de la NASA et contrôlé contre le catalogue des éclipses de la NASA (lignes 09565 à 09570, axe de
+// l'ombre à moins de 1,5° du point du maximum ; essai_eclipse, fil du rendu).
+struct Eclipse {
+    const char* label;
+    double years;
+};
+const Eclipse kEclipses[] = {{"Éclipse annulaire du 17 février 2026", 26.13007063}, {"Éclipse totale du 12 août 2026", 26.61256739},
+                             {"Éclipse annulaire du 6 février 2027", 27.09970273},  {"Éclipse totale du 2 août 2027", 27.58363123},
+                             {"Éclipse annulaire du 26 janvier 2028", 28.06880339}, {"Éclipse totale du 22 juillet 2028", 28.55474849}};
+constexpr int kEclipseCount = static_cast<int>(sizeof(kEclipses) / sizeof(kEclipses[0]));
+const char* const kEclipseStatus = "calculé d'après les éphémérides de la NASA ; contrôlé contre le catalogue des éclipses de la NASA";
+
+// La prochaine après la date affichée (-1 : aucune dans la liste).
+int nextEclipse(double years) {
+    for (int k = 0; k < kEclipseCount; ++k)
+        if (kEclipses[k].years > years + 1.0 / 365.25) return k;
+    return -1;
+}
+// L'éclipse en cours à la date affichée (à 4 heures près du maximum), ou -1.
+int eclipseNow(double years) {
+    for (int k = 0; k < kEclipseCount; ++k)
+        if (std::fabs(kEclipses[k].years - years) < 4.0 / 24.0 / 365.25) return k;
+    return -1;
+}
+
+// La caméra suit la Terre et regarde dans l'axe Soleil-Lune, pour voir l'ombre de la Lune ; le temps est arrêté au maximum.
+void showEclipse(Sim& sim, UiState& ui, int k) {
+    if (k < 0 || k >= kEclipseCount) return;
     const int earth = bodyByName(sim, "Terre");
     ui.tour = -1;
     ui.welcome = false;
-    sim.years = kEclipse2026Years;
+    sim.years = kEclipses[k].years;
     sim.paused = true;
     sim.backward = false;
     sim.rate = 1;      // 1 heure par seconde : l'ombre traverse la Terre en quelques secondes
@@ -252,6 +277,8 @@ void startTour(Sim& sim, UiState& ui, int step) {
     ui.tour = -1;      // plus d'étape possible : fin de la visite
 }
 
+void showVoyagerJupiter(Sim& sim, UiState& ui);
+
 // Au premier dessin : mot d'accueil, et réglages de contrôle (variable UNIVERS_ECRAN, pour les captures sans fenêtre).
 void firstFrame(Sim& sim, UiState& ui) {
     if (ui.started) return;
@@ -267,8 +294,12 @@ void firstFrame(Sim& sim, UiState& ui) {
         startTour(sim, ui, std::atoi(e.substr(7).c_str()));
         sim.stepFlight(Sim::kFlySeconds);      // capture : l'étape est atteinte
     }
-    if (e == "eclipse") {
-        showEclipse(sim, ui);
+    if (e == "voyager") {
+        showVoyagerJupiter(sim, ui);
+        sim.stepFlight(Sim::kFlySeconds);
+    }
+    if (e.rfind("eclipse", 0) == 0) {      // eclipse ou eclipse:<rang dans la liste>
+        showEclipse(sim, ui, e.size() > 8 ? std::atoi(e.substr(8).c_str()) : nextEclipse(kStartYears));
         sim.stepFlight(Sim::kFlySeconds);
     }
     if (e.rfind("vol:", 0) == 0) {      // vol:<nom>:<avancement 0 à 1>
@@ -332,6 +363,7 @@ bool labelWanted(const Sim& sim, const Camera& cam, int i, float w, float h, dou
     if (i == sim.focus) return discRadiusPx(sim, cam, i, h) <= 14;      // vu de près : la fiche porte déjà son nom
     if (b.kind == Kind::Star && (sim.dist < 0.02 || sim.dist > 3000.0 || sim.apparentMag(i, cam.pos) - boostMag > 4.5)) return false;
     if (b.kind == Kind::Planet && sim.dist > 0.05) return false;
+    if (b.kind == Kind::Probe) return sim.dist < 0.3;
     if (b.kind == Kind::Galaxy && (sim.dist < 2.0e4 || sim.dist > 3.0e9 || (b.priority > 1 && sim.dist < 1.5e6))) return false;
     if (b.kind == Kind::Planet) {      // un nom par planète seulement quand elle se détache de son astre parent
         double qx = 0, qy = 0;
@@ -373,7 +405,7 @@ void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, f
         placed.push_back(box);
         if (isFocus) dl->AddCircle(p, 9 * ui.s, kAccent, 32, 1.5f * ui.s);
         // Lune sans éclat renseigné : un petit repère marque son emplacement mesuré (ce n'est pas sa lumière).
-        if (b.kind == Kind::Planet && !b.hasPhotometry) dl->AddCircle(p, 3 * ui.s, IM_COL32(200, 214, 240, 200), 12, 1.2f * ui.s);
+        if ((b.kind == Kind::Planet && !b.hasPhotometry) || b.kind == Kind::Probe) dl->AddCircle(p, 3 * ui.s, IM_COL32(200, 214, 240, 200), 12, 1.2f * ui.s);
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), {at.x + 1, at.y + 1}, IM_COL32(0, 0, 0, 200), name);
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), at, isFocus || isHover ? kAccent : (b.kind == Kind::Star ? kInkSoft : kInk), name);
     }
@@ -449,6 +481,7 @@ void handleKeys(Sim& sim, UiState& ui) {
 int kindRank(const Body& b) {
     if (b.kind == Kind::Sun) return 0;
     if (b.kind == Kind::Planet) return b.parent == 0 ? 0 : 1;
+    if (b.kind == Kind::Probe) return 1;
     return b.kind == Kind::Star ? 2 : 3;
 }
 
@@ -555,6 +588,34 @@ void goToMenuBodies(Sim& sim, UiState& ui) {
     }
 }
 
+// Voyager 1 au plus près de Jupiter, le 5 mars 1979 (sim.years = -20,826, donnée par le fil du rendu).
+void showVoyagerJupiter(Sim& sim, UiState& ui) {
+    const int v = bodyByName(sim, "Voyager 1");
+    ui.tour = -1;
+    ui.welcome = false;
+    sim.years = -20.826;
+    sim.paused = true;
+    sim.backward = false;
+    sim.rate = 1;      // 1 heure par seconde : le survol se déroule en quelques secondes
+    sim.refreshEphemeris();
+    if (v >= 0 && sim.visible(v)) sim.flyTo(v);
+}
+
+void goToMenuProbes(Sim& sim, UiState& ui) {
+    bool any = false;
+    for (const Body& b : sim.bodies) any |= b.kind == Kind::Probe;
+    if (!any || !ImGui::BeginMenu("Sondes")) return;
+    for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
+        const Body& b = sim.bodies[static_cast<size_t>(i)];
+        if (b.kind != Kind::Probe) continue;
+        // Une sonde n'a de position qu'aux dates fournies par le JPL : grisée sinon.
+        if (ImGui::MenuItem(b.name.c_str(), sim.visible(i) ? nullptr : "pas à cette date", false, sim.visible(i))) goToBody(sim, ui, i);
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Voyager 1 survole Jupiter (5 mars 1979)")) showVoyagerJupiter(sim, ui);
+    ImGui::EndMenu();
+}
+
 void drawGoToMenu(Sim& sim, UiState& ui) {
     if (ui.openGoTo || ui.keepGoTo) {
         ImGui::OpenPopup("aller");
@@ -573,9 +634,18 @@ void drawGoToMenu(Sim& sim, UiState& ui) {
     }
     ImGui::Separator();
     goToMenuBodies(sim, ui);
+    goToMenuProbes(sim, ui);
     ImGui::Separator();
     if (ImGui::MenuItem("Visite guidée")) startTour(sim, ui, 0);
-    if (ImGui::MenuItem("Éclipse de Soleil du 12 août 2026")) showEclipse(sim, ui);
+    if (ImGui::BeginMenu("Éclipses de Soleil")) {
+        const int next = nextEclipse(kStartYears);
+        for (int k = 0; k < kEclipseCount; ++k)
+            if (ImGui::MenuItem(kEclipses[k].label, k == next ? "la prochaine" : nullptr)) showEclipse(sim, ui, k);
+        ImGui::Separator();
+        ImGui::TextDisabled("Calculées d'après les éphémérides de la NASA,");
+        ImGui::TextDisabled("contrôlées contre le catalogue des éclipses de la NASA.");
+        ImGui::EndMenu();
+    }
     if (ImGui::MenuItem("Revenir à la vue précédente", "Retour arrière", false, !sim.history.empty())) {
         ui.tour = -1;
         sim.back();
@@ -764,6 +834,15 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         row("Rayon", (fb.radiusKm >= 100 ? frInt(fb.radiusKm) : frNum(fb.radiusKm)) + " km", "mesuré", s);
         if (!fb.hasPhotometry) ImGui::TextDisabled("Son éclat et sa surface ne sont pas renseignés ici : un repère marque sa place.");
         if (fb.naif == eph::kEarth) row("Lumières de nuit", "vues par satellite (NASA), grossies pour être visibles", "mesuré", s);
+    } else if (fb.kind == Kind::Probe) {
+        const char* traj = sim.years <= kStartYears ? "mesuré : trajectoire reconstruite par le JPL" : "calculé : trajectoire prévue par le JPL";
+        row("Distance au Soleil", frDistance(dSun), traj, s);
+        const int earth = bodyByName(sim, "Terre");
+        if (earth >= 0 && sim.visible(earth)) row("Distance à la Terre", frDistance(distBetween(p, sim.position(earth))), traj, s);
+        if (sim.probes && fb.probe >= 0 && static_cast<size_t>(fb.probe) < sim.probes->size()) {
+            const sondes::Probe& pr = (*sim.probes)[static_cast<size_t>(fb.probe)];
+            row("Position connue", "du " + frDate((pr.firstJd() - 2451545.0) / 365.25) + " au " + frDate((pr.lastJd() - 2451545.0) / 365.25), "", s);
+        }
     } else if (fb.kind == Kind::Star) {
         // Aujourd'hui la distance est une mesure ; à une autre date, c'est la mesure prolongée en ligne droite.
         row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : mouvement mesuré, prolongé en ligne droite", s);
@@ -779,10 +858,11 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     }
     if (fb.kind == Kind::Sun || fb.kind == Kind::Star)
         row("Température", frInt(4600.0 * (1.0 / (0.92 * fb.bv + 1.7) + 1.0 / (0.92 * fb.bv + 0.62))) + " K en surface", "calculé d'après la couleur", s);
-    if (fb.kind != Kind::Galaxy && (fb.kind != Kind::Planet || fb.hasPhotometry)) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé", s);
+    if (fb.kind != Kind::Galaxy && fb.kind != Kind::Probe && (fb.kind != Kind::Planet || fb.hasPhotometry)) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé", s);
     ImGui::Separator();
     if (fb.kind == Kind::Planet && computed) ImGui::TextDisabled("Position : calculée ici (gravité mutuelle, partie des éphémérides JPL DE440 de la NASA).");
     else if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
+    else if (fb.kind == Kind::Probe) ImGui::TextDisabled("Source : trajectoire JPL Horizons (NASA).");
     else if (fb.kind == Kind::Galaxy && sim.deepTime() && fb.name != "Centre de la Voie lactée")
         ImGui::TextDisabled("Position : calcul complet de la rencontre avec Andromède (scénario), parti des mesures de McConnachie 2012.");
     else if (fb.kind == Kind::Galaxy) ImGui::TextDisabled("Sources : Karachentsev et al. 2013 ; McConnachie 2012.");
@@ -814,8 +894,10 @@ void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlag
     if (!sim.history.empty()) ImGui::SameLine();
     const uint32_t naifF = static_cast<uint32_t>(sim.bodies[static_cast<size_t>(f)].naif);
     if ((naifF == eph::kEarth || naifF == eph::kMoon) && sim.bodies[static_cast<size_t>(f)].kind == Kind::Planet) {
-        if (ImGui::Button("Éclipse du 12 août 2026")) showEclipse(sim, ui);
-        ImGui::SameLine();
+        const int next = nextEclipse(sim.years);
+        if (next >= 0 && ImGui::Button("Prochaine éclipse de Soleil")) showEclipse(sim, ui, next);
+        if (next >= 0 && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", kEclipses[next].label);
+        if (next >= 0) ImGui::SameLine();
     }
     if (f != 0 && sim.visible(0) && ImGui::Button("Revenir au Soleil")) goToBody(sim, ui, 0, 45.0 * kAuInLy);
     ImGui::End();
@@ -846,6 +928,7 @@ void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fix
     const Body& fb = sim.bodies[static_cast<size_t>(sim.focus)];
     const std::string where = sim.flying ? "En route vers « " + fb.name + " »…" : "Tu regardes « " + fb.name + " » depuis " + frDistance(sim.dist) + ".";
     ImGui::TextUnformatted(where.c_str());
+    if (const int k = eclipseNow(sim.years); k >= 0) ImGui::TextDisabled("%s, de Soleil : %s.", kEclipses[k].label, kEclipseStatus);
     whatYouSee(sim);
     ImGui::TextDisabled("Clic sur un astre : y aller   •   Molette : zoomer   •   Glisser : tourner   •   Tape un nom : chercher   •   F1 : aide");
     ImGui::End();
