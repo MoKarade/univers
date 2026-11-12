@@ -5,3 +5,4 @@ __pycache__/
 # Clé Firebase : jamais dans le dépôt
 *service-account*.json
 cle.json
+pipeline/fusion/sortie/

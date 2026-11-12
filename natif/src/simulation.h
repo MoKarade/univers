@@ -1,0 +1,603 @@
+// Appli PC « Univers » : l'état du simulateur (temps, astres, objet suivi, caméra), sans rien qui dépende de l'affichage.
+#pragma once
+#include "commun.h"
+#include "cosmologie.h"
+#include "ephemeride.h"
+#include "galaxie_orbites.h"
+#include "groupe_local.h"
+#include "systeme_solaire.h"
+
+namespace {
+
+constexpr double kLyInMeters = 9.4607304725808e15;      // année-lumière julienne (UAI)
+constexpr double kLyInKm = kLyInMeters / 1000.0;
+constexpr double kAuInLy = 149597870700.0 / kLyInMeters;
+constexpr double kYearSeconds = 365.25 * 86400.0;
+// Aujourd'hui, lu sur l'horloge du PC, en années juliennes depuis J2000,0 (1er janvier 2000, 12 h TU = 946 728 000 s Unix).
+inline const double kStartYears =
+    (std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count() - 946728000.0) / kYearSeconds;
+constexpr double kLinearLimitYears = 3.0e6;      // au-delà, la ligne droite ne vaut plus pour les étoiles (page : épicycles puis orbites) : étape E5
+// Temps des éphémérides (TDB) moins temps civil (UTC) : 69,184 s depuis 2017 (32,184 s + 37 secondes intercalaires).
+// [Approximation assumée : appliquée à toute date ; l'écart réel a varié de quelques dizaines de secondes par siècle.]
+constexpr double kTdbMinusUtc = 69.184;
+
+enum class Kind { Sun, Star, Planet, Galaxy };
+
+// Un astre que l'on peut suivre, chercher, nommer à l'écran.
+struct Body {
+    std::string name;
+    Kind kind = Kind::Star;
+    int64_t star = -1;          // étoile : numéro dans le catalogue
+    int naif = 0;               // planète : code du corps dans les éphémérides de la NASA (clé de sa carte et de son orientation)
+    int posNaif = 0;            // code utilisé pour sa position : le centre de la planète quand un fichier de lunes le donne
+    int parent = -1;            // lune : numéro de l'astre autour duquel elle tourne (pour le tracé de l'orbite)
+    double h = 0;               // planète : magnitude V(1,0), à 1 UA du Soleil et de l'observateur, pleine phase (fiche NASA)
+    bool hasPhotometry = false; // planète : éclat lu dans planetes.tsv ; sinon elle n'est pas dessinée en point
+    int tint[3] = {-1, -1, -1}; // planète : teinte moyenne de sa carte de surface (valeurs d'écran) ; -1 : pas de carte
+    double bv = 0.65;           // étoile : indice de couleur B-V
+    double periodYears = 0;     // planète : durée d'un tour (pour tracer l'orbite)
+    double radiusKm = 0;        // rayon moyen
+    const char* nature = "";
+    std::string natureText;     // galaxie : genre lu dans le fichier
+    Vec3 fixedPos{0, 0, 0};     // galaxie : position mesurée (années-lumière), immobile pour l'instant
+    int priority = 1;           // galaxie : 1 = nom montré dès qu'on sort de la Voie lactée
+    const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
+};
+
+// Planètes : rayon moyen et durée d'un tour, relus contre la fiche « Planetary Fact Sheet » de la NASA
+// (docs/plan-natif.md). L'éclat (magnitude V(1,0)) et la teinte ne sont pas écrits ici : ils sont lus dans
+// planetes.tsv, que pipeline/natif/planetes.py tire des fiches de la NASA et des cartes de surface.
+struct PlanetRow {
+    const char* name;
+    int naif;
+    double periodYears, radiusKm;
+    const char* nature;
+};
+constexpr PlanetRow kPlanets[] = {
+    {"Mercure", eph::kMercury, 0.2408467, 2439.4, "planète rocheuse"},
+    {"Vénus", eph::kVenus, 0.61519726, 6051.8, "planète rocheuse"},
+    {"Terre", eph::kEarth, 1.0000174, 6371.0, "planète rocheuse"},
+    {"Mars", eph::kMarsBary, 1.8808476, 3389.5, "planète rocheuse"},
+    {"Jupiter", eph::kJupiterBary, 11.862615, 69911.0, "géante gazeuse"},
+    {"Saturne", eph::kSaturnBary, 29.447498, 58232.0, "géante gazeuse"},
+    {"Uranus", eph::kUranusBary, 84.016846, 25362.0, "géante de glace"},
+    {"Neptune", eph::kNeptuneBary, 164.79132, 24622.0, "géante de glace"},
+    {"Pluton", eph::kPlutoBary, 247.92065, 1188.3, "planète naine"},
+};
+constexpr PlanetRow kMoon = {"Lune", eph::kMoon, 27.321661 / 365.25, 1737.4, "satellite de la Terre"};
+
+struct Rate {
+    const char* label;
+    double yearsPerSecond;
+};
+constexpr Rate kRates[] = {{"Temps réel", 1.0 / kYearSeconds},        {"1 heure par seconde", 3600.0 / kYearSeconds}, {"1 jour par seconde", 1.0 / 365.25},
+                           {"1 mois par seconde", 1.0 / 12.0},         {"1 an par seconde", 1.0},                      {"100 ans par seconde", 100.0},
+                           {"10 000 ans par seconde", 1.0e4},          {"100 000 ans par seconde", 1.0e5},
+                           {"10 millions d'années par seconde", 1.0e7}, {"200 millions d'années par seconde", 2.0e8}};
+constexpr int kRateCount = static_cast<int>(sizeof(kRates) / sizeof(kRates[0]));
+
+struct Sim {
+    const Stars* stars = nullptr;
+    const eph::Set* spk = nullptr;       // éphémérides de la NASA (planètes, puis lunes) ; nul si le fichier des planètes manque
+    std::vector<Body> bodies;            // 0 : le Soleil ; puis planètes et Lune ; puis les étoiles nommées de la page
+    std::vector<Vec3> planetPos;         // position de chaque astre de type planète à la date courante (années-lumière, centre : Soleil)
+    bool ephemValid = false;             // la date courante est dans la plage des éphémérides des planètes
+    std::vector<char> planetValid;       // pour chaque astre de type planète ou lune : sa position est connue à la date courante
+    std::vector<char> planetComputed;    // sa position vient du calcul (hors des fichiers de la NASA), pas d'une éphéméride : à dire à l'écran
+    const phys::SystemeSolaire* outer = nullptr;      // calcul du système solaire hors de la plage de la NASA (bibliothèque univers_physique) ; nul tant qu'il n'est pas prêt
+    double outerYears = 1e300;           // date du dernier calcul hors plage (pour ne pas le refaire quand le temps est arrêté)
+    std::vector<Vec3> outerPos;          // son résultat, par astre
+    int focus = 0;
+    double years = kStartYears;          // années juliennes depuis J2000,0
+    int rate = 2;
+    bool paused = false, backward = false;
+    double yaw = -1.2, pitch = 0.55;     // direction d'où l'on regarde l'astre suivi (radians)
+    double dist = 45.0 * kAuInLy;        // distance de la caméra à l'astre suivi (années-lumière) : au départ, tout le système solaire
+    bool touched = false;                // quelqu'un a pris la main : fin du lent tour d'horizon
+    double asteroidEpochJd = 0;          // date des orbites des astéroïdes (0 : pas d'astéroïdes)
+    uint64_t asteroidCount = 0;
+    cosmo::Params cosmology;             // paramètres de l'univers en expansion (réglables à l'écran)
+    bool cosmologyDirty = true;          // les distances des galaxies sont à recalculer
+
+    // Le Soleil, les planètes (si les éphémérides sont là), puis les étoiles nommées (etoiles_noms.tsv).
+    void loadBodies(const std::string& namesPath, const std::string& galaxiesPath, const std::string& photometryPath, const std::string& moonsPath) {
+        bodies.clear();
+        Body sun;
+        sun.name = "Soleil";
+        sun.kind = Kind::Sun;
+        sun.bv = kSunBv;
+        sun.radiusKm = 695700.0;
+        sun.nature = "notre étoile";
+        bodies.push_back(sun);
+        if (spk) {
+            auto add = [&](const PlanetRow& r, int parent) {
+                Body b;
+                b.name = r.name;
+                b.kind = Kind::Planet;
+                b.naif = r.naif;
+                b.posNaif = r.naif;
+                // Planètes à lunes : de440.bsp donne le centre de masse planète + lunes ; le fichier des lunes donne le centre
+                // de la planète elle-même (code x99). Pour Pluton l'écart dépasse son rayon.
+                Vec3 probe;
+                if (r.naif >= 4 && r.naif <= 9 && planetAt(r.naif * 100 + 99, years, probe)) b.posNaif = r.naif * 100 + 99;
+                b.parent = parent;
+                b.periodYears = r.periodYears;
+                b.radiusKm = r.radiusKm;
+                b.nature = r.nature;
+                bodies.push_back(b);
+                return static_cast<int>(bodies.size()) - 1;
+            };
+            int earth = -1;
+            for (const auto& r : kPlanets) {
+                const int i = add(r, 0);
+                if (r.naif == eph::kEarth) earth = i;
+            }
+            add(kMoon, earth);
+            // Lunes des autres planètes (lunes.tsv : code NAIF, nom, code du centre de la planète, rayon moyen en km).
+            std::ifstream mf(moonsPath);
+            std::string ml;
+            while (std::getline(mf, ml)) {
+                int code = 0, planet = 0;
+                char name[64] = "";
+                double radius = 0;
+                if (std::sscanf(ml.c_str(), "%d\t%63[^\t]\t%d\t%lf", &code, name, &planet, &radius) != 4) continue;
+                int parent = -1;
+                for (size_t i = 0; i < bodies.size(); ++i)
+                    if (bodies[i].kind == Kind::Planet && bodies[i].naif == planet / 100) parent = static_cast<int>(i);
+                Vec3 a, pa, b2, pb;
+                const double step = 0.25 / 24.0 / 365.25;      // un quart d'heure
+                if (parent < 0 || !planetAt(code, years, a) || !planetAt(bodies[static_cast<size_t>(parent)].posNaif, years, pa) ||
+                    !planetAt(code, years + step, b2) || !planetAt(bodies[static_cast<size_t>(parent)].posNaif, years + step, pb))
+                    continue;      // fichier d'éphémérides de cette lune absent : elle n'est pas montrée
+                Body m;
+                m.name = name;
+                m.kind = Kind::Planet;
+                m.naif = code;
+                m.posNaif = code;
+                m.parent = parent;
+                m.radiusKm = radius;
+                m.natureText = "lune de " + bodies[static_cast<size_t>(parent)].name;
+                // Durée d'un tour, pour tracer l'orbite : angle parcouru autour de la planète en un quart d'heure.
+                const Vec3 r1 = a - pa, r2 = b2 - pb;
+                const double angle = std::acos(std::clamp(dot(r1, r2) / std::sqrt(dot(r1, r1) * dot(r2, r2)), -1.0, 1.0));
+                m.periodYears = angle > 0 ? 2.0 * kPi / angle * step : 0;
+                if (m.periodYears > 0) bodies.push_back(m);
+            }
+        }
+        std::string line;
+        // Éclat et teinte des planètes (planetes.tsv : code NAIF, magnitude V(1,0), rouge, vert, bleu).
+        std::ifstream pf(photometryPath);
+        while (std::getline(pf, line)) {
+            int naif = 0, r = -1, g = -1, bl = -1;
+            double h = 0;
+            if (std::sscanf(line.c_str(), "%d %lf %d %d %d", &naif, &h, &r, &g, &bl) != 5) continue;
+            for (Body& b : bodies)
+                if (b.kind == Kind::Planet && b.naif == naif) {
+                    b.h = h;
+                    b.hasPhotometry = true;
+                    b.tint[0] = r;
+                    b.tint[1] = g;
+                    b.tint[2] = bl;
+                }
+        }
+        std::ifstream f(namesPath);
+        while (std::getline(f, line)) {
+            const size_t a = line.find('\t'), b = line.find('\t', a + 1);
+            if (a == std::string::npos) continue;
+            Body body;
+            body.star = std::strtoll(line.substr(0, a).c_str(), nullptr, 10);
+            body.name = line.substr(a + 1, b == std::string::npos ? std::string::npos : b - a - 1);
+            body.nature = "étoile";
+            if (body.star >= 0 && static_cast<uint64_t>(body.star) < stars->n) {
+                body.bv = stars->bv()[body.star];
+                bodies.push_back(body);
+            }
+        }
+        // Galaxies nommées (galaxies_noms.tsv : nom, x, y, z en années-lumière, genre, priorité).
+        std::ifstream gf(galaxiesPath);
+        while (std::getline(gf, line)) {
+            std::vector<std::string> cols;
+            size_t from = 0;
+            for (size_t tab; (tab = line.find('\t', from)) != std::string::npos; from = tab + 1) cols.push_back(line.substr(from, tab - from));
+            cols.push_back(line.substr(from));
+            if (cols.size() < 6) continue;
+            Body body;
+            body.name = cols[0];
+            body.kind = Kind::Galaxy;
+            body.fixedPos = {std::atof(cols[1].c_str()), std::atof(cols[2].c_str()), std::atof(cols[3].c_str())};
+            body.natureText = cols[4];
+            body.priority = std::atoi(cols[5].c_str());
+            bodies.push_back(body);
+        }
+        // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
+        Body centre;
+        centre.name = "Centre de la Voie lactée";
+        centre.kind = Kind::Galaxy;
+        centre.fixedPos = fromGalactocentric({0, 0, 0});
+        centre.natureText = "centre de notre galaxie (Sagittarius A*)";
+        bodies.push_back(centre);
+        planetPos.assign(bodies.size(), {0, 0, 0});
+        replayRef.assign(bodies.size(), -1);
+        replayRef.back() = -2;
+        refreshEphemeris();
+        refreshGalaxies();
+    }
+
+    // Position héliocentrique d'un corps des éphémérides à une date donnée (années-lumière, écliptique J2000). false : hors de la plage.
+    bool planetAt(int naif, double atYears, Vec3& out) const {
+        if (!spk) return false;
+        const double et = atYears * kYearSeconds + kTdbMinusUtc;
+        eph::Vec p, v, s, sv;
+        if (!spk->state(naif, et, p, v) || !spk->state(eph::kSun, et, s, sv)) return false;      // hors de la plage, ou fichier absent
+        const eph::Vec e = eph::toEcliptic({p.x - s.x, p.y - s.y, p.z - s.z});
+        out = {e.x / kLyInKm, e.y / kLyInKm, e.z / kLyInKm};
+        return true;
+    }
+
+    void refreshEphemeris() {
+        ephemValid = spk != nullptr;
+        planetValid.assign(bodies.size(), 0);
+        planetComputed.assign(bodies.size(), 0);
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            if (bodies[i].kind != Kind::Planet) continue;
+            planetValid[i] = planetAt(bodies[i].posNaif, years, planetPos[i]) ? 1 : 0;
+            if (!planetValid[i] && bodies[i].parent == 0) ephemValid = false;      // une planète sans position : hors de la plage de de440.bsp
+        }
+        if (ephemValid || !outer) return;
+        // Hors de la plage de la NASA : positions calculées (gravité mutuelle partie de l'état DE440 aux bornes, puis table
+        // des orbites sur des millions d'années). Les lunes n'y sont pas : elles restent cachées. Un seul calcul par date.
+        if (outerYears != years) {
+            outerYears = years;
+            outerPos.assign(bodies.size(), {0, 0, 0});
+            const auto codes = phys::SystemeSolaire::corps();
+            std::vector<phys::Vec3> out(codes.size());
+            const bool ok = outer->positions(2451545.0 + years * 365.25, out);
+            outerOk_.assign(bodies.size(), 0);
+            for (size_t i = 0; ok && i < bodies.size(); ++i) {
+                const Body& b = bodies[i];
+                if (b.kind != Kind::Planet || b.parent != 0) continue;
+                // Codes du calcul : centres de masse 1 à 9 (3 : Terre + Lune, à 4 700 km au plus du centre de la Terre).
+                const int code = b.naif >= 100 ? b.naif / 100 : b.naif;
+                for (size_t k = 0; k < codes.size(); ++k)
+                    if (codes[k] == code && std::isfinite(out[k].x)) {
+                        outerPos[i] = {out[k].x / kLyInKm, out[k].y / kLyInKm, out[k].z / kLyInKm};
+                        outerOk_[i] = 1;
+                    }
+            }
+        }
+        for (size_t i = 0; i < bodies.size(); ++i)
+            if (i < outerOk_.size() && outerOk_[i] && !planetValid[i]) {
+                planetPos[i] = outerPos[i];
+                planetValid[i] = 1;
+                planetComputed[i] = 1;
+            }
+    }
+    std::vector<char> outerOk_;
+
+    // ---------------------------------------------------------------- temps profond et Groupe local
+    // Jusqu'à 3 millions d'années d'aujourd'hui, tout est montré dans le repère du Soleil. Au-delà (vers l'avenir, jusqu'à
+    // la fin du calcul de la fusion), seules les galaxies dont le mouvement est calculé sont montrées : celles du calcul
+    // complet de la rencontre avec Andromède (phys::fusion::Rejeu). Le repère reste celui d'aujourd'hui, attaché au centre
+    // de la Voie lactée : l'origine est l'endroit où se trouve le Soleil aujourd'hui par rapport à ce centre.
+    const phys::fusion::Rejeu* replay = nullptr;
+    std::vector<int> replayRef;          // par astre : -1 aucun ; 100 + g : centre de la galaxie g du calcul ; k >= 0 : traceur k ; -2 : centre de la Voie lactée
+    std::vector<Vec3> galPos;            // position de chaque galaxie à la date courante
+    std::vector<char> galValid;
+
+    bool deepTime() const { return std::fabs(years - kStartYears) > kLinearLimitYears; }
+    double replayGa() const { return (years - kStartYears) / 1.0e9; }
+    double maxYears() const { return kStartYears + (replay ? replay->finGa() * 1.0e9 : kLinearLimitYears); }
+    double minYears() const { return kStartYears - kLinearLimitYears; }
+
+    // Repère galactocentrique de la page (kpc, relatif au centre de la Voie lactée) -> repère du simulateur (années-lumière,
+    // écliptique J2000, origine : place actuelle du Soleil). Matrice DATA.M_GAL2ECL de la page (app/gen/data.js) ; place du
+    // Soleil : 8,2 kpc du centre (GAL.R0), direction de Sagittarius A* (DATA.SGRA_GAL).
+    static Vec3 fromGalactocentric(phys::Vec3 g) {
+        static constexpr double M[3][3] = {{-0.0548756577, 0.4941094372, -0.8676661376}, {-0.993821367, -0.1109908412, -0.0003515418}, {-0.0964766946, 0.8622858559, 0.4971472117}};
+        const phys::Vec3 s = phys::galaxie::soleilPos();
+        const double v[3] = {g.x - s.x, g.y - s.y, g.z - s.z};
+        const double kpc = 3261.5637769;
+        return {(M[0][0] * v[0] + M[0][1] * v[1] + M[0][2] * v[2]) * kpc, (M[1][0] * v[0] + M[1][1] * v[1] + M[1][2] * v[2]) * kpc,
+                (M[2][0] * v[0] + M[2][1] * v[1] + M[2][2] * v[2]) * kpc};
+    }
+
+    // Relie les galaxies nommées au calcul de la fusion (noms des traceurs : fusion_noms.tsv, dans l'ordre du calcul).
+    void linkReplay(const phys::fusion::Rejeu* r, const std::string& namesPath) {
+        replay = r;
+        replayRef.assign(bodies.size(), -1);
+        std::vector<std::string> names;
+        std::ifstream f(namesPath);
+        for (std::string line; std::getline(f, line);) names.push_back(line);
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            const Body& b = bodies[i];
+            if (b.kind != Kind::Galaxy) continue;
+            if (b.name == "Centre de la Voie lactée") replayRef[i] = -2;
+            else if (!r) continue;
+            else if (b.name == "Andromède (M31)") replayRef[i] = 100 + phys::fusion::kAndromede;
+            else if (b.name == "Galaxie du Triangle (M33)") replayRef[i] = 100 + phys::fusion::kTriangle;
+            else if (b.name == "Grand Nuage de Magellan") replayRef[i] = 100 + phys::fusion::kGrandNuage;
+            else
+                for (size_t k = 0; k < names.size() && static_cast<int>(k) < r->nombreTraceurs(); ++k)
+                    if (names[k] == b.name) replayRef[i] = static_cast<int>(k);
+        }
+        refreshGalaxies();
+    }
+
+    void refreshGalaxies() {
+        galPos.assign(bodies.size(), {0, 0, 0});
+        galValid.assign(bodies.size(), 0);
+        const double tGa = replayGa();
+        const bool deep = deepTime();
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            const Body& b = bodies[i];
+            if (b.kind != Kind::Galaxy) continue;
+            const int ref = i < replayRef.size() ? replayRef[i] : -1;
+            if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
+                galPos[i] = b.fixedPos;
+                galValid[i] = 1;
+                continue;
+            }
+            phys::Vec3 g;
+            const bool ok = replay && ref >= 0 && (ref >= 100 ? replay->centre(ref - 100, tGa, g) : replay->traceur(ref, tGa, g));
+            if (!ok) continue;      // mouvement non calculé : la galaxie n'est pas montrée à cette date
+            galPos[i] = fromGalactocentric(g);
+            galValid[i] = 1;
+        }
+    }
+
+    // Une planète ou une lune n'est montrée que si sa position est connue à la date courante.
+    // Une étoile n'est montrée qu'à moins de 3 millions d'années d'aujourd'hui (au-delà, la ligne droite ne vaut plus) ;
+    // le Soleil, tant que le système solaire est suivi (10 millions d'années) ; une galaxie, si sa position est connue.
+    bool visible(int i) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        if (b.kind == Kind::Planet) return planetValid[static_cast<size_t>(i)] != 0;
+        if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
+        if (b.kind == Kind::Sun) return std::fabs(years - kStartYears) <= 1.0e7;
+        return !deepTime();
+    }
+
+    // Position à la date courante (années-lumière, repère écliptique centré sur le Soleil).
+    Vec3 position(int i) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        if (b.kind == Kind::Sun) return {0, 0, 0};
+        if (b.kind == Kind::Planet) return planetPos[static_cast<size_t>(i)];
+        if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galPos.size() && galValid[static_cast<size_t>(i)] ? galPos[static_cast<size_t>(i)] : b.fixedPos;
+        const double k = years * kKmsToLyPerYear;      // étoile : ligne droite à la vitesse mesurée
+        return {stars->x()[b.star] + stars->vel(0)[b.star] * k, stars->y()[b.star] + stars->vel(1)[b.star] * k, stars->z()[b.star] + stars->vel(2)[b.star] * k};
+    }
+    double speedKms(int i) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        if (b.kind != Kind::Star) return 0;
+        double s = 0;
+        for (int a = 0; a < 3; ++a) s += static_cast<double>(stars->vel(a)[b.star]) * stars->vel(a)[b.star];
+        return std::sqrt(s);
+    }
+    // Magnitude apparente d'un astre vu d'un point donné.
+    // Étoiles : loi en 1/d². Planètes : lumière du Soleil renvoyée, m = H + 5 log10(r d) - 2,5 log10(phase), avec r et d
+    // en UA et la phase d'une sphère mate (loi de Lambert) [approximation assumée de la vraie courbe de phase].
+    double apparentMag(int i, Vec3 from) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        if (b.kind == Kind::Galaxy) return 99.0;      // éclat des galaxies : pas dans les données pour l'instant
+        const Vec3 p = position(i), d = p - from;
+        const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
+        if (b.kind == Kind::Planet) {
+            if (!b.hasPhotometry) return 99.0;      // éclat non renseigné : on ne l'invente pas
+            const double r = std::max(std::sqrt(dot(p, p)), 1e-15);
+            const double cosA = std::clamp((dot(p, d)) / (r * dist), -1.0, 1.0);      // angle Soleil-planète-observateur
+            const double alpha = std::acos(cosA);
+            const double phase = std::max((std::sin(alpha) + (kPi - alpha) * std::cos(alpha)) / kPi, 1e-6);
+            return b.h + 5.0 * std::log10((r / kAuInLy) * (dist / kAuInLy)) - 2.5 * std::log10(phase);
+        }
+        const double absMag = b.kind == Kind::Sun ? kSunAbsMag : stars->mag()[b.star];
+        return absMag + 5.0 * std::log10(dist / 3.2615638) - 5.0;
+    }
+
+    // ------------------------------------------------------------ caméra, vols et gestes (interface)
+    // Vol vers un astre : le point visé glisse de l'ancien astre au nouveau pendant que la distance recule puis
+    // avance (en échelle logarithmique), pour que l'on voie toujours d'où l'on part et où l'on va.
+    static constexpr double kFlySeconds = 1.8;
+    bool flying = false;
+    double flyT = 0;                 // avancement du vol, de 0 à 1
+    Vec3 flyFrom{0, 0, 0};           // point visé au départ du vol
+    double flyFromDist = 1, flyToDist = 1, flyPeakDist = 1;
+    struct View {
+        int focus;
+        double dist, yaw, pitch;
+    };
+    std::vector<View> history;      // vues précédentes, pour « Retour »
+
+    static double ease(double s) { return s * s * s * (s * (s * 6.0 - 15.0) + 10.0); }      // départ et arrivée en douceur
+    // Point visé à l'instant présent (pendant un vol : entre l'ancien astre et le nouveau).
+    Vec3 target() const {
+        const Vec3 to = position(focus);
+        if (!flying) return to;
+        const double e = ease(flyT);
+        return {flyFrom.x + (to.x - flyFrom.x) * e, flyFrom.y + (to.y - flyFrom.y) * e, flyFrom.z + (to.z - flyFrom.z) * e};
+    }
+    Camera camera(double aspect) const {
+        const Vec3 t = target();
+        const Vec3 dir{std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch)};
+        return lookAt({t.x + dist * dir.x, t.y + dist * dir.y, t.z + dist * dir.z}, t, 60.0, aspect);
+    }
+    // Distance d'arrivée près d'un astre : de quoi le voir dans son voisinage.
+    double arriveDist(int i, double from) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        double arrive = 50.0;                                                 // étoile : on garde ou on se rapproche à 50 années-lumière
+        if (b.kind == Kind::Sun) arrive = 45.0 * kAuInLy;
+        if (b.kind == Kind::Planet) arrive = 6.0 * b.radiusKm / kLyInKm;      // planète ou lune : elle remplit un bon tiers de l'écran
+        double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
+        if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
+        return d;
+    }
+    void remember() {
+        if (!history.empty() && history.back().focus == focus && std::fabs(std::log(history.back().dist / dist)) < 0.05) return;
+        history.push_back({focus, dist, yaw, pitch});
+        if (history.size() > 40) history.erase(history.begin());
+    }
+    // Vol fluide vers l'astre i, arrivée à la distance `toDist` (0 : distance d'arrivée habituelle).
+    void flyTo(int i, double toDist = 0) {
+        if (i < 0 || i >= static_cast<int>(bodies.size()) || !visible(i)) return;
+        remember();
+        flyFrom = target();
+        flyFromDist = dist;
+        focus = i;
+        flyToDist = toDist > 0 ? std::clamp(toDist, minDist(i), kMaxDist) : arriveDist(i, dist);
+        const Vec3 gap = position(i) - flyFrom;
+        const double sep = std::sqrt(dot(gap, gap));
+        // Au milieu du vol, on recule assez pour voir les deux astres à la fois.
+        flyPeakDist = std::max({flyFromDist, flyToDist, 0.9 * sep});
+        flyT = 0;
+        flying = true;
+        touched = true;
+    }
+    void back() {
+        if (history.empty()) return;
+        const View v = history.back();
+        history.pop_back();
+        if (!visible(v.focus)) return;
+        flyFrom = target();
+        flyFromDist = dist;
+        focus = v.focus;
+        flyToDist = v.dist;
+        const Vec3 gap = position(v.focus) - flyFrom;
+        flyPeakDist = std::max({flyFromDist, flyToDist, 0.9 * std::sqrt(dot(gap, gap))});
+        flyT = 0;
+        flying = true;
+        touched = true;
+    }
+    void stepFlight(double dt) {
+        if (!flying) return;
+        flyT = std::min(1.0, flyT + dt / kFlySeconds);
+        // Distance : courbe de Bézier en logarithme, départ -> sommet -> arrivée.
+        const double s = ease(flyT), a = std::log(flyFromDist), m = std::log(flyPeakDist), b = std::log(flyToDist);
+        dist = std::exp((1 - s) * (1 - s) * a + 2 * s * (1 - s) * m + s * s * b);
+        if (flyT >= 1.0) {
+            flying = false;
+            dist = flyToDist;
+        }
+    }
+
+    // Les étoiles pâlissent en 1/d² : loin de tout, on multiplie leur éclat pour qu'elles restent visibles, et on le dit.
+    double brightnessBoost() const {
+        const double k = std::clamp(dist / 30.0, 1.0, 10.0);      // plafonné à 100 fois : au-delà de 300 années-lumière le nuage d'étoiles se resserre à l'écran et l'éclat par pixel reste constant (mesuré : saturation en blanc au-delà)
+        return k * k;
+    }
+    // Astéroïdes : montrés à l'échelle du système solaire (plein éclat jusqu'à 60 fois la distance Terre-Soleil, éteints
+    // à 600), et seulement à moins de 300 ans de la date de leurs orbites : au-delà, l'orbite simple ne vaut plus.
+    double asteroidGain(double epochJd) const {
+        const double au = dist / kAuInLy;
+        const double fade = std::clamp((std::log10(600.0) - std::log10(std::max(au, 1e-9))) / (std::log10(600.0) - std::log10(60.0)), 0.0, 1.0);
+        const double epochYears = (epochJd - 2451545.0) / 365.25;
+        return std::fabs(years - epochYears) < 300.0 ? 0.30 * fade : 0.0;
+    }
+    // Éclat donné à chaque galaxie des relevés : nul tant qu'on est dans la Voie lactée, plein au-delà de 3 millions d'années-lumière.
+    double galaxyGain() const {
+        const double t = std::clamp((std::log10(std::max(dist, 1.0)) - 4.5) / 2.0, 0.0, 1.0);
+        return 0.10 * t * t * (3.0 - 2.0 * t);
+    }
+
+    void advance(double dt) {
+        if (!paused) years += (backward ? -1.0 : 1.0) * kRates[rate].yearsPerSecond * dt;
+        years = std::clamp(years, minYears(), maxYears());
+        if (!touched) yaw += 0.035 * dt;      // lent tour d'horizon, 2 degrés par seconde
+        refreshEphemeris();
+        refreshGalaxies();
+        stepFlight(dt);
+        if (!visible(focus)) {                // l'astre suivi n'a plus de position connue : retour au Soleil, ou au centre de la Voie lactée
+            focus = 0;
+            if (!visible(0))
+                for (size_t i = 0; i < bodies.size(); ++i)
+                    if (i < replayRef.size() && replayRef[i] == -2) {
+                        focus = static_cast<int>(i);
+                        dist = std::max(dist, 3.0e5);
+                    }
+            flying = false;
+        }
+    }
+    double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return 1.0e3;
+        return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
+    }
+    static constexpr double kMaxDist = 9.0e10;      // un peu plus que la distance des objets les plus lointains (z = 7)
+    void zoom(double notches) {
+        if (notches == 0) return;
+        if (flying) {      // molette pendant un vol : on corrige la distance d'arrivée, sans casser le vol
+            flyToDist = std::clamp(flyToDist * std::pow(0.8, notches), minDist(focus), kMaxDist);
+            return;
+        }
+        dist = std::clamp(dist * std::pow(0.8, notches), minDist(focus), kMaxDist);
+    }
+    void orbit(double dx, double dy) {
+        yaw -= dx * 0.005;
+        pitch = std::clamp(pitch + dy * 0.005, -1.55, 1.55);
+    }
+    // Suivre l'astre i tout de suite, sans vol (départ du programme, contrôles).
+    void follow(int i) {
+        if (!visible(i)) return;
+        flying = false;
+        dist = arriveDist(i, dist);
+        focus = i;
+    }
+};
+
+// ---------------------------------------------------------------- textes en français
+std::string frNum(double v, int digits = 3) {
+    char buf[64];
+    const double a = std::fabs(v);
+    const int dec = a < 1e-12 ? 0 : std::clamp(digits - 1 - static_cast<int>(std::floor(std::log10(a))), 0, 6);
+    std::snprintf(buf, sizeof(buf), "%.*f", dec, v);
+    std::string s(buf);
+    const size_t dot = s.find('.');
+    const std::string intPart = s.substr(0, dot), frac = dot == std::string::npos ? "" : s.substr(dot + 1);
+    std::string out;
+    const size_t start = (!intPart.empty() && intPart[0] == '-') ? 1 : 0;
+    for (size_t i = 0; i < intPart.size(); ++i) {
+        out += intPart[i];
+        const size_t left = intPart.size() - 1 - i;
+        if (i >= start && left > 0 && left % 3 == 0) out += "\xC2\xA0";      // espace insécable entre les milliers
+    }
+    if (!frac.empty()) out += "," + frac;
+    return out;
+}
+std::string frInt(double v) { return frNum(std::round(v), 1 + static_cast<int>(std::floor(std::log10(std::max(1.0, std::fabs(v)))))); }
+
+// Une longueur donnée en années-lumière, écrite dans l'unité qui parle.
+std::string frDistance(double ly) {
+    const double km = ly * kLyInKm, au = ly / kAuInLy;
+    if (ly >= 1.0e9) return frNum(ly / 1.0e9) + " milliards d'années-lumière";
+    if (ly >= 1.0e6) return frNum(ly / 1.0e6) + " millions d'années-lumière";
+    if (ly >= 0.1) return frNum(ly) + (ly >= 2 ? " années-lumière" : " année-lumière");
+    if (au >= 0.1) return frNum(au) + " fois la distance Terre-Soleil";
+    if (km >= 1.0e6) return frNum(km / 1.0e6) + " millions de km";
+    return frInt(km) + " km";
+}
+
+// Date : jour, mois, année tant que le calendrier a un sens ; sinon l'année seule.
+std::string frDate(double years, bool withTime = false) {
+    static const char* months[] = {"janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"};
+    if (std::fabs(years) > 6000.0) {      // hors de la plage où le calcul du calendrier est sûr
+        const double y = 2000.0 + years;
+        return y >= 0 ? "An " + frInt(y) : frInt(-y) + " ans avant notre ère";
+    }
+    // Jour julien -> calendrier grégorien (Fliegel et Van Flandern 1968).
+    const double jd = 2451545.0 + years * 365.25;
+    const long long J = static_cast<long long>(std::floor(jd + 0.5));
+    long long l = J + 68569, n = 4 * l / 146097;
+    l = l - (146097 * n + 3) / 4;
+    const long long i = 4000 * (l + 1) / 1461001;
+    l = l - 1461 * i / 4 + 31;
+    const long long j = 80 * l / 2447, day = l - 2447 * j / 80;
+    l = j / 11;
+    const long long month = j + 2 - 12 * l, year = 100 * (n - 49) + i + l;
+    char buf[96];
+    if (withTime) {
+        const double frac = jd + 0.5 - std::floor(jd + 0.5);
+        const int minutes = static_cast<int>(frac * 1440.0);
+        std::snprintf(buf, sizeof(buf), "%lld %s %lld, %02d h %02d (temps universel)", day, months[std::clamp<long long>(month, 1, 12) - 1], year, minutes / 60, minutes % 60);
+    } else {
+        std::snprintf(buf, sizeof(buf), "%lld %s %lld", day, months[std::clamp<long long>(month, 1, 12) - 1], year);
+    }
+    return buf;
+}
+
+}  // namespace
