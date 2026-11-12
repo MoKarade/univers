@@ -76,6 +76,7 @@ body{height:100%; margin:0; background:var(--scene); color:var(--on-scene); font
 #scale{position:fixed; left:20px; bottom:calc(var(--bar-h) + 26px + env(safe-area-inset-bottom,0px)); font-size:12.5px; line-height:1.3; pointer-events:none; text-shadow:0 0 6px #000,0 0 2px #000; font-variant-numeric:tabular-nums}
 #scale-bar{height:6px; border:1px solid var(--on-scene); border-top:0; margin-bottom:5px; min-width:30px}
 #scale-light{color:var(--on-scene-dim)}
+#fps{position:fixed; right:calc(12px + env(safe-area-inset-right,0px)); top:calc(10px + env(safe-area-inset-top,0px)); padding:3px 7px; border-radius:6px; background:rgba(0,0,0,.6); color:#9cf59c; font:500 12.5px/1 var(--sans); font-variant-numeric:tabular-nums; pointer-events:none; z-index:4}
 #time{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + env(safe-area-inset-bottom,0px)); width:min(900px,calc(100% - 20px)); background:var(--panel); color:var(--ink); -webkit-backdrop-filter:blur(16px) saturate(1.3); backdrop-filter:blur(16px) saturate(1.3); border:1px solid var(--line); border-radius:16px; padding:10px 12px; display:grid; grid-template-columns:auto minmax(150px,1.1fr) minmax(170px,1.3fr) auto; grid-template-areas:"tl tl tl tl" "play date speed btns"; gap:8px 16px; align-items:center}
 .g-play{grid-area:play; display:flex; gap:6px}
 .g-date{grid-area:date; min-width:0}
@@ -179,6 +180,7 @@ dt{color:var(--ink-dim)} dd{margin:0; text-align:right; font-weight:500}
 <nav id="rail" aria-label="Échelles"><div class="track"></div><div id="ticks"></div><div id="thumb"></div><div class="hit" id="rail-hit"></div></nav>
 <nav id="nav" aria-label="Déplacements"><button class="btn ic nb" id="n-back" aria-label="Revenir à la vue précédente" title="Vue précédente" disabled>←</button><button class="btn ic nb" id="n-home" aria-label="Revenir au système solaire" title="Système solaire">⌂</button><button class="btn ic nb" id="n-out" aria-label="Reculer d’un cran" title="Reculer d’un cran">−</button><button class="btn ic nb" id="n-in" aria-label="Avancer d’un cran" title="Avancer d’un cran">+</button></nav>
 <div id="hint" hidden>Glisser pour tourner. Pincer ou molette pour changer d’échelle. Toucher un objet ou son nom pour ouvrir sa fiche, deux fois pour y aller. En bas à droite : retour, système solaire, reculer, avancer.</div>
+<div id="fps" hidden aria-live="off"></div>
 <div id="scale"><div id="scale-bar"></div><div id="scale-len"></div><div id="scale-light"></div></div>
 <button type="button" id="evt" hidden></button>
 <footer id="time">
@@ -247,6 +249,7 @@ dt{color:var(--ink-dim)} dd{margin:0; text-align:right; font-weight:500}
   <p class="hint">Par défaut, le Soleil, les planètes et les galaxies du Groupe local sont grossis pour rester visibles. Les distances, elles, sont toujours réelles.</p>
   <label class="ck"><input type="checkbox" id="c-lite"><span>Rendu allégé</span></label>
   <p class="hint">À cocher si l’animation saccade.</p>
+  <label class="ck"><input type="checkbox" id="c-fps"><span>Compteur d’images par seconde</span></label>
   <h3>Données détaillées</h3>
   <p class="hint" id="tile-status"></p>
   <p><button class="btn" id="b-tiles" hidden>Charger les données détaillées</button></p>
