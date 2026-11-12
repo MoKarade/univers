@@ -262,3 +262,10 @@ documente pas) ; magnitude absolue et couleur du Soleil (valeurs nominales usuel
   par capture). Gaia et la Voie lactée ne sont montrées qu'à moins de 3 millions d'années d'aujourd'hui.
 - Question posée à Marc : la Voie lactée « modèle » contient trois points supposés ; la garder affichée (dite comme
   telle) ou la retirer, au nom de sa règle « rien de supposé pour le présent ».
+
+## Décision de Marc, 12 novembre 2026, 18 h 04 UTC : « je veux full ce qu'il y a réellement »
+
+Réponse à la question « garder la Voie lactée dessinée (modèle) ? ». Appliqué : la lueur d'ensemble de la Voie lactée
+(modèle avec trois points supposés) n'est plus montrée (`kShowModelledMilkyWay = false` dans `fenetre.cpp`) ; seules
+les étoiles mesurées de Gaia le sont. Règle pour toute la suite : pour le présent, rien qui ne soit mesuré ; et le plus
+possible de ce qui est mesuré. L'évolution dans le temps reste du calculé, dit comme tel.

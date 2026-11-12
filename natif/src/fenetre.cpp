@@ -199,8 +199,12 @@ int runWindow(const WindowOptions& opt) {
     // là, le dessin d'origine ne garde que le catalogue principal (Gaia en a retiré les doublons).
     GaiaRenderer gaia;
     const bool gaiaOk = gaia.create(g, dataDir + "/gaia.bin", HdrTarget::kFormat);
+    // Décision de Marc (12 novembre 2026, « je veux full ce qu'il y a réellement ») : la lueur d'ensemble de la Voie lactée
+    // est un modèle ajusté sur des mesures, avec trois points supposés (docs/gaia-voie-lactee.md) ; elle n'est donc PAS
+    // montrée. Seules les étoiles mesurées le sont. Le code du fil Gaia reste en place (kShowModelledMilkyWay).
+    constexpr bool kShowModelledMilkyWay = false;
     MilkyWayRenderer milkyWay;
-    milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
+    if (kShowModelledMilkyWay) milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
     sim.hasGaia = gaiaOk;
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
