@@ -99,5 +99,37 @@ int main(int argc, char** argv) {
             }
         }
     }
+    // Sensibilité au MODÈLE : même départ mesuré, calcul exact, un paramètre du potentiel changé dans sa fourchette.
+    // L'écart mesure ce que le calcul ne peut pas corriger (limite du modèle, pas du calcul).
+    {
+        struct Variante { const char* nom; g::Potentiel pot; };
+        const auto halo = [](double v0) { g::Potentiel p; p.GMs = (v0 * v0 - g::v2Baryons(g::kR0)) / g::nfwShape(g::kR0); return p; };
+        std::vector<Variante> vs;
+        { g::Potentiel p; p.omegaBarre = 33; vs.push_back({"barre 33 km/s/kpc", p}); }
+        { g::Potentiel p; p.omegaBarre = 41; vs.push_back({"barre 41 km/s/kpc", p}); }
+        vs.push_back({"rotation 224 km/s", halo(224)});
+        vs.push_back({"rotation 236 km/s", halo(236)});
+        { g::Potentiel p; p.Ab *= 2; vs.push_back({"barre 2 fois plus forte", p}); }
+        { g::Potentiel p; p.barre = false; vs.push_back({"sans barre", p}); }
+        std::printf("\nSensibilité au modèle (écart au calcul de référence, même départ mesuré)\n");
+        const std::vector<double> ts = {0.01, 0.1, 0.5};
+        std::vector<std::vector<phys::Vec3>> ref(ts.size());
+        { g::Orbites o(P, V); for (size_t i = 0; i < ts.size(); ++i) { o.avance(ts[i]); ref[i].resize(P.size()); o.positions(ref[i]); } }
+        for (auto& v : vs) {
+            g::Orbites o(P, V, v.pot);
+            std::printf("  %s\n", v.nom);
+            for (size_t i = 0; i < ts.size(); ++i) {
+                o.avance(ts[i]);
+                std::vector<double> dr[2], da[2];
+                for (size_t k = 0; k < P.size(); ++k) {
+                    const phys::Vec3 a = o.position(k), b = ref[i][k];
+                    dr[chaud[k]].push_back(std::hypot(a.x - b.x, a.y - b.y, a.z - b.z)); da[chaud[k]].push_back(angle(a, b));
+                }
+                std::printf("   à +%.0f Ma\n", ts[i] * 1000);
+                ligne("disque : position", dr[0], "kpc"); ligne("disque : angle", da[0], "°");
+                ligne("chaud : position", dr[1], "kpc");
+            }
+        }
+    }
     return 0;
 }
