@@ -15,6 +15,8 @@ poussière comprise). Aucune valeur n'est modifiée ici.
 Usage : python gaia_telecharger.py <dossier> [--parts 256] [--simultanes 4]
 Taille attendue : environ 6 Go.
 """
+import sys as _sys
+_sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
 import argparse, concurrent.futures as cf, os, sys, time, urllib.parse, urllib.request
 
 TAP = 'https://gea.esac.esa.int/tap-server/tap'

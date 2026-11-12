@@ -11,6 +11,8 @@
 
 Usage : python test_gaia.py <dossier des parts> <gaia.bin> [voie_lactee.bin]
 """
+import sys as _sys
+_sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
 import glob, math, os, sys
 import numpy as np
 from astropy.io import fits

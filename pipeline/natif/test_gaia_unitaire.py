@@ -4,6 +4,8 @@
 Les points tirés au hasard ne servent qu'à éprouver le découpage de l'arbre : ils ne sont jamais affichés.
 Usage : python test_gaia_unitaire.py
 """
+import sys as _sys
+_sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
 import math, os, sys
 import numpy as np
 

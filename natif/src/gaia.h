@@ -30,6 +30,11 @@ struct GaiaFile {
     const GaiaLeaf* leaves = nullptr;
     const uint8_t* stars = nullptr;      // 16 octets par étoile
     const uint8_t* velocities = nullptr;      // 8 octets par étoile
+    // Résumé de chaque feuille (absent des fichiers anciens : bins = 0) : centre de lumière, puis par tranche de magnitude
+    // absolue la lumière 10^(-0,4 M) et le pas de couleur moyen.
+    uint32_t bins = 0;
+    float bin0 = 0, binWidth = 1;
+    const float* summaries = nullptr;      // (4 + 2 × bins) flottants par feuille
     float magnitude(uint64_t i) const {
         uint16_t h;
         std::memcpy(&h, stars + i * 16 + 12, 2);
@@ -56,7 +61,14 @@ bool openGaia(const std::string& path, GaiaFile& out) {
     out.leaves = reinterpret_cast<const GaiaLeaf*>(out.base + 4096);
     out.stars = out.base + 4096 + leafBytes;
     out.velocities = out.stars + starBytes;
-    return static_cast<uint64_t>(size.QuadPart) >= 4096 + leafBytes + starBytes + out.n * 8;
+    std::memcpy(&out.bins, out.base + 1056, 4);
+    std::memcpy(&out.bin0, out.base + 1060, 4);
+    std::memcpy(&out.binWidth, out.base + 1064, 4);
+    const size_t velBytes = gaiaAlign(out.n * 8);
+    out.summaries = reinterpret_cast<const float*>(out.velocities + velBytes);
+    const uint64_t need = 4096 + leafBytes + starBytes + velBytes + static_cast<uint64_t>(out.leafCount) * (4 + 2 * out.bins) * 4;
+    if (out.bins == 0 || out.bins > 256) out.bins = 0;
+    return static_cast<uint64_t>(size.QuadPart) >= (out.bins ? need : 4096 + leafBytes + starBytes + out.n * 8);
 }
 
 // Copie vers un tampon de stockage de la carte, par morceaux (pas de tampon intermédiaire de plusieurs gigaoctets).
@@ -85,8 +97,10 @@ public:
     uint64_t count = 0;      // étoiles dans le fichier
     uint64_t drawn = 0;      // étoiles dessinées à la dernière image
     // Flux le plus faible dessiné, dans l'unité de l'image en grande dynamique (l'écran commence à montrer vers 4e-4).
-    // Les étoiles plus faibles sont sautées une à une ; leur lumière cumulée n'est pas encore ajoutée [À faire].
-    float fluxMin = 1e-6f;
+    // Les étoiles plus faibles sont sautées une à une ; leur lumière cumulée est rendue par un point par feuille, au centre
+    // de lumière de la feuille, étalé sur la taille de la feuille à l'écran (résumé des feuilles de gaia.bin).
+    float fluxMin = 3e-5f;
+    uint32_t restPoints = 0;      // points de lumière cumulée à la dernière image
 
     bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
         if (!openGaia(path, file_)) return false;
@@ -105,6 +119,15 @@ public:
             colors[i * 4 + 3] = 1.0f;
         }
         colors_ = uploadStorage(g, colors.data(), sizeof(colors));
+        for (int i = 0; i < 256; ++i)
+            for (int k = 0; k < 3; ++k) lut_[i][k] = colors[i * 4 + k];
+        if (file_.bins) {
+            for (int i = 0; i < kRing; ++i) {
+                rest_[i] = createBuffer(g, std::max<VkDeviceSize>(32, file_.leafCount * 32ull), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                check(vkMapMemory(g.dev, rest_[i].mem, 0, VK_WHOLE_SIZE, 0, &restMapped_[i]), "lumière cumulée");
+            }
+        }
         for (auto& r : indirect_) {
             r = createBuffer(g, std::max<VkDeviceSize>(16, file_.leafCount * 16ull), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -120,12 +143,20 @@ public:
         if (!ready) return;
         const double since = years - (static_cast<double>(file_.epoch) - 2000.0);      // années depuis les mesures de Gaia
         const PushConstants pc = pushConstants(cam, exposure, height, since);
-        const uint32_t n = selectLeaves(cam, exposure, since, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]));
+        const uint32_t n = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
+                                        file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
+        const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
+        const VkRect2D sc{{0, 0}, {width, height}};
+        vkCmdSetViewport(cmd, 0, 1, &vp);
+        vkCmdSetScissor(cmd, 0, 1, &sc);
+        if (restPoints > 0) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, restPipeline_);
+            vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+            const VkDeviceSize off = 0;
+            vkCmdBindVertexBuffers(cmd, 0, 1, &rest_[ring_].buf, &off);
+            vkCmdDraw(cmd, restPoints, 1, 0, 0);
+        }
         if (n > 0) {
-            const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
-            const VkRect2D sc{{0, 0}, {width, height}};
-            vkCmdSetViewport(cmd, 0, 1, &vp);
-            vkCmdSetScissor(cmd, 0, 1, &sc);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &set_, 0, nullptr);
             vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
@@ -137,6 +168,12 @@ public:
     void release(const Gpu& g) {
         if (!ready) return;
         vkDestroyPipeline(g.dev, pipeline_, nullptr);
+        if (restPipeline_) vkDestroyPipeline(g.dev, restPipeline_, nullptr);
+        if (restVs_) vkDestroyShaderModule(g.dev, restVs_, nullptr);
+        for (int i = 0; i < kRing && file_.bins; ++i) {
+            vkUnmapMemory(g.dev, rest_[i].mem);
+            destroy(g, rest_[i]);
+        }
         vkDestroyPipelineLayout(g.dev, layout_, nullptr);
         vkDestroyDescriptorPool(g.dev, pool_, nullptr);
         vkDestroyDescriptorSetLayout(g.dev, setLayout_, nullptr);
@@ -158,8 +195,12 @@ private:
     GaiaFile file_;
     Buffer stars_, velocities_, colors_, indirect_[kRing];
     void* mapped_[kRing]{};
+    Buffer rest_[kRing];
+    void* restMapped_[kRing]{};
+    float lut_[256][3]{};
     int ring_ = 0;
-    VkPipeline pipeline_{};
+    VkPipeline pipeline_{}, restPipeline_{};
+    VkShaderModule restVs_{};
     VkPipelineLayout layout_{};
     VkDescriptorSetLayout setLayout_{};
     VkDescriptorPool pool_{};
@@ -167,7 +208,9 @@ private:
     VkShaderModule vs_{}, fs_{};
 
     // Feuilles visibles et, pour chacune, le nombre d'étoiles à dessiner (les plus brillantes d'abord).
-    uint32_t selectLeaves(const Camera& cam, float exposure, double since, VkDrawIndirectCommand* out) {
+    // rest : 8 flottants par feuille (position relative à la caméra, magnitude absolue de la lumière sautée ; couleur, taille en pixels).
+    uint32_t selectLeaves(const Camera& cam, float exposure, double since, uint32_t height, VkDrawIndirectCommand* out, float* rest) {
+        const double pxPerRad = height / (2.0 * cam.tanHalf);
         const double mLim = 2.5 * std::log10(static_cast<double>(exposure) / fluxMin);      // magnitude apparente la plus faible dessinée
         const double grow = kMaxSpeedKms * std::fabs(since) * kKmsToLyPerYear;
         const double tx = cam.tanHalf * cam.aspect * 1.02, ty = cam.tanHalf * 1.02;      // 2 % de marge : les points ont une taille
@@ -177,6 +220,7 @@ private:
                                 {cam.fwd.x * ty + cam.up.x, cam.fwd.y * ty + cam.up.y, cam.fwd.z * ty + cam.up.z}};
         uint32_t k = 0;
         drawn = 0;
+        restPoints = 0;
         for (uint32_t i = 0; i < file_.leafCount; ++i) {
             const GaiaLeaf& L = file_.leaves[i];
             const double lo[3] = {L.mn[0] - grow - cam.pos.x, L.mn[1] - grow - cam.pos.y, L.mn[2] - grow - cam.pos.z};
@@ -203,12 +247,44 @@ private:
                     else b = m;
                 }
                 take = a;
+                if (rest && take < L.n) addRest(i, L, cam, absLim, dPc, pxPerRad, rest);
             }
             if (take == 0) continue;
             out[k++] = {take, 1, static_cast<uint32_t>(L.first), 0};
             drawn += take;
         }
         return k;
+    }
+
+    // Lumière des étoiles de la feuille i plus faibles que absLim : somme des tranches de magnitude (la tranche coupée
+    // compte au prorata de la part de sa largeur sous la limite), en un point au centre de lumière de la feuille.
+    void addRest(uint32_t i, const GaiaLeaf& L, const Camera& cam, double absLim, double dPc, double pxPerRad, float* rest) {
+        const float* s = file_.summaries + static_cast<size_t>(i) * (4 + 2 * file_.bins);
+        const float* lum = s + 4;
+        const float* col = lum + file_.bins;
+        double sum = 0, colSum = 0, colW = 0;
+        for (uint32_t b = 0; b < file_.bins; ++b) {
+            const double lo = file_.bin0 + b * file_.binWidth;
+            const double part = std::clamp((lo + file_.binWidth - absLim) / file_.binWidth, 0.0, 1.0);
+            if (part <= 0 || lum[b] <= 0) continue;
+            const double l = lum[b] * part;
+            sum += l;
+            if (col[b] < 254.5f) { colSum += l * col[b]; colW += l; }
+        }
+        if (sum <= 0) return;
+        // taille de la feuille à l'écran : la lumière y est étalée (au moins la taille d’une étoile, au plus 512 pixels)
+        const double ext = std::sqrt((L.mx[0] - L.mn[0]) * (L.mx[0] - L.mn[0]) + (L.mx[1] - L.mn[1]) * (L.mx[1] - L.mn[1]) + (L.mx[2] - L.mn[2]) * (L.mx[2] - L.mn[2]));
+        const double sizePx = ext / (dPc * 3.2615638) * pxPerRad;
+        if (sizePx > 512.0) return;      // feuille trop grande à l'écran : sa lumière sautée, étalée, n'est pas rendue (part mesurée : docs/gaia-voie-lactee.md)
+        float* v = rest + restPoints * 8;
+        v[0] = static_cast<float>(s[0] - cam.pos.x);
+        v[1] = static_cast<float>(s[1] - cam.pos.y);
+        v[2] = static_cast<float>(s[2] - cam.pos.z);
+        v[3] = static_cast<float>(-2.5 * std::log10(sum));
+        const int ci = colW > 0 ? static_cast<int>(std::lround(colSum / colW)) : 255;
+        for (int a = 0; a < 3; ++a) v[4 + a] = lut_[std::clamp(ci, 0, 255)][a];
+        v[7] = static_cast<float>(std::max(sizePx, 1.0));
+        ++restPoints;
     }
 
     void createPipeline(const Gpu& g, VkFormat fmt) {
@@ -300,6 +376,19 @@ private:
         pci.pDynamicState = &ds;
         pci.layout = layout_;
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_), "pipeline Gaia");
+        if (!file_.bins) return;
+        // Lumière cumulée des étoiles sautées : un point par feuille, sommets ordinaires (8 flottants).
+        restVs_ = shader(g, "gaia_reste.vert.spv");
+        stages[0].module = restVs_;
+        const VkVertexInputBindingDescription bind{0, 32, VK_VERTEX_INPUT_RATE_VERTEX};
+        const VkVertexInputAttributeDescription attrs[2] = {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0}, {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 16}};
+        VkPipelineVertexInputStateCreateInfo vin2{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        vin2.vertexBindingDescriptionCount = 1;
+        vin2.pVertexBindingDescriptions = &bind;
+        vin2.vertexAttributeDescriptionCount = 2;
+        vin2.pVertexAttributeDescriptions = attrs;
+        pci.pVertexInputState = &vin2;
+        check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &restPipeline_), "pipeline Gaia (lumière cumulée)");
     }
 };
 

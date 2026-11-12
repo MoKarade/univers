@@ -24,9 +24,13 @@ Format gaia.bin (petit-boutiste), sections alignées sur 64 octets :
   feuilles (48 octets) : min x,y,z (f32), nombre (u32), max x,y,z (f32), réservé (u32), première étoile (u64), réservé (u64)
   étoiles (16 octets)  : x, y, z (f32, al), magnitude absolue G (f16), pas de couleur (u8), drapeaux (u8 : 1 = vitesse radiale mesurée)
   vitesses (8 octets)  : vx, vy, vz (i16, pas de 0,05 km/s), réservé (i16)
+  résumés (528 octets par feuille) : centre de lumière x, y, z (f32), réservé (f32), lumière 10^(-0,4 M) par tranche (64 f32),
+                        pas de couleur moyen par tranche (64 f32) ; tranches et bornes : en-tête, octets 1056 à 1067
 
 Usage : python gaia_convertir.py <dossier des parts> <etoiles.bin> <passband.dat> <zeropt.dat> <dossier de sortie>
 """
+import sys as _sys
+_sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
 import glob, math, os, sys, time
 import numpy as np
 from astropy.io import fits
@@ -36,6 +40,8 @@ LY_PER_PC = 3.2615638
 EPS = math.radians(84381.448 / 3600.0)
 KAPPA = 4.740470446      # km/s pour 1 mas/an à 1 kpc
 FEUILLE = 32768
+TRANCHES, TRANCHE0, TRANCHE_L = 64, -8.0, 0.5      # résumé des feuilles : magnitudes absolues -8 à +24 par 0,5
+ATTENDU = 98_346_986      # COUNT(*) WHERE parallax_over_error > 10, archive Gaia, 12 novembre 2026
 BPRP0, BPRP_PAS = -0.6, 0.03      # pas 0 à 253 : -0,6 à 7,0 ; 254 : au-delà ; 255 : non mesuré
 V_PAS = 0.05
 
@@ -134,6 +140,7 @@ def main():
     G = lire_parts(dossier)
     n_total = len(G['ra'])
     print(f'{n_total} étoiles lues ({time.time() - t0:.0f} s)')
+    if n_total != ATTENDU: sys.exit(f'{n_total} étoiles lues, {ATTENDU} attendues (compte du 12 novembre 2026) : téléchargement incomplet')
     T = temperatures(passband, zeropt)
 
     ra, de, plx = np.radians(G['ra']), np.radians(G['dec']), G['parallax']
@@ -181,11 +188,26 @@ def main():
     for i, (lo, hi) in enumerate(fs):
         fe['min'][i], fe['max'][i] = p[lo:hi].min(0), p[lo:hi].max(0)
         fe['n'][i], fe['premier'][i] = hi - lo, lo
-    head = b'UNIVGAI1' + np.uint64(len(k)).tobytes() + np.uint32(len(fs)).tobytes() + np.array([2016.0, BPRP0, BPRP_PAS], '<f4').tobytes() + T.tobytes()
+    # Résumé de chaque feuille : centre de lumière et lumière par tranche de magnitude absolue (10^(-0,4 M), pas de couleur
+    # moyen pondéré). L'appli y lit la lumière des étoiles qu'elle saute, pour la rendre en un seul point.
+    lum = 10 ** (-0.4 * M[k])
+    tr = np.clip(np.floor((M[k] - TRANCHE0) / TRANCHE_L), 0, TRANCHES - 1).astype(np.int64)
+    cle = num * TRANCHES + tr
+    nfe = len(fs) * TRANCHES
+    res = np.zeros(len(fs), np.dtype([('c', '<f4', 3), ('r', '<f4'), ('lum', '<f4', TRANCHES), ('couleur', '<f4', TRANCHES)]))
+    L_t = np.bincount(cle, lum, nfe)
+    res['lum'] = L_t.reshape(-1, TRANCHES)
+    mesure = pas[k] < 255      # couleur mesurée seulement
+    L_c = np.bincount(cle[mesure], lum[mesure], nfe)
+    res['couleur'] = np.where(L_c > 0, np.bincount(cle[mesure], lum[mesure] * pas[k][mesure].astype(np.float64), nfe) / np.maximum(L_c, 1e-300), 255).reshape(-1, TRANCHES)
+    L_f = np.bincount(num, lum, len(fs))
+    for a in range(3): res['c'][:, a] = np.bincount(num, lum * p[:, a], len(fs)) / L_f
+    head = (b'UNIVGAI1' + np.uint64(len(k)).tobytes() + np.uint32(len(fs)).tobytes() + np.array([2016.0, BPRP0, BPRP_PAS], '<f4').tobytes()
+            + T.tobytes() + np.uint32(TRANCHES).tobytes() + np.array([TRANCHE0, TRANCHE_L], '<f4').tobytes())
     chemin = os.path.join(sortie, 'gaia.bin')
     with open(chemin + '.partiel', 'wb') as f:
         f.write(head + b'\0' * (4096 - len(head)))
-        for b in (fe.tobytes(), rec.tobytes(), vel.tobytes()): f.write(b + b'\0' * (-len(b) % 64))
+        for b in (fe.tobytes(), rec.tobytes(), vel.tobytes(), res.tobytes()): f.write(b + b'\0' * (-len(b) % 64))
     os.replace(chemin + '.partiel', chemin)
     print(f'-> {chemin} ({os.path.getsize(chemin) / 1e9:.2f} Go, {time.time() - t0:.0f} s) ; '
           f'vitesse radiale mesurée : {int(a_rv[k].sum())} ; couleur non mesurée : {int((pas[k] == 255).sum())}')

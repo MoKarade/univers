@@ -33,6 +33,8 @@ Format voie_lactee.bin (petit-boutiste) : en-tête de 1024 octets (« UNIVMW01 �
 puis la grande grille NX×NY×NZ de paires f16 (lumière manquante, poussière), x le plus rapide, puis la grille locale de
 poussière 160×160×52 en f16 (A_V par pc).
 """
+import sys as _sys
+_sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
 import json, math, os, re, sys, time
 import numpy as np
 
