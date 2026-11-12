@@ -18,11 +18,12 @@ Définition de « fini » validée par Marc, vérifiée ici sur cinq écrans : t
      les réglages à l'intérieur des panneaux Affichage et Cosmologie (trois touchers : « Plus », le panneau,
      le réglage). Elles sont comptées et affichées.
   5. Téléphone : un toucher sur la barre des échelles rend ses arrêts touchables.
-  6. Choix écrits, non testés comme des pertes : sur téléphone le bandeau d'événement montre son titre seul
+  6. Rien de caché sans défilement : boutons de la fiche entiers, liste de la fiche d'au moins deux lignes.
+  7. Choix écrits, non testés comme des pertes : sur téléphone le bandeau d'événement montre son titre seul
      (coupé s'il est long ; le toucher ouvre sa fiche avec la date et la source) ; tiroir fermé, l'âge de
      l'univers laisse sa ligne au bandeau tant qu'il est affiché (7 s), et reste visible tiroir ouvert.
      La chronologie s'ouvre aussi en touchant la date : ses commandes restent à deux touchers.
-  7. Fiche lisible : contraste du texte sur le fond de la fiche d'au moins 4,5, thème sombre et thème clair.
+  8. Fiche lisible : contraste du texte sur le fond de la fiche d'au moins 4,5, thème sombre et thème clair.
 
 Lancer : python3 app/build.py puis python3 app/test/ui_chevauchement.py [phone small land mid desk]
 Variable U_SHOTS : dossier où enregistrer une capture par situation (facultatif).
@@ -68,6 +69,15 @@ MEASURE_JS = r"""
   document.querySelectorAll('#rail .stop span, #rail .tick b').forEach(s => { if (!vis(s)) return; const q = clip(s, s.getBoundingClientRect()); if (q) out.push({ id: 'rail:' + out.length, name: 'échelle « ' + s.textContent + ' »', box: q, opaque: false, leaf: false }); });
   return out;
 }
+"""
+
+# Contenu caché sans pouvoir défiler : boutons de la fiche coupés, liste de la fiche réduite à moins de deux lignes.
+CUT_JS = r"""
+() => { const c = document.getElementById('card'), bad = []; if (!c || getComputedStyle(c).display === 'none') return bad;
+  const cr = c.getBoundingClientRect(), vp = r => r.top >= Math.max(cr.top, 0) - 1 && r.bottom <= Math.min(cr.bottom, innerHeight) + 1 && r.left >= cr.left - 1 && r.right <= cr.right + 1;
+  c.querySelectorAll('.cbtn button').forEach(b => { if (getComputedStyle(b).display !== 'none' && !vp(b.getBoundingClientRect())) bad.push('bouton de fiche coupé : ' + b.textContent); });
+  const dl = document.getElementById('card-dl'); if (dl.children.length) { const lh = parseFloat(getComputedStyle(dl).fontSize) * 1.4, r = dl.getBoundingClientRect(), h = Math.min(r.bottom, cr.bottom, innerHeight) - Math.max(r.top, cr.top, 0); if (h < Math.min(2 * lh, dl.scrollHeight) - 1) bad.push('liste de la fiche réduite à ' + Math.round(h) + ' px'); }
+  return bad; }
 """
 
 SITUATIONS = [
@@ -164,6 +174,9 @@ def situations(pg, mode, H):
                 part = (t['box'][3] - t['box'][1]) / H if t else 0
                 line += f', barre du bas {part:.0%}'
                 if part > BAR_MAX: bad.append(f'barre du bas {part:.0%} de la hauteur (max {BAR_MAX:.0%})')
+        cut = pg.evaluate(CUT_JS)
+        if cut: line += f', {len(cut)} coupé(s)'
+        bad += cut
         if name == 'fiche Sirius + message':
             c = contrast(pg); line += f', contraste fiche {c:.1f}'
             if c < CONTRAST_MIN: bad.append(f'contraste de la fiche {c:.1f}')

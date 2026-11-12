@@ -207,8 +207,10 @@ body:has(.panel:not([hidden])) #card, body:has(.panel:not([hidden])) #notice{dis
   body:has(#hint:not([hidden])) #rail{visibility:hidden}
 }
 @media (max-height:520px) and (min-width:621px){
-  #card{right:auto; width:min(440px,58%); max-height:calc(100% - var(--top-h, 120px) - var(--bar-h) - 30px)}
-  #hint{left:auto; right:8px; transform:none; max-width:40%}
+  /* paysage : la fiche prend la colonne de droite sur toute la hauteur ; la barre des échelles s'efface, les boutons passent à gauche */
+  #card{left:auto; right:8px; top:calc(8px + env(safe-area-inset-top,0px)); bottom:calc(var(--bar-h) + 16px + env(safe-area-inset-bottom,0px)); width:min(400px,42%); max-height:none}
+  body:has(#card:not([hidden])) #rail{display:none} body:has(#card:not([hidden])) #nav{right:auto; left:calc(8px + env(safe-area-inset-left,0px))}
+  #hint{left:8px; right:auto; transform:none; max-width:48%}
   body:has(#time.open) #card{display:none}
   #nav{bottom:calc(var(--bar-h) + 22px + env(safe-area-inset-bottom,0px))} #rail{bottom:calc(var(--bar-h) + 80px + env(safe-area-inset-bottom,0px))}
   body:has(#card:not([hidden])) #scale{display:none}
