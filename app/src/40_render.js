@@ -40,6 +40,10 @@ const FRAG_SOFT = `varying vec3 vColor; varying float vA;
 void main(){ vec2 p=gl_PointCoord*2.0-1.0; float d2=dot(p,p); if(d2>1.0) discard; gl_FragColor=vec4(vColor*vA*(exp(-d2*4.2)-0.015),1.0); }`;
 
 const SH = {
+  /* voile : surface vue par la tranche plus lumineuse que de face (comme une bulle), additif, sans profondeur */
+  shell: { v: `varying float vRim; void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv;
+  float c=abs(dot(normalize(normalMatrix*normal),normalize(-mv.xyz))); vRim=pow(1.0-c,3.0); }`,
+    f: `uniform vec3 uColor; uniform float uOpacity; varying float vRim; void main(){ gl_FragColor=vec4(uColor*uOpacity*(0.012+0.3*vRim),1.0); }` },
   star: { v: `attribute float aMag; attribute vec3 aCol; attribute vec3 aLife; attribute float aFate; attribute vec3 aVel; uniform float uUnitToPc,uExpo,uOpacity,uDpr,uEvolve,uT,uFlash,uVt,uMcut,uTgtR; uniform vec3 uTgt; varying vec3 vColor; varying float vA; varying float vCore;
 uniform float uDust,uAk; uniform vec3 uCamLy; uniform mat3 uE2G;
 ${dustGlsl()}void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); gl_Position=projectionMatrix*mv; gl_Position.z=0.0;
@@ -63,11 +67,11 @@ ${dustGlsl()}void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); g
     f: `varying vec3 vColor; varying float vA; varying float vCore;
 void main(){ vec2 p=gl_PointCoord*2.0-1.0; float d2=dot(p,p); if(d2>1.0) discard; float core=exp(-d2*15.0); float halo=exp(-d2*3.5)*0.16-0.005; vec2 q=abs(p); float spike=(exp(-q.y*26.0)*exp(-q.x*3.2)+exp(-q.x*26.0)*exp(-q.y*3.2))*0.22*vCore*vCore*(1.0-d2);
   gl_FragColor=vec4(mix(vColor,vec3(1.0),core*0.28)*vA*(core*(1.0+3.0*vCore)+max(halo,0.0)*(0.5+vCore)+spike),1.0); }` },
-  galaxy: { v: `attribute vec2 aOm; attribute vec3 aCol; attribute vec2 aLook; attribute vec3 aCen; attribute float aGrp; attribute float aId; uniform vec3 uSh[104]; uniform vec3 uAx[104]; uniform vec3 uShift,uShift2,uHide; uniform float uG2,uHideK; uniform float uT1,uT2,uPx,uOpacity,uMinPx,uMaxPx,uFloor,uBigPx,uExag,uStarCap,uInside; varying vec3 vColor; varying float vA;
+  galaxy: { v: `attribute vec2 aOm; attribute vec3 aCol; attribute vec2 aLook; attribute vec3 aCen; attribute float aGrp; attribute float aId; uniform vec3 uSh[104]; uniform vec3 uAx[104]; uniform vec3 uShift,uShift2,uHide; uniform float uG2,uHideK,uHideId; uniform float uT1,uT2,uPx,uOpacity,uMinPx,uMaxPx,uFloor,uBigPx,uExag,uStarCap,uInside; varying vec3 vColor; varying float vA;
 void main(){ float ang=-(aOm.x*uT1+aOm.y*uT2); float c=cos(ang),s=sin(ang); vec3 ax=uAx[int(aId+0.5)]; vec3 p; if(dot(ax,ax)>0.5){ vec3 d=position-aCen; p=aCen+d*c+cross(ax,d)*s+ax*dot(ax,d)*(1.0-c); } else { p=vec3(c*position.x-s*position.y,s*position.x+c*position.y,position.z); } p=aCen+(p-aCen)*uExag+step(0.5,aGrp)*step(aGrp,1.5)*uShift+step(1.5,aGrp)*uShift2+uSh[int(aId+0.5)];
   vec4 mv=modelViewMatrix*vec4(p,1.0); gl_Position=projectionMatrix*mv; gl_Position.z=0.0; float sc=length(modelViewMatrix[0].xyz);
   float px=aLook.x*uExag*sc*uPx/max(-mv.z,1e-9); float e=min(1.0,(px*px)/(uMinPx*uMinPx)); float gt=step(0.3,aLook.x); float big=mix(1.0,1.0-smoothstep(uBigPx*0.4,uBigPx*0.95,px),gt); float cap=max(mix(uStarCap*(0.7+aLook.x*8.0),uMaxPx,gt),uMinPx);
-  vA=aLook.y*uOpacity*max(e,uFloor)*big*mix(pow(min(1.0,cap/max(px,1e-6)),1.2),1.0,gt); vColor=mix(aCol,vec3(0.95,0.92,0.86)*dot(aCol,vec3(0.3333)),uInside); gl_PointSize=clamp(px,uMinPx,cap)*2.0; vA*=mix(1.0,uG2,step(1.5,aGrp)); vA*=1.0-uHideK*(1.0-step(0.5,distance(aCen,uHide))); }`, f: FRAG_SOFT },
+  vA=aLook.y*uOpacity*max(e,uFloor)*big*mix(pow(min(1.0,cap/max(px,1e-6)),1.2),1.0,gt); vColor=mix(aCol,vec3(0.95,0.92,0.86)*dot(aCol,vec3(0.3333)),uInside); gl_PointSize=clamp(px,uMinPx,cap)*2.0; vA*=mix(1.0,uG2,step(1.5,aGrp)); vA*=1.0-uHideK*(1.0-step(0.5,distance(aCen,uHide))); vA*=step(0.5,abs(aId-uHideId)); }`, f: FRAG_SOFT },
   web: { v: `attribute vec3 aPsi; attribute vec3 aEig; attribute vec4 aRnd; uniform float uD,uPx,uOpacity,uHorizon,uAge,uMinPx,uMaxPx,uSw,uSf,uRW,uCR; varying vec3 vColor; varying float vA; varying vec3 vShape;
 float Sof(float r){ return uSw*(1.0-smoothstep(0.6*uRW,uRW,r))+uSf; }
 void main(){ vec3 p=position+uD*aPsi; vec3 j=abs(vec3(1.0)+uD*aEig); float dens=1.0/max(j.x*j.y*j.z,0.012); float r=length(position);
@@ -96,6 +100,8 @@ void main(){ float r=aDist; vec4 mv=modelViewMatrix*vec4(position*r,1.0); gl_Pos
   vA=uOpacity*lod*hz*smoothstep(0.15,0.9,uAge)*(0.9+0.3*ns); gl_PointSize=uMinPx*(2.5+1.0*ns+0.6*q); if(vA<=0.002) gl_Position=vec4(2.0,2.0,2.0,1.0); }`, f: FRAG_SOFT },
   dots: { v: `attribute vec2 aLook; uniform float uOpacity,uDpr,uZ; uniform vec3 uColor; varying vec3 vColor; varying float vA;
 void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv; if(uZ>0.5) gl_Position.z=0.0; vA=aLook.y*uOpacity; vColor=uColor; gl_PointSize=clamp(aLook.x*1.5,1.0,4.5)*uDpr; }`, f: FRAG_SOFT },
+  dotsC: { v: `attribute vec2 aLook; attribute vec3 aCol; uniform float uOpacity,uDpr; varying vec3 vColor; varying float vA;
+void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv; vA=aLook.y*uOpacity; vColor=aCol; gl_PointSize=clamp(aLook.x*1.5,1.0,4.5)*uDpr; }`, f: FRAG_SOFT },
   orbit: { v: `attribute float aU; attribute float aSide; uniform vec3 uP,uQ; uniform float uE0,uWidth; uniform vec2 uViewport; varying float vU; varying float vSide;
 vec3 rel(float dE){ float sh=sin(0.5*dE); return uP*(-2.0*sin(uE0+0.5*dE)*sh)+uQ*(2.0*cos(uE0+0.5*dE)*sh); }
 void main(){ float dE=-aU*6.2831853; vec4 c0=projectionMatrix*modelViewMatrix*vec4(rel(dE),1.0); vec4 c1=projectionMatrix*modelViewMatrix*vec4(rel(dE-0.012),1.0);
@@ -377,7 +383,7 @@ function createRenderer(canvas, Q, generated) {
   const lm = DATA.FAR.filter(f => f.k !== 'void');
   const lmPos = new Float32Array(lm.length * 3), lmCol = new Float32Array(lm.length * 3), lmLook = new Float32Array(lm.length * 2), lmOm = new Float32Array(lm.length * 2);
   lm.forEach((f, i) => { lmPos.set(f.pos, i * 3); lmCol.set(f.k === 'cluster' ? [1.0, 0.82, 0.55] : [0.8, 0.86, 1.0], i * 3); lmLook.set([f.k === 'cluster' ? clamp(f.sg * 0.1, 0.7, 2.2) : 0.06, f.k === 'cluster' ? 0.26 : 0.8], i * 2); });
-  const galU = () => ({ uT1: U(0), uT2: U(0), uPx: U(1), uOpacity: U(1), uMinPx: U(1), uMaxPx: U(64), uFloor: U(0), uBigPx: U(64), uExag: U(1), uStarCap: U(2.4), uInside: U(0), uShift: U(new THREE.Vector3()), uShift2: U(new THREE.Vector3()), uG2: U(1), uHide: U(new THREE.Vector3(1e9, 1e9, 1e9)), uHideK: U(0) });
+  const galU = () => ({ uT1: U(0), uT2: U(0), uPx: U(1), uOpacity: U(1), uMinPx: U(1), uMaxPx: U(64), uFloor: U(0), uBigPx: U(64), uExag: U(1), uStarCap: U(2.4), uInside: U(0), uShift: U(new THREE.Vector3()), uShift2: U(new THREE.Vector3()), uG2: U(1), uHideId: U(-9), uHide: U(new THREE.Vector3(1e9, 1e9, 1e9)), uHideK: U(0) });
   const lmU = galU();
   const landmarks = pts({ position: [lmPos, 3], aOm: [lmOm, 2], aCol: [lmCol, 3], aLook: [lmLook, 2] }, mk(SH.galaxy, lmU), 3);
   // galaxies proches à distance mesurée (Karachentsev 2013), en Mpc comobiles
@@ -429,9 +435,10 @@ function createRenderer(canvas, Q, generated) {
   R.starPos = sPos;
   const starsU = starU();
   // vie et mouvement de chaque étoile : destin estimé d'après l'éclat et la couleur, vitesse mesurée
-  const sHip = new Uint32Array(sN), sLife = new Float32Array(sN * 3), sFate = new Float32Array(sN), sMass = new Float32Array(sN), sCls = new Uint8Array(sN), sBv = new Float32Array(sN);
+  const sHip = new Uint32Array(sN), sSrc = new Uint8Array(sN), sRange = new Float32Array(sN * 2), sLife = new Float32Array(sN * 3), sFate = new Float32Array(sN), sMass = new Float32Array(sN), sCls = new Uint8Array(sN), sBv = new Float32Array(sN);
   sHip.set(new Uint32Array(b64ToBytes(DATA.STARS_HIP).buffer).subarray(0, sN0));
-  for (let i = 0; i < sN; i++) { sBv[i] = i < sN0 ? sAux[i * 2 + 1] / 100 - 0.5 : XS[i - sN0].bv; const L = starLife(sMag[i], sBv[i], i, sHip[i]); sLife.set([clamp(L[0], -2e5, 2e5), clamp(L[1], -2e5, 2e5), clamp(L[2], -2e5, 2e5)], i * 3); sFate[i] = L[3]; sMass[i] = L[4]; sCls[i] = L[5]; }
+  const lifeAll = () => { for (let i = 0; i < sN; i++) { sBv[i] = i < sN0 ? sAux[i * 2 + 1] / 100 - 0.5 : XS[i - sN0].bv; const L = starLife(sMag[i], sBv[i], i, sHip[i]); sLife.set([clamp(L[0], -2e5, 2e5), clamp(L[1], -2e5, 2e5), clamp(L[2], -2e5, 2e5)], i * 3); sFate[i] = L[3]; sMass[i] = L[4]; sCls[i] = L[5]; sSrc[i] = L[6]; sRange[i * 2] = L[7]; sRange[i * 2 + 1] = L[8]; } };
+  lifeAll();
   const vq = new Int16Array(sN * 3), Mg = DATA.M_GAL2ECL; vq.set(new Int16Array(b64ToBytes(DATA.STARS_VEL).buffer).subarray(0, sN0 * 3)); XS.forEach((o, k) => { for (let a = 0; a < 3; a++) vq[(sN0 + k) * 3 + a] = Math.round(20 * (Mg[0][a] * o.v[0] + Mg[1][a] * o.v[1] + Mg[2][a] * o.v[2])); });
   const K = initStarKin(sPos, sN, DATA.SGRA_GAL.map(x => -x * GAL.R0), vq); R.K = K; orbInit(K, DATA.SGRA_GAL.map(x => -x * GAL.R0));
   // trajectoire publiée (instant, distance et vitesse du passage) pour chaque étoile frôleuse, ajoutée ou déjà présente
@@ -439,8 +446,10 @@ function createRenderer(canvas, Q, generated) {
   R.passers = (DATA.PASSERS || []).map(o => { const i = o.i >= 0 ? o.i : sN0 + XS.indexOf(o); K.lin[i] = 1; for (let a = 0; a < 3; a++) { K.p0[i * 3 + a] = o.p[a]; sPos[i * 3 + a] = o.p[a]; K.ve[i * 3 + a] = o.v[a] * KMS_LY_YR; } K.vkms[i] = o.vk; sMass[i] = o.m; if (!DATA.STAR_NAMES[i]) DATA.STAR_NAMES[i] = o.n; return Object.assign({ idx: i }, o); });
   // les étoiles frôleuses sont dessinées par le catalogue principal : leurs copies dans les autres catalogues Gaia sont éteintes (même direction à 0,02 degré près, même distance à 1,2 % près)
   const PNOW = (DATA.PASSERS || []).filter(o => o.G <= 13.2).map(o => { const d = Math.hypot(o.now[0], o.now[1], o.now[2]); return [o.now[0], o.now[1], o.now[2], 0.012 * d + 0.03, d]; });
-  const isPasser = (x, y, z) => { for (let q = 0; q < PNOW.length; q++) { const w = PNOW[q]; if (Math.abs(x - w[0]) < w[3] && Math.abs(y - w[1]) < w[3] && Math.abs(z - w[2]) < w[3]) { const d = Math.hypot(x, y, z); if ((x * w[0] + y * w[1] + z * w[2]) / (d * w[4]) > 1 - 8e-8 && Math.abs(d / w[4] - 1) < 0.012) return true; } } return false; }; R.star = { N: sN, mag: sMag, bv: sBv, hip: sHip, life: sLife, fate: sFate, mass: sMass, cls: sCls };
+  const isPasser = (x, y, z) => { for (let q = 0; q < PNOW.length; q++) { const w = PNOW[q]; if (Math.abs(x - w[0]) < w[3] && Math.abs(y - w[1]) < w[3] && Math.abs(z - w[2]) < w[3]) { const d = Math.hypot(x, y, z); if ((x * w[0] + y * w[1] + z * w[2]) / (d * w[4]) > 1 - 8e-8 && Math.abs(d / w[4] - 1) < 0.012) return true; } } return false; }; R.star = { N: sN, mag: sMag, bv: sBv, hip: sHip, life: sLife, fate: sFate, mass: sMass, cls: sCls, src: sSrc, range: sRange };
   const stars = pts({ position: [sPos, 3], aMag: [sMag, 1], aCol: [sCol, 3], aLife: [sLife, 3], aFate: [sFate, 1] }, mk(SH.star, starsU), 8); starsU.uEvolve.value = 1;
+  R.relife = () => { lifeAll(); for (const o of R.passers) sMass[o.idx] = o.m;      /* masses publiées des étoiles frôleuses (Bailer-Jones 2022) gardées */
+    stars.geometry.attributes.aLife.needsUpdate = true; stars.geometry.attributes.aFate.needsUpdate = true; };      /* âges Gaia arrivés : destins recalculés */
   let starCursor = 0, starPassT = 1e99, starDone = 0;
   // --- Gaia DR3 : toutes les étoiles plus faibles que le premier catalogue, jusqu'à la magnitude limite du jeu de données
   const gN = Math.round(DATA.GAIA_N * (Q.gaia || 1)), gGeo = new Uint16Array(b64ToBytes(DATA.GAIA_GEO).buffer), gAux = b64ToBytes(DATA.GAIA_AUX), gPos = new Float32Array(gN * 3), gMag = new Float32Array(gN), gCol = new Float32Array(gN * 3), gBv = new Float32Array(gN), gLife = new Float32Array(gN * 3), gFate = new Float32Array(gN), gMass = new Float32Array(gN), gCls = new Uint8Array(gN);
@@ -555,11 +564,17 @@ void main(){ float e=aEl.x; float M=mod(aEl.y+aEl.z*uT,6.2831853); float E=M+e*s
   const COM = decodeComets(); R.COM = COM; const cometU = dotsU([0.6, 0.92, 1.0]), comets = pts({ position: [COM.pos, 3], aLook: [COM.look, 2] }, mk(SH.dots, cometU, { depthTest: true }), 46);
   const fpos = k => new Float32Array(b64ToBytes(DATA[k]).buffer), mkLook = (n, s, a) => { const l = new Float32Array(n * 2); for (let i = 0; i < n; i++) { l[i * 2] = s; l[i * 2 + 1] = a; } return l; };
   R.EXO = { N: DATA.EXO_N, pos: fpos('EXO_POS') }; R.PSR = { N: DATA.PSR_N, pos: fpos('PSR_POS') };
-  const exoU = dotsU([0.42, 1.0, 0.6]), exo = pts({ position: [R.EXO.pos, 3], aLook: [mkLook(R.EXO.N, 1.9, 0.85), 2] }, mk(SH.dots, exoU), 9);
+  /* étoiles à planètes : la couleur de l'étoile (température mesurée, NASA Exoplanet Archive), gris si elle est inconnue. Un vert de repère
+     faisait ressortir les champs des relevés (le trait vers le Cygne est le champ du télescope Kepler), pas des étoiles. */
+  const exoCol = new Float32Array(R.EXO.N * 3); for (let i = 0; i < R.EXO.N; i++) { const T = +((DATA.EXO_ST && DATA.EXO_ST[i]) || '').split('~')[2]; exoCol.set(T > 0 ? bbRgb(T) : [0.62, 0.62, 0.62], i * 3); }
+  const exoU = dotsU([1, 1, 1]), exo = pts({ position: [R.EXO.pos, 3], aLook: [mkLook(R.EXO.N, 1.7, 0.8), 2], aCol: [exoCol, 3] }, mk(SH.dotsC, exoU), 9);
   /* Laniakea (A2) : cellules de bord du bassin d'attraction de la Voie lactée (Dupuy et Courtois 2023, champ de vitesses
      Cosmicflows-4), en Mpc comobiles, écliptique J2000, comme les galaxies proches. Pipeline : pipeline/sources/build_laniakea.py */
-  const LK = DATA.LANIAKEA, lkPos = LK ? new Float32Array(b64ToBytes(LK.pos).buffer) : new Float32Array(0), lkU = dotsU([0.35, 0.85, 1.0]);
-  const lania = pts({ position: [lkPos, 3], aLook: [mkLook(lkPos.length / 3, 2.4, 0.8), 2] }, mk(SH.dots, lkU), 4); R.lania = lania;
+  const LK = DATA.LANIAKEA, lkU = { uColor: U(new THREE.Color(0.4, 0.72, 1.0)), uOpacity: U(0) }, lkGeo = new THREE.BufferGeometry();
+  if (LK) { const q = new Int16Array(b64ToBytes(LK.pos).buffer), p = new Float32Array(q.length); for (let i = 0; i < q.length; i++) p[i] = q[i] * LK.q;      /* sommets en Mpc comobiles */
+    lkGeo.setAttribute('position', new THREE.BufferAttribute(p, 3)); lkGeo.setIndex(new THREE.BufferAttribute(new Uint16Array(b64ToBytes(LK.tri).buffer), 1)); lkGeo.computeVertexNormals(); }
+  /* surface lisse de la frontière, et non des points : vus de loin, les points dessinaient la grille des cellules de 7,8 Mpc/h */
+  const lania = new THREE.Mesh(lkGeo, mk(SH.shell, lkU, { side: THREE.DoubleSide })); lania.frustumCulled = false; lania.renderOrder = 4; lania.visible = false; scene.add(lania); R.lania = lania;
   const psrU = dotsU([0.8, 0.62, 1.0]), psr = pts({ position: [R.PSR.pos, 3], aLook: [mkLook(R.PSR.N, 1.9, 0.85), 2] }, mk(SH.dots, psrU), 9);
   // trous noirs : stellaires dans la Voie lactée (années-lumière), supermassifs au centre d'autres galaxies (Mpc)
   const f32 = s => new Float32Array(b64ToBytes(s).buffer);
@@ -768,9 +783,9 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
     const oNear = sim ? 0 : fadeIn(lr, 22.3, 22.9) * fadeOut(lr, 24.7, 25.3) * smoothstep(0.3, 1.2, F.age);
     near.visible = oNear > 0.003;
     if (near.visible) { place(near, gc, unitC, F); nearU.uPx.value = px; nearU.uOpacity.value = oNear; nearU.uMinPx.value = minPx * 1.35; nearU.uMaxPx.value = maxPx; nearU.uFloor.value = 0.55; nearU.uBigPx.value = Math.min(maxPx, 0.1 * R.halfMin); nearU.uStarCap.value = 2.4 * dpr; }
-    const oLk = sim ? 0 : fadeIn(lr, 23.8, 24.2) * fadeOut(lr, 25.3, 25.8) * smoothstep(0.3, 1.2, F.age);
-    lania.visible = oLk > 0.003 && lkPos.length > 0;
-    if (lania.visible) { place(lania, gc, unitC, F); lkU.uOpacity.value = oLk; lkU.uDpr.value = dpr; }
+    const oLk = sim ? 0 : fadeIn(lr, 24.45, 24.85) * fadeOut(lr, 25.3, 25.8) * smoothstep(0.3, 1.2, F.age);
+    lania.visible = oLk > 0.003 && !!LK;
+    if (lania.visible) { place(lania, gc, unitC, F); lkU.uOpacity.value = oLk; }
     const oLm = fadeIn(lr, 22.6, 23.2) * fadeOut(lr, LOG.MPC + 2.9, LOG.MPC + 3.5) * smoothstep(0.3, 1.2, F.age);
     landmarks.visible = sim && oLm > 0.003;
     if (landmarks.visible) { place(landmarks, gc, unitC, F); lmU.uPx.value = px; lmU.uOpacity.value = oLm * 0.9; lmU.uMinPx.value = minPx * 1.7; lmU.uMaxPx.value = maxPx; lmU.uFloor.value = 0.5; lmU.uBigPx.value = Math.min(maxPx, 0.1 * R.halfMin); lmU.uStarCap.value = 2.4 * dpr; }
@@ -809,7 +824,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
         for (const h of cores) { const m = h[0], c = h[1]; m.visible = oD > 0.004; if (!m.visible) continue; place(m, c ? [gc[0] + c[0] * KPC, gc[1] + c[1] * KPC, gc[2] + c[2] * KPC] : gc, 1, F); m.scale.setScalar(1); m.userData.u.uRad.value = Math.min(26 * KPC * F.s, 300); m.userData.u.uOpacity.value = oD * 0.22; }
         if (dyn.visible) { dynU.uExag.value = 1; dynU.uInside.value = mwU.uInside.value; dyn.geometry.attributes.position.needsUpdate = true; } }
       if (F.lgSh) { const a = lgU.uSh.value, q = F.lgSh; for (let i = 0; i < a.length; i++) a[i].set(q[i * 3], q[i * 3 + 1], q[i * 3 + 2]); }
-      lgU.uShift.value.set(F.lgShift[0], F.lgShift[1], F.lgShift[2]); lgU.uShift2.value.set(F.lgShift2[0], F.lgShift2[1], F.lgShift2[2]); lgU.uG2.value = 1 - F.lmcGone; }
+      lgU.uShift.value.set(F.lgShift[0], F.lgShift[1], F.lgShift[2]); lgU.uShift2.value.set(F.lgShift2[0], F.lgShift2[1], F.lgShift2[2]); lgU.uG2.value = 1 - F.lmcGone; lgU.uHideId.value = F.hideId !== undefined ? F.hideId : -9; }
     setGal(localGroup, lgU, gc, KPC, born * lerp(0.4, 1, smoothstep(19.5, 21.3, lr)) * small * fadeOut(lr, 23.5, 24.2), lerp(0.25, 0.012, smoothstep(20.5, 22.3, lr)), 1.1);
     { const oH = born * fadeIn(lr, 20.1, 20.7) * fadeOut(lr, 23.0, 23.7) * F.dmMix;
       for (const h of halos) { const m = h[0], c = h[1]; m.visible = oH > 0.004; if (!m.visible) continue; place(m, c ? [gc[0] + c[0] * KPC, gc[1] + c[1] * KPC, gc[2] + c[2] * KPC] : gc, 1, F); m.scale.setScalar(1); m.userData.u.uRad.value = Math.min(260 * KPC * F.s, 300); m.userData.u.uOpacity.value = oH * 0.05; } }

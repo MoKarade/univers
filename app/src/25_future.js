@@ -92,17 +92,44 @@ const MS_MASS = [40, 17, 7, 3.5, 2.5, 1.9, 1.5, 1.3, 1.1, 1.0, 0.9, 0.85, 0.7, 0
 const MS_MV = [-5.5, -4.0, -1.5, 0.0, 1.0, 1.9, 2.6, 3.5, 4.4, 4.8, 5.5, 5.9, 7.3, 8.8, 11.5, 15.0];
 const STAR_CLASS = ['naine (séquence principale)', 'géante', 'supergéante', 'naine blanche'];
 const STAR_FATE_OVERRIDE = { 27989: 0.1 };     // Bételgeuse : explosion attendue d'ici 100 000 ans environ (ordre de grandeur)
+/* --------------------------------------------------------------------------
+   Durée de vie des étoiles : modèles d'évolution MIST v1.2 (Choi et al. 2016 ; Dotter 2016), [Fe/H] = 0 (gen/mist_life.js).
+   Âge : mesuré par Gaia DR3 (FLAME, Creevey et al. 2023) pour 38 987 étoiles Hipparcos (fichier joint, flameLoad) ; la date
+   montrée est celle de l'âge et de la masse centraux, la fiche donne la fourchette. Sans âge mesuré : âge tiré dans la
+   fourchette possible (statistique), et la fiche dit « inconnu » avec la fourchette.
+   -------------------------------------------------------------------------- */
+let FLAME = null;
+function flameLoad(txt) { const b = b64ToBytes(txt.trim()), dv = new DataView(b.buffer, b.byteOffset, b.length), n = b.length / 16, m = new Map();
+  for (let k = 0; k < n; k++) { const o = k * 16, u = q => dv.getUint16(o + 4 + q * 2, true); m.set(dv.getInt32(o, true), [u(0), u(1), u(2), u(3) / 1000, u(4) / 1000, u(5) / 1000]); }      /* âges en Ma, masses en M☉ */
+  FLAME = m; return m; }
+/** Fin de la séquence principale et fin de vie (Ma) pour une masse (M☉), interpolées en log dans la grille MIST. */
+function mistLife(m) {
+  const R = DATA.MIST_LIFE ? DATA.MIST_LIFE.rows.filter(r => r[1]) : null; if (!R) return [1e4 * Math.pow(m, -2.5), 1.12e4 * Math.pow(m, -2.5)];
+  const x = clamp(m, R[0][0], R[R.length - 1][0]); let k = 0; while (k < R.length - 2 && R[k + 1][0] < x) k++;
+  const f = Math.log(x / R[k][0]) / Math.log(R[k + 1][0] / R[k][0]), L = (a, b) => Math.exp(Math.log(a) + (Math.log(b) - Math.log(a)) * f);
+  return [L(R[k][1], R[k + 1][1]), L(R[k][2], R[k + 1][2])];
+}
+/* Destin selon la masse initiale : supernova au-dessus de 9 M☉, naine blanche sous 7 ; entre les deux, inconnu (limite
+   discutée, Doherty et al. 2017) : montrée comme une naine blanche, et dit dans la fiche. */
+const SN_MIN = 9, SN_UNC = 7;
 function starLife(MV, bv, i, hip) {
-  const h = hash01(i), h2 = hash01(i * 31 + 5), msMv = interp(MS_BV, MS_MV, bv);
-  let cls = 0, mass, tMS, tB, tM, tD;
+  const h = hash01(i), h2 = hash01(i * 31 + 5), msMv = interp(MS_BV, MS_MV, bv), F = FLAME && hip ? FLAME.get(hip) : null;
+  let cls = 0, mass, tMS, tB, tM, tD, src = 0, lo = 0, hi = 0;
   if (MV < -3.5) cls = 2; else if (MV > msMv + 3.5 && bv < 1.0) cls = 3; else if (MV < msMv - 2.2 && bv > 0.45) cls = 1;
-  if (cls === 0) { mass = interp(MS_BV, MS_MASS, bv); tMS = Math.max(1e4 * Math.pow(mass, -2.5), 3); const age = (0.03 + 0.94 * h) * Math.min(tMS, 12000); tB = -age; tM = tB + tMS; tD = tM + Math.max(0.12 * tMS, 0.5); }
-  else if (cls === 1) { mass = 1.2 + 1.3 * h2; tMS = 1e4 * Math.pow(mass, -2.5); const dur = 0.12 * tMS; tM = -h * dur; tD = tM + dur; tB = tM - tMS; }
-  else if (cls === 2) { mass = clamp(9 + (-3.5 - MV) * 3.5, 9, 40); tMS = Math.max(1e4 * Math.pow(mass, -2.5), 3); const dur = 0.1 * tMS; tM = -h * dur; tD = tM + dur; tB = tM - tMS; }
+  if (F && cls !== 3) {      /* âge et masse mesurés : dates centrales ; fourchette de la fin de séquence principale par les bornes à 16 et 84 % */
+    src = 1; mass = F[3]; const age = F[0], [ms, end] = mistLife(mass); tMS = ms; tB = -age; tM = ms - age; tD = end - age;
+    lo = mistLife(F[5])[0] - F[2]; hi = mistLife(F[4])[0] - F[1];
+    /* l'aspect d'aujourd'hui reste celui mesuré : une étoile vue géante est géante maintenant (fin de séquence principale passée) ;
+       une étoile que les modèles donnent déjà sortie de la séquence principale (âge FLAME, modèles BaSTI, plus grand que la durée MIST)
+       est traitée de même, à partir de son éclat mesuré */
+    if (cls === 1 || cls === 2 || tM < 0) { const dur = Math.max(end - ms, 1); if (tM >= 0) tM = -1e-3; tD = Math.max(tD, tM + 1e-3); if (tD - tM > dur) tD = tM + dur; if (cls === 0) cls = 1; }
+  } else if (cls === 0) { mass = interp(MS_BV, MS_MASS, bv); const [ms, end] = mistLife(mass); tMS = Math.max(ms, 3); const amax = Math.min(tMS, 12000), age = (0.03 + 0.94 * h) * amax; tB = -age; tM = tB + tMS; tD = tB + Math.max(end, tMS * 1.12); lo = tMS - 0.97 * amax; hi = tMS - 0.03 * amax; }
+  else if (cls === 1) { mass = 1.2 + 1.3 * h2; const [ms, end] = mistLife(mass); tMS = ms; const dur = end - ms; tM = -h * dur; tD = tM + dur; tB = tM - tMS; lo = 0; hi = dur; }
+  else if (cls === 2) { mass = clamp(9 + (-3.5 - MV) * 3.5, 9, 40); const [ms, end] = mistLife(mass); tMS = Math.max(ms, 3); const dur = Math.max(end - ms, 0.1 * tMS); tM = -h * dur; tD = tM + dur; tB = tM - tMS; lo = 0; hi = dur; }
   else { mass = 0.6; tD = -(100 + 5000 * h); tM = tD - 300; tB = tD - 3000; }
   if (STAR_FATE_OVERRIDE[hip] !== undefined) { const d = STAR_FATE_OVERRIDE[hip] - tD; tD += d; tM += d; tB += d; }
-  const sn = cls !== 3 && mass >= 8;
-  return [tB, tM, tD, cls === 3 ? 4 : (cls === 0 ? 0 : 2) + (sn ? 1 : 0), mass, cls];
+  const sn = cls !== 3 && mass >= SN_MIN;
+  return [tB, tM, tD, cls === 3 ? 4 : (cls === 0 ? 0 : 2) + (sn ? 1 : 0), mass, cls, src, lo, hi];
 }
 const bvTemp = bv => 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62));
 const bvSpectral = bv => bv < -0.30 ? 'O' : bv < -0.02 ? 'B' : bv < 0.30 ? 'A' : bv < 0.58 ? 'F' : bv < 0.81 ? 'G' : bv < 1.40 ? 'K' : 'M';
@@ -190,6 +217,53 @@ function fusExtrema(k) { const F = FUSC, d = [], out = [], W = 10;      /* extre
     if (d[i] === lo && hi - lo > 2 && (!out.length || out[out.length - 1][2] !== 'min')) out.push([F.t[i], d[i], 'min']);
     else if (d[i] === hi && hi - lo > 2 && out.length && out[out.length - 1][2] !== 'max') out.push([F.t[i], d[i], 'max']); }
   return out; }
+
+/* R10 : les étoiles du calcul complet (30 000 étoiles affichées : 12 000 de la Voie lactée, 15 000 d'Andromède, 2 000 du
+   Triangle, 1 000 du Grand Nuage), une image toutes les 20 Ma, relatives au centre de la Voie lactée, en paquets de 25 images
+   (pipeline/fusion/exporter_images.py), chargés à la demande. Entre deux images, chaque étoile va en ligne droite :
+   pour les étoiles du centre (un tour en 50 à 100 Ma), c'est une corde de leur orbite. */
+let FUSI = null;
+function fusImagesInit(meta) { FUSI = { meta, packs: [], n: meta.t.length, dt: meta.t[1] - meta.t[0], NS: meta.etoiles, Q: meta.quantum_kpc, cnt: meta.par_galaxie, per: meta.paquets[0].images }; return FUSI; }
+const fusPackOf = k => Math.floor(k / FUSI.per);
+function fusFrame(k) { const P = FUSI.packs[fusPackOf(k)]; if (!P || !P.data) return null; const o = (k - P.first) * FUSI.NS * 3; return P.data.subarray(o, o + FUSI.NS * 3); }
+/** Demande les paquets des images k et k + 1 (et le suivant, à l'avance) ; libère les paquets éloignés. fetcher(paquet) → Promise du texte base64. */
+function fusWant(t, fetcher) {
+  const k = clamp(Math.floor(t / FUSI.dt), 0, FUSI.n - 1), want = new Set([fusPackOf(k), fusPackOf(Math.min(k + 1, FUSI.n - 1)), fusPackOf(Math.min(k + FUSI.per, FUSI.n - 1))]);
+  FUSI.packs.forEach((P, p) => { if (P && !want.has(p) && Math.abs(p - fusPackOf(k)) > 1) FUSI.packs[p] = null; });
+  for (const p of want) if (!FUSI.packs[p]) { const pk = FUSI.meta.paquets[p], P = FUSI.packs[p] = { first: pk.premiere, data: null };
+    fetcher(pk).then(txt => { const b = b64ToBytes(txt.trim()); P.data = new Int16Array(b.buffer, b.byteOffset, b.length / 2); }).catch(e => { console.warn('Image du calcul de la fusion non chargée :', e.message); if (FUSI.packs[p] === P) FUSI.packs[p] = null; }); }
+}
+/** Positions (kpc, centrées sur la Voie lactée) à la date t, interpolées entre deux images ; false si elles ne sont pas encore chargées. */
+function fusFill(out, t, off) {
+  const x = clamp(t / FUSI.dt, 0, FUSI.n - 1.0001), k = x | 0, f = x - k, a = fusFrame(k), b = fusFrame(k + 1), q = FUSI.Q, o = (off || 0) * 3; if (!a || !b) return false;
+  for (let j = 0; j < a.length; j++) out[o + j] = (a[j] + (b[j] - a[j]) * f) * q;
+  return true;
+}
+/** Après la dernière image (10 Ga) : chaque étoile continue dans la galaxie résultante, immobile et sphérique (les deux
+    halos de la page confondus, cœur de 0,3 kpc à densité constante). Pas propre à chaque étoile (2 % de son temps de
+    traversée, sans descendre sous 0,5 Ma) ; le cœur à densité constante évite le coup de fouet d'un centre ponctuel, qui faisait gonfler la galaxie.
+    Avance par tranches de 5 Ma tant que ms millisecondes ne sont pas écoulées ; renvoie true quand tTarget est atteint. */
+function tailAdvance(D, tTarget, ms, T) {
+  const t0p = performance.now(), ta = T.a, tb = T.b, nt = T.n - 2, x = D.x, v = D.v, ga = r => { const rr = Math.max(r, 0.3) * 10, q = Math.min(rr | 0, nt), f = Math.min(rr, nt) - q; return (ta[q] + (ta[q + 1] - ta[q]) * f) + (tb[q] + (tb[q + 1] - tb[q]) * f); };
+  while (Math.abs(tTarget - D.t) > 1e-9 && performance.now() - t0p < ms) {
+    const H = clamp(tTarget - D.t, -0.005, 0.005);      /* tranches de 5 Ma : l'heure est vérifiée souvent, l'image ne gèle pas */
+    for (let j = 0; j < D.n * 3; j += 3) {
+      let left = H;
+      while (Math.abs(left) > 1e-12) {
+        const r = Math.max(Math.hypot(x[j], x[j + 1], x[j + 2]), 0.3), vc = Math.sqrt(ga(r)) * r, h = Math.sign(left) * Math.min(Math.abs(left), Math.max(0.02 * r / Math.max(vc, 1), 0.0005));      /* au plus fin 0,5 Ma : le cœur à densité constante reste stable à ce pas */
+        let g = ga(Math.hypot(x[j], x[j + 1], x[j + 2])); v[j] -= g * x[j] * h / 2; v[j + 1] -= g * x[j + 1] * h / 2; v[j + 2] -= g * x[j + 2] * h / 2;
+        x[j] += v[j] * h; x[j + 1] += v[j + 1] * h; x[j + 2] += v[j + 2] * h;
+        g = ga(Math.hypot(x[j], x[j + 1], x[j + 2])); v[j] -= g * x[j] * h / 2; v[j + 1] -= g * x[j + 1] * h / 2; v[j + 2] -= g * x[j + 2] * h / 2;
+        left -= h;
+      }
+    }
+    D.t += H;
+  }
+  for (let j = 0; j < D.n * 3; j++) D.out[j] = x[j];
+  return Math.abs(tTarget - D.t) <= 1e-9;
+}
+/** Part des images nécessaires à la date t déjà chargées (0 à 1). */
+function fusReady(t) { const k = clamp(Math.floor(t / FUSI.dt), 0, FUSI.n - 2); return (fusFrame(k) ? 0.5 : 0) + (fusFrame(k + 1) ? 0.5 : 0); }
 
 function andromedaOrbit(C, vtKms, Vin, fus) {
   const P = DATA.M31.pos, V = Vin || DATA.M31.vel, r0 = Math.hypot(P[0], P[1], P[2]), u = [P[0] / r0, P[1] / r0, P[2] / r0], vr = V[0] * u[0] + V[1] * u[1] + V[2] * u[2];

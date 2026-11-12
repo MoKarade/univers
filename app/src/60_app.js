@@ -63,6 +63,24 @@
   const DTAB = dynTables(); let LMCO = lmcOrbit(); andromedaAt(LMCO, 0, MAG.r0);
   /* R10 : centres du calcul complet de la fusion, chargés à part ; valables pour la vitesse « Gaia, 2025 » et la cosmologie de Planck seulement. */
   const FUS_URL = window.__FUSC !== undefined ? window.__FUSC : '/_blob/6973105923eaef7cf421a368d7c74833', FUS_M33 = 2;
+  const FUSI_URL = window.__FUSI !== undefined ? window.__FUSI : '/_blob/4d3b29d19c3f56f3030e0dd222c9d200';
+  let fusiP = null; const fusiStart = () => { if (fusiP || !FUSI_URL) return; fusiP = fetch(FUSI_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(fusImagesInit).catch(e => { console.warn('Images du calcul de la fusion non chargées :', e.message); fusiP = null; }); };
+  const fusFetch = pk => fetch(pk.url || pk.fichier).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
+  /* R10 : nuage de points des étoiles du calcul complet (couleurs et éclats empruntés aux modèles de la page, galaxie par galaxie) */
+  function repInit() { const NS = FUSI.NS, c = FUSI.cnt, D = { n: NS, out: new Float32Array(NS * 3), col: new Float32Array(NS * 3), look: new Float32Array(NS * 2), boost: clamp(Math.sqrt(Q.gal / c.mw), 1, 2.4), rep: true }; let k = 0;
+    for (const [g, n] of [[G.gal, c.mw], [G.m31dyn, c.m31], [G.m31dyn, c.m33], [G.gal, c.lmc]]) { const gN = g.pos.length / 3; for (let i = 0; i < n; i++, k++) { const j = i % gN; D.col.set(g.col.subarray(j * 3, j * 3 + 3), k * 3); D.look.set(g.look.subarray(j * 2, j * 2 + 2), k * 2); } }
+    return D; }
+  /* Après la dernière image (10 Ga) : les mêmes étoiles continuent dans la galaxie résultante (tailAdvance), à partir de l'avant-dernière image et de la vitesse tirée de ses deux voisines. */
+  function repTail() { const NS = FUSI.NS, a = fusFrame(FUSI.n - 1), m = fusFrame(FUSI.n - 2), b = fusFrame(FUSI.n - 3); if (!a || !m || !b || !S.rep) return null; const n = NS + 1, q = FUSI.Q, dtg = 2 * FUSI.dt, z = () => new Float64Array(n * 3);
+    const D = { n, nMW: n, t: FUSC.tEnd - FUSI.dt, t0: FUSC.tEnd - FUSI.dt, x: z(), v: z(), rx: z(), rv: z(), out: new Float32Array(n * 3), col: new Float32Array(n * 3), look: new Float32Array(n * 2), kind: new Uint8Array(n).fill(2), p0: new Float32Array(n * 3), om: new Float32Array(n), r0: new Float32Array(n), A: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], boost: S.rep.boost, tail: true };
+    D.x.set(S.repSun.x.subarray(0, 3), 0); D.v.set(S.repSun.v.subarray(0, 3), 0); D.col.set(S.rep.col, 3); D.look.set(S.rep.look, 2);
+    for (let j = 0; j < NS * 3; j++) { D.x[j + 3] = m[j] * q; D.v[j + 3] = (a[j] - b[j]) * q / dtg; }      /* vitesse centrée sur l'image 499 */
+    for (let j = 0; j < n * 3; j++) D.out[j] = D.x[j];
+    return D; }
+  const fusAuto = () => tier === 2 || TL.on;      /* 80 Mo d'images : automatique sur ordinateur, à la demande sur téléphone (panneau Affichage) */
+  /* G2 : orbites des planètes sur des millions d'années (table de pipeline/gravite/build_long.js, fichier joint), chargées la première fois qu'on s'éloigne de plus de 2 500 ans */
+  const NBL = { url: window.__NBL !== undefined ? window.__NBL : '/_blob/725049663be0ece860394ad7524b349e', p: null };
+  const nblStart = () => { if (NBL.p || !NBL.url || NB_LONG) return; NBL.p = fetch(NBL.url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(t => { const b = b64ToBytes(t.trim()); nbLongLoad(b.buffer.slice(b.byteOffset, b.byteOffset + b.length)); NBL.p = null; }).catch(e => { console.warn('Orbites à long terme non chargées :', e.message); NBL.p = null; NBL.url = null; }); };
   const fusOk = () => !!FUSC && S.m31V === M31_MEAS[0][1] && Math.abs(S.vt - vtOf(M31_MEAS[0][1])) < 0.5 && ['H0', 'Om', 'OL', 'w'].every(k => S.par[k] === PLANCK[k]);
   if (FUS_URL) fetch(FUS_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { fusLoad(j); orbitDirty = true; }).catch(e => console.warn('Calcul complet de la fusion non chargé :', e.message));      /* sans le fichier : la page garde ses propres orbites */
   const LMIN = 6.6, LMAX = 26.95, SPEED_MAX_LOG = 17.2, LMICRO = -20.0;      /* R13 : le zoom s'arrête à 10⁻²⁰ m, le plus fin jamais sondé (ordre de grandeur, LHC) ; accessible seulement en plongeant vers la Terre */
@@ -247,9 +265,14 @@
   function solveKO(m, jd) { const M = m.M0 + m.nr * (jd - m.jd0);      // position dans le plan de l'orbite (UA) : ellipse, ou hyperbole pour les sondes qui quittent le système solaire
     if (m.hyp) { let H = Math.asinh(M / m.e); for (let i = 0; i < 40; i++) { const d = (m.e * Math.sinh(H) - H - M) / (m.e * Math.cosh(H) - 1); H -= d; if (Math.abs(d) < 1e-12) break; } return [m.aAU * (m.e - Math.cosh(H)), m.aAU * Math.sqrt(m.e * m.e - 1) * Math.sinh(H)]; }
     const E = keplerE(wrapPi(M), m.e); return [m.aAU * (Math.cos(E) - m.e), m.aAU * Math.sqrt(1 - m.e * m.e) * Math.sin(E)]; }
+  /* Lot G : Io, Europe, Ganymède et Callisto en gravité mutuelle (24_moons.js), sur ±10 ans autour de leur date de départ (calée sur Horizons) */
+  const MOJ = DATA.LUNES_JUP ? moTrack(MO_JUP, DATA.LUNES_JUP.s, DATA.LUNES_JUP.jd, 3652.5) : null, MOJN = { Io: 0, Europe: 1, 'Ganymède': 2, Callisto: 3 };
+  let mojPos = null, mojOn = false;
   function updateMoons() { F.moonC = F.moonC || {}; const yr = yearOf(F.jd);
+    mojPos = MOJ && !S.moonOff ? MOJ.at(F.jdM + deltaT((F.jdM - JD_J2000) / 36525) / DAY_S, 10) : null; mojOn = !!mojPos;
     for (const t of kSets) { const c = cenOf(t.cen); F.moonC[t.key] = c; if (!c) continue; t.idx.forEach((k, j) => { const m = KO[k]; m.off = m.kind === 'probe' ? (m.tab ? F.jd < m.tab.jd0 : yr < m.from) : m.kind === 'exo' ? !m.on : m.kind === 'moon' && (!!F.eng[m.p] || (m.n === 'Phobos' && S.ty > FATE.phobos * 1e9) || (m.n === 'Triton' && S.ty > FATE.triton * 1e9) || S.ty < -4.5e9); let xy = m.off ? [0, 0] : solveKO(m, m.kind === 'probe' ? F.jd : m.kind === 'sstar' ? F.jdS : F.jdM); if (m.prec) { const f = m.prec * (yr - m.tp), cf = Math.cos(f), sf = Math.sin(f); xy = [xy[0] * cf - xy[1] * sf, xy[0] * sf + xy[1] * cf]; }      // précession relativiste : l'ellipse tourne lentement dans son plan
         let rx = m.P[0] * xy[0] + m.Q[0] * xy[1], ry = m.P[1] * xy[0] + m.Q[1] * xy[1], rz = m.P[2] * xy[0] + m.Q[2] * xy[1]; if (m.tab && !m.off && F.jd < m.tab.jd1) { const pt = probeTab(m, F.jd, rx, ry, rz); rx = pt[0]; ry = pt[1]; rz = pt[2]; }      // avant le dernier survol : trajectoire réelle
+        if (mojPos && m.kind === 'moon' && m.p === 'jupiter' && MOJN[m.n] !== undefined && !m.off) { const q = MOJN[m.n] * 6, f = 1e3 / AU; rx = mojPos[q] * f; ry = mojPos[q + 1] * f; rz = mojPos[q + 2] * f; }      /* position calculée en gravité mutuelle */
         if (m.off && m.kind === 'moon') rx = ry = rz = NaN; t.rel[j * 3] = rx; t.rel[j * 3 + 1] = ry; t.rel[j * 3 + 2] = rz; kPos[k * 3] = c[0] + rx * AU; kPos[k * 3 + 1] = c[1] + ry * AU; kPos[k * 3 + 2] = c[2] + rz * AU; }); } }
   { const SL = ['S1', 'S2', 'S4', 'S8', 'S9', 'S12', 'S13', 'S14', 'S38', 'S55'];
     KO.forEach((m, k) => { const t = KSETS[m.kind + ':' + m.p], l = Math.log10(m.aAU * AU), get = () => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]];
@@ -263,7 +286,7 @@
     const per = TAU / m.nr, a = m.aAU, b = a * Math.sqrt(1 - m.e * m.e), cen = () => cenOf(m.p), get = () => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]];
     return { name: m.n, exist: () => !m.off ? null : S.ty < -4.5e9 ? 'pas encore formée' : 'sort inconnu', sub: 'Lune de ' + PLN[m.p], get, orbit: { e: m.e, P: m.P.map(x => x * a), Q: m.Q.map(x => x * b), c: cen }, rows: () => { const c = cen(), p = get(), d = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
       return [['Distance à ' + PLN[m.p], nf(Math.round(d / 1e5) * 100, 0) + NBSP + 'km'], ['Orbite', 'de ' + nf(Math.round(m.a * (1 - m.e) / 100) * 100, 0) + ' à ' + nf(Math.round(m.a * (1 + m.e) / 100) * 100, 0) + NBSP + 'km'], ['Un tour de sa planète', fmtDays(per)], ['Vitesse sur l’orbite', sig(TAU * m.a / (per * 86400), 3) + NBSP + 'km/s'], ['Diamètre', (m.small ? 'environ ' : '') + nf(m.d, m.d < 100 ? 1 : 0) + NBSP + 'km'], ['Excentricité', sig(m.e, 2)], ['Découverte', m.disc],
-        ['La lumière de sa planète l’atteint en', fmtLight(d)], ['Suivi', 'position fiable à quelques degrés près pendant un an autour d’aujourd’hui ; au-delà, seule l’orbite reste juste']]; } }; }
+        ['La lumière de sa planète l’atteint en', fmtLight(d)], (m.p === 'jupiter' && MOJN[m.n] !== undefined && mojOn ? ['Suivi', 'calculé ici : les quatre grandes lunes s’attirent entre elles, tirées par Jupiter (masse et aplatissement mesurés par Juno) et par le Soleil ; à 250 km près de la NASA de 2016 à 2036 (moins d’un huitième de la taille d’Io), contrôlé à 8 dates']: ['Suivi', 'position fiable à quelques degrés près pendant un an autour d’aujourd’hui ; au-delà, seule l’orbite reste juste' + (m.p === 'jupiter' && MOJN[m.n] !== undefined ? ' (calcul en gravité mutuelle : de 2016 à 2036)' : '')])]; } }; }
   function selSStar(k) { const m = KO[k], a = m.aAU, b = a * Math.sqrt(1 - m.e * m.e), cen = () => cenOf('sgra'), get = () => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], vm = TAU * a / m.per * 4.74047;
     return { name: 'Étoile ' + m.n, sub: 'Étoile en orbite autour du trou noir central de la Voie lactée', get, orbit: { e: m.e, P: m.P.map(x => x * a), Q: m.Q.map(x => x * b), c: cen }, rows: () => { const c = cen(), p = get(), d = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]) / AU, yr = yearOf(F.jd), vp = vm * Math.sqrt((1 + m.e) / (1 - m.e));
       return [['Distance au trou noir', nf(Math.round(d), 0) + NBSP + 'UA'], ['Orbite', 'de ' + nf(Math.round(a * (1 - m.e)), 0) + ' à ' + nf(Math.round(a * (1 + m.e)), 0) + NBSP + 'UA'], ['Un tour du trou noir', sig(m.per, 3) + NBSP + 'ans'], ['Vitesse actuelle', nf(Math.round(vm * Math.sqrt(Math.max(2 * a / Math.max(d, 1e-9) - 1, 0)) / 10) * 10, 0) + NBSP + 'km/s'],
@@ -284,7 +307,7 @@
   addLabel('Centre galactique', '', 1.2, 19.9, 21.6, () => F.gcRel);
   addLabel('Voie lactée', 'here', 0, 21.85, 23.55, () => F.gcRel);
   for (const c of G.lg.centers) { const g = c.g, l = Math.log10(Math.max(vlen(c.c), 20) * KPC); addLabel(g.n, '', g.p, g.p >= 5 ? Math.max(l - 0.3, 21.05) : l - 0.85, g.p >= 5 ? Math.max(l + 0.45, 21.6) : g.p === 4 ? l + 0.5 : g.p === 3 ? l + 0.75 : 23.85, () => add3(F.gcRel, c.c, KPC), { gate: () => (c.gone || (F.dyn && g.p >= 3) ? 0 : 1) }); }
-  if (DATA.LANIAKEA) addLabel('Laniakea', '', 0.5, 23.95, 25.4, () => add3(F.gcRel, DATA.LANIAKEA.attracteur, MPC * F.cos.a));      /* placé sur l'attracteur publié (Dupuy et Courtois 2023), au cœur du bassin */
+  if (DATA.LANIAKEA) addLabel('Laniakea', '', 0.5, 24.45, 25.4, () => add3(F.gcRel, DATA.LANIAKEA.attracteur, MPC * F.cos.a));      /* placé sur l'attracteur publié (Dupuy et Courtois 2023), au cœur du bassin */
   for (const f of DATA.FAR) { const l = Math.log10(f.d * MPC); addLabel(f.n, f.k === 'void' ? 'region' : '', f.p, l - 0.75, l + [1.25, 0.9, 0.65, 0.45][f.p - 1], () => add3(F.gcRel, f.pos, MPC * F.cos.a)); }
   addLabel('Groupe local', 'here', 0, 23.85, 25.45, () => F.gcRel);
   addLabel('Nous sommes ici', 'here', 0, 25.75, 27.2, () => F.gcRel);
@@ -341,7 +364,7 @@
   /* ---- commandes sur la scène ---- */
   /* R3 : sans objet touché, la molette vise le point sous le curseur et le pincement le milieu des doigts. Ce point W (m, repère du Soleil)
      reste fixe à l'écran : la cible de la caméra glisse de (W − cible)(1 − k), k étant le rapport d'échelle. W est l'objet sous le point
-     s'il y en a un à 8 px près (planète, étoile, galaxie… même recherche que le toucher), sinon le point du plan de visée. Le décalage
+     s'il y en a un à 40 px près (planète, étoile, galaxie… même recherche que le toucher) ; sinon, et en dézoomant, le zoom reste centré. Le décalage
      (S.zoff) s'annule, en glissant, sur « Accueil », un arrêt de la barre, ou quand on touche un objet. */
   let zAnc = null;
   function zoffReset() { zAnc = null; if (!S.zoff) return; S.zoff = null; if (S.lastTg) S.cbl = { from: S.lastTg, t0: performance.now() / 1000 }; }
@@ -349,9 +372,8 @@
     if (zAnc && now - zAnc.t < 400 && Math.hypot(x - zAnc.x, y - zAnc.y) < 3) { zAnc.t = now; return zAnc.W; }      /* même geste : même point */
     let W = null; const sc = [0, 0, 0];
     for (const b of BODIES) { const o = Rr.bodies[b.key]; if (o.screen && Math.hypot(o.screen[0] - x, o.screen[1] - y) < Math.min(o.px, 200) + 6) { W = bodyPosM(b.key); break; } }
-    if (!W) { const p = pickAt(x, y, true); if (p && Rr.project(p, F, sc) && Math.hypot(sc[0] - x, sc[1] - y) < 8) W = p; }
-    if (!W) { const c = Rr.camPos, v = new THREE.Vector3(x / Rr.cssW * 2 - 1, 1 - y / Rr.cssH * 2, 0.5).unproject(Rr.camera), dir = v.sub(c).normalize(), n = c.clone().normalize(), dn = dir.dot(n);
-      if (Math.abs(dn) < 1e-6) return null; const t = -c.dot(n) / dn; W = [(c.x + t * dir.x) / F.s + F.tg[0], (c.y + t * dir.y) / F.s + F.tg[1], (c.z + t * dir.z) / F.s + F.tg[2]]; }
+    if (!W) { const p = pickAt(x, y, true); if (p && Rr.project(p, F, sc) && Math.hypot(sc[0] - x, sc[1] - y) < 40) W = p; }      /* objet le plus proche du curseur, à 40 px près */
+    if (!W) return null;      /* retour de Marc (12/11) : plus de zoom vers un point vide ; sans objet près du curseur, le zoom reste centré */
     zAnc = { x, y, t: now, W }; return W; }
   /* R12 : vitesse de zoom constante par puissance de dix, sauf dans les étendues où rien ne change à l'écran : traversées trois fois plus vite, et le panneau le dit.
      Étendues repérées par mesure (écart moyen entre deux images successives, un quart de puissance de dix d'écart, inférieur à 3 sur 255 : docs/r12-zoom.md). */
@@ -364,6 +386,7 @@
   const zFast = lr => microOn() ? ZFAST.find(z => lr > z.lo && lr < z.hi) || null : null;
   function zoomAt(dl, x, y) { if (zFast(S.logR)) dl *= ZFAST_K; const l0 = S.logR, l1 = clampZoom(l0 + dl); S.anim = null; S.logR = l1;
     if (S.center || microOn() || (S.focus !== 'sun' && l0 < 14.4) || !(l1 !== l0) || !F.s) return;      /* objet touché ou astre suivi : le zoom reste centré sur lui (R1) */
+    if (l1 > l0) return;      /* dézoomer reste centré : on recule depuis ce qu'on regarde */
     const W = anchorAt(x, y); if (!W || !isFinite(W[0])) return; const k = Math.pow(10, l1 - l0), z = S.zoff || [0, 0, 0];
     for (let i = 0; i < 3; i++) { const dz = (W[i] - F.tg[i]) * (1 - k); z[i] += dz; F.tg[i] += dz; } S.zoff = z; F.s /= k; }      /* F.tg et F.s suivent tout de suite : plusieurs crans dans la même image restent justes */
   { const ptrs = new Map(); let pinch = 0, moved = 0, t0 = 0, lastTap = [0, 0, 0];
@@ -516,13 +539,21 @@
   /* S5 : extinction par la poussière mesurée (Edenhofer et al. 2024), vue de la Terre et vue d'ici */
   function dustRow(P, i) { const s = eclLyToGalPc([P[i * 3], P[i * 3 + 1], P[i * 3 + 2]]), cl = Rr.dustU.uCamLy.value, pr = dustPair(eclLyToGalPc([cl.x, cl.y, cl.z]), s), x = a => a < 0.05 ? 'presque pas atténuée' : sig(Math.pow(10, 0.4 * a), 2) + ' fois moins lumineuse';
     return 'vue de la Terre : ' + x(pr[1]) + (Rr.dustOn ? ' ; vue d’ici : ' + x(pr[0]) + ', son éclat en tient compte' : '') + (Math.hypot(...s) > DATA.DUST.rmax ? ' ; au-delà de la carte (1,25 kpc), poussière inconnue' : '') + ' (carte 3D mesurée, Edenhofer et al. 2024)'; }
+  /* Destin des étoiles : âge mesuré par Gaia (FLAME) ou inconnu, fin de la séquence principale avec sa fourchette (modèles MIST) */
+  function lifeRows(st, i, L, t) { if (st.cls[i] === 3) return []; const m = st.mass[i], lo = st.range[i * 2] - t, hi = st.range[i * 2 + 1] - t, when = x => x > 0 ? 'dans ' + fmtYears(x * 1e6) : 'il y a ' + fmtYears(-x * 1e6);
+    const r = st.src[i] ? [['Âge estimé par Gaia', fmtYears(-L[0] * 1e6) + ' (Gaia DR3, FLAME, d’après sa luminosité et sa température)', 'c']] : [['Âge', 'inconnu (la date montrée est tirée dans la fourchette possible)', 's']];
+    if (st.cls[i] === 0 || st.src[i]) r.push(['Fin de la séquence principale', lo > 0 || hi > 0 ? 'entre ' + when(Math.min(lo, hi)) + ' et ' + when(Math.max(lo, hi)) + ' (modèles d’évolution MIST)' : 'déjà passée']);
+    if (m >= SN_UNC && m < SN_MIN) r.push(['Fin de vie', 'naine blanche ou supernova : inconnu à cette masse (limite discutée, entre 7 et 9 fois le Soleil)']);
+    return r; }
+  const FLAME_URL = window.__FLAME !== undefined ? window.__FLAME : '/_blob/fa99f6d36d21cec7344dae6d6b7fbae5';
+  if (FLAME_URL) fetch(FLAME_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(t => { flameLoad(t); Rr.relife(); if (S.sel) renderCard(); }).catch(e => console.warn('Âges Gaia non chargés :', e.message));
   function selStar(i) {
     const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i], L = [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]], fate = st.fate[i];
     const get = () => [sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY]; if (!Rr.keyStars.includes(i)) Rr.keyStars.push(i);
     return { exoI: STAREXO[i] >= 0 ? STAREXO[i] : undefined, exoC: true, lr: STAREXO[i] >= 0 ? exoLr(STAREXO[i]) : undefined, name: DATA.STAR_NAMES[i] || (hip ? 'HIP ' + hip : 'Étoile sans nom'), exist: () => starState(L, fate), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
       const d = vlen(get()), t = F.tMyr, sn = fate === 1 || fate === 3, lum = Math.pow(10, 0.4 * (4.83 - MV));
       const fut = fate === 4 || (!sn && t >= L[2]) ? 'naine blanche qui refroidit' : sn && t >= L[2] ? 'a explosé en supernova' : sn ? 'supernova ' + inTime((L[2] - t) * 1e6) : t < L[1] ? 'géante rouge ' + inTime((L[1] - t) * 1e6) + ', puis naine blanche' : 'naine blanche ' + inTime((L[2] - t) * 1e6);
-      return starTag([['Distance', fmtDist(d)], ['Éclat', fmtTimes(lum) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(st.mass[i], 2) + NBSP + 'fois le Soleil'], ['Vitesse', Rr.K.vkms[i] > 0 ? (noRV(get(), kvOf(Rr.K, i)) ? 'au moins ' : '') + sig(Rr.K.vkms[i], 3) + NBSP + 'km/s par rapport au Soleil' + (noRV(get(), kvOf(Rr.K, i)) ? ' (vitesse radiale non mesurée)' : '') : 'non mesurée'], ['Mouvement', orbMotionText(Rr.K, i, F.tEff, false)], ['Poussière devant elle', dustRow(Rr.starPos, i)], ['Avenir estimé', fut]].concat(hip ? [['Catalogue', 'HIP ' + hip]] : [], passRows(i), starExtra(get(), kvOf(Rr.K, i), MV, bv), STAREXO[i] >= 0 ? [['Planètes connues', EXOP[STAREXO[i]] + ' : « Y aller » pour les voir tourner autour de l’étoile']].concat(exoRows(STAREXO[i]).map(r => [r[0], r[1], 'm'])) : [])); }, get src() { const o = (Rr.passers || []).find(q => q.idx === i); return STAR_SRC(i >= DATA.STARS_N ? 'Gaia DR3, d’après Bailer-Jones 2022' : 'catalogue HYG (Hipparcos, Yale, Gliese)', { exo: STAREXO[i] >= 0, pass: o ? o.src || 'Bailer-Jones 2022 (Gaia DR3)' : '' }); } };
+      return starTag([['Distance', fmtDist(d)], ['Éclat', fmtTimes(lum) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(st.mass[i], 2) + NBSP + 'fois le Soleil'], ['Vitesse', Rr.K.vkms[i] > 0 ? (noRV(get(), kvOf(Rr.K, i)) ? 'au moins ' : '') + sig(Rr.K.vkms[i], 3) + NBSP + 'km/s par rapport au Soleil' + (noRV(get(), kvOf(Rr.K, i)) ? ' (vitesse radiale non mesurée)' : '') : 'non mesurée'], ['Mouvement', orbMotionText(Rr.K, i, F.tEff, false)], ['Poussière devant elle', dustRow(Rr.starPos, i)], ['Avenir estimé', fut]].concat(hip ? [['Catalogue', 'HIP ' + hip]] : [], lifeRows(st, i, L, t), passRows(i), starExtra(get(), kvOf(Rr.K, i), MV, bv), STAREXO[i] >= 0 ? [['Planètes connues', EXOP[STAREXO[i]] + ' : « Y aller » pour les voir tourner autour de l’étoile']].concat(exoRows(STAREXO[i]).map(r => [r[0], r[1], 'm'])) : [])); }, get src() { const o = (Rr.passers || []).find(q => q.idx === i); return STAR_SRC(i >= DATA.STARS_N ? 'Gaia DR3, d’après Bailer-Jones 2022' : 'catalogue HYG (Hipparcos, Yale, Gliese)', { exo: STAREXO[i] >= 0, pass: o ? o.src || 'Bailer-Jones 2022 (Gaia DR3)' : '' }); } };
   }
   function selBody(tag, i) {
     const B = Rr[tag], raw = NM[tag][i] || '', parts = raw.split('~'), nm = parts[0] ? parts[0] + (parts[1] ? ' (' + parts[1] + ')' : '') : (parts[1] ? 'Astéroïde ' + parts[1] : 'Objet sans nom');
@@ -1269,10 +1300,10 @@
   const provText = lr => S.center && S.center.isGal && S.cpos && vlen(S.cpos) > 1.5 * Math.pow(10, S.logR) ? 'Galaxie reconstruite en volume d’après sa photo réelle : forme et bras réels, épaisseur et côté proche supposés.' : farCentered() ? 'Vue centrée sur cet objet, loin du Soleil. Positions réelles.' : lr < 14.7 ? (S.opts.realSize ? 'Positions et tailles réelles.' : 'Positions réelles. Astres grossis pour rester visibles.')
     : lr < 16.9 ? 'Réservoir de comètes supposé : il n’a jamais été observé directement.'
     : lr < 19.4 ? nf(starTotal(), 0) + ' étoiles à leur position mesurée.'
-    : lr < 21.75 ? 'Aspect généré, forme guidée par les mesures. Soleil et amas d’étoiles à leur vraie place.'
+    : lr < 21.75 ? (F.dyn && F.dyn.rep ? 'Étoiles du calcul complet de la fusion (300 000 particules qui s’attirent toutes), une image tous les 20 millions d’années ; le Triangle et le Grand Nuage y sont dispersés. Scénario.' : F.dyn && F.dyn.tail ? 'Après 10 milliards d’années : les étoiles du calcul complet continuent dans une galaxie résultante simplifiée (les deux halos de la page) ; ce changement de modèle la resserre d’environ 20 %.' : 'Aspect généré, forme guidée par les mesures. Soleil et amas d’étoiles à leur vraie place.')
     : lr < 23.6 ? (S.opts.realSize || Rr.galExag < 1.05 ? 'Galaxies à leur position mesurée. Leur aspect est généré.' : 'Galaxies à leur position mesurée, grossies pour rester visibles. Leur aspect est généré.')
     : S.opts.simWeb ? 'Toile simulée. Les amas nommés sont à leur vraie place.'
-    : lr < LOG.MPC + 3.3 ? 'Galaxies réellement observées. Les zones vides ne sont pas encore cartographiées.' + (Rr.lania && Rr.lania.visible ? ' Points bleus : frontière de Laniakea, notre superamas (Cosmicflows-4).' : '')
+    : lr < LOG.MPC + 3.3 ? 'Galaxies réellement observées. Les zones vides ne sont pas encore cartographiées.' + (Rr.lania && Rr.lania.visible ? ' Voile bleu : frontière de Laniakea, notre superamas (Cosmicflows-4).' : '')
     : 'Quasars observés, fond diffus mesuré par Planck, limites calculées.';
   const EARTH_TXT = 'Sort de la Terre inconnu : engloutie par le Soleil géant selon Schröder et Smith 2008 et Rasio et al. 1996, pourrait survivre selon Rybicki et Denis 2001. À partir du moment où les marées commencent à resserrer son orbite, la Terre et la Lune ne sont plus dessinées.';
   const SYS_END_TXT = 'Inconnu : des étoiles de passage défont le système solaire. Dans les simulations de Zink, Batygin et Adams (2020), l’instabilité se déclenche environ 30 milliards d’années après la mort du Soleil (vers 38 milliards d’années d’ici), puis les éjections s’étalent sur environ 10 milliards d’années ; la dernière planète part en moyenne 100 milliards d’années après la mort du Soleil. L’ordre et les dates de chaque planète ne sont pas connus : plus aucune n’est dessinée.';
@@ -1288,14 +1319,15 @@
     if (microOn()) { const nt = microLevel(lr).note; return (typeof nt === 'function' ? nt() : nt) || ''; }
     if (lr < 17.6 && S.ty >= SYS_END * 1e9) return SYS_END_TXT;      /* vue du système solaire : son état passe avant le calcul d'Andromède */
     if (lr < 13.5 && S.ty / 1e9 >= T_DIV) return EARTH_TXT;      /* R6 : panneau du sort de la Terre, dans le système solaire */
-    if (S.dyn && Math.abs((S.dynT !== undefined ? S.dynT : S.ty / 1e9) - S.dyn.t) > 0.04) return 'Calcul de la rencontre avec Andromède : ' + Math.round(clamp((S.dyn.t - S.dyn.t0) / Math.max((S.dynT !== undefined ? S.dynT : S.ty / 1e9) - S.dyn.t0, 1e-6), 0, 1) * 100) + NBSP + '%';
+    if (F.dyn && F.dyn.rep && !S.repOk) return 'Chargement des images du calcul complet de la fusion : ' + Math.round(fusReady(S.ty / 1e9) * 100) + NBSP + '%';
+    if (S.dyn && Math.abs((S.dynT !== undefined ? S.dynT : S.ty / 1e9) - S.dyn.t) > 0.04) return (S.dyn.tail ? 'Calcul de la galaxie résultante : ' : 'Calcul de la rencontre avec Andromède : ') + Math.round(clamp((S.dyn.t - S.dyn.t0) / Math.max((S.dynT !== undefined ? S.dynT : S.ty / 1e9) - S.dyn.t0, 1e-6), 0, 1) * 100) + NBSP + '%';
     if (S.hit === 'end') return C.endKind === 'crunch' ? 'Big Crunch : dans ce modèle, l’univers s’effondre ici. Remontez le temps pour continuer.' : C.endKind === 'rip' ? 'Big Rip : dans ce modèle, l’expansion déchire tout ici. Remontez le temps pour continuer.' : 'Limite du calcul atteinte. Remontez le temps pour continuer.';
     if (S.hit === 'start') return C.tBang !== null ? 'Vous êtes à 100 000 ans du Big Bang : l’univers est un plasma opaque. Relancez le temps vers le futur.' : 'Début du calcul atteint. Relancez le temps vers le futur.';
     if (F.cmbT > 0 && C.tBang !== null) { const ay = (S.ty / 1e9 - C.tBang) * 1e9, Tt = nf(Number(F.cmbT.toPrecision(2)), 0) + NBSP + 'K';
       if (ay < 3.7e5) return 'Univers opaque : un plasma à ' + Tt + ' remplit tout l’espace, la lumière n’y circule pas encore.'; if (ay < 3e6) return 'L’univers vient de devenir transparent. Il baigne dans une lueur à ' + Tt + ', qui rougit puis glisse vers l’infrarouge.'; if (ay < 1.8e8) return 'Âges sombres : aucune étoile ne brille encore. Le rayonnement du Big Bang est à ' + Tt + '.'; }
     if (S.ecl && lr < 10.8) return S.ecl;
     if (lr > 13.5 && lr < 17.2) { const e = OO.near(S.ty); if (e) return (/^[ÉE]toile /.test(e.name) ? 'L’é' + e.name.slice(1) : 'L’étoile ' + e.name) + ' passe à ' + nf(Math.round(e.d * LY / AU / 100) * 100, 0) + NBSP + 'UA du Soleil. Son attraction dévie les comètes proches de sa route : sur ' + nf(G.oort.N, 0) + ' comètes simulées, ' + nf(e.hit, 0) + ' changent d’orbite, ' + e.ej + ' sont éjectées et ' + e.inn + ' plongent vers les planètes.'; }
-    if (lr < 17.6) { if (S.ty < SS_BORN) return 'À cette époque, le Soleil n’est pas encore né.'; if (S.ty < -4.45e9) return 'Le système solaire est en formation : les planètes grossissent dans un disque de gaz et de poussière. Elles sont montrées sur leurs orbites actuelles, faute de pouvoir reconstituer leurs positions.' + (S.ty < -4.51e9 ? ' La Lune n’existe pas encore.' : ''); if (S.ty > (10.00 - SUN_NOW) * 1e9) return 'À cette époque, le Soleil est une ' + F.sun.phase + ' : ' + sig(F.sun.R, 3) + ' fois son rayon actuel. Les orbites s’élargissent à mesure qu’il perd de la masse.'; if ((lr < 10.9 ? S.moonOff : S.solOff) && S.playing) return 'Le temps défile trop vite pour suivre les orbites : ' + (lr < 10.9 ? 'les lunes tournent' : 'les planètes tournent') + ' ici au ralenti. En pause, tout reprend sa vraie place.'; if (Math.abs(S.ty) > 3050) return 'À plus de 3 000 ans d’aujourd’hui, la position des planètes n’est plus qu’indicative.'; if (Math.abs(S.ty) > 60 && lr > 10.6 && lr < 14.7) return 'À plus de quelques décennies d’aujourd’hui, astéroïdes et objets lointains ne sont plus qu’indicatifs. Les planètes restent exactes.'; }
+    if (lr < 17.6) { if (S.ty < SS_BORN) return 'À cette époque, le Soleil n’est pas encore né.'; if (S.ty < -4.45e9) return 'Le système solaire est en formation : les planètes grossissent dans un disque de gaz et de poussière. Elles sont montrées sur leurs orbites actuelles, faute de pouvoir reconstituer leurs positions.' + (S.ty < -4.51e9 ? ' La Lune n’existe pas encore.' : ''); if (S.ty > (10.00 - SUN_NOW) * 1e9) return 'À cette époque, le Soleil est une ' + F.sun.phase + ' : ' + sig(F.sun.R, 3) + ' fois son rayon actuel. Les orbites s’élargissent à mesure qu’il perd de la masse.'; if ((lr < 10.9 ? S.moonOff : S.solOff) && S.playing) return 'Le temps défile trop vite pour suivre les orbites : ' + (lr < 10.9 ? 'les lunes tournent' : 'les planètes tournent') + ' ici au ralenti. En pause, tout reprend sa vraie place.'; if (Math.abs(S.ty) > 3050) { const L = nbLongRange(); return sol.long ? 'Planètes : orbites calculées sur des millions d’années, toutes les planètes s’attirent (à 0,2° près pour les planètes rocheuses, 1° pour les géantes).' : L && (S.ty > L[1] || S.ty < L[0]) ? 'Au-delà de ' + fmtYears(Math.abs(S.ty > 0 ? L[1] : L[0])) + (S.ty > 0 ? ' dans l’avenir' : ' dans le passé') + ' : position des planètes inconnue (le système solaire est chaotique). Orbites figées, montrées à titre indicatif.' : NBL.p ? 'Chargement des orbites calculées sur des millions d’années…' : 'À plus de 3 000 ans d’aujourd’hui, la position des planètes n’est plus qu’indicative.'; } if (Math.abs(S.ty) > 60 && lr > 10.6 && lr < 14.7) return 'À plus de quelques décennies d’aujourd’hui, astéroïdes et objets lointains ne sont plus qu’indicatifs. Les planètes restent exactes.'; }
     else if (lr < 23.6) { if (age < 1) return 'À cette époque, la Voie lactée n’est pas encore formée.'; }
     else if (age < 0.2) return 'Âges sombres : aucune galaxie ne brille encore.';
     return '';
@@ -1457,6 +1489,7 @@
   $('card-more').addEventListener('click', () => { S.more = !S.more; renderCard(); });
   $('n-back').addEventListener('click', goBack); $('n-home').addEventListener('click', goHome); $('n-out').addEventListener('click', () => stepZoom(1)); $('n-in').addEventListener('click', () => stepZoom(-1)); syncNav();
   { let seen = false; try { seen = !!localStorage.getItem('univers-aide'); } catch (e) {}      // rappel des gestes, une seule fois
+    if (!PHONE.matches) $('hint').textContent = 'Glisser : tourner. Molette : zoomer. Cliquer un astre : sa fiche, deux fois pour y aller. Espace : pause.';      /* le texte par défaut est celui du téléphone */
     if (!seen && !window.__NOADAPT) { const h = $('hint'), off = () => { h.hidden = true; try { localStorage.setItem('univers-aide', '1'); } catch (e) {} }; setTimeout(() => { h.hidden = false; }, 1500); setTimeout(off, 15000); h.addEventListener('click', off); canvas.addEventListener('pointerdown', () => setTimeout(off, 3000), { once: true }); } }
   function tilesTick(dtMs) {
     TL.ema += (Math.min(dtMs, 100) - TL.ema) * 0.05; const adapt = !window.__NOADAPT, gov = f => TL.ema > 27 ? Math.max(0.12, f * 0.985) : TL.ema < 18 ? Math.min(1, f * 1.004 + 0.001) : f;
@@ -1510,7 +1543,7 @@
       const dS = S.ty - (S.prevTy === undefined ? S.ty : S.prevTy), jumped = Math.abs(Math.abs(dS) - stepY) > 1e-7 + 1e-9 * Math.abs(S.ty); S.prevTy = S.ty;
       const capS = clamp(0.0134 * Math.pow(Math.pow(10, S.logR) / AU, 0.4), 0.0012, 0.08), lag = (off, cap) => (jumped || stepY <= cap ? 0 : off - Math.sign(dS) * (stepY - cap));
       S.solOff = lag(S.solOff || 0, capS); S.moonOff = lag(S.moonOff || 0, 0.02 / 365.25); S.sOff = lag(S.sOff || 0, 0.05); S.capS = capS; }
-    sol = solarSystemAt(T_NOW + (S.ty + S.solOff) / 100, sol);
+    if (Math.abs(S.ty) > 2500) nblStart(); sol = solarSystemAt(T_NOW + (S.ty + S.solOff) / 100, sol);
     const C = S.cosmo, cs = cosmoAt(C, S.ty / 1e9, F.cos);
     const tG = S.ty / 1e9, ss = sunState(tG, SS); F.sun = ss; F.sunCol = tempRgb(ss.T); F.orb = 1 / ss.M; F.orbP = F.orbP || {}; for (const k in TIDE_P) F.orbP[k] = tideAt(TIDE_P[k], tG); F.orbP.earth = tideAt(TIDE_E, Math.min(tG, T_DIV)); F.eng.mercury = tG >= ENG.mercury; F.eng.venus = tG >= ENG.venus; F.eng.earth = tG >= ENG.earth; for (const k of SYS_PL) F.eng[k] = tG >= SYS_END; F.sysK = tG < SYS_END ? 1 : 0;      /* petits corps et nuage d'Oort : coupure nette avec le système solaire (R7), plus de fondu */ F.ringsGone = tG > FATE.rings;
     F.ty = S.ty; F.tMyr = S.ty / 1e6; F.tEff = S.T1 + S.T2 * (oSunNo / oSunDM); orbRequest(Rr.K, F.tEff, S.T2 === 0, Math.abs(S.ty) > 2e6); if (S.playing) F.flash = Math.max(3e-7, 1.3 * S.speed / YEAR_S / 1e6); else if (!F.flash) F.flash = 3e-7;
@@ -1524,12 +1557,31 @@
     { andromedaAt(LMCO, tG, MAG.r); const sh = mulM(M, [MAG.r[0] - MAG.r0[0], MAG.r[1] - MAG.r0[1], MAG.r[2] - MAG.r0[2]]); F.lgShift2 = sh; F.lmcGone = LMCO.tMerge ? smoothstep(LMCO.tMerge, LMCO.tMerge + 0.25, tG) : 0;
       for (const c of MAG.c) { c.c[0] = c.m0[0] + sh[0]; c.c[1] = c.m0[1] + sh[1]; c.c[2] = c.m0[2] + sh[2]; c.gone = F.lmcGone > 0.6; } }
     sunGalAt(Rr.K, F.tEff, sunGal);
+    if (S.tOn !== null && tG >= S.tOn - 0.5 && tG < S.tOn && S.orbit.fus && fusAuto()) { fusiStart(); if (FUSI) fusWant(S.tOn, fusFetch); }      /* R10 : images préparées avant la rencontre */
+    F.hideId = -9;
     if (S.tOn !== null && tG >= S.tOn) {            // rencontre rapprochée : les étoiles des deux galaxies sont simulées une à une
-      if (!S.dyn) { if (!G.m31dyn) G.m31dyn = Q.dyn31 + 70 > G.m31.N ? genDiskGalaxy(23, Q.dyn31 + 70, 24) : G.m31; S.dyn = dynInit(G.gal, Q.gal, G.m31dyn, S.orbit, S.tOn, sunGalAt(Rr.K, S.tOn, [0, 0, 0]), Rr.m31Rot, Q.dynN, Q.dyn31, G.m31.N - 70); Rr.setDyn(S.dyn); }
+      if (!G.m31dyn) G.m31dyn = Q.dyn31 + 70 > G.m31.N ? genDiskGalaxy(23, Q.dyn31 + 70, 24) : G.m31;
+      if (S.orbit.fus && fusAuto()) { fusiStart(); if (FUSI) fusWant(Math.min(tG, FUSC.tEnd), fusFetch); }
+      const rep = S.orbit.fus && FUSI && (fusReady(Math.min(tG, FUSC.tEnd)) === 1 || (S.rep && F.dyn === S.rep) || (S.dyn && S.dyn.tail));      /* rejeu dès que les images sont là ; en attendant, la simulation de la page */
+      if (rep) {      /* R10 : les étoiles du calcul complet, image par image ; le Soleil garde son calcul (une particule tirée par les deux galaxies) */
+        if (!S.rep) S.rep = repInit();
+        if (!S.repSun) S.repSun = dynInit(G.gal, Q.gal, G.m31dyn, S.orbit, S.tOn, sunGalAt(Rr.K, S.tOn, [0, 0, 0]), Rr.m31Rot, 1, 0, G.m31.N - 70);
+        { const tS = Math.min(tG, FUSC.tEnd); let k = 0; while (Math.abs(S.repSun.t - tS) > 1e-9 && ++k < 40) dynAdvance(S.repSun, S.orbit, tS, 400, DTAB); }
+      }
+      if (rep && tG <= FUSC.tEnd) {
+        if (S.dyn || F.dyn !== S.rep) { S.dyn = null; Rr.setDyn(S.rep); }
+        fusWant(tG, fusFetch); S.repOk = fusFill(S.rep.out, tG); F.hideId = FUS_M33 + 1; F.lmcGone = 1; for (const c of MAG.c) c.gone = true;
+        sunGal[0] = S.repSun.x[0]; sunGal[1] = S.repSun.x[1]; sunGal[2] = S.repSun.x[2]; F.dyn = S.rep; F.mergeK = 1; S.dynT = undefined;
+      } else if (rep && (!S.dyn || !S.dyn.tail)) {      /* après 10 Ga : la suite part des deux dernières images ; tant qu'elles ne sont pas là, on attend et on le dit */
+        fusWant(FUSC.tEnd - FUSI.dt, fusFetch); fusWant(FUSC.tEnd, fusFetch); const D = repTail();
+        if (D) { S.dyn = D; Rr.setDyn(D); } else { S.repOk = false; if (F.dyn !== S.rep) Rr.setDyn(S.rep); F.dyn = S.rep; F.mergeK = 1; }
+      }
+      if (!(rep && (tG <= FUSC.tEnd || !S.dyn))) {
+      if (!S.dyn) { S.dyn = dynInit(G.gal, Q.gal, G.m31dyn, S.orbit, S.tOn, sunGalAt(Rr.K, S.tOn, [0, 0, 0]), Rr.m31Rot, Q.dynN, Q.dyn31, G.m31.N - 70); Rr.setDyn(S.dyn); }
       { const tD = tG, t0p = performance.now(); let n = 0; S.dynT = tD;      /* plus de plafond : après la fusion, les étoiles continuent de tourner dans la galaxie résultante (avant, l'image se figeait 3 milliards d'années après la fusion) */
-        do dynAdvance(S.dyn, S.orbit, tD, Math.abs(tD - S.dyn.t) > 0.06 ? Q.dynSteps * 3 : Q.dynSteps, DTAB); while (Math.abs(tD - S.dyn.t) > 0.06 && performance.now() - t0p < 14 && ++n < 60); }
-      sunGal[0] = S.dyn.x[0]; sunGal[1] = S.dyn.x[1]; sunGal[2] = S.dyn.x[2]; F.dyn = S.dyn; F.mergeK = 1;
-    } else { S.dyn = null; F.dyn = null; F.mergeK = 0; S.dynT = undefined; }
+        if (S.dyn.tail) tailAdvance(S.dyn, tD, 14, DTAB); else do dynAdvance(S.dyn, S.orbit, tD, Math.abs(tD - S.dyn.t) > 0.06 ? Q.dynSteps * 3 : Q.dynSteps, DTAB); while (Math.abs(tD - S.dyn.t) > 0.06 && performance.now() - t0p < 14 && ++n < 60); }
+      sunGal[0] = S.dyn.x[0]; sunGal[1] = S.dyn.x[1]; sunGal[2] = S.dyn.x[2]; F.dyn = S.dyn; F.mergeK = 1; if (S.dyn.tail) { F.hideId = FUS_M33 + 1; F.lmcGone = 1; } }
+    } else { S.dyn = null; S.rep = null; S.repSun = null; F.dyn = null; F.mergeK = 0; S.dynT = undefined; }
 
     const g = mulM(M, [-sunGal[0], -sunGal[1], -sunGal[2]]); F.gcRel[0] = g[0] * KPC; F.gcRel[1] = g[1] * KPC; F.gcRel[2] = g[2] * KPC;
     const R = Math.pow(10, S.logR), fb = bodyPosM(S.focus);
