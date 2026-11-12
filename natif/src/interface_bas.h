@@ -11,7 +11,7 @@ namespace {
 // de près chaque point est un objet mesuré ; en s'éloignant, chaque pixel additionne la lumière de plus en plus d'étoiles
 // mesurées (éclat par pixel constant au-delà de 300 al, simulation.h). La vue lointaine est leur somme, jamais un modèle.
 const char* grainLine(const Sim& sim) {
-    if (sim.deepTime()) return nullptr;
+    if (sim.starShare() <= 0) return nullptr;      // seul le calcul de la fusion est montré : voir la ligne suivante
     if (sim.dist < 0.05) {
         if (sim.asteroidCount && sim.asteroidGain(sim.asteroidEpochJd) > 0 && sim.dist > 8.0 * kAuInLy)
             return "Ici, planètes et lunes sont montrées une par une ; les astéroïdes s'additionnent par pixel.";
@@ -48,10 +48,10 @@ void whatYouSee(const Sim& sim) {
     if (sim.asteroidCount && sim.asteroidGain(sim.asteroidEpochJd) > 0 && sim.dist < 0.05)
         ImGui::TextDisabled("Les petits points sont %s astéroïdes, chacun sur son orbite mesurée (JPL), grossis pour être visibles%s",
                             frInt(static_cast<double>(sim.asteroidCount)).c_str(), sim.dist <= 8.0 * kAuInLy ? " ; clic sur l'un d'eux : sa fiche." : ".");
-    if (sim.deepTime()) {
-        if (sim.replay) ImGui::TextDisabled("Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
-        return;
-    }
+    if (sim.replay && sim.starShare() < 1)
+        ImGui::TextDisabled(sim.starShare() > 0 ? "Les points qui apparaissent sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure)."
+                                                : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
+    if (sim.starShare() <= 0) return;
     // Voie lactée en volume (fil Gaia, docs/gaia-voie-lactee.md) : un modèle, dit comme tel dès qu'on la voit de loin.
     // Choix de Marc (12/11) : pour l'état présent, seulement du mesuré. Sans la lueur d'ensemble, l'écran le dit.
     if (sim.hasMilkyWay && sim.dist > 3000.0) {
