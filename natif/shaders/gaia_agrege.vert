@@ -11,19 +11,38 @@ layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
 const int SPREAD = 8;          /* points par case (gaia.h dessine SPREAD instances) */
 const float OVERLAP = 2.5;     /* tache plus large que la case : les cases voisines se recouvrent, pas de trous entre elles */
+/* trois nombres pseudo-aléatoires fixes dans [0, 1[ (hachage entier PCG, Jarzynski et Olano 2020) */
+vec3 hash3(uvec2 k) {
+    uvec3 v = uvec3(k.x, k.y, k.x ^ (k.y * 747796405u));
+    v = v * 1664525u + 1013904223u;
+    v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+    v ^= v >> 16u;
+    v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+    return vec3(v) * (1.0 / 4294967296.0);
+}
 void main() {
     Cell c = cell[gl_VertexIndex];
     float pxPerRad = pc.par.y / (2.0 * pc.par.w);
     vec3 p;
     float flux, ext;
     if (pc.camLo.w == 0.0) {
-        /* la case couvre un dixième de décade en parallaxe : sa lumière est répartie en SPREAD points également espacés
-           (en log) sur cette épaisseur, au lieu d'un seul point au milieu (sinon : des coquilles autour du Soleil) */
-        float s = pow(10.0, ((float(gl_InstanceIndex) + 0.5) / float(SPREAD) - 0.5) * 0.1);
-        p = (c.pm.xyz * s - pc.camHi.xyz) - pc.camLo.xyz;
+        /* La case n'a pas de positions d'étoiles, seulement une somme de lumière : sa lumière est répartie en SPREAD points
+           tirés uniformément dans le volume de la case (morceau de ciel × tranche d'un dixième de décade en parallaxe).
+           Le tirage est fixe (même case, même tirage) et sans alignement : pas de grille ni de coquilles. */
+        vec3 h = hash3(uvec2(uint(gl_VertexIndex), uint(gl_InstanceIndex)));
+        float s = pow(10.0, (h.x - 0.5) * 0.1);
+        vec3 n = normalize(c.pm.xyz);
+        vec3 t1 = normalize(cross(n, abs(n.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+        vec3 t2 = cross(n, t1);
+        float d0 = length(c.pm.xyz) * s;
+        vec3 q = (n + (2.0 * h.y - 1.0) * c.rest.x / length(c.pm.xyz) * t1 + (2.0 * h.z - 1.0) * c.rest.x / length(c.pm.xyz) * t2) * d0;
+        p = (q - pc.camHi.xyz) - pc.camLo.xyz;
         float d = max(length(p), 1e-12);
         flux = pc.par.x * pow(10.0, -0.4 * (c.pm.w + 2.5 * log(float(SPREAD)) / log(10.0) + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0));
-        ext = OVERLAP * c.rest.x * s / d * pxPerRad;
+        /* tache : assez large pour que les points d'une case se recouvrent (côté de la case, ou épaisseur partagée entre les points) */
+        /* l'épaisseur ne compte que vue de côté : projetée sur l'écran (sinus de l'angle entre le rayon de vue et la direction du Soleil) */
+        float r = max(OVERLAP * c.rest.x * s, 0.23 * d0 / float(SPREAD) * length(cross(n, p / d)));
+        ext = r / d * pxPerRad;
     } else {
         p = c.pm.xyz;                          /* direction seule */
         flux = pc.par.x * pow(10.0, -0.4 * c.pm.w);

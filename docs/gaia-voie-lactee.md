@@ -94,3 +94,14 @@ De près, chaque étoile mesurée ; en s'éloignant, des sommes de ce qui est me
   Voie lactée, 71 images/s vu de 25 000 al.
 - Ce qui se voit de loin est la Galaxie telle que Gaia la mesure : plus de lumière vers le centre galactique, et une forme
   allongée vers le Soleil due à l'incertitude des distances.
+
+### Correction des alignements vus par Marc (12 novembre 2026, 19 h 30 UTC)
+
+Cause [Certain, captures avant/après à 3 000, 30 000 et 60 000 al] : la lumière additionnée était placée en 8 points
+réguliers sur l'axe de chaque case (traits de 8 points), cases centrées sur le Soleil (coquilles et rayons réguliers).
+Corrections :
+- dans chaque case, la lumière est répartie en points tirés uniformément dans tout son volume (tirage fixe par case,
+  hachage PCG) ; la tache de chaque point couvre l'écart entre points (épaisseur projetée sur l'écran) ;
+- en volume, seules les sources dont la parallaxe vaut plus de 5 fois son erreur (distance à mieux que 20 %), source par
+  source sur le serveur : 93,8 millions de sources, 3 181 655 cases, 30,3 % de cette lumière. Les 1,61 milliard d'autres
+  sont « ciel seul » (vues du Soleil, sans profondeur) : rien n'est placé à une distance mal mesurée.

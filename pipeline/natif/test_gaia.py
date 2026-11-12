@@ -118,7 +118,7 @@ def agrege(chemin):
     sources = int(t['n'].sum(dtype=np.int64))
     # DR3 : 1 811 709 771 sources ; ici toutes celles qui ont une magnitude G, moins les 98 346 986 dessinées une à une
     verifie(1.70e9 < sources < 1.72e9, f'{sources} sources additionnées ({nc} cases 3D, {ns} pixels de ciel seul)')
-    verifie(np.all(np.isfinite(t['m'])) and np.all(t['e'][:nc] <= 1.0), 'magnitudes finies ; erreur de distance des cases 3D ≤ 100 %')
+    verifie(np.all(np.isfinite(t['m'])) and np.all(t['e'][:nc] <= 0.2), 'magnitudes finies ; erreur de distance des cases 3D ≤ 20 %')
 
 
 def main():

@@ -5,8 +5,9 @@ Les 98 millions d'étoiles à distance sûre (parallaxe / erreur > 10) sont dess
 (environ 1,7 milliard) ont une distance mal mesurée ou pas de parallaxe : leur lumière G est additionnée, sans modèle,
 par case :
 - ciel : pixel HEALPix de niveau 7 (emboîté, 196 608 pixels de 0,21 deg²), tiré du numéro de la source ;
-- distance : tranche de parallaxe, pb = floor(10 log10(parallaxe en mas)) (un dixième de décade) ;
-  parallaxe nulle, négative ou absente : distance inconnue (case « ciel seul », pb = -999).
+- distance : tranche de parallaxe, pb = floor(10 log10(parallaxe en mas)) (un dixième de décade), seulement pour les
+  sources dont la parallaxe vaut plus de 5 fois son erreur (distance à mieux que 20 %) ;
+  toutes les autres (parallaxe moins sûre, négative ou absente) : distance inconnue, « ciel seul », par pixel.
 Par case : nombre de sources, somme des flux 10^(-0,4 G), somme des flux × BP-RP et des flux dont BP-RP existe (couleur
 moyenne pondérée), somme des flux × erreur relative de parallaxe (incertitude moyenne de la distance de la case).
 
@@ -23,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gaia_telecharger as gt
 
 NIVEAU = 7
+POE_MIN = 5      # distance placée en volume seulement si la parallaxe vaut plus de 5 fois son erreur (règle de Marc : rien de supposé)
 DIV = 2 ** 35 * 4 ** (12 - NIVEAU)      # source_id // DIV = pixel HEALPix de niveau 7
 F = 'POWER(10, -0.4*phot_g_mean_mag)'
 AGREGATS = (f'COUNT(*) AS n, SUM({F}) AS f, SUM({F}*bp_rp) AS fc, SUM({F}*(bp_rp*0+1)) AS fcn')
@@ -31,8 +33,8 @@ AGREGATS = (f'COUNT(*) AS n, SUM({F}) AS f, SUM({F}*bp_rp) AS fc, SUM({F}*(bp_rp
 def requetes(debut, fin):
     base = f'FROM gaiadr3.gaia_source WHERE source_id >= {debut} AND source_id < {fin} AND phot_g_mean_mag IS NOT NULL'
     a = (f'SELECT source_id/{DIV} AS hp, FLOOR(10*LOG10(parallax)) AS pb, {AGREGATS}, SUM({F}*parallax_error/parallax) AS fe '
-         f'{base} AND parallax > 0 AND parallax_over_error <= 10 GROUP BY hp, pb')
-    b = (f'SELECT source_id/{DIV} AS hp, {AGREGATS} {base} AND (parallax IS NULL OR parallax <= 0) GROUP BY hp')
+         f'{base} AND parallax_over_error > {POE_MIN} AND parallax_over_error <= 10 GROUP BY hp, pb')
+    b = (f'SELECT source_id/{DIV} AS hp, {AGREGATS} {base} AND (parallax IS NULL OR parallax_over_error <= {POE_MIN}) GROUP BY hp')
     return a, b
 
 
