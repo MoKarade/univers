@@ -442,7 +442,8 @@ function createRenderer(canvas, Q, generated) {
   const PNOW = (DATA.PASSERS || []).filter(o => o.G <= 13.2).map(o => { const d = Math.hypot(o.now[0], o.now[1], o.now[2]); return [o.now[0], o.now[1], o.now[2], 0.012 * d + 0.03, d]; });
   const isPasser = (x, y, z) => { for (let q = 0; q < PNOW.length; q++) { const w = PNOW[q]; if (Math.abs(x - w[0]) < w[3] && Math.abs(y - w[1]) < w[3] && Math.abs(z - w[2]) < w[3]) { const d = Math.hypot(x, y, z); if ((x * w[0] + y * w[1] + z * w[2]) / (d * w[4]) > 1 - 8e-8 && Math.abs(d / w[4] - 1) < 0.012) return true; } } return false; }; R.star = { N: sN, mag: sMag, bv: sBv, hip: sHip, life: sLife, fate: sFate, mass: sMass, cls: sCls, src: sSrc, range: sRange };
   const stars = pts({ position: [sPos, 3], aMag: [sMag, 1], aCol: [sCol, 3], aLife: [sLife, 3], aFate: [sFate, 1] }, mk(SH.star, starsU), 8); starsU.uEvolve.value = 1;
-  R.relife = () => { lifeAll(); stars.geometry.attributes.aLife.needsUpdate = true; stars.geometry.attributes.aFate.needsUpdate = true; };      /* âges Gaia arrivés : destins recalculés */
+  R.relife = () => { lifeAll(); for (const o of R.passers) sMass[o.idx] = o.m;      /* masses publiées des étoiles frôleuses (Bailer-Jones 2022) gardées */
+    stars.geometry.attributes.aLife.needsUpdate = true; stars.geometry.attributes.aFate.needsUpdate = true; };      /* âges Gaia arrivés : destins recalculés */
   let starCursor = 0, starPassT = 1e99, starDone = 0;
   // --- Gaia DR3 : toutes les étoiles plus faibles que le premier catalogue, jusqu'à la magnitude limite du jeu de données
   const gN = Math.round(DATA.GAIA_N * (Q.gaia || 1)), gGeo = new Uint16Array(b64ToBytes(DATA.GAIA_GEO).buffer), gAux = b64ToBytes(DATA.GAIA_AUX), gPos = new Float32Array(gN * 3), gMag = new Float32Array(gN), gCol = new Float32Array(gN * 3), gBv = new Float32Array(gN), gLife = new Float32Array(gN * 3), gFate = new Float32Array(gN), gMass = new Float32Array(gN), gCls = new Uint8Array(gN);

@@ -533,7 +533,7 @@
     return 'vue de la Terre : ' + x(pr[1]) + (Rr.dustOn ? ' ; vue d’ici : ' + x(pr[0]) + ', son éclat en tient compte' : '') + (Math.hypot(...s) > DATA.DUST.rmax ? ' ; au-delà de la carte (1,25 kpc), poussière inconnue' : '') + ' (carte 3D mesurée, Edenhofer et al. 2024)'; }
   /* Destin des étoiles : âge mesuré par Gaia (FLAME) ou inconnu, fin de la séquence principale avec sa fourchette (modèles MIST) */
   function lifeRows(st, i, L, t) { if (st.cls[i] === 3) return []; const m = st.mass[i], lo = st.range[i * 2] - t, hi = st.range[i * 2 + 1] - t, when = x => x > 0 ? 'dans ' + fmtYears(x * 1e6) : 'il y a ' + fmtYears(-x * 1e6);
-    const r = st.src[i] ? [['Âge mesuré', fmtYears(-L[0] * 1e6) + ' (Gaia DR3, FLAME), masse ' + sig(m, 3) + ' fois le Soleil', 'm']] : [['Âge', 'inconnu (la date montrée est tirée dans la fourchette possible)', 's']];
+    const r = st.src[i] ? [['Âge estimé par Gaia', fmtYears(-L[0] * 1e6) + ' (Gaia DR3, FLAME, d’après sa luminosité et sa température)', 'c']] : [['Âge', 'inconnu (la date montrée est tirée dans la fourchette possible)', 's']];
     if (st.cls[i] === 0 || st.src[i]) r.push(['Fin de la séquence principale', lo > 0 || hi > 0 ? 'entre ' + when(Math.min(lo, hi)) + ' et ' + when(Math.max(lo, hi)) + ' (modèles d’évolution MIST)' : 'déjà passée']);
     if (m >= SN_UNC && m < SN_MIN) r.push(['Fin de vie', 'naine blanche ou supernova : inconnu à cette masse (limite discutée, entre 7 et 9 fois le Soleil)']);
     return r; }

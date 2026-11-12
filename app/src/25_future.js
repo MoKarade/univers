@@ -119,6 +119,10 @@ function starLife(MV, bv, i, hip) {
   if (F && cls !== 3) {      /* âge et masse mesurés : dates centrales ; fourchette de la fin de séquence principale par les bornes à 16 et 84 % */
     src = 1; mass = F[3]; const age = F[0], [ms, end] = mistLife(mass); tMS = ms; tB = -age; tM = ms - age; tD = end - age;
     lo = mistLife(F[5])[0] - F[2]; hi = mistLife(F[4])[0] - F[1];
+    /* l'aspect d'aujourd'hui reste celui mesuré : une étoile vue géante est géante maintenant (fin de séquence principale passée) ;
+       une étoile que les modèles donnent déjà sortie de la séquence principale (âge FLAME, modèles BaSTI, plus grand que la durée MIST)
+       est traitée de même, à partir de son éclat mesuré */
+    if (cls === 1 || cls === 2 || tM < 0) { const dur = Math.max(end - ms, 1); if (tM >= 0) tM = -1e-3; tD = Math.max(tD, tM + 1e-3); if (tD - tM > dur) tD = tM + dur; if (cls === 0) cls = 1; }
   } else if (cls === 0) { mass = interp(MS_BV, MS_MASS, bv); const [ms, end] = mistLife(mass); tMS = Math.max(ms, 3); const amax = Math.min(tMS, 12000), age = (0.03 + 0.94 * h) * amax; tB = -age; tM = tB + tMS; tD = tB + Math.max(end, tMS * 1.12); lo = tMS - 0.97 * amax; hi = tMS - 0.03 * amax; }
   else if (cls === 1) { mass = 1.2 + 1.3 * h2; const [ms, end] = mistLife(mass); tMS = ms; const dur = end - ms; tM = -h * dur; tD = tM + dur; tB = tM - tMS; lo = 0; hi = dur; }
   else if (cls === 2) { mass = clamp(9 + (-3.5 - MV) * 3.5, 9, 40); const [ms, end] = mistLife(mass); tMS = Math.max(ms, 3); const dur = Math.max(end - ms, 0.1 * tMS); tM = -h * dur; tD = tM + dur; tB = tM - tMS; lo = 0; hi = dur; }
