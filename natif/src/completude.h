@@ -72,7 +72,7 @@ struct Comptes {
     int lunes[10] = {};                // lunes présentes, par code NAIF du système (la Lune : indice 3)
     uint64_t asteroides = 0;
     int sondes = 0;                    // sondes dont la trajectoire réelle est chargée
-    uint64_t cometes = 0;              // comètes chargées (aucune pour l'instant : aucun fichier de comètes dans l'appli)
+    uint64_t cometes = 0;              // comètes du catalogue des petits corps (asteroides::Catalogue::isComet)
     uint64_t etoiles = 0;
     uint64_t etoilesCatalogue[3] = {}; // principal (HYG / Hipparcos), Gaia embarqué, Gaia en flux
     uint64_t etoilesGaia = 0;          // gaia.bin (Gaia DR3, parallaxe > 10 fois son erreur) quand il est chargé ; 0 sinon
@@ -91,6 +91,21 @@ inline int lunesPresentes(const Comptes& c) {
     int n = 0;
     for (int v : c.lunes) n += v;
     return n;
+}
+
+// Lunes présentes parmi les connues : par système, au plus le nombre reconnu (une trajectoire de la NASA peut exister pour
+// une lune pas encore dans la liste de l'UAI ; elle est dite à part, jamais comptée au-delà de 100 %).
+inline int lunesPresentesConnues(const Comptes& c) {
+    int n = 0;
+    for (int s = 0; s < 10; ++s) n += std::min(c.lunes[s], kLunesConnues[s]);
+    return n;
+}
+
+// Système d'une lune d'après son code NAIF : premier chiffre (301 -> 3, 502 -> 5, 55501 -> 5, 65067 -> 6).
+inline int systemeDeLaLune(int naif) {
+    int s = naif < 0 ? -naif : naif;
+    while (s >= 10) s /= 10;
+    return s;
 }
 
 inline int lunesConnues() {
@@ -166,6 +181,12 @@ Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia 
     c.voieLactee = sim.hasMilkyWay;
     if (sim.hasGaia && !fichierAgrege.empty()) c = lireAgrege(c, fichierAgrege);
     c.asteroides = sim.asteroidCount;
+    if (sim.asteroidCat) {      // les comètes, quand le catalogue en contient, ne sont pas des astéroïdes
+        uint64_t k = 0;
+        for (uint64_t i = 0; i < sim.asteroidCat->n; ++i) k += sim.asteroidCat->isComet(static_cast<size_t>(i)) ? 1 : 0;
+        c.cometes = k;
+        c.asteroides = sim.asteroidCount >= k ? sim.asteroidCount - k : 0;
+    }
     c.galaxiesReleves = galaxiesReleves;
     for (const auto& b : sim.bodies) {
         using K = decltype(b.kind);
@@ -173,7 +194,7 @@ Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia 
         const bool autourDuSoleil = b.parent < 0 || sim.bodies[static_cast<size_t>(b.parent)].kind == K::Sun;
         if (b.kind == K::Planet && autourDuSoleil) ++c.planetes;
         if (b.kind == K::Planet && !autourDuSoleil) {
-            const int systeme = b.naif == 301 ? 3 : b.naif / 100;
+            const int systeme = systemeDeLaLune(b.naif);
             if (systeme >= 0 && systeme < 10) ++c.lunes[systeme];
         }
         if (b.kind == K::Probe) ++c.sondes;
@@ -242,16 +263,19 @@ inline std::string sur(double present, double connu) { return entier(present) + 
 inline Echelle systemeSolaire(const Comptes& c) {
     Echelle e;
     e.nom = "Système solaire";
-    const double present = c.planetes + lunesPresentes(c) + double(c.asteroides) + double(c.cometes) + c.sondes;
+    const double present = c.planetes + lunesPresentesConnues(c) + double(c.asteroides) + double(c.cometes) + c.sondes;
     const double connu = kPlanetesConnues + lunesConnues() + kAsteroidesConnus + kCometesConnues + kSondesSortie;
     e.part = present / connu;
     e.complet = pourcent(e.part) + " des objets connus (" + entier(present) + " sur " + entier(connu) + ") ; lunes " +
-                pourcent(double(lunesPresentes(c)) / lunesConnues()) + ", comètes " + pourcent(double(c.cometes) / kCometesConnues);
+                pourcent(double(lunesPresentesConnues(c)) / lunesConnues()) + ", comètes " + pourcent(double(c.cometes) / kCometesConnues);
     e.precision = "planètes et Soleil < 1 mm ; sondes < 1 km ; astéroïdes < 300 000 km";
     e.mesure = "positions : éphémérides de la NASA (planètes, lunes) ; calculées ici (astéroïdes)";
     e.lignes = {
         {"Planètes et Pluton", sur(c.planetes, kPlanetesConnues), Nature::Mesure, "UAI"},
-        {"Lunes", sur(lunesPresentes(c), lunesConnues()), Nature::Mesure, "JPL, Planetary Satellite Discovery Circumstances, 12/11/2026"},
+        {"Lunes", sur(lunesPresentesConnues(c), lunesConnues()) +
+                      (lunesPresentes(c) > lunesPresentesConnues(c) ? " ; plus " + entier(lunesPresentes(c) - lunesPresentesConnues(c)) +
+                                                                          " pas encore reconnue(s) par l'UAI" : std::string()),
+         Nature::Mesure, "JPL, Planetary Satellite Discovery Circumstances, 12/11/2026 ; trajectoires du NAIF"},
         {"Astéroïdes", sur(double(c.asteroides), kAsteroidesConnus), Nature::Mesure, "JPL Small-Body Database, 12/11/2026"},
         {"Comètes", sur(double(c.cometes), kCometesConnues), Nature::Mesure, "JPL Small-Body Database, 12/11/2026"},
         {"Sondes qui quittent le système solaire", sur(c.sondes, kSondesSortie), Nature::Mesure, "NASA (Pioneer 10 et 11, Voyager 1 et 2, New Horizons)"},
@@ -266,7 +290,7 @@ inline Echelle systemeSolaire(const Comptes& c) {
     };
     const double asteroidesAbsents = kAsteroidesConnus - double(c.asteroides);
     e.manques = {
-        entier(lunesConnues() - lunesPresentes(c)) + " lunes : les fichiers légers du NAIF n'en contiennent pas ; les 5 grandes lunes d'Uranus sont dans un fichier de 5,6 Go",
+        entier(lunesConnues() - lunesPresentesConnues(c)) + " lunes connues sans trajectoire publiée par la NASA (fichiers du NAIF)",
         "Les " + entier(kCometesConnues) + " comètes du JPL",
         "Les autres sondes (en orbite autour des planètes, en route) : pas encore chargées",
         "Orbites des astéroïdes : ajouter l'attraction des planètes (écart actuel jusqu'à 300 000 km)",

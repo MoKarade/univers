@@ -46,7 +46,8 @@ int main(int argc, char** argv) {
     eph::Set spk;
     std::string err;
     verifie(spk.add(dir + "/de440.bsp", err), "de440.bsp lu");
-    for (const char* f : {"mar099s.bsp", "jup365.bsp", "sat441.bsp", "nep097.bsp", "plu060.bsp"}) {
+    for (const char* f : {"mar099s.bsp", "jup365.bsp", "sat441.bsp", "nep097.bsp", "plu060.bsp", "ura184_part-3.bsp", "ura116xl.bsp", "sat415.bsp",
+                          "nep104.bsp", "nep105.bsp", "jup347.bsp", "jup348.bsp", "jup349.bsp", "sat455.bsp", "sat456.bsp", "sat457.bsp", "sat459.bsp"}) {
         std::string ignored;
         spk.add(dir + "/" + f, ignored);
     }
@@ -56,6 +57,9 @@ int main(int argc, char** argv) {
     sim.probes = &probes;
     sim.stars = &stars;
     sim.spk = &spk;
+    asteroides::Catalogue asteroidCat;
+    verifie(asteroidCat.load(dir + "/asteroides.bin", dir + "/asteroides_noms.txt"), "catalogue des petits corps lu");
+    sim.asteroidCat = &asteroidCat;
     {      // en-tête de asteroides.bin, lu comme asteroides.h dans l'appli
         std::ifstream af(dir + "/asteroides.bin", std::ios::binary);
         char h[16] = {};
@@ -113,8 +117,11 @@ int main(int argc, char** argv) {
         verifie(phrase && rs[0].manques[1].find("79 ") == 0, "astéroïdes absents : 1 580 368 - 1 580 289 = 79");
     }
     verifie(c.sondes == 5, "5 sondes : Pioneer 10 et 11, Voyager 1 et 2, New Horizons");
-    verifie(c.lunes[3] == 1 && c.lunes[4] == 2 && c.lunes[5] == 4 && c.lunes[6] == 7 && c.lunes[7] == 0 && c.lunes[8] == 1 && c.lunes[9] == 1,
-            "lunes par système : Terre 1, Mars 2, Jupiter 4, Saturne 7, Uranus 0 (fichier absent), Neptune 1, Pluton 1");
+    // Attendu : lunes.tsv relu en Python (colonne « planète »), 12/11 19 h UTC : 437 lunes, plus la Lune.
+    verifie(c.lunes[3] == 1 && c.lunes[4] == 2 && c.lunes[5] == 116 && c.lunes[6] == 290 && c.lunes[7] == 15 && c.lunes[8] == 9 && c.lunes[9] == 5,
+            "lunes par système : Terre 1, Mars 2, Jupiter 116, Saturne 290, Uranus 15, Neptune 9, Pluton 5 (codes provisoires compris)");
+    verifie(systemeDeLaLune(55501) == 5 && systemeDeLaLune(65067) == 6 && systemeDeLaLune(85051) == 8 && systemeDeLaLune(301) == 3, "système d'une lune : premier chiffre du code");
+    verifie(lunesPresentesConnues(c) == 1 + 2 + 115 + 290 + 15 + 9 + 5, "lunes comptées au plus jusqu'au nombre reconnu (Jupiter : 116 chargées, 115 reconnues)");
     verifie(c.etoiles == 6153611, "6 153 611 étoiles");
     verifie(c.etoiles10pc == 481, "481 points à moins de 10 pc (numpy : 481)");
     verifie(c.doublons10pc == 11, "11 paires de deux catalogues à moins de 0,02 al (numpy : 11)");
