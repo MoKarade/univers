@@ -926,8 +926,10 @@ void whatYouSee(const Sim& sim) {
         ImGui::TextDisabled("La Voie lactée : modèle ajusté sur des mesures ; supposés : partage de la lumière au prorata des masses,");
         ImGui::TextDisabled("lumière ajoutée par les bras, largeur de la barre longue.");
     } else if (sim.dist > 3000.0) {
-        ImGui::TextDisabled(sim.hasGaia ? "Voie lactée : seules les étoiles mesurées par Gaia sont montrées ; sa lumière d'ensemble n'est pas dessinée,"
-                                        : "Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
+        if (sim.hasGaia && sim.gaiaCount)
+            ImGui::TextDisabled("Voie lactée : seules les étoiles mesurées par Gaia sont montrées (%s) ; sa lumière d'ensemble n'est pas dessinée,",
+                                frInt(static_cast<double>(sim.gaiaCount)).c_str());
+        else ImGui::TextDisabled("Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
         ImGui::TextDisabled("car elle demanderait un modèle.");
     }
     if (sim.galaxyGain() > 0.005) {
