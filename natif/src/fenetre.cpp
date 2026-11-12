@@ -216,7 +216,7 @@ int runWindow(const WindowOptions& opt) {
     sim.asteroidCount = asteroids.ready ? asteroids.count : 0;
     // Complétude par échelle : comptée une fois sur les données réellement chargées (après les astéroïdes, pour qu'ils
     // soient comptés), lue ensuite par l'interface.
-    const auto rapportCompletude = completude::rapport(completude::compter(sim, galaxies.count));
+    const auto rapportCompletude = completude::rapport(completude::compter(sim, galaxies.count, gaia.count));
     sim.completeness = &rapportCompletude;
     FusionPoints fusionPoints;
     fusionPoints.create(g, hasReplay ? static_cast<uint32_t>(replay.nombreEtoiles()) : 0);
