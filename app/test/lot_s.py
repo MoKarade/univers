@@ -89,7 +89,7 @@ def main():
 
         # S3 : distances Cosmicflows-4 dans les fiches. NGC 4258 : 7,5 millions de parsecs, dont le maser (Tully et al. 2023).
         txt = norm(pg.evaluate("""(() => { const i = DATA.NEAR_NAMES.split('|').indexOf('NGC4258'); if (i < 0) return null;
-            __U.select(__U.selNear(i)); return document.getElementById('card').innerText; })()"""))
+            __U.select(__U.selNear(i)); const m = document.getElementById('card-more'); if (m && !m.hidden) m.click(); return document.getElementById('card').innerText; })()"""))
         manque = [a for a in ('Distance mesurée', 'Cosmicflows-4, PGC 39600', 'maser', 'Céphéides', 'à 1 % près') if a not in txt]
         check(not manque, 'fiche NGC 4258%s' % ((' : manque ' + str(manque) + ' dans « ' + txt.replace(chr(10), ' / ')[:300] + ' »') if manque else ''))
         n_cf4 = pg.evaluate("DATA.CF4_NEAR.filter(Boolean).length + DATA.CF4_LOCAL.filter(Boolean).length")
