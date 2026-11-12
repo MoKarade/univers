@@ -72,9 +72,26 @@ def chaos():
     return etat
 
 
+def fusion():
+    j = os.path.join(NATIF, 'fusion-toutes', 'journal.txt')
+    if not os.path.exists(j): return 'terminé'
+    lignes = open(j, encoding='utf-8', errors='replace').read().splitlines()
+    t = 0.0
+    for l in reversed(lignes):
+        m = re.search(r't =\s*([\d.]+) Ga', l)
+        if m: t = float(m.group(1)); break
+    fini = any(l.startswith('{') and 'fusion_ga' in l for l in lignes)
+    pause = any('occupée' in l for l in lignes[-3:])
+    etat = 'terminé' if fini else 'en pause' if pause else 'en cours' if actif(j, 900) else 'en pause'
+    ecrire('fusion_toutes_etoiles', nom='Fusion Voie lactée–Andromède, 1 million d’étoiles gardées', fait=10 if fini else t, total=10,
+           unite='milliards d’années', debut=iso(os.path.getctime(j)), maj=iso(time.time()), etat=etat,
+           detail='3 millions de particules qui s’attirent toutes, sur la carte graphique')
+    return etat
+
+
 def main():
     while True:
-        etats = [telechargement(), horizon(), chaos()]
+        etats = [telechargement(), horizon(), chaos(), fusion()]
         if all(e in ('terminé', 'échec') for e in etats): break
         time.sleep(20)
 

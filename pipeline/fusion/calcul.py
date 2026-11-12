@@ -17,6 +17,8 @@ Usage : python calcul.py <de_Ga> <a_Ga> [N_total] [--gpu]
 --gpu : gravité sur la carte graphique (gravite_gpu.py) au lieu de falcON ; si sortie/depart.npz existe, il sert de départ.
 --theta=0.5 : angle d'ouverture de l'arbre (0,7 par défaut ; 0,5 : erreur médiane de force 0,03 % au lieu de 0,1 %).
 --sortie=<dossier> : dossier des sorties (par défaut pipeline/fusion/sortie).
+--toutes : garde à chaque image TOUTES les étoiles (disque et bulbe, environ 1 million sur 3 millions de particules) au lieu de
+           l'échantillon de 30 000 du départ ; environ 6 Mo par image.
 """
 import os, sys, json, time, math
 import numpy as np
@@ -168,6 +170,12 @@ def main():
                 p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; meta = json.loads(str(z['meta']))
         else:
             p, gid, show, meta = construire(int(args[2]) if len(args) > 2 else 300000)
+        if '--toutes' in sys.argv:      # toutes les étoiles, dans l'ordre des galaxies (le tirage du départ est remplacé)
+            etoiles = (p['kind'] > 0) & (p['kind'] < 9)
+            show = np.concatenate([np.where((gid == k) & etoiles)[0] for k in range(len(meta['galaxies']))])
+            meta['affichees'] = [int(((gid == k) & etoiles).sum()) for k in range(len(meta['galaxies']))]
+            meta['composantes'] = 'kind de chaque étoile affichée : composantes.bin (int8, 1 disque, 2 bulbe)'
+            p['kind'][show].astype(np.int8).tofile(os.path.join(OUT, 'composantes.bin'))
         meta.update(t=[], centres=[], traceurs_pos=[], energie=[], e0=None, fusion_ga=None, fichiers=[])
         t = 0.0; debut = True
     else:

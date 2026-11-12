@@ -132,6 +132,9 @@ def main():
     for p in range(lo, hi + 1):
         out = os.path.join(a.sortie, f'horizon_{p:04d}.npz')
         if os.path.exists(out): continue
+        fe = os.path.join(a.erreurs, f'part_{p:04d}.fits')
+        while not os.path.exists(fe):      # téléchargement encore en cours : on attend la part
+            time.sleep(30)
         t0 = time.time()
         rng = np.random.default_rng(20261112 + p)
         sid, etats, tiree, connu = clones_part(os.path.join(a.base, f'part_{p:04d}.fits'), os.path.join(a.erreurs, f'part_{p:04d}.fits'), a.k, rng)
