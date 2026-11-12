@@ -8,6 +8,7 @@
 #include <imgui_impl_vulkan.h>
 #include <imgui_impl_win32.h>
 
+#include "asteroides.h"
 #include "fenetre.h"
 #include "galaxies.h"
 #include "interface.h"
@@ -165,6 +166,10 @@ int runWindow(const WindowOptions& opt) {
     GalaxyFile galaxyFile;
     GalaxyRenderer galaxies;
     if (openGalaxies(dataDir + "/galaxies.bin", galaxyFile)) galaxies.create(g, galaxyFile, HdrTarget::kFormat);
+    AsteroidRenderer asteroids;
+    asteroids.create(g, dataDir + "/asteroides.bin", HdrTarget::kFormat);
+    sim.asteroidEpochJd = asteroids.ready ? asteroids.epochJd : 0;
+    sim.asteroidCount = asteroids.ready ? asteroids.count : 0;
     SphereRenderer spheres;
     spheres.create(g, HdrTarget::kFormat, dataDir + "/textures");
     std::vector<bool> asSphere;
@@ -312,6 +317,10 @@ int runWindow(const WindowOptions& opt) {
         beginPass(cmd, hdr.view, sc.extent);
         galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
         sr.draw(cmd, pc, sc.extent.width, sc.extent.height);
+        asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
+                       sc.extent.width, sc.extent.height, asteroids.ready ? static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);
+        // (l'ordre compte : après les astéroïdes, le dessin des étoiles n'est plus lié ; les planètes le relient)
+        sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
         planets.draw(cmd);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
         vkCmdEndRendering(cmd);
@@ -387,6 +396,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     planets.release(g);
+    asteroids.release(g);
     galaxies.release(g);
     spheres.release(g);
     sr.release(g);

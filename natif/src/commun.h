@@ -443,6 +443,16 @@ struct StarRenderer {
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline), "pipeline des étoiles");
     }
 
+    // Lie le dessin des étoiles et ses constantes, sans rien dessiner (pour d'autres points au même format).
+    void bind(VkCommandBuffer cmd, const PushConstants& pc, uint32_t width, uint32_t height) const {
+        const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
+        const VkRect2D sc{{0, 0}, {width, height}};
+        vkCmdSetViewport(cmd, 0, 1, &vp);
+        vkCmdSetScissor(cmd, 0, 1, &sc);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+    }
+
     // À appeler entre vkCmdBeginRendering et vkCmdEndRendering, sur une image en grande dynamique vidée.
     void draw(VkCommandBuffer cmd, const PushConstants& pc, uint32_t width, uint32_t height) const {
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};

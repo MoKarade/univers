@@ -176,3 +176,20 @@ finale, interface comprise, dans un fichier (`--fenetre-test`), relu à l'œil e
   l'image suivante. Panneau « L'univers en expansion » (H0, matière, énergie noire, w0, wa, âge, courbure).
 - Dit à l'écran : éclat des galaxies supposé identique et pâlissant avec la distance ; Voie lactée non dessinée.
 - Reste E4 : Voie lactée, formes et photos des galaxies proches, mouvement du Groupe local, cône de lumière.
+
+## Règle de Marc (12 novembre 2026, transmise par le coordinateur) : rien de supposé pour l'état présent
+
+Pour l'état présent, seulement du mesuré. Dans l'appli : la taille des points des galaxies et des astéroïdes est un
+réglage d'affichage, dit comme tel à l'écran, jamais une valeur physique annoncée. À relire contre les sources avant
+de les afficher comme des mesures : magnitudes H, couleurs et rayons des planètes (recopiés de mémoire), étendue de
+l'image des anneaux de Saturne (calée sur deux repères mesurés).
+
+## E2 suite et E3 (12 novembre 2026)
+
+- Anneaux de Saturne : `shaders/sphere.frag` (disque dans le plan de l'équateur, ombre de la planète sur les anneaux
+  et des anneaux sur la planète), image Solar System Scope.
+- E3 : `pipeline/natif/asteroides.py` (123 530 orbites du JPL, époque JJ 2461200,5), `ref_asteroides.py` (positions de
+  référence demandées à JPL Horizons), contrôle [Certain] : Albert, Mildred et IAU à 25 000, 73 000 et 93 000 km de
+  Horizons après 154 jours (orbite simple, sans l'attraction des planètes). `natif/src/asteroides.h`,
+  `shaders/asteroides.vert` : équation de Kepler résolue par la carte graphique à chaque image. Montrés à moins de
+  300 ans de l'époque. Pas encore : noms et fiches des astéroïdes, comètes, sondes.

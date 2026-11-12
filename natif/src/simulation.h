@@ -83,6 +83,8 @@ struct Sim {
     double yaw = -1.2, pitch = 0.55;     // direction d'où l'on regarde l'astre suivi (radians)
     double dist = 45.0 * kAuInLy;        // distance de la caméra à l'astre suivi (années-lumière) : au départ, tout le système solaire
     bool touched = false;                // quelqu'un a pris la main : fin du lent tour d'horizon
+    double asteroidEpochJd = 0;          // date des orbites des astéroïdes (0 : pas d'astéroïdes)
+    uint64_t asteroidCount = 0;
     cosmo::Params cosmology;             // paramètres de l'univers en expansion (réglables à l'écran)
     bool cosmologyDirty = true;          // les distances des galaxies sont à recalculer
 
@@ -216,6 +218,14 @@ struct Sim {
     double brightnessBoost() const {
         const double k = std::clamp(dist / 30.0, 1.0, 70.0);      // plafonné : au-delà de 2 000 années-lumière, les étoiles mesurées se fondent en un point
         return k * k;
+    }
+    // Astéroïdes : montrés à l'échelle du système solaire (plein éclat jusqu'à 60 fois la distance Terre-Soleil, éteints
+    // à 600), et seulement à moins de 300 ans de la date de leurs orbites : au-delà, l'orbite simple ne vaut plus.
+    double asteroidGain(double epochJd) const {
+        const double au = dist / kAuInLy;
+        const double fade = std::clamp((std::log10(600.0) - std::log10(std::max(au, 1e-9))) / (std::log10(600.0) - std::log10(60.0)), 0.0, 1.0);
+        const double epochYears = (epochJd - 2451545.0) / 365.25;
+        return std::fabs(years - epochYears) < 300.0 ? 0.30 * fade : 0.0;
     }
     // Éclat donné à chaque galaxie des relevés : nul tant qu'on est dans la Voie lactée, plein au-delà de 3 millions d'années-lumière.
     double galaxyGain() const {

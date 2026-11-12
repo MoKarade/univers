@@ -292,10 +292,12 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     ImGui::TextUnformatted(where.c_str());
     const double boost = sim.brightnessBoost();
     if (boost > 1.5 && sim.dist < 1.0e5) ImGui::TextDisabled("Éclat des étoiles multiplié par %s pour qu'elles restent visibles de si loin.", frNum(boost, 2).c_str());
+    if (sim.asteroidCount && sim.asteroidGain(sim.asteroidEpochJd) > 0.01)
+        ImGui::TextDisabled("Les petits points sont %s astéroïdes, chacun sur son orbite mesurée (JPL), grossis pour être visibles.", frInt(static_cast<double>(sim.asteroidCount)).c_str());
     if (sim.galaxyGain() > 0.005) {
         ImGui::TextDisabled("Chaque point lointain est une galaxie ou un quasar, placé d'après son décalage vers le rouge mesuré");
-        ImGui::TextDisabled("(relevés 2MRS, 6dF, 2dF, SDSS, DESI). Leur éclat propre n'est pas dans les données : on leur donne");
-        ImGui::TextDisabled("le même à toutes (supposé), et il pâlit avec la distance.");
+        ImGui::TextDisabled("(relevés 2MRS, 6dF, 2dF, SDSS, DESI). Son éclat n'est pas mesuré ici : le point a une taille fixe,");
+        ImGui::TextDisabled("qui s'efface avec la distance pour garder l'image lisible (réglage d'affichage, pas une mesure).");
         ImGui::TextDisabled("La Voie lactée elle-même n'est pas encore dessinée : seules ses étoiles mesurées près du Soleil le sont.");
     }
     ImGui::TextDisabled("Molette : zoomer   •   Glisser : tourner autour   •   Clic sur un nom : le suivre   •   Espace : pause   •   Échap : quitter");
