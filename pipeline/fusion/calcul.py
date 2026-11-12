@@ -11,17 +11,17 @@ Sorties (dossier `sortie/`) :
 - fusion.json : temps des images, centres des galaxies, traceurs (Soleil, naines), énergie, date de la fusion, liste des
   étoiles affichées par galaxie ;
 - etat.npz : instantané pour reprendre.
-Usage : python calcul.py <de_Ga> <a_Ga> [N_total]
+Usage : python calcul.py <de_Ga> <a_Ga> [N_total] [--gpu]
+        python calcul.py depart <N_total>        (conditions de départ seules, écrit sortie/depart.npz)
+        python calcul.py reprise <a_Ga> [--gpu]  (repart du dernier instantané)
+--gpu : gravité sur la carte graphique (gravite_gpu.py) au lieu de falcON ; si sortie/depart.npz existe, il sert de départ.
 """
 import os, sys, json, time, math
 import numpy as np
-import pyfalcon
-import agama
-import modeles as M
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'sortie')
-G = M.G
+G = 4.30091e-6                       # comme modeles.G (M☉, kpc, km/s)
 T_UNIT = 0.9778                       # Ga par unité de temps kpc/(km/s)
 DT_MA, KF_MA, KF_PER_FILE = 0.25, 20.0, 25
 DT = DT_MA * 1e-3 / T_UNIT
@@ -33,6 +33,7 @@ EQ2GAL = np.array([[-0.0548755604, -0.8734370902, -0.4838350155],      # équato
 
 
 def construire(n_total):
+    import modeles as M      # AGAMA : seulement pour tirer les conditions de départ
     ci = json.load(open(os.path.join(HERE, 'conditions.json'), encoding='utf-8'))
     f = n_total / 300000
     mw = M.galaxie('Voie lactée', int(80000 * f), int(36000 * f), int(4000 * f))
@@ -65,15 +66,6 @@ def construire(n_total):
     return p, gid, np.concatenate(show), meta
 
 
-def forces(p):
-    acc, phi = pyfalcon.gravity(p['pos'].astype(np.float32), (p['m'] * G).astype(np.float32), p['eps'].astype(np.float32), theta=0.6)
-    return acc.astype(np.float64), phi.astype(np.float64)
-
-
-def energie(p, phi):
-    return 0.5 * float(np.sum(p['m'] * np.sum(p['vel'] ** 2, axis=1))) + 0.5 * float(np.sum(p['m'] * phi))
-
-
 def centre(pos, m):
     """Centre par sphère qui rétrécit (Power et al. 2003), sur les étoiles d'une galaxie."""
     c = np.average(pos, axis=0, weights=m); r = np.percentile(np.linalg.norm(pos - c, axis=1), 90)
@@ -84,56 +76,140 @@ def centre(pos, m):
     return c
 
 
+class Processeur:
+    """Gravité par falcON (pyfalcon), sur le processeur : le calcul d'origine (R9)."""
+    nom = 'falcON (processeur), theta 0,6'
+
+    def __init__(self, p):
+        import pyfalcon
+        self.f = pyfalcon; self.p = p
+
+    def forces(self):
+        p = self.p
+        acc, phi = self.f.gravity(p['pos'].astype(np.float32), (p['m'] * G).astype(np.float32), p['eps'].astype(np.float32), theta=0.6)
+        return acc.astype(np.float64), phi.astype(np.float64)
+
+    def energie(self, phi):
+        p = self.p
+        return 0.5 * float(np.sum(p['m'] * np.sum(p['vel'] ** 2, axis=1))) + 0.5 * float(np.sum(p['m'] * phi))
+
+    def pos(self): return self.p['pos']
+    def etat(self): return self.p
+    def attendre(self): pass
+
+
+class Carte:
+    """Gravité par arbre sur la carte graphique (gravite_gpu.py, jalon A1). Positions et vitesses restent sur la carte."""
+    nom = 'arbre de Barnes-Hut avec quadripôles (carte graphique), theta 0,7'
+    THETA = 0.7
+
+    def __init__(self, p):
+        import cupy as cp, gravite_gpu
+        self.cp, self.gg, self.np_p = cp, gravite_gpu, p
+        self.p = {k: cp.asarray(p[k], dtype=cp.float64) for k in ('pos', 'vel', 'm', 'eps')}
+        self.mg = self.p['m'] * G
+        self.t_check = time.time()
+
+    def forces(self):
+        return self.gg.gravity(self.p['pos'], self.mg, self.p['eps'], theta=self.THETA, quad=True)
+
+    def energie(self, phi):
+        cp, p = self.cp, self.p
+        return 0.5 * float(cp.sum(p['m'] * cp.sum(p['vel'] ** 2, axis=1))) + 0.5 * float(cp.sum(p['m'] * phi))
+
+    def pos(self): return self.cp.asnumpy(self.p['pos'])
+
+    def etat(self):
+        out = dict(self.np_p); out['pos'] = self.cp.asnumpy(self.p['pos']); out['vel'] = self.cp.asnumpy(self.p['vel'])
+        return out
+
+    def attendre(self):
+        """Laisse la carte à Marc : toutes les 30 s, on s'arrête une seconde ; si la carte reste occupée par un
+        autre programme (un jeu), on attend qu'elle se libère. Aucune fenêtre n'est ouverte."""
+        if time.time() - self.t_check < 30: return
+        import subprocess
+        self.cp.cuda.Stream.null.synchronize()
+        while True:
+            time.sleep(1.0)
+            try:
+                u = int(subprocess.run(['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
+                                       capture_output=True, text=True, timeout=20, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout.split()[0])
+            except Exception as e:      # mesure impossible : on le dit et on continue
+                print(f'  (occupation de la carte illisible : {e})', flush=True); break
+            if u < SEUIL_OCCUPATION: break
+            print(f'  carte graphique occupée à {u} % par un autre programme : pause de 60 s', flush=True)
+            time.sleep(60)
+        self.t_check = time.time()
+
+
+SEUIL_OCCUPATION = 35      # % d'occupation de la carte, mesurée pendant notre pause, au-delà duquel on attend
+
+
 def main():
-    t_from, t_to = float(sys.argv[1]), float(sys.argv[2])
-    n_total = int(sys.argv[3]) if len(sys.argv) > 3 else 300000
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    gpu = '--gpu' in sys.argv
     os.makedirs(OUT, exist_ok=True)
-    jpath, spath = os.path.join(OUT, 'fusion.json'), os.path.join(OUT, 'etat.npz')
-    if t_from == 0:
-        p, gid, show, meta = construire(n_total)
+    jpath, spath, dpath = os.path.join(OUT, 'fusion.json'), os.path.join(OUT, 'etat.npz'), os.path.join(OUT, 'depart.npz')
+    if args[0] == 'depart':      # conditions de départ seules (AGAMA) : python calcul.py depart <N>
+        p, gid, show, meta = construire(int(args[1]))
+        np.savez_compressed(dpath, gid=gid, show=show, meta=json.dumps(meta, ensure_ascii=False), **p)
+        print('départ écrit :', len(p['m']), 'particules'); return
+    reprise = args[0] == 'reprise'      # python calcul.py reprise <a_Ga> : repart du dernier instantané
+    t_to = float(args[1])
+    if not reprise and float(args[0]) == 0:
+        if os.path.exists(dpath):
+            z = np.load(dpath); p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']
+            meta = json.loads(str(z['meta']))
+        else:
+            p, gid, show, meta = construire(int(args[2]) if len(args) > 2 else 300000)
         meta.update(t=[], centres=[], traceurs_pos=[], energie=[], e0=None, fusion_ga=None, fichiers=[])
-        t = 0.0
+        t = 0.0; debut = True
     else:
         z = np.load(spath); p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; t = float(z['t'])
-        meta = json.load(open(jpath, encoding='utf-8'))
-        assert abs(t - t_from) < 1e-6, (t, t_from)
+        meta = json.load(open(jpath, encoding='utf-8')); debut = False
+        if not reprise: assert abs(t - float(args[0])) < 1e-6, (t, args[0])
+    S = Carte(p) if gpu else Processeur(p)
+    meta['gravite'] = S.nom; meta['particules'] = int((p['kind'] < 9).sum())
     stars = (p['kind'] > 0) & (p['kind'] < 9); trac = np.where(p['kind'] == 9)[0]
-    acc, phi = forces(p)
-    if meta['e0'] is None: meta['e0'] = energie(p, phi)
+    star_idx = [np.where((gid == k) & stars)[0] for k in range(len(meta['galaxies']))]
+    acc, phi = S.forces()
+    if meta['e0'] is None: meta['e0'] = S.energie(phi)
     frames, t0 = [], time.time()
     steps = int(round((t_to - t) * 1000 / DT_MA)); every = int(round(KF_MA / DT_MA))
 
     def image():
-        cs = []
-        for k in range(len(meta['galaxies'])):
-            sel = np.where((gid == k) & stars)[0]; cs.append(centre(p['pos'][sel], p['m'][sel]).round(3).tolist())
-        meta['t'].append(round(t, 4)); meta['centres'].append(cs); meta['traceurs_pos'].append(p['pos'][trac].round(3).tolist())
-        e = energie(p, phi); meta['energie'].append(e / meta['e0'] - 1)
+        pos = S.pos(); cs = []
+        for sel in star_idx: cs.append(centre(pos[sel], p['m'][sel]).round(3).tolist())
+        meta['t'].append(round(t, 4)); meta['centres'].append(cs); meta['traceurs_pos'].append(pos[trac].round(3).tolist())
+        e = S.energie(phi); meta['energie'].append(e / meta['e0'] - 1)
         d = math.dist(cs[0], cs[1])
         if meta['fusion_ga'] is None and d < 10 and t > 1: meta['fusion_ga'] = round(t, 3)
         if meta['fusion_ga'] is not None and d > 30: meta['fusion_ga'] = None      # séparés de nouveau : pas encore la fusion
-        frames.append(np.clip(np.round(p['pos'][show] / Q), -32767, 32767).astype(np.int16))
+        frames.append(np.clip(np.round(pos[show] / Q), -32767, 32767).astype(np.int16))
         print(f'  t = {t:6.3f} Ga | séparation des centres {d:7.1f} kpc | dérive d’énergie {100 * meta["energie"][-1]:+.3f} % | {time.time() - t0:6.0f} s', flush=True)
         if len(frames) == KF_PER_FILE: vider()
 
     def vider():
-        if not frames: return
-        name = f'kf_{len(meta["fichiers"]):03d}.bin'
-        np.concatenate(frames).tofile(os.path.join(OUT, name)); meta['fichiers'].append([name, len(frames)]); frames.clear()
+        """Écrit les images en attente, puis un instantané complet : un arrêt brutal ne perd que le morceau en cours."""
+        if frames:
+            name = f'kf_{len(meta["fichiers"]):03d}.bin'
+            np.concatenate(frames).tofile(os.path.join(OUT, name)); meta['fichiers'].append([name, len(frames)]); frames.clear()
+        meta['derive_max'] = max(abs(x) for x in meta['energie'])
+        np.savez(spath + '.tmp.npz', t=t, gid=gid, show=show, **S.etat()); os.replace(spath + '.tmp.npz', spath)
+        json.dump(meta, open(jpath + '.tmp', 'w', encoding='utf-8'), ensure_ascii=False); os.replace(jpath + '.tmp', jpath)
 
-    if t_from == 0: image()
+    if debut: image()
+    P = S.p
     for s in range(steps):
-        p['vel'] += 0.5 * DT * acc
-        p['pos'] += DT * p['vel']
-        acc, phi = forces(p)
-        p['vel'] += 0.5 * DT * acc
+        P['vel'] += 0.5 * DT * acc
+        P['pos'] += DT * P['vel']
+        acc, phi = S.forces()
+        P['vel'] += 0.5 * DT * acc
         t = round(t + DT_MA * 1e-3, 6)
         if (s + 1) % every == 0: image()
+        S.attendre()
     vider()
-    meta['derive_max'] = max(abs(x) for x in meta['energie'])
-    json.dump(meta, open(jpath, 'w', encoding='utf-8'), ensure_ascii=False)
-    np.savez(spath, t=t, gid=gid, show=show, **p)
-    print(json.dumps({k: meta[k] for k in ('fusion_ga', 'derive_max', 'affichees')}, ensure_ascii=False))
+    print(json.dumps({k: meta[k] for k in ('fusion_ga', 'derive_max', 'affichees', 'gravite', 'particules')}, ensure_ascii=False))
 
 
 if __name__ == '__main__':
