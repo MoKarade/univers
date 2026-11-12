@@ -72,7 +72,7 @@ void loadFonts(ImFont*& normal, ImFont*& big) {
 
 void row(const char* label, const std::string& value, const char* status, float s) {
     ImGui::TextDisabled("%s", label);
-    ImGui::SameLine(176 * s);
+    ImGui::SameLine(std::max(176.0f, ImGui::CalcTextSize(label).x / s + 16.0f) * s);
     ImGui::TextUnformatted(value.c_str());
     if (status[0]) {
         ImGui::SameLine();
@@ -170,7 +170,8 @@ struct UiState {
     bool started = false;
     bool welcome = false, help = false, openGoTo = false;
     bool keepGoTo = false;
-    ImVec2 goToAnchor{0, 0};        // le menu « Aller à » s'ouvre sous son bouton          // contrôle : le menu « Aller à » reste ouvert pour la capture
+    ImVec2 goToAnchor{0, 0};
+    float searchRight = 0, timeW = 0, timeBottom = 0;      // place prise par la recherche et la barre du temps (image précédente)        // le menu « Aller à » s'ouvre sous son bouton          // contrôle : le menu « Aller à » reste ouvert pour la capture
     int cardClosedFor = -1;         // fiche fermée pour cet astre
     int tour = -1;                  // étape de la visite guidée (-1 : pas de visite)
     double tourClock = 0;
@@ -195,6 +196,13 @@ int bodyByName(const Sim& sim, const char* name) {
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
         if (sim.bodies[static_cast<size_t>(i)].name == name) return i;
     return -1;
+}
+
+// Centre des échelles : le Soleil ; quand il n'a plus de position (temps profond), le centre de la Voie lactée.
+int scaleCenter(const Sim& sim) {
+    if (sim.visible(0)) return 0;
+    const int c = bodyByName(sim, "Centre de la Voie lactée");
+    return c >= 0 ? c : 0;
 }
 
 void startTour(Sim& sim, UiState& ui, int step) {
@@ -375,7 +383,7 @@ void handleKeys(Sim& sim, UiState& ui) {
             }
         } else if (c >= '1' && c < '1' + kScaleCount) {
             ui.tour = -1;
-            sim.flyTo(0, kScales[c - '1'].distLy);
+            sim.flyTo(scaleCenter(sim), kScales[c - '1'].distLy);
         } else if (c == '+' || c == '=') sim.zoom(1.5);
         else if (c == '-' || c == '_') sim.zoom(-1.5);
     }
@@ -517,13 +525,13 @@ void drawGoToMenu(Sim& sim, UiState& ui) {
     }
     ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
     if (!ImGui::BeginPopup("aller")) return;
-    ImGui::TextDisabled("Échelles (vues depuis le Soleil)");
+    ImGui::TextDisabled(sim.visible(0) ? "Échelles (vues depuis le Soleil)" : "Échelles (vues depuis le centre de la Voie lactée)");
     for (int k = 0; k < kScaleCount; ++k) {
         const char key[2] = {static_cast<char>('1' + k), 0};
         if (ImGui::MenuItem(kScales[k].label, key)) {
             ui.tour = -1;
             ui.welcome = false;
-            sim.flyTo(0, kScales[k].distLy);
+            sim.flyTo(scaleCenter(sim), kScales[k].distLy);
         }
     }
     ImGui::Separator();
@@ -557,6 +565,7 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     ImGui::SameLine();
     if (ImGui::Button(" ? ")) ui.help = !ui.help;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toutes les commandes (F1)");
+    ui.searchRight = ImGui::GetItemRectMax().x;
     drawGoToMenu(sim, ui);
     drawSearchResults(sim, ui, active, entered);
     ImGui::End();
@@ -591,14 +600,15 @@ std::string relativeToToday(double years) {
     if (a < 1.0 / 12.0) span = frInt(a * 365.25) + (a * 365.25 >= 1.5 ? " jours" : " jour");
     else if (a < 1.0) span = frInt(a * 12.0) + (a * 12.0 >= 1.5 ? " mois" : " mois");
     else if (a < 1.0e6) span = frInt(a) + (a >= 1.5 ? " ans" : " an");
-    else span = frNum(a / 1.0e6) + " millions d'années";
+    else if (a < 1.0e9) span = frNum(a / 1.0e6) + " millions d'années";
+    else span = frNum(a / 1.0e9) + (a >= 1.5e9 ? " milliards d'années" : " milliard d'années");
     return d > 0 ? "dans " + span : "il y a " + span;
 }
 
 void dateJumpPopup(Sim& sim, UiState& ui) {
     if (!ImGui::BeginPopup("date")) return;
     ImGui::TextUnformatted("Aller à une date");
-    ImGui::TextDisabled("Exemples : 1969   •   21/07/1969   •   -3000   •   250000");
+    ImGui::TextDisabled("Exemples : 1969   •   21/07/1969   •   -3000   •   250000   •   5000000000");
     if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
     ImGui::SetNextItemWidth(px(ui, 220));
     bool go = ImGui::InputText("##d", ui.dateText, sizeof(ui.dateText), ImGuiInputTextFlags_EnterReturnsTrue);
@@ -608,21 +618,38 @@ void dateJumpPopup(Sim& sim, UiState& ui) {
         double y = 0;
         ui.dateError = !ui_outils::parseDate(ui.dateText, y);
         if (!ui.dateError) {
-            sim.years = std::clamp(y, kStartYears - kLinearLimitYears, kStartYears + kLinearLimitYears);
+            sim.years = std::clamp(y, sim.minYears(), sim.maxYears());
             ImGui::CloseCurrentPopup();
         }
     }
     if (ui.dateError) ImGui::TextDisabled("Date non comprise. Écris une année, ou jour/mois/année.");
-    ImGui::TextDisabled("Limite : 3 millions d'années avant ou après aujourd'hui.");
+    ImGui::TextDisabled("Plage : de %s à %s.", relativeToToday(sim.minYears()).c_str(), relativeToToday(sim.maxYears()).c_str());
     ImGui::EndPopup();
 }
 
+// Au-delà de 3 millions d'années : ce qui est montré, et d'où cela vient.
+void deepTimeNote(const Sim& sim) {
+    if (sim.deepTime()) {
+        ImGui::TextDisabled("Au-delà de 3 millions d'années : seules les galaxies du Groupe local dont le mouvement est calculé sont montrées "
+                            "(calcul complet de la rencontre avec Andromède, un scénario).");
+        if (sim.replay)
+            ImGui::TextDisabled("Dans ce calcul, la Voie lactée et Andromède fusionnent dans %s milliards d'années (énergie conservée à %s %% près).",
+                                frNum(sim.replay->fusionGa(), 3).c_str(), frNum(100.0 * sim.replay->deriveEnergie(), 2).c_str());
+        return;
+    }
+    if (std::fabs(sim.years - kStartYears) >= kLinearLimitYears * 0.999) {
+        if (sim.replay) ImGui::TextDisabled("Au-delà de 3 millions d'années, les étoiles ne vont plus en ligne droite : seules les galaxies calculées restent.");
+        else ImGui::TextDisabled("Limite : au-delà de 3 millions d'années, il faut le calcul de la rencontre avec Andromède, qui n'est pas chargé.");
+    }
+}
+
 void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
-    ImGui::SetNextWindowPos({w * 0.5f, px(ui, 16)}, 0, {0.5f, 0});
+    // Centrée, sauf si elle mordrait sur la recherche : elle se décale alors vers la droite.
+    ImGui::SetNextWindowPos({std::max(w * 0.5f, ui.searchRight + px(ui, 12) + ui.timeW * 0.5f), px(ui, 16)}, 0, {0.5f, 0});
     ImGui::Begin("temps", nullptr, fixed);
     ImGui::PushFont(ui.big);
     const std::string date = frDate(sim.years, kRates[sim.rate].yearsPerSecond < 0.02);
-    const float rowW = px(ui, 560);
+    const float rowW = px(ui, 600);
     ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - ImGui::CalcTextSize(date.c_str()).x) * 0.5f + px(ui, 14)));
     ImGui::TextUnformatted(date.c_str());
     ImGui::PopFont();
@@ -642,7 +669,7 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Plus lent (Page suivante)");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(px(ui, 200));
+    ImGui::SetNextItemWidth(px(ui, 270));
     if (ImGui::BeginCombo("##vitesse", kRates[sim.rate].label)) {
         for (int i = 0; i < kRateCount; ++i)
             if (ImGui::Selectable(kRates[i].label, i == sim.rate)) sim.rate = i;
@@ -663,12 +690,15 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     dateJumpPopup(sim, ui);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);      // les remarques passent à la ligne : la barre garde sa largeur
     if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");
+    else if (sim.deepTime() && !sim.visible(0)) {
+    }      // temps profond : le système solaire n'est plus suivi, la remarque ci-dessous le dit
     else if (!sim.ephemValid && !sim.outer) ImGui::TextDisabled("Hors de 1550-2650 (plage des éphémérides de la NASA) : calcul des planètes en préparation.");
     else if (!sim.ephemValid)
         ImGui::TextDisabled("Hors de 1550-2650 : planètes calculées ici (gravité mutuelle partie des éphémérides de la NASA) ; lunes et orbites non montrées.");
-    if (std::fabs(sim.years - kStartYears) >= kLinearLimitYears * 0.999)
-        ImGui::TextDisabled("Limite : au-delà de 3 millions d'années, les étoiles ne vont plus en ligne droite (à venir).");
+    deepTimeNote(sim);
     ImGui::PopTextWrapPos();
+    ui.timeW = ImGui::GetWindowWidth();
+    ui.timeBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
     ImGui::End();
 }
 
@@ -701,7 +731,9 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         row("Éclat vu de la Terre", "magnitude " + frNum(sim.apparentMag(f, {0, 0, 0})), "calculé", s);
         row("Vitesse", frNum(sim.speedKms(f)) + " km/s par rapport au Soleil", "mesuré", s);
     } else if (fb.kind == Kind::Galaxy) {
-        row("Distance au Soleil", frDistance(dSun), "mesuré", s);
+        // En temps profond, la place vient du calcul de la rencontre avec Andromède (sauf le centre de la Voie lactée, origine du repère).
+        const bool deepCalc = sim.deepTime() && fb.name != "Centre de la Voie lactée";
+        row(sim.deepTime() ? "Distance à la place actuelle du Soleil" : "Distance au Soleil", frDistance(dSun), deepCalc ? "calculé" : "mesuré", s);
         ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
     } else {
         row("Rayon", frInt(fb.radiusKm) + " km", "mesuré", s);
@@ -712,6 +744,8 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     ImGui::Separator();
     if (fb.kind == Kind::Planet && computed) ImGui::TextDisabled("Position : calculée ici (gravité mutuelle, partie des éphémérides JPL DE440 de la NASA).");
     else if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
+    else if (fb.kind == Kind::Galaxy && sim.deepTime() && fb.name != "Centre de la Voie lactée")
+        ImGui::TextDisabled("Position : calcul complet de la rencontre avec Andromède (scénario), parti des mesures de McConnachie 2012.");
     else if (fb.kind == Kind::Galaxy) ImGui::TextDisabled("Sources : Karachentsev et al. 2013 ; McConnachie 2012.");
     else ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
 }
@@ -720,7 +754,7 @@ void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlag
     const int f = sim.focus;
     if (ui.cardClosedFor == f) return;
     ui.cardClosedFor = -1;
-    ImGui::SetNextWindowPos({w - px(ui, 16), px(ui, 150)}, 0, {1, 0});      // sous la barre du temps : les deux ne se recouvrent jamais
+    ImGui::SetNextWindowPos({w - px(ui, 16), std::max(px(ui, 150), ui.timeBottom + px(ui, 12))}, 0, {1, 0});      // sous la barre du temps : les deux ne se recouvrent jamais
     ImGui::Begin("fiche", nullptr, fixed);
     ImGui::PushFont(ui.big);
     ImGui::TextUnformatted(sim.bodies[static_cast<size_t>(f)].name.c_str());
@@ -739,7 +773,7 @@ void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlag
         sim.back();
     }
     if (!sim.history.empty()) ImGui::SameLine();
-    if (f != 0 && ImGui::Button("Revenir au Soleil")) goToBody(sim, ui, 0, 45.0 * kAuInLy);
+    if (f != 0 && sim.visible(0) && ImGui::Button("Revenir au Soleil")) goToBody(sim, ui, 0, 45.0 * kAuInLy);
     ImGui::End();
 }
 
@@ -750,6 +784,10 @@ void whatYouSee(const Sim& sim) {
     if (boost > 1.5 && sim.dist < 1.0e5) ImGui::TextDisabled("Éclat des étoiles multiplié par %s pour qu'elles restent visibles de si loin.", frNum(boost, 2).c_str());
     if (sim.asteroidCount && sim.asteroidGain(sim.asteroidEpochJd) > 0.01)
         ImGui::TextDisabled("Les petits points sont %s astéroïdes, chacun sur son orbite mesurée (JPL), grossis pour être visibles.", frInt(static_cast<double>(sim.asteroidCount)).c_str());
+    if (sim.deepTime()) {
+        if (sim.replay) ImGui::TextDisabled("Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
+        return;
+    }
     if (sim.galaxyGain() > 0.005) {
         ImGui::TextDisabled("Chaque point lointain est une galaxie ou un quasar, placé d'après son décalage vers le rouge mesuré");
         ImGui::TextDisabled("(relevés 2MRS, 6dF, 2dF, SDSS, DESI). Son éclat n'est pas mesuré ici : le point a une taille fixe,");
