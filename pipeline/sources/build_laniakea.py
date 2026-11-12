@@ -70,6 +70,8 @@ def controle_conversion():
     s = open(os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data.js'), encoding='utf-8').read()
     far, _ = json.JSONDecoder().raw_decode(s[s.index('"FAR":') + 6:])
     page = {f['n']: np.array(f['pos']) for f in far}
+    # positions supergalactiques approchées, de mémoire [À vérifier] : elles ne servent qu'à ce contrôle à 4° près,
+    # comparées aux positions que la page affiche déjà (DATA.FAR) ; une erreur de rotation donne plus de 90° d'écart
     for nom, sg in (('Amas de Coma', (-2.6, 70.0, 10.7)), ('Amas de Persée', (50.0, -10.0, -12.0)), ('Amas de la Vierge', (-3.0, 15.0, -1.0))):
         a = sg_vers_page(np.array([sg]))[0]
         g = page[nom]

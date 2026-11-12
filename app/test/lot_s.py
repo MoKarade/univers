@@ -125,6 +125,7 @@ def main():
         vis = pg.evaluate("[__U.Rr.lania.visible, [...document.querySelectorAll('.lb')].some(e => e.style.visibility === 'visible' && /Laniakea/.test(e.textContent))]")
         if not vis[1]:
             print('   étiquettes visibles :', pg.evaluate("[...document.querySelectorAll('.lb')].filter(e => e.style.visibility === 'visible').map(e => e.textContent).join(', ')"), '| centre :', pg.evaluate("__U.S.center && __U.S.center.name"), pg.evaluate("__U.S.logR"))
+        pg.screenshot(path='/tmp/lot_s_laniakea_%s.png' % MODE)
         prov = pg.evaluate("document.getElementById('prov').textContent")
         check(vis[0] and 'Laniakea' in prov, 'Laniakea visible à 10^24,95 m, expliquée sous le titre : « %s »' % prov)
         # le nom flottant suit l'attracteur ; la règle commune des étiquettes le masque près des bords ou s'il en chevauche une autre
