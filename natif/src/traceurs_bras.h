@@ -31,6 +31,7 @@ struct ArmTracerPoints {
     float* cols[StarRenderer::kCols] = {};
     uint32_t capacity = 0, count = 0;
     std::vector<ArmTracer> tracers;
+    std::vector<Vec3> world;               // places à l'écran à la date montrée (années-lumière), pour les noms et le clic
     std::vector<phys::Vec3> galactic;      // places d'aujourd'hui par rapport au centre de la Galaxie (kpc)
     static constexpr double kPatternKmsKpc = 28.2, kPatternErrorKmsKpc = 2.1;      // Dias et al. 2019
     static constexpr double kFullYears = 2.0e8, kEndYears = 4.0e8;
@@ -72,6 +73,7 @@ struct ArmTracerPoints {
         }
         const phys::Vec3 s = phys::galaxie::soleilPos();
         galactic.resize(capacity);
+        world.resize(capacity);
         for (uint32_t i = 0; i < capacity; ++i) {
             const phys::Vec3 g = orbite::versGalactique(tracers[i].pos);
             galactic[i] = {g.x / orbite::kKpcLy + s.x, g.y / orbite::kKpcLy + s.y, g.z / orbite::kKpcLy + s.z};
@@ -97,6 +99,7 @@ struct ArmTracerPoints {
             const phys::Vec3& g0 = galactic[i];
             const Vec3 e = orbite::versEcliptique({(g0.x * ca - g0.y * sa) * orbite::kKpcLy, (g0.x * sa + g0.y * ca) * orbite::kKpcLy, g0.z * orbite::kKpcLy});
             const Vec3 w{centre.x + e.x, centre.y + e.y, centre.z + e.z};
+            world[i] = w;
             cols[0][i] = static_cast<float>(w.x);
             cols[1][i] = static_cast<float>(w.y);
             cols[2][i] = static_cast<float>(w.z);

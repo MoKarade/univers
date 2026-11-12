@@ -301,7 +301,10 @@ int runWindow(const WindowOptions& opt) {
     const bool hasLoneGalaxy = loneGalaxy.create(g, dataDir + "/voie-lactee-seule", HdrTarget::kFormat);
     double loneShare = 0;
     ArmTracerPoints armTracers;      // masers et amas mesurés qui tracent les bras spiraux
-    if (armTracers.create(g, dataDir + "/traceurs_bras.tsv")) sim.armTracers = &armTracers.tracers;
+    if (armTracers.create(g, dataDir + "/traceurs_bras.tsv")) {
+        sim.armTracers = &armTracers.tracers;
+        sim.armTracerWorld = &armTracers.world;
+    }
     ClonePoints clones;      // nuage des 10 000 scénarios du Groupe local (précalculés par le fil physique)
     if (clones.create(g, dataDir + "/clones_groupe_local.bin")) {
         sim.cloneCount = clones.n;
