@@ -18,7 +18,7 @@ Usage : python calcul.py <de_Ga> <a_Ga> [N_total] [--gpu]
 --theta=0.5 : angle d'ouverture de l'arbre (0,7 par défaut ; 0,5 : erreur médiane de force 0,03 % au lieu de 0,1 %).
 --sortie=<dossier> : dossier des sorties (par défaut pipeline/fusion/sortie).
 --toutes : garde à chaque image TOUTES les étoiles (disque et bulbe, environ 1 million sur 3 millions de particules) au lieu de
-           l'échantillon de 30 000 du départ ; environ 6 Mo par image.
+           l'échantillon de 30 000 du départ ; environ 6 Mo par image. --echantillon=N avec --toutes : N étoiles tirées au hasard.
 """
 import os, sys, json, time, math
 import numpy as np
@@ -54,7 +54,7 @@ def construire_voie_lactee(n_disque):
     m = p['m'][:, None]; cm = (p['pos'] * m).sum(0) / m.sum(); vm = (p['vel'] * m).sum(0) / m.sum()
     p['pos'] -= cm; p['vel'] -= vm
     show = np.where((p['kind'] > 0) & (p['kind'] < 9))[0][:1]      # remplacé par --toutes
-    meta = dict(galaxies=['mw'], traceurs=[t[0] for t in tr], cm0=cm.tolist(), vm0=vm.tolist(), affichees=[1], quantum_kpc=Q, pas_ma=DT_MA,
+    meta = dict(galaxies=['mw', 'm31', 'm33', 'lmc'], traceurs=[t[0] for t in tr], cm0=cm.tolist(), vm0=vm.tolist(), affichees=[1, 0, 0, 0], quantum_kpc=Q, pas_ma=DT_MA,
                 image_ma=KF_MA, vitesse_m31=None, modele='Voie lactée seule (bras et barre)', adoucissement_facteur=k_eps)
     return p, gid, show, meta
 
@@ -195,8 +195,14 @@ def main():
             p, gid, show, meta = construire(int(args[2]) if len(args) > 2 else 300000)
         if '--toutes' in sys.argv:      # toutes les étoiles, dans l'ordre des galaxies (le tirage du départ est remplacé)
             etoiles = (p['kind'] > 0) & (p['kind'] < 9)
-            show = np.concatenate([np.where((gid == k) & etoiles)[0] for k in range(len(meta['galaxies']))])
-            meta['affichees'] = [int(((gid == k) & etoiles).sum()) for k in range(len(meta['galaxies']))]
+            par = [np.where((gid == k) & etoiles)[0] for k in range(len(meta['galaxies']))]
+            for a in sys.argv:      # --echantillon=N : N étoiles tirées au hasard (graine fixe), au prorata de chaque galaxie
+                if a.startswith('--echantillon='):
+                    n_tot, tous = int(a.split('=', 1)[1]), sum(len(x) for x in par)
+                    rng = np.random.default_rng(20261112)
+                    par = [np.sort(rng.choice(x, size=min(len(x), round(n_tot * len(x) / tous)), replace=False)) if len(x) else x for x in par]
+            show = np.concatenate(par)
+            meta['affichees'] = [int(len(x)) for x in par]
             meta['composantes'] = 'kind de chaque étoile affichée : composantes.bin (int8, 1 disque, 2 bulbe)'
             p['kind'][show].astype(np.int8).tofile(os.path.join(OUT, 'composantes.bin'))
         meta.update(t=[], centres=[], traceurs_pos=[], energie=[], e0=None, fusion_ga=None, fichiers=[])
@@ -217,11 +223,11 @@ def main():
 
     def image():
         pos = S.pos(); cs = []
-        for sel in star_idx: cs.append(centre(pos[sel], p['m'][sel]).round(3).tolist())
+        for sel in star_idx: cs.append(centre(pos[sel], p['m'][sel]).round(3).tolist() if len(sel) else [0.0, 0.0, 0.0])      # galaxie absente : 0
         meta['t'].append(round(t, 4)); meta['centres'].append(cs); meta['traceurs_pos'].append(pos[trac].round(3).tolist())
         e = S.energie(phi); meta['energie'].append(e / meta['e0'] - 1)
-        d = math.dist(cs[0], cs[1]) if len(cs) > 1 else 0.0      # Voie lactée seule : pas de séparation
-        if len(cs) > 1 and meta['fusion_ga'] is None and d < 10 and t > 1: meta['fusion_ga'] = round(t, 3)
+        d = math.dist(cs[0], cs[1]) if len(star_idx[1]) else 0.0      # Voie lactée seule : pas de séparation
+        if len(star_idx[1]) and meta['fusion_ga'] is None and d < 10 and t > 1: meta['fusion_ga'] = round(t, 3)
         if meta['fusion_ga'] is not None and d > 30: meta['fusion_ga'] = None      # séparés de nouveau : pas encore la fusion
         frames.append(np.clip(np.round(pos[show] / Q), -32767, 32767).astype(np.int16))
         print(f'  t = {t:6.3f} Ga | séparation des centres {d:7.1f} kpc | dérive d’énergie {100 * meta["energie"][-1]:+.3f} % | {time.time() - t0:6.0f} s', flush=True)

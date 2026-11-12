@@ -51,7 +51,7 @@ def main() -> None:
     for g, c in zip(GALAXIES, counts):
         sl = slice(start, start + int(c))
         start += int(c)
-        if g in bv_gal:
+        if bv_gal.get(g) is not None:      # null : pas de couleur sourcée (NaN)
             bv[sl] = float(bv_gal[g])
         if physique:
             m = np.array([masses[g].get(COMPOSANTE.get(int(k), 'disque'), masses[g]['disque']) for k in (1, 2)])
