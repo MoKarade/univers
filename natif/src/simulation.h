@@ -5,6 +5,7 @@
 #include "ephemeride.h"
 #include "galaxie_orbites.h"
 #include "groupe_local.h"
+#include "lune.h"
 #include "systeme_solaire.h"
 
 namespace {
@@ -85,8 +86,6 @@ struct Sim {
     std::vector<char> planetValid;       // pour chaque astre de type planète ou lune : sa position est connue à la date courante
     std::vector<char> planetComputed;    // sa position vient du calcul (hors des fichiers de la NASA), pas d'une éphéméride : à dire à l'écran
     const phys::SystemeSolaire* outer = nullptr;      // calcul du système solaire hors de la plage de la NASA (bibliothèque univers_physique) ; nul tant qu'il n'est pas prêt
-    double outerYears = 1e300;           // date du dernier calcul hors plage (pour ne pas le refaire quand le temps est arrêté)
-    std::vector<Vec3> outerPos;          // son résultat, par astre
     int focus = 0;
     double years = kStartYears;          // années juliennes depuis J2000,0
     int rate = 2;
@@ -245,34 +244,44 @@ struct Sim {
         }
         if (ephemValid || !outer) return;
         // Hors de la plage de la NASA : positions calculées (gravité mutuelle partie de l'état DE440 aux bornes, puis table
-        // des orbites sur des millions d'années). Les lunes n'y sont pas : elles restent cachées. Un seul calcul par date.
-        if (outerYears != years) {
-            outerYears = years;
-            outerPos.assign(bodies.size(), {0, 0, 0});
-            const auto codes = phys::SystemeSolaire::corps();
-            std::vector<phys::Vec3> out(codes.size());
-            const bool ok = outer->positions(2451545.0 + years * 365.25, out);
-            outerOk_.assign(bodies.size(), 0);
-            for (size_t i = 0; ok && i < bodies.size(); ++i) {
-                const Body& b = bodies[i];
-                if (b.kind != Kind::Planet || b.parent != 0) continue;
-                // Codes du calcul : centres de masse 1 à 9 (3 : Terre + Lune, à 4 700 km au plus du centre de la Terre).
-                const int code = b.naif >= 100 ? b.naif / 100 : b.naif;
-                for (size_t k = 0; k < codes.size(); ++k)
-                    if (codes[k] == code && std::isfinite(out[k].x)) {
-                        outerPos[i] = {out[k].x / kLyInKm, out[k].y / kLyInKm, out[k].z / kLyInKm};
-                        outerOk_[i] = 1;
-                    }
-            }
+        // des orbites sur des millions d'années). Le suivi avance pas à pas avec le temps qui défile. La Lune vient de la
+        // théorie de Meeus (lune.h, de -2000 à +6000) ; les autres lunes restent cachées : leur position est inconnue.
+        if (!suivi_ || suiviOf_ != outer) {
+            suivi_ = std::make_unique<phys::Suivi>(*outer);
+            suiviOf_ = outer;
         }
-        for (size_t i = 0; i < bodies.size(); ++i)
-            if (i < outerOk_.size() && outerOk_[i] && !planetValid[i]) {
-                planetPos[i] = outerPos[i];
+        const double jd = 2451545.0 + years * 365.25;
+        if (!suivi_->aller(jd)) return;
+        phys::Vec3 moonGeo;
+        const bool hasMoon = phys::lune::geocentrique(jd, moonGeo);
+        Vec3 earth{0, 0, 0};
+        bool hasEarth = false;
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            const Body& b = bodies[i];
+            if (b.kind != Kind::Planet || b.parent != 0 || planetValid[i]) continue;
+            // Codes du calcul : centres de masse 1 à 9 (3 : Terre + Lune).
+            const int code = b.naif >= 100 ? b.naif / 100 : b.naif;
+            phys::Vec3 pos, vel;
+            phys::Statut statut;
+            if (!suivi_->etat(code, pos, vel, statut)) continue;
+            if (b.naif == eph::kEarth && hasMoon) {      // Terre = centre de masse Terre-Lune moins la part de la Lune
+                pos = {pos.x - phys::lune::kFractionLune * moonGeo.x, pos.y - phys::lune::kFractionLune * moonGeo.y, pos.z - phys::lune::kFractionLune * moonGeo.z};
+                earth = {pos.x / kLyInKm, pos.y / kLyInKm, pos.z / kLyInKm};
+                hasEarth = true;
+            }
+            planetPos[i] = {pos.x / kLyInKm, pos.y / kLyInKm, pos.z / kLyInKm};
+            planetValid[i] = 1;
+            planetComputed[i] = 1;
+        }
+        for (size_t i = 0; hasEarth && i < bodies.size(); ++i)
+            if (bodies[i].kind == Kind::Planet && bodies[i].naif == eph::kMoon && !planetValid[i]) {
+                planetPos[i] = {earth.x + moonGeo.x / kLyInKm, earth.y + moonGeo.y / kLyInKm, earth.z + moonGeo.z / kLyInKm};
                 planetValid[i] = 1;
                 planetComputed[i] = 1;
             }
     }
-    std::vector<char> outerOk_;
+    std::unique_ptr<phys::Suivi> suivi_;
+    const phys::SystemeSolaire* suiviOf_ = nullptr;
 
     // ---------------------------------------------------------------- temps profond et Groupe local
     // Jusqu'à 3 millions d'années d'aujourd'hui, tout est montré dans le repère du Soleil. Au-delà (vers l'avenir, jusqu'à

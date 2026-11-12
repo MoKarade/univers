@@ -225,3 +225,17 @@ documente pas) ; magnitude absolue et couleur du Soleil (valeurs nominales usuel
 - À l'écran : chaque lune a son orbite tracée d'après les éphémérides, sa fiche et un repère à sa place mesurée ;
   son éclat et sa surface ne sont pas renseignés (rien n'est inventé). La planète est placée à son vrai centre quand
   le fichier des lunes le donne (important pour Pluton, dont le centre de masse avec Charon est hors de la planète).
+
+## État au 12 novembre 2026, 16 h 50 UTC
+
+- PR #34 versée dans `main` (accord de Marc, contrôles verts). La branche `appli-pc` continue à partir de `main`.
+- Fils PC assemblés ici : interface (#45, #47), bibliothèque de physique (#46, #48 : système solaire hors DE440 avec
+  suivi pas à pas, Lune de Meeus de −2000 à +6000, orbites galactiques, rejeu de la fusion).
+- E6, première version : le temps va jusqu'à +10 milliards d'années (deux vitesses de plus). Au-delà de 3 millions
+  d'années : étoiles mesurées cachées (ligne droite hors de validité), galaxies du Groupe local placées par le calcul
+  de la fusion (`phys::fusion::Rejeu`, calcul à 300 000 particules), 30 000 étoiles du calcul affichées
+  (`natif/src/fusion_points.h`), galaxies des relevés éloignées par le facteur d'échelle calculé
+  (`cosmo::scaleFactorAt`). Les galaxies sans mouvement calculé ne sont pas montrées à ces dates. Nouvel astre :
+  « Centre de la Voie lactée ». Captures de contrôle : aujourd'hui, +4 Ga (Andromède en approche), +6,5 Ga (fusionnées).
+- À faire : remplacer les fichiers du rejeu par ceux du calcul à 3 millions de particules quand il finit
+  (`pipeline/natif/fusion_bin.py`), textes d'interface du temps profond (fil interface), passé lointain.
