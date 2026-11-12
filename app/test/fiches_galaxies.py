@@ -15,11 +15,12 @@ URL = os.environ.get('U_URL', 'file://' + os.path.abspath(os.path.join(HERE, '..
 PHOTO_NEAR = [x[1] for x in json.load(open(os.path.join(HERE, '..', '..', 'pipeline', 'raw', 'gal', 'list.json'), encoding='utf-8')) if x[0] == 'near'][:20]
 CHECK = """(fams) => { const U = __U, out = {};
   const ok = o => { const r = o.rows(), m = r.find(x => x[0] === 'Mouvement dans la simulation'), t = r.find(x => /^Rotation/.test(x[0]));
-    return m && t && m[1].length > 20 && t[1].length > 20 ? null : o.name; };
+    return m && t && / · (mesuré|calculé|scénario|inconnu|Probable)/.test(m[1] + ' ' + t[1]) ? null : o.name; };
   out['Groupe local'] = U.G.lg.centers.filter(c => !c.gone).slice(0, 20).map(c => ok(U.selLG(c)));
   out['galaxies proches'] = Array.from({ length: 20 }, (_, k) => ok(U.selNear(k * 37)));
   out['galaxies photographiées'] = fams.photo.map(i => ok(U.selNear(i)));
   out['galaxies lointaines'] = Array.from({ length: 20 }, (_, k) => ok(U.selSurv(k * 97)));
+  out.photoTxt = fams.photo.filter(i => /photo réelle/.test(U.selNear(i).rows().find(x => /^Rotation/.test(x[0]))[1])).length;
   return out; }"""
 
 
@@ -32,11 +33,15 @@ def main():
         pg.goto(URL); pg.wait_for_function('window.__U && window.__U.frame() > 2', timeout=180000)
         res = pg.evaluate(CHECK, {'photo': PHOTO_NEAR})
         b.close()
+    nphoto = res.pop('photoTxt')
+    ok = nphoto > 0
+    bad += 0 if ok else 1
+    print(f"{'PASSE' if ok else 'ÉCHEC'}  galaxies photographiées : {nphoto} sur 20 disent « photo réelle » dans leur ligne de rotation")
     for fam, lst in res.items():
         miss = [x for x in lst if x]
         ok = len(lst) >= 20 and not miss
         bad += 0 if ok else 1
-        print(f"{'PASSE' if ok else 'ÉCHEC'}  {fam} : {len(lst) - len(miss)} fiches sur {len(lst)} avec les deux lignes" + (f" ; manquent : {', '.join(miss[:5])}" if miss else ''))
+        print(f"{'PASSE' if ok else 'ÉCHEC'}  {fam} : {len(lst) - len(miss)} fiches sur {len(lst)} avec les deux lignes et leur statut" + (f" ; manquent : {', '.join(miss[:5])}" if miss else ''))
     print('fiches-galaxies :', 'PASSE' if bad == 0 else f'ÉCHEC ({bad})')
     sys.exit(1 if bad else 0)
 
