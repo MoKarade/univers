@@ -108,7 +108,7 @@ struct OrbitCache {
             for (int k = 0; k <= kPoints && t.valid; ++k) {
                 const double at = sim.years + (static_cast<double>(k) / kPoints - 0.5) * b.periodYears;
                 Vec3 p, parent{0, 0, 0};
-                t.valid = sim.planetAt(b.naif, at, p) && (b.parent <= 0 || sim.planetAt(sim.bodies[static_cast<size_t>(b.parent)].naif, at, parent));
+                t.valid = sim.planetAt(b.posNaif, at, p) && (b.parent <= 0 || sim.planetAt(sim.bodies[static_cast<size_t>(b.parent)].posNaif, at, parent));
                 t.pts[static_cast<size_t>(k)] = p - parent;
             }
         }
@@ -135,7 +135,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
         ui.orbits.update(sim);
         for (int i = 0; i < count; ++i) {
             const Body& b = sim.bodies[static_cast<size_t>(i)];
-            if (b.kind != Kind::Planet || !ui.orbits.tracks[static_cast<size_t>(i)].valid) continue;
+            if (b.kind != Kind::Planet || !sim.visible(i) || !ui.orbits.tracks[static_cast<size_t>(i)].valid) continue;
             const Vec3 parent = b.parent > 0 ? sim.position(b.parent) : Vec3{0, 0, 0};
             const auto& pts = ui.orbits.tracks[static_cast<size_t>(i)].pts;
             // Taille apparente de l'orbite : ni un point, ni un trait qui traverse tout l'écran.
@@ -192,6 +192,8 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
         placed.push_back(box);
         const bool hover = mouse.x >= at.x - 14 && mouse.x <= at.x + size.x + 4 && mouse.y >= at.y - 4 && mouse.y <= at.y + size.y + 4;
         if (isFocus) dl->AddCircle({static_cast<float>(px), static_cast<float>(py)}, 9, kAccent, 32, 1.5f);
+        // Lune sans éclat renseigné : un petit repère marque son emplacement mesuré (ce n'est pas sa lumière).
+        if (b.kind == Kind::Planet && !b.hasPhotometry) dl->AddCircle({static_cast<float>(px), static_cast<float>(py)}, 3, IM_COL32(200, 214, 240, 200), 12, 1.2f);
         dl->AddText({at.x + 1, at.y + 1}, IM_COL32(0, 0, 0, 200), name);
         dl->AddText(at, isFocus || hover ? kAccent : (b.kind == Kind::Star ? kInkSoft : IM_COL32(200, 214, 240, 255)), name);
         if (hover && click) clicked = i;
@@ -262,8 +264,15 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
                 const Vec3 d = p - sim.position(i);
                 row("Distance à la Terre", frDistance(std::sqrt(dot(d, d))), "éphémérides NASA");
             }
-        row("Durée d'un tour", fb.periodYears >= 1 ? frNum(fb.periodYears) + " ans" : frNum(fb.periodYears * 365.25) + " jours", "mesuré");
-        row("Rayon", frInt(fb.radiusKm) + " km", "mesuré");
+        if (fb.parent > 0) {
+            const Vec3 d = p - sim.position(fb.parent);
+            row(("Distance à " + sim.bodies[static_cast<size_t>(fb.parent)].name).c_str(), frDistance(std::sqrt(dot(d, d))), "éphémérides NASA");
+        }
+        const double days = fb.periodYears * 365.25;
+        row("Durée d'un tour", fb.periodYears >= 1 ? frNum(fb.periodYears) + " ans" : days >= 2 ? frNum(days) + " jours" : frNum(days * 24.0) + " heures",
+            fb.parent > 0 && fb.naif != eph::kMoon ? "calculé d'après les éphémérides" : "mesuré");
+        row("Rayon", (fb.radiusKm >= 100 ? frInt(fb.radiusKm) : frNum(fb.radiusKm)) + " km", "mesuré");
+        if (!fb.hasPhotometry) ImGui::TextDisabled("Son éclat et sa surface ne sont pas renseignés ici : un repère marque sa place.");
     } else if (fb.kind == Kind::Star) {
         // Aujourd'hui la distance est une mesure ; à une autre date, c'est la mesure prolongée en ligne droite.
         row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : mouvement mesuré, prolongé en ligne droite");

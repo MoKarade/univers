@@ -3,7 +3,9 @@
 //
 // Format : fichier DAF / SPK (NAIF, « SPK Required Reading » et « DAF Required Reading »). Chaque segment donne la
 // position d'un corps par rapport à un centre, en km, repère ICRF (équatorial J2000), par des polynômes de
-// Tchebychev sur des intervalles de temps fixes (segments de type 2). Le temps est en secondes TDB depuis J2000,0.
+// Tchebychev sur des intervalles de temps fixes (segments de type 2 : position ; type 3 : position et vitesse,
+// utilisé par les fichiers des lunes). Le temps est en secondes TDB depuis J2000,0.
+// Plusieurs fichiers se complètent (planètes : de440.bsp ; lunes : jup365.bsp, sat441.bsp…) : voir Set.
 // Ici : aucun calcul d'orbite, seulement la lecture des polynômes de la NASA. Hors de la plage du fichier, la
 // fonction répond « inconnu » (false).
 #pragma once
@@ -12,6 +14,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -67,7 +70,7 @@ public:
                 seg.frame = ints[2];
                 seg.type = ints[3];
                 const uint64_t first = static_cast<uint64_t>(ints[4]), last = static_cast<uint64_t>(ints[5]);
-                if (seg.type != 2 || seg.frame != 1 || last * 8 > size_ || last < first + 4) continue;      // seuls les segments Tchebychev (position), ICRF
+                if ((seg.type != 2 && seg.type != 3) || seg.frame != 1 || last * 8 > size_ || last < first + 4) continue;      // segments Tchebychev, ICRF
                 const double* tail = word(last - 3);      // les 4 derniers réels : début, durée d'un intervalle, taille d'un enregistrement, nombre
                 seg.init = tail[0];
                 seg.intlen = tail[1];
@@ -86,6 +89,15 @@ public:
     // Plage de dates couverte par tous les segments (secondes TDB depuis J2000,0).
     double firstEt() const { double v = -1e300; for (const auto& s : segments_) v = std::max(v, s.start); return v; }
     double lastEt() const { double v = 1e300; for (const auto& s : segments_) v = std::min(v, s.end); return v; }
+
+    // Un pas de la chaîne : position et vitesse d'un corps par rapport à son centre dans ce fichier. false : pas ici.
+    bool step(int body, double et, Vec& pos, Vec& vel, int& center) const {
+        const Segment* seg = find(body, et);
+        if (!seg) return false;
+        evaluate(*seg, et, pos, vel);
+        center = seg->center;
+        return true;
+    }
 
     // Position et vitesse d'un corps par rapport au centre de masse du système solaire, en km et km/s, repère ICRF.
     bool state(int body, double et, Vec& pos, Vec& vel) const {
@@ -133,7 +145,7 @@ private:
         i = std::min(std::max(i, 0), seg.n - 1);
         const double* r = seg.data + static_cast<size_t>(i) * seg.rsize;
         const double mid = r[0], radius = r[1];
-        const int nc = (seg.rsize - 2) / 3;
+        const int nc = (seg.rsize - 2) / (seg.type == 3 ? 6 : 3);      // type 3 : les coefficients de vitesse suivent ceux de position (non lus : on dérive)
         const double t = (et - mid) / radius;
         // Polynômes de Tchebychev T_k(t) et leurs dérivées, par récurrence.
         double T[32], D[32];
@@ -160,6 +172,39 @@ private:
     const uint8_t* base_ = nullptr;
     uint64_t size_ = 0;
     std::vector<Segment> segments_;
+};
+
+// Plusieurs fichiers lus ensemble : un corps peut être donné dans un fichier par rapport à un centre décrit dans un
+// autre (Io par rapport au centre de masse de Jupiter dans jup365.bsp, ce centre de masse par rapport à celui du
+// système solaire dans de440.bsp). Les fichiers sont interrogés dans l'ordre où ils ont été ajoutés.
+class Set {
+public:
+    bool add(const std::string& path, std::string& error) {
+        auto f = std::make_unique<Spk>();
+        if (!f->open(path, error)) return false;
+        files_.push_back(std::move(f));
+        return true;
+    }
+    bool empty() const { return files_.empty(); }
+    bool state(int body, double et, Vec& pos, Vec& vel) const {
+        pos = {};
+        vel = {};
+        for (int guard = 0; body != kSsb && guard < 8; ++guard) {
+            Vec p, v;
+            int center = 0;
+            bool found = false;
+            for (const auto& f : files_)
+                if (f->step(body, et, p, v, center)) { found = true; break; }
+            if (!found) return false;
+            pos = {pos.x + p.x, pos.y + p.y, pos.z + p.z};
+            vel = {vel.x + v.x, vel.y + v.y, vel.z + v.z};
+            body = center;
+        }
+        return body == kSsb;
+    }
+
+private:
+    std::vector<std::unique_ptr<Spk>> files_;
 };
 
 // Équatorial J2000 (ICRF) -> écliptique J2000 : rotation autour de l'axe x de l'obliquité.

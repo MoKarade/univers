@@ -28,9 +28,14 @@ Copy-Item "$Build\spv\*.spv" "$Cible\spv" -Force
 if (Test-Path "$Donnees\textures") { New-Item -ItemType Directory -Force "$Cible\textures" | Out-Null; Get-ChildItem "$Donnees\textures" -File | ForEach-Object { Copier-SiChange $_.FullName "$Cible\textures\$($_.Name)" } }
 # Données : copiées seulement si elles ont changé (taille ou date). Un fichier inchangé que le simulateur ouvert
 # tient en mémoire n'est donc pas touché ; un fichier changé et tenu ouvert est signalé, sans arrêter l'installation.
-foreach ($f in 'etoiles.bin', 'etoiles.json', 'etoiles_noms.tsv', 'galaxies.bin', 'galaxies_noms.tsv', 'asteroides.bin', 'asteroides_noms.txt', 'planetes.tsv') { Copier-SiChange "$Donnees\$f" "$Cible\$f" }
+foreach ($f in 'etoiles.bin', 'etoiles.json', 'etoiles_noms.tsv', 'galaxies.bin', 'galaxies_noms.tsv', 'asteroides.bin', 'asteroides_noms.txt', 'planetes.tsv', 'lunes.tsv') { Copier-SiChange "$Donnees\$f" "$Cible\$f" }
 # Éphémérides de la NASA (JPL DE440), téléchargées du NAIF : 114 Mo, lues telles quelles par le simulateur.
 if (Test-Path "$Ephem") { Copier-SiChange "$Ephem" "$Cible\de440.bsp" }
+# Éphémérides des lunes (NAIF), si elles ont été téléchargées à côté de celles des planètes.
+foreach ($f in 'mar099s.bsp', 'jup365.bsp', 'sat441.bsp', 'nep097.bsp', 'plu060.bsp') {
+    $src = Join-Path (Split-Path $Ephem) $f
+    if (Test-Path $src) { Copier-SiChange $src "$Cible\$f" }
+}
 # Vue de départ : la ceinture d'Orion (étoile nommée de la page), si elle est dans le catalogue.
 $meta = Get-Content "$Cible\etoiles.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $orion = $meta.nommees | Where-Object { $_.n -like 'Alnilam*' } | Select-Object -First 1

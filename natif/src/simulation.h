@@ -25,7 +25,8 @@ struct Body {
     std::string name;
     Kind kind = Kind::Star;
     int64_t star = -1;          // étoile : numéro dans le catalogue
-    int naif = 0;               // planète : code du corps dans les éphémérides de la NASA
+    int naif = 0;               // planète : code du corps dans les éphémérides de la NASA (clé de sa carte et de son orientation)
+    int posNaif = 0;            // code utilisé pour sa position : le centre de la planète quand un fichier de lunes le donne
     int parent = -1;            // lune : numéro de l'astre autour duquel elle tourne (pour le tracé de l'orbite)
     double h = 0;               // planète : magnitude V(1,0), à 1 UA du Soleil et de l'observateur, pleine phase (fiche NASA)
     bool hasPhotometry = false; // planète : éclat lu dans planetes.tsv ; sinon elle n'est pas dessinée en point
@@ -73,10 +74,11 @@ constexpr int kRateCount = static_cast<int>(sizeof(kRates) / sizeof(kRates[0]));
 
 struct Sim {
     const Stars* stars = nullptr;
-    const eph::Spk* spk = nullptr;       // éphémérides de la NASA ; nul si le fichier manque
+    const eph::Set* spk = nullptr;       // éphémérides de la NASA (planètes, puis lunes) ; nul si le fichier des planètes manque
     std::vector<Body> bodies;            // 0 : le Soleil ; puis planètes et Lune ; puis les étoiles nommées de la page
     std::vector<Vec3> planetPos;         // position de chaque astre de type planète à la date courante (années-lumière, centre : Soleil)
-    bool ephemValid = false;             // la date courante est dans la plage des éphémérides
+    bool ephemValid = false;             // la date courante est dans la plage des éphémérides des planètes
+    std::vector<char> planetValid;       // pour chaque astre de type planète ou lune : sa position est connue à la date courante
     int focus = 0;
     double years = kStartYears;          // années juliennes depuis J2000,0
     int rate = 2;
@@ -90,7 +92,7 @@ struct Sim {
     bool cosmologyDirty = true;          // les distances des galaxies sont à recalculer
 
     // Le Soleil, les planètes (si les éphémérides sont là), puis les étoiles nommées (etoiles_noms.tsv).
-    void loadBodies(const std::string& namesPath, const std::string& galaxiesPath, const std::string& photometryPath) {
+    void loadBodies(const std::string& namesPath, const std::string& galaxiesPath, const std::string& photometryPath, const std::string& moonsPath) {
         bodies.clear();
         Body sun;
         sun.name = "Soleil";
@@ -105,6 +107,11 @@ struct Sim {
                 b.name = r.name;
                 b.kind = Kind::Planet;
                 b.naif = r.naif;
+                b.posNaif = r.naif;
+                // Planètes à lunes : de440.bsp donne le centre de masse planète + lunes ; le fichier des lunes donne le centre
+                // de la planète elle-même (code x99). Pour Pluton l'écart dépasse son rayon.
+                Vec3 probe;
+                if (r.naif >= 4 && r.naif <= 9 && planetAt(r.naif * 100 + 99, years, probe)) b.posNaif = r.naif * 100 + 99;
                 b.parent = parent;
                 b.periodYears = r.periodYears;
                 b.radiusKm = r.radiusKm;
@@ -118,6 +125,36 @@ struct Sim {
                 if (r.naif == eph::kEarth) earth = i;
             }
             add(kMoon, earth);
+            // Lunes des autres planètes (lunes.tsv : code NAIF, nom, code du centre de la planète, rayon moyen en km).
+            std::ifstream mf(moonsPath);
+            std::string ml;
+            while (std::getline(mf, ml)) {
+                int code = 0, planet = 0;
+                char name[64] = "";
+                double radius = 0;
+                if (std::sscanf(ml.c_str(), "%d\t%63[^\t]\t%d\t%lf", &code, name, &planet, &radius) != 4) continue;
+                int parent = -1;
+                for (size_t i = 0; i < bodies.size(); ++i)
+                    if (bodies[i].kind == Kind::Planet && bodies[i].naif == planet / 100) parent = static_cast<int>(i);
+                Vec3 a, pa, b2, pb;
+                const double step = 0.25 / 24.0 / 365.25;      // un quart d'heure
+                if (parent < 0 || !planetAt(code, years, a) || !planetAt(bodies[static_cast<size_t>(parent)].posNaif, years, pa) ||
+                    !planetAt(code, years + step, b2) || !planetAt(bodies[static_cast<size_t>(parent)].posNaif, years + step, pb))
+                    continue;      // fichier d'éphémérides de cette lune absent : elle n'est pas montrée
+                Body m;
+                m.name = name;
+                m.kind = Kind::Planet;
+                m.naif = code;
+                m.posNaif = code;
+                m.parent = parent;
+                m.radiusKm = radius;
+                m.natureText = "lune de " + bodies[static_cast<size_t>(parent)].name;
+                // Durée d'un tour, pour tracer l'orbite : angle parcouru autour de la planète en un quart d'heure.
+                const Vec3 r1 = a - pa, r2 = b2 - pb;
+                const double angle = std::acos(std::clamp(dot(r1, r2) / std::sqrt(dot(r1, r1) * dot(r2, r2)), -1.0, 1.0));
+                m.periodYears = angle > 0 ? 2.0 * kPi / angle * step : 0;
+                if (m.periodYears > 0) bodies.push_back(m);
+            }
         }
         std::string line;
         // Éclat et teinte des planètes (planetes.tsv : code NAIF, magnitude V(1,0), rouge, vert, bleu).
@@ -173,7 +210,7 @@ struct Sim {
         if (!spk) return false;
         const double et = atYears * kYearSeconds + kTdbMinusUtc;
         eph::Vec p, v, s, sv;
-        if (!spk->state(naif, et, p, v) || !spk->state(eph::kSun, et, s, sv)) return false;
+        if (!spk->state(naif, et, p, v) || !spk->state(eph::kSun, et, s, sv)) return false;      // hors de la plage, ou fichier absent
         const eph::Vec e = eph::toEcliptic({p.x - s.x, p.y - s.y, p.z - s.z});
         out = {e.x / kLyInKm, e.y / kLyInKm, e.z / kLyInKm};
         return true;
@@ -181,11 +218,16 @@ struct Sim {
 
     void refreshEphemeris() {
         ephemValid = spk != nullptr;
-        for (size_t i = 0; i < bodies.size(); ++i)
-            if (bodies[i].kind == Kind::Planet && !planetAt(bodies[i].naif, years, planetPos[i])) ephemValid = false;
+        planetValid.assign(bodies.size(), 0);
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            if (bodies[i].kind != Kind::Planet) continue;
+            planetValid[i] = planetAt(bodies[i].posNaif, years, planetPos[i]) ? 1 : 0;
+            if (!planetValid[i] && bodies[i].parent == 0) ephemValid = false;      // une planète sans position : hors de la plage de de440.bsp
+        }
     }
 
-    bool visible(int i) const { return bodies[static_cast<size_t>(i)].kind != Kind::Planet || ephemValid; }
+    // Une planète ou une lune n'est montrée que si sa position est connue à la date courante.
+    bool visible(int i) const { return bodies[static_cast<size_t>(i)].kind != Kind::Planet || planetValid[static_cast<size_t>(i)]; }
 
     // Position à la date courante (années-lumière, repère écliptique centré sur le Soleil).
     Vec3 position(int i) const {

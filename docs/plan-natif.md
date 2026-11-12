@@ -211,3 +211,17 @@ Ensuite, le même jour :
   Deux valeurs de mémoire étaient fausses : Lune (+0,28 au lieu de −0,08) et Neptune (−7,00 au lieu de −6,94).
 Reste [À vérifier] : étendue de l'image des anneaux de Saturne (calée sur deux repères mesurés, la source ne la
 documente pas) ; magnitude absolue et couleur du Soleil (valeurs nominales usuelles, non relues).
+
+## Lunes (12 novembre 2026)
+
+- `natif/src/ephemeride.h` : segments de type 3 et lecture de plusieurs fichiers ensemble (`eph::Set`).
+- Fichiers du NAIF (dossier satellites) : `mar099s.bsp` (Phobos, Déimos), `jup365.bsp` (Io, Europe, Ganymède,
+  Callisto ; 1,1 Go), `sat441.bsp` (Mimas à Japet), `nep097.bsp` (Triton), `plu060.bsp` (Charon et le centre de
+  Pluton). `pipeline/natif/lunes.py` : rayons moyens tirés du fichier officiel pck00011.tpc, positions de référence
+  demandées à JPL Horizons (`ref_lunes.txt`).
+- Contrôle `essai_ephem` [Certain] : 14 lunes à moins d'un millimètre de Horizons ; Triton à 255 km (le seul fichier
+  léger qui le contient est plus ancien que la solution de Horizons : écart affiché, non jugé).
+- Pas faites : les cinq grandes lunes d'Uranus (les fichiers du NAIF qui les contiennent pèsent 5,6 Go).
+- À l'écran : chaque lune a son orbite tracée d'après les éphémérides, sa fiche et un repère à sa place mesurée ;
+  son éclat et sa surface ne sont pas renseignés (rien n'est inventé). La planète est placée à son vrai centre quand
+  le fichier des lunes le donne (important pour Pluton, dont le centre de masse avec Charon est hors de la planète).

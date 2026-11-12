@@ -96,13 +96,18 @@ int runWindow(const WindowOptions& opt) {
     // Les données sont rangées à côté du fichier d'étoiles : noms des étoiles, éphémérides de la NASA.
     const size_t cut = opt.starsPath.find_last_of("\\/");
     const std::string dataDir = cut == std::string::npos ? std::string(".") : opt.starsPath.substr(0, cut);
-    eph::Spk spk;
+    eph::Set spk;
     std::string spkError;
-    const bool hasSpk = spk.open(dataDir + "/de440.bsp", spkError);      // absent : le simulateur le dit à l'écran et montre les étoiles
+    const bool hasSpk = spk.add(dataDir + "/de440.bsp", spkError);      // absent : le simulateur le dit à l'écran et montre les étoiles
+    if (hasSpk)      // lunes : chaque fichier présent ajoute les siennes ; un fichier absent ne bloque rien
+        for (const char* f : {"mar099s.bsp", "jup365.bsp", "sat441.bsp", "nep097.bsp", "plu060.bsp"}) {
+            std::string ignored;
+            spk.add(dataDir + "/" + f, ignored);
+        }
     Sim sim;
     sim.stars = &stars;
     sim.spk = hasSpk ? &spk : nullptr;
-    sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv");
+    sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
     if (!opt.target.empty()) {
         bool found = false;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
