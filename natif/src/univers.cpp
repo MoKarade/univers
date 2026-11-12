@@ -54,6 +54,7 @@ int main(int argc, char** argv) {
         else if (k == "--distance") { wopt.dist = std::atof(v); ++i; }
         else if (k == "--date") { wopt.years = std::atof(v); wopt.hasYears = true; ++i; }
         else if (k == "--vue") { std::sscanf(v, "%lf,%lf", &wopt.yawDeg, &wopt.pitchDeg); wopt.hasView = true; ++i; }
+        else if (k == "--controle-orbites") wopt.checkOrbits = true;
         else if (k == "--regarde") { lookIndex = std::strtoull(v, nullptr, 10); ++i; }
         else if (k == "--verifie") { verify = parseList(v); ++i; }
         else if (k == "--images") { frames = std::max(1, std::atoi(v)); ++i; }

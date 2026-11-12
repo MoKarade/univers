@@ -53,6 +53,23 @@ int main(int argc, char** argv) {
         verifie(lu && std::fabs(x - s.x) < 1e-6 && std::fabs(y - s.y) < 1e-6 && std::fabs(z - s.z) < 1e-6 && src.find(want) != std::string::npos,
                 "place et vitesse du Soleil de la carte graphique = celles de la bibliothèque");
     }
+    // 1 bis. Le calcul exact de la carte (orbites_pas.comp, à côté du premier fichier) : mêmes constantes que la bibliothèque.
+    {
+        std::string dir = argv[1];
+        const size_t cut = dir.find_last_of("/\\");
+        dir = cut == std::string::npos ? "." : dir.substr(0, cut);
+        std::ifstream fc(dir + "/orbites_pas.comp");
+        std::stringstream sc;
+        sc << fc.rdbuf();
+        const std::string comp = sc.str();
+        const g::Potentiel P;
+        verifie(proche(constante(comp, "OP_G"), g::kG) && proche(constante(comp, "OP_MB"), g::kMb) && proche(constante(comp, "OP_AB"), g::kAb) &&
+                    proche(constante(comp, "OP_MD"), g::kMd) && proche(constante(comp, "OP_AD"), g::kAd) && proche(constante(comp, "OP_BD"), g::kBd) &&
+                    proche(constante(comp, "OP_RS"), g::kRs) && proche(constante(comp, "OP_GMH"), P.GMs) && proche(constante(comp, "OP_K"), g::kKmsKpcToRadGa) &&
+                    proche(constante(comp, "OP_RB"), P.Rb) && proche(constante(comp, "OP_ABAR"), P.Ab) && proche(constante(comp, "OP_BAR0"), g::barAngleAt(0)) &&
+                    proche(constante(comp, "OP_BARW"), g::kBarOmegaKmsKpc * g::kKmsKpcToRadGa),
+                "constantes du calcul exact de la carte graphique (orbites_pas.comp) = bibliothèque de physique");
+    }
     // 2. Temps courts : ligne droite mesurée.
     const Vec3 pos{12.0, -30.0, 4.0}, vel{-20.0, 35.0, 8.0};
     {

@@ -11,6 +11,7 @@
 
 #include "asteroides.h"
 #include "fenetre.h"
+#include "orbites_gpu.h"
 #include "fusion_points.h"
 #include "gaia.h"
 #include "galaxies.h"
@@ -241,6 +242,8 @@ int runWindow(const WindowOptions& opt) {
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
     sr.create(g, stars, HdrTarget::kFormat, gaiaOk);
+    OrbitGpu orbits;      // orbite exacte de chaque étoile, calculée sur la carte graphique
+    orbits.create(g, stars, sr, HdrTarget::kFormat);
     PlanetPoints planets;
     planets.create(g);
     GalaxyFile galaxyFile;
@@ -421,6 +424,9 @@ int runWindow(const WindowOptions& opt) {
         // 1. Les étoiles, en grande dynamique.
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        // Orbites exactes : la carte rattrape la date montrée (tout d'un coup pendant un contrôle, 64 pas par image sinon).
+        orbits.advance(cmd, sim.years, test ? 1000000 : 64);
+        sim.orbitLagSteps = orbits.lagSteps;
         beginPass(cmd, hdr.view, sc.extent);
         galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
         if (sim.starShare() > 0) {      // étoiles Gaia sur leur orbite calculée ; part qui baisse quand le calcul de la fusion prend le relais
@@ -432,8 +438,7 @@ int runWindow(const WindowOptions& opt) {
         if (sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
             PushConstants orbiting = pc;
             orbiting.par[0] *= static_cast<float>(sim.starShare());
-            orbiting.par[3] = static_cast<float>(sim.years / 1.0e9);      // depuis J2000, date des positions du catalogue
-            sr.draw(cmd, orbiting, sc.extent.width, sc.extent.height);
+            orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years));      // années depuis J2000, date des positions
         }
         if (fusionPoints.count) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
@@ -533,6 +538,29 @@ int runWindow(const WindowOptions& opt) {
     asteroids.release(g);
     galaxies.release(g);
     spheres.release(g);
+    if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
+        const uint32_t n = std::min<uint32_t>(20000, orbits.count);
+        const std::vector<float> got = orbits.readBack(g, n);
+        std::vector<phys::Vec3> p0(n), v0(n);
+        for (uint32_t k = 0; k < n; ++k) {
+            p0[k] = {orbits.initial[k * 8], orbits.initial[k * 8 + 1], orbits.initial[k * 8 + 2]};
+            v0[k] = {orbits.initial[k * 8 + 4], orbits.initial[k * 8 + 5], orbits.initial[k * 8 + 6]};
+        }
+        phys::galaxie::Orbites ref(p0, v0);
+        ref.avance(static_cast<double>(orbits.stepLo) * 1.0e-3);
+        std::vector<double> err(n);
+        for (uint32_t k = 0; k < n; ++k) {
+            const phys::Vec3 r = ref.position(k);
+            const double dx = got[k * 8] - r.x, dy = got[k * 8 + 1] - r.y, dz = got[k * 8 + 2] - r.z;
+            err[k] = std::sqrt(dx * dx + dy * dy + dz * dz) * 1000.0;      // parsecs
+        }
+        std::sort(err.begin(), err.end());
+        const double med = err[n / 2], p99 = err[n * 99 / 100];
+        const bool ok = med < 1.0 && p99 < 10.0;
+        std::printf("orbites sur la carte graphique, pas %ld (%.0f millions d'annees), %u etoiles : ecart avec le calcul en double precision : mediane %.4f pc, 99e centile %.3f pc, maximum %.2f pc -> %s\n",
+                    orbits.stepLo, static_cast<double>(orbits.stepLo), n, med, p99, err[n - 1], ok ? "PASSE" : "ECHEC");
+    }
+    orbits.release(g);
     sr.release(g);
     hdr.release(g);
     final.release(g);

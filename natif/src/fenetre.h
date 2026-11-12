@@ -12,6 +12,7 @@ struct WindowOptions {
     bool hasYears = false;
     double yawDeg = 0, pitchDeg = 0;      // contrôle : direction d'où l'on regarde l'astre suivi (longitude et latitude écliptiques, degrés)
     bool hasView = false;
+    bool checkOrbits = false;   // contrôle : relit les orbites calculées sur la carte et les compare au calcul en double précision
 };
 
 int runWindow(const WindowOptions& opt);

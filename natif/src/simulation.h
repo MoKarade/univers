@@ -88,7 +88,69 @@ constexpr Rate kRates[] = {{"Temps réel", 1.0 / kYearSeconds},        {"1 heure
                            {"10 millions d'années par seconde", 1.0e7}, {"200 millions d'années par seconde", 2.0e8}};
 constexpr int kRateCount = static_cast<int>(sizeof(kRates) / sizeof(kRates[0]));
 
+// Orbites exactes (double précision, bibliothèque de physique) du Soleil et des étoiles nommées : le même calcul que
+// celui de la carte graphique (orbites_gpu.h), pour que les noms et le point visé suivent les étoiles dessinées.
+// Deux états par étoile, au pas d'avant et au pas d'après la date (1 million d'années), reliés par une courbe de Hermite.
+struct ExactOrbits {
+    std::vector<phys::Vec3> g0, v0;      // départ : position (kpc) et vitesse (km/s) galactocentriques ; rang 0 : le Soleil
+    mutable phys::galaxie::Orbites o;
+    mutable bool built = false;
+    mutable long idx = 0, at = 0;        // idx : pas des états gardés ; at : pas où se trouve `o`
+    mutable std::vector<phys::Vec3> pa, va, pb, vb;
+
+    int add(Vec3 pos, Vec3 vel) {
+        const phys::Vec3 s = phys::galaxie::soleilPos(), sv = phys::galaxie::soleilVit(), pg = orbite::versGalactique(pos), vg = orbite::versGalactique(vel);
+        g0.push_back({pg.x / orbite::kKpcLy + s.x, pg.y / orbite::kKpcLy + s.y, pg.z / orbite::kKpcLy + s.z});
+        v0.push_back({vg.x + sv.x, vg.y + sv.y, vg.z + sv.z});
+        built = false;
+        return static_cast<int>(g0.size()) - 1;
+    }
+    void read(std::vector<phys::Vec3>& p, std::vector<phys::Vec3>& v) const {
+        p.resize(g0.size());
+        v.resize(g0.size());
+        for (size_t k = 0; k < g0.size(); ++k) {
+            p[k] = o.position(k);
+            v[k] = o.vitesse(k);
+        }
+    }
+    void ensure(double years) const {
+        const long n = static_cast<long>(std::floor(years / 1.0e6));
+        if (built && n == idx) return;
+        if (!built || std::labs(n) + 1 < std::labs(n - at)) {      // premier appel, ou plus court en repartant d'aujourd'hui
+            o = phys::galaxie::Orbites(g0, v0);
+            at = 0;
+            built = true;
+        }
+        o.avance(static_cast<double>(n) * 1.0e-3, 1);
+        read(pa, va);
+        o.avance(static_cast<double>(n + 1) * 1.0e-3, 1);
+        read(pb, vb);
+        at = n + 1;
+        idx = n;
+    }
+    // Position galactocentrique (kpc) de l'étoile k à `years` ans de la date des positions.
+    phys::Vec3 position(int k, double years) const {
+        ensure(years);
+        const double f = years / 1.0e6 - static_cast<double>(idx), f2 = f * f, f3 = f2 * f, T = 1.0e-3 * phys::galaxie::kKmsKpcToRadGa;
+        const double h00 = 2 * f3 - 3 * f2 + 1, h10 = (f3 - 2 * f2 + f) * T, h01 = -2 * f3 + 3 * f2, h11 = (f3 - f2) * T;
+        const phys::Vec3 &a = pa[static_cast<size_t>(k)], &u = va[static_cast<size_t>(k)], &b = pb[static_cast<size_t>(k)], &w = vb[static_cast<size_t>(k)];
+        return {h00 * a.x + h10 * u.x + h01 * b.x + h11 * w.x, h00 * a.y + h10 * u.y + h01 * b.y + h11 * w.y, h00 * a.z + h10 * u.z + h01 * b.z + h11 * w.z};
+    }
+};
+
 struct Sim {
+    mutable ExactOrbits exact;
+    mutable std::vector<int> exactOf;      // rang dans `exact` de chaque astre (-1 : pas une étoile)
+    void ensureExact() const {
+        if (exactOf.size() == bodies.size() && !exact.g0.empty()) return;
+        exact = ExactOrbits{};
+        exact.add({0, 0, 0}, {0, 0, 0});      // le Soleil
+        exactOf.assign(bodies.size(), -1);
+        for (size_t i = 0; i < bodies.size(); ++i)
+            if (bodies[i].kind == Kind::Star && stars)
+                exactOf[i] = exact.add({stars->x()[bodies[i].star], stars->y()[bodies[i].star], stars->z()[bodies[i].star]},
+                                       {stars->vel(0)[bodies[i].star], stars->vel(1)[bodies[i].star], stars->vel(2)[bodies[i].star]});
+    }
     const Stars* stars = nullptr;
     const eph::Set* spk = nullptr;       // éphémérides de la NASA (planètes, puis lunes) ; nul si le fichier des planètes manque
     std::vector<Body> bodies;            // 0 : le Soleil ; puis planètes et Lune ; puis les étoiles nommées de la page
@@ -104,6 +166,7 @@ struct Sim {
     double yaw = -1.2, pitch = 0.55;     // direction d'où l'on regarde l'astre suivi (radians)
     double dist = 45.0 * kAuInLy;        // distance de la caméra à l'astre suivi (années-lumière) : au départ, tout le système solaire
     bool touched = false;                // quelqu'un a pris la main : fin du lent tour d'horizon
+    long orbitLagSteps = 0;              // pas d'orbite (1 million d'années) que la carte graphique doit encore calculer
     double asteroidEpochJd = 0;          // date des orbites des astéroïdes (0 : pas d'astéroïdes)
     uint64_t asteroidCount = 0;
     cosmo::Params cosmology;             // paramètres de l'univers en expansion (réglables à l'écran)
@@ -396,7 +459,11 @@ struct Sim {
         return std::clamp((kOrbitLimitYears - std::fabs(years - kStartYears)) / (kOrbitLimitYears - kOrbitFadeYears), 0.0, 1.0);
     }
     // Déplacement de ce qui est fixe par rapport au centre de la Galaxie : le Soleil tourne, le monde reste centré sur lui.
-    Vec3 sunShift() const { return orbite::decalageSoleil(years); }
+    Vec3 sunShift() const {
+        ensureExact();
+        const phys::Vec3 s = exact.position(0, years), s0 = phys::galaxie::soleilPos();
+        return orbite::versEcliptique({-(s.x - s0.x) * orbite::kKpcLy, -(s.y - s0.y) * orbite::kKpcLy, -(s.z - s0.z) * orbite::kKpcLy});
+    }
 
     // Repère galactocentrique de la page (kpc, relatif au centre de la Voie lactée) -> repère du simulateur (années-lumière,
     // écliptique J2000, origine : place actuelle du Soleil). Matrice DATA.M_GAL2ECL de la page (app/gen/data.js) ; place du
@@ -475,8 +542,15 @@ struct Sim {
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galPos.size() && galValid[static_cast<size_t>(i)] ? galPos[static_cast<size_t>(i)] : b.fixedPos;
         // Étoile : ligne droite à la vitesse mesurée, raccordée à son orbite calculée autour de la Galaxie.
         const Vec3 p0{stars->x()[b.star], stars->y()[b.star], stars->z()[b.star]};
-        const Vec3 d = orbite::deplacement(p0, {stars->vel(0)[b.star], stars->vel(1)[b.star], stars->vel(2)[b.star]}, years);      // années depuis J2000, date des positions du catalogue
-        return {p0.x + d.x, p0.y + d.y, p0.z + d.z};
+        // Même calcul que la carte graphique (etoiles_orbite.vert) : orbite exacte relative au Soleil, raccordée à la ligne droite.
+        const double kt = years * kKmsToLyPerYear, w = orbite::poidsOrbite(years);      // années depuis J2000, date des positions du catalogue
+        const Vec3 lin{p0.x + stars->vel(0)[b.star] * kt, p0.y + stars->vel(1)[b.star] * kt, p0.z + stars->vel(2)[b.star] * kt};
+        ensureExact();
+        const int k = exactOf[static_cast<size_t>(i)];
+        if (w < 1e-9 || k < 0) return lin;
+        const phys::Vec3 e = exact.position(k, years), s = exact.position(0, years);
+        const Vec3 orb = orbite::versEcliptique({(e.x - s.x) * orbite::kKpcLy, (e.y - s.y) * orbite::kKpcLy, (e.z - s.z) * orbite::kKpcLy});
+        return {lin.x * (1.0 - w) + orb.x * w, lin.y * (1.0 - w) + orb.y * w, lin.z * (1.0 - w) + orb.z * w};
     }
     double speedKms(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
