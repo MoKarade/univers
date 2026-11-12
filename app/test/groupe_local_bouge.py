@@ -30,7 +30,21 @@ def main():
         pg.evaluate("__U.S.ty = 3e9; __U.S.lastTy = 3e9")
         pg.wait_for_function(STATE.replace('return out; })()', 'return out.filter(g => g.vl !== null && g.r >= 50).every(g => g.dx > 1); })()'), timeout=120000)
         G = pg.evaluate(STATE)
+        # la vitesse donnée au calcul redonne la vitesse mesurée dans l'axe du regard, et le départ va dans le bon sens (vers ou loin du centre)
+        pg.evaluate("__U.S.ty = 0; __U.S.lastTy = 0"); pg.wait_for_timeout(1500); p0 = pg.evaluate("__U.G.lg.centers.map(c => c.c.slice())")
+        pg.evaluate("__U.S.ty = 1e8; __U.S.lastTy = 1e8"); pg.wait_for_timeout(1500)
+        V = pg.evaluate("""(() => { const R = __U.lgRadial(), X = DATA.LG_X, M = DATA.M_GAL2ECL, o = []; const gc = __U.gcRelKpc0;
+          for (const i of Object.keys(R).map(Number)) { const c = __U.G.lg.centers[i], q = c.c0, h = [q[0] + gc[0], q[1] + gc[1], q[2] + gc[2]], hg = [0, 1, 2].map(j => M[0][j] * h[0] + M[1][j] * h[1] + M[2][j] * h[2]), d = Math.hypot(...hg), v = R[i];
+            o.push({ n: c.g.n, i, proj: (hg[0] * v[0] + hg[1] * v[1] + hg[2] * v[2]) / d, vl: X[i][1], vg: __U.LGR.vg[i], c0: q, c: c.c.slice() }); }
+          return o; })()""")
         b.close()
+    errv = max(abs(g['proj'] - g['vl']) for g in V)
+    check(errv < 2, f"{len(V)} galaxies sans déplacement mesuré dans le ciel : la vitesse donnée au calcul, vue du Soleil dans l'axe du regard, redonne la mesure à {errv:.2f} km/s près (limite 2)")
+    def sens(g):
+        a = p0[g['i']]; b = g['c']; ra = sum(x * x for x in a) ** 0.5; rb = sum(x * x for x in b) ** 0.5
+        return (rb - ra) * g['vg'] > 0 or abs(g['vg']) < 5
+    badS = [g['n'] for g in V if not sens(g)]
+    check(not badS, "départ dans le bon sens (vers le centre de la Voie lactée ou loin de lui, selon la vitesse calculée)" + (f" ; faux : {badS}" if badS else ''))
     mov = [g for g in G if g['vl'] is not None and g['r'] >= 50]
     still = [g for g in G if g['dx'] <= 1]
     rad = [g for g in mov if not g['pm']]
