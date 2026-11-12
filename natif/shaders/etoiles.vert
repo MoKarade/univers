@@ -1,6 +1,9 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+#include "orbite_galactique.glsl"
 /* Étoiles : une colonne du fichier par attribut (x, y, z en années-lumière, magnitude absolue, vitesse en km/s),
-   couleur calculée au chargement. Mouvement en ligne droite à la vitesse mesurée. Position relative à la caméra,
+   couleur calculée au chargement. Mouvement : ligne droite à la vitesse mesurée, raccordée sans seuil à l'orbite
+   calculée autour du centre de la Galaxie (orbite_galactique.glsl). Position relative à la caméra,
    soustraite en deux temps (partie principale, puis reste) pour garder la précision loin du Soleil.
    Éclat apparent par la loi en 1/d². */
 layout(location = 0) in float inX;
@@ -11,11 +14,13 @@ layout(location = 4) in vec4 inCol;
 layout(location = 5) in float inVx;
 layout(location = 6) in float inVy;
 layout(location = 7) in float inVz;
-layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; } pc;   /* par : exposition, hauteur en pixels, temps */
+layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; } pc;   /* par : exposition, hauteur en pixels, temps (al par km/s), temps (milliards d'années ; 0 : ligne droite seule) */
 layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
 void main() {
-    vec3 p = ((vec3(inX, inY, inZ) - pc.camHi.xyz) + vec3(inVx, inVy, inVz) * pc.par.z) - pc.camLo.xyz;
+    vec3 pos = vec3(inX, inY, inZ), vel = vec3(inVx, inVy, inVz);
+    vec3 dep = pc.par.w == 0.0 ? vel * pc.par.z : ogDeplacement(pos, vel, pc.par.z, pc.par.w);
+    vec3 p = ((pos - pc.camHi.xyz) + dep) - pc.camLo.xyz;
     float d = max(length(p), 1e-12);
     float m = inMag + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0;      /* magnitude apparente vue de la caméra */
     float flux = pc.par.x * pow(10.0, -0.4 * m);

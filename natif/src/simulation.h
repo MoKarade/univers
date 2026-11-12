@@ -7,6 +7,7 @@
 #include "cosmologie.h"
 #include "ephemeride.h"
 #include "galaxie_orbites.h"
+#include "orbite_galactique.h"
 #include "groupe_local.h"
 #include "lune.h"
 #include "sondes.h"
@@ -21,6 +22,11 @@ constexpr double kYearSeconds = 365.25 * 86400.0;
 // Aujourd'hui, lu sur l'horloge du PC, en années juliennes depuis J2000,0 (1er janvier 2000, 12 h TU = 946 728 000 s Unix).
 inline const double kStartYears =
     (std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count() - 946728000.0) / kYearSeconds;
+// Étoiles mesurées : suivies sur leur orbite calculée autour du centre de la Galaxie jusqu'à 1 milliard d'années
+// d'aujourd'hui, dans le passé comme dans le futur (orbite_galactique.h) ; elles s'effacent progressivement entre 800
+// millions et 1 milliard d'années, où le calcul de la fusion des galaxies prend le relais.
+constexpr double kOrbitLimitYears = 1.0e9;
+constexpr double kOrbitFadeYears = 0.8e9;
 constexpr double kLinearLimitYears = 3.0e6;      // au-delà, la ligne droite ne vaut plus pour les étoiles (page : épicycles puis orbites) : étape E5
 // Temps des éphémérides (TDB) moins temps civil (UTC) : 69,184 s depuis 2017 (32,184 s + 37 secondes intercalaires).
 // [Approximation assumée : appliquée à toute date ; l'écart réel a varié de quelques dizaines de secondes par siècle.]
@@ -383,7 +389,14 @@ struct Sim {
     bool deepTime() const { return std::fabs(years - kStartYears) > kLinearLimitYears; }
     double replayGa() const { return (years - kStartYears) / 1.0e9; }
     double maxYears() const { return kStartYears + (replay ? replay->finGa() * 1.0e9 : kLinearLimitYears); }
-    double minYears() const { return kStartYears - kLinearLimitYears; }
+    double minYears() const { return kStartYears - kOrbitLimitYears; }
+    // Part des étoiles mesurées encore montrée (1 jusqu'à 800 millions d'années, 0 à 1 milliard) ; le calcul de la fusion
+    // prend la part restante.
+    double starShare() const {
+        return std::clamp((kOrbitLimitYears - std::fabs(years - kStartYears)) / (kOrbitLimitYears - kOrbitFadeYears), 0.0, 1.0);
+    }
+    // Déplacement de ce qui est fixe par rapport au centre de la Galaxie : le Soleil tourne, le monde reste centré sur lui.
+    Vec3 sunShift() const { return orbite::decalageSoleil(years); }
 
     // Repère galactocentrique de la page (kpc, relatif au centre de la Voie lactée) -> repère du simulateur (années-lumière,
     // écliptique J2000, origine : place actuelle du Soleil). Matrice DATA.M_GAL2ECL de la page (app/gen/data.js) ; place du
@@ -424,19 +437,21 @@ struct Sim {
         galValid.assign(bodies.size(), 0);
         const double tGa = replayGa();
         const bool deep = deepTime();
+        const Vec3 shift = sunShift();
         for (size_t i = 0; i < bodies.size(); ++i) {
             const Body& b = bodies[i];
             if (b.kind != Kind::Galaxy) continue;
             const int ref = i < replayRef.size() ? replayRef[i] : -1;
             if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
-                galPos[i] = b.fixedPos;
+                galPos[i] = {b.fixedPos.x + shift.x, b.fixedPos.y + shift.y, b.fixedPos.z + shift.z};
                 galValid[i] = 1;
                 continue;
             }
             phys::Vec3 g;
             const bool ok = replay && ref >= 0 && (ref >= 100 ? replay->centre(ref - 100, tGa, g) : replay->traceur(ref, tGa, g));
             if (!ok) continue;      // mouvement non calculé : la galaxie n'est pas montrée à cette date
-            galPos[i] = fromGalactocentric(g);
+            const Vec3 w = fromGalactocentric(g);
+            galPos[i] = {w.x + shift.x, w.y + shift.y, w.z + shift.z};
             galValid[i] = 1;
         }
     }
@@ -448,8 +463,8 @@ struct Sim {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
-        if (b.kind == Kind::Sun) return std::fabs(years - kStartYears) <= 1.0e7;
-        return !deepTime();
+        if (b.kind == Kind::Sun) return std::fabs(years - kStartYears) < kOrbitLimitYears;      // suivi sur son orbite autour de la Galaxie, comme les étoiles
+        return std::fabs(years - kStartYears) < kOrbitLimitYears;      // étoile : suivie sur son orbite calculée
     }
 
     // Position à la date courante (années-lumière, repère écliptique centré sur le Soleil).
@@ -458,8 +473,10 @@ struct Sim {
         if (b.kind == Kind::Sun) return {0, 0, 0};
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetPos[static_cast<size_t>(i)];
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galPos.size() && galValid[static_cast<size_t>(i)] ? galPos[static_cast<size_t>(i)] : b.fixedPos;
-        const double k = years * kKmsToLyPerYear;      // étoile : ligne droite à la vitesse mesurée
-        return {stars->x()[b.star] + stars->vel(0)[b.star] * k, stars->y()[b.star] + stars->vel(1)[b.star] * k, stars->z()[b.star] + stars->vel(2)[b.star] * k};
+        // Étoile : ligne droite à la vitesse mesurée, raccordée à son orbite calculée autour de la Galaxie.
+        const Vec3 p0{stars->x()[b.star], stars->y()[b.star], stars->z()[b.star]};
+        const Vec3 d = orbite::deplacement(p0, {stars->vel(0)[b.star], stars->vel(1)[b.star], stars->vel(2)[b.star]}, years);      // années depuis J2000, date des positions du catalogue
+        return {p0.x + d.x, p0.y + d.y, p0.z + d.z};
     }
     double speedKms(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];

@@ -35,7 +35,9 @@ struct FusionPoints {
     // exposure : celle du dessin des étoiles pour cette image (éclat multiplié compris).
     void update(const Sim& sim, const Camera& cam, float exposure) {
         count = 0;
-        if (!capacity || !sim.replay || !sim.deepTime()) return;
+        const double share = 1.0 - sim.starShare();      // les étoiles mesurées occupent le reste (Sim::starShare)
+        if (!capacity || !sim.replay || share <= 0) return;
+        const Vec3 shift = sim.sunShift();
         const double tGa = sim.replayGa();
         if (tGa != worldAtGa) {
             if (!sim.replay->etoilesA(tGa, scratch)) { worldAtGa = -1; return; }
@@ -45,13 +47,14 @@ struct FusionPoints {
         // Éclat d'affichage : 0,35 par point, éteint progressivement quand on regarde de trop près (moins de 3 000 al).
         const double fade = std::clamp((std::log10(std::max(sim.dist, 1.0)) - 3.5) / 1.0, 0.0, 1.0);
         if (fade <= 0) return;
-        const double mApp = -2.5 * std::log10(0.35 * fade / exposure);
+        const double mApp = -2.5 * std::log10(0.35 * fade * share / exposure);
         for (uint32_t i = 0; i < capacity; ++i) {
-            const Vec3 d = world[i] - cam.pos;
+            const Vec3 w{world[i].x + shift.x, world[i].y + shift.y, world[i].z + shift.z};
+            const Vec3 d = w - cam.pos;
             const double dist = std::max(std::sqrt(dot(d, d)), 1e-9);
-            cols[0][i] = static_cast<float>(world[i].x);
-            cols[1][i] = static_cast<float>(world[i].y);
-            cols[2][i] = static_cast<float>(world[i].z);
+            cols[0][i] = static_cast<float>(w.x);
+            cols[1][i] = static_cast<float>(w.y);
+            cols[2][i] = static_cast<float>(w.z);
             cols[3][i] = static_cast<float>(mApp - 5.0 * std::log10(dist / 3.2615638) + 5.0);
         }
         count = capacity;

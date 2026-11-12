@@ -40,8 +40,8 @@ file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
 foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
-    COMMAND ${GLSLANG} -V --quiet ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
-    DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} VERBATIM)
+    COMMAND ${GLSLANG} -V --quiet -I${CMAKE_SOURCE_DIR}/shaders ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
+    DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl VERBATIM)
   list(APPEND SPV_FILES ${SPV_DIR}/${S}.spv)
 endforeach()
 add_custom_target(shaders DEPENDS ${SPV_FILES})
@@ -115,3 +115,9 @@ target_link_libraries(essai_gaia PRIVATE volk univers_physique)
 target_compile_options(essai_gaia PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(essai_gaia PRIVATE -static)
 add_dependencies(essai_gaia shaders)
+
+# Contrôle du mouvement des étoiles autour de la Galaxie (orbite_galactique.h, shaders/orbite_galactique.glsl).
+add_executable(essai_orbite src/essai_orbite.cpp)
+target_link_libraries(essai_orbite PRIVATE volk univers_physique)
+target_compile_options(essai_orbite PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_orbite PRIVATE -static)

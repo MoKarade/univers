@@ -314,3 +314,12 @@ des sources Gaia à distance moins sûre (fil Gaia), texte qui dit à chaque éc
 
 - Fait : `pipeline/natif/galaxies_groupe_local.py` ajoute à galaxies_noms.tsv les 44 galaxies naines confirmées à moins de 1 Mpc qui manquaient (Local Volume Database v1.1.2, Pace 2024 : direction et module de distance mesurés). L'appli en montre 113 sur 113.
 - À faire par le fil complétude : régénérer completude_groupe_local.h (zéro manquante) et adapter son essai.
+
+## Mouvement continu des étoiles autour de la Galaxie (12 novembre 2026)
+
+- Demande de Marc : « je veux voir tout le temps pour chaque astre ce qu'il fait réellement, peu importe le temps » ; la Voie lactée ne tournait qu'à 10 millions d'années par seconde.
+- Cause : pas de seuil de vitesse, mais une coupure à ±3 millions d'années (ligne droite avant ; après, étoiles cachées et calcul de la fusion).
+- Fait : `natif/src/orbite_galactique.h` et `natif/shaders/orbite_galactique.glsl` : chaque étoile part de sa position et de sa vitesse mesurées et suit son orbite calculée (épicycles, moment cinétique conservé exactement, potentiel [modèle] du fil physique), raccord sans seuil (poids 1 − exp(−(t / 300 000 ans)²)). Étoiles montrées jusqu'à ±1 milliard d'années (fondu avec le calcul de la fusion entre 800 millions et 1 milliard) ; passé ouvert jusqu'à −1 milliard d'années. Le monde reste centré sur le Soleil ; le centre de la Galaxie, les galaxies nommées et les points de la fusion se déplacent en sens inverse du Soleil (`Sim::sunShift`).
+- Contrôle (`essai_orbite`) : constantes de la carte graphique = bibliothèque de physique ; ligne droite exacte à 1 000 ans ; aucun saut de −1 à +1 milliard d'années ; écart avec le calcul exact du fil physique pour des étoiles du disque : 0,012 kpc à 10 millions d'années, 1,5 kpc (7 degrés) à 100 millions, 51 degrés à 1 milliard ; orbite allongée : méthode inadaptée (10 kpc à 100 millions d'années).
+- Reste : les 98 millions d'étoiles Gaia (fil Gaia, même fichier .glsl) ; calcul exact étoile par étoile sur la carte graphique (recommandation du fil physique) ; textes de l'interface.
+- `--cible` accepte les noms sans accents.

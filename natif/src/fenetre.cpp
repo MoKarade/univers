@@ -92,6 +92,16 @@ void pumpMessages() {
 
 }  // namespace
 
+// Nom sans accents, pour --cible depuis une console qui ne passe pas les accents (« Centre de la Voie lactee »).
+static std::string sansAccents(const std::string& t) {
+    static const char* const from[] = {"é", "è", "ê", "ë", "à", "â", "î", "ï", "ô", "û", "ù", "ç", "É"};
+    static const char* const to[] = {"e", "e", "e", "e", "a", "a", "i", "i", "o", "u", "u", "c", "E"};
+    std::string out = t;
+    for (size_t k = 0; k < sizeof(from) / sizeof(from[0]); ++k)
+        for (size_t at = out.find(from[k]); at != std::string::npos; at = out.find(from[k], at)) out.replace(at, std::strlen(from[k]), to[k]);
+    return out;
+}
+
 int runWindow(const WindowOptions& opt) {
     const bool test = opt.testFrames > 0;
     gWindowMode = !test;      // dès le début : même un fichier d'étoiles absent est dit à l'écran
@@ -144,7 +154,7 @@ int runWindow(const WindowOptions& opt) {
     if (!opt.target.empty()) {
         bool found = false;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
-            if (sim.bodies[static_cast<size_t>(i)].name == opt.target) {
+            if (sim.bodies[static_cast<size_t>(i)].name == opt.target || sansAccents(sim.bodies[static_cast<size_t>(i)].name) == opt.target) {
                 sim.focus = i;
                 found = true;
             }
@@ -419,7 +429,12 @@ int runWindow(const WindowOptions& opt) {
             milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
             gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
         }
-        if (!sim.deepTime()) sr.draw(cmd, pc, sc.extent.width, sc.extent.height);      // étoiles mesurées : à moins de 3 millions d'années d'aujourd'hui
+        if (sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
+            PushConstants orbiting = pc;
+            orbiting.par[0] *= static_cast<float>(sim.starShare());
+            orbiting.par[3] = static_cast<float>(sim.years / 1.0e9);      // depuis J2000, date des positions du catalogue
+            sr.draw(cmd, orbiting, sc.extent.width, sc.extent.height);
+        }
         if (fusionPoints.count) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
             still.par[2] = 0;
