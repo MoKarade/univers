@@ -26,6 +26,9 @@ with sync_playwright() as p:
     pg.evaluate('__U.setTime(1e9)'); time.sleep(2); d2 = pg.evaluate(f'__U.Rr.pick.svDist[{i}]'); prov = pg.evaluate("document.getElementById('prov').textContent")
     print(f'dans 1 milliard d’années : {d2:.1f} Mpc ; provenance : …{prov[-70:]}')
     if abs(d2 / d0 - 1) > 0.002 or 'seulement autour d’aujourd’hui' not in prov: fails.append('loin d’aujourd’hui : la vue devrait être coupée et le dire')
+    rows2 = pg.evaluate(f'__U.selSurv({i}).rows().map(r => r.join(" : "))'); v2 = [r for r in rows2 if r.startswith('S’éloigne')]
+    print('   fiche loin d’aujourd’hui :', [r for r in rows2 if r.startswith('Distance')][:1], v2)
+    if not any(r.startswith('Distance à cet instant') for r in rows2) or not v2 or not v2[0].startswith('S’éloigne à'): fails.append('fiche loin d’aujourd’hui : devrait parler de la distance à cet instant')
     if logs: fails.append('erreurs de page : ' + logs[0])
     b.close()
 print('ÉCHECS :' if fails else 'tout est vert', fails); sys.exit(1 if fails else 0)
