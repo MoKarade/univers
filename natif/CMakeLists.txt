@@ -96,4 +96,10 @@ add_executable(essai_interface src/essai_interface.cpp)
 target_compile_options(essai_interface PRIVATE -Wall -Wextra)
 target_link_options(essai_interface PRIVATE -static)
 
+# Contrôle de la complétude par échelle (completude.h) sur le vrai fichier d'étoiles.
+add_executable(essai_completude src/essai_completude.cpp)
+target_link_libraries(essai_completude PRIVATE volk imgui univers_physique)
+target_compile_options(essai_completude PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_completude PRIVATE -static)
+
 add_subdirectory(physique)
