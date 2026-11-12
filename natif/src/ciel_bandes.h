@@ -14,13 +14,14 @@
 #pragma once
 #include "commun.h"
 #include <filesystem>
+#include <limits>
 
 namespace {
 
 struct SkyBandUbo {      // std140 : tout en vec4
     float right[4], up[4], fwd[4];
     float scale[4];      // bas, haut, logarithmique (1) ou linéaire (0), opacité
-    float grid[4];       // Nside, hauteur de l'image, rien, rien
+    float grid[4];       // Nside, nombre de niveaux de la pyramide, angle d'un pixel de l'écran au centre (rad), rien
 };
 
 // Fiche d'une bande, lue dans le JSON du fichier. Les textes sont ceux du script : source, mesure, unité, référence.
@@ -139,28 +140,57 @@ public:
         std::streamoff off = 0;
         if (!readSkyBandHeader(path, in, off)) return false;
         const size_t n = 12ull * in.nside * in.nside;
+        // Pyramide « somme du mesuré » : niveau 0 = la carte ; chaque niveau suivant donne à un pixel la moyenne de ses
+        // 4 enfants mesurés (ordre emboîté : les 4 enfants se suivent). Un pixel sans aucun enfant mesuré reste vide.
+        // Le shader lit le niveau dont le pixel a la taille d'un pixel de l'écran : de loin on voit la moyenne de ce qui
+        // est mesuré dans le pixel, pas un pixel du relevé pris au hasard (ce qui donnait un grain artificiel).
+        size_t total = 0;
+        uint32_t levels = 0;
+        for (uint32_t ns = in.nside; ns >= 1; ns /= 2) {
+            total += 12ull * ns * ns;
+            ++levels;
+        }
         std::ifstream f(path, std::ios::binary);
         f.seekg(off);
-        Buffer staging = createBuffer(g, n * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        Buffer staging = createBuffer(g, total * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         void* p = nullptr;
-        check(vkMapMemory(g.dev, staging.mem, 0, n * 4, 0, &p), "carte du ciel");
+        check(vkMapMemory(g.dev, staging.mem, 0, total * 4, 0, &p), "carte du ciel");
         f.read(static_cast<char*>(p), static_cast<std::streamsize>(n * 4));
         const bool ok = static_cast<bool>(f);
+        if (ok) {
+            float* v = static_cast<float*>(p);
+            size_t src = 0, dst = n, count = n;
+            for (uint32_t l = 1; l < levels; ++l) {
+                for (size_t i = 0; i < count / 4; ++i) {
+                    double sum = 0;
+                    int k = 0;
+                    for (int c = 0; c < 4; ++c) {
+                        const float x = v[src + 4 * i + c];
+                        if (std::isfinite(x)) { sum += x; ++k; }
+                    }
+                    v[dst + i] = k ? static_cast<float>(sum / k) : std::numeric_limits<float>::quiet_NaN();
+                }
+                src = dst;
+                dst += count / 4;
+                count /= 4;
+            }
+        }
         vkUnmapMemory(g.dev, staging.mem);
         if (!ok) {
             destroy(g, staging);
             return false;
         }
+        levels_ = levels;
         vkDeviceWaitIdle(g.dev);
         if (loaded) destroy(g, map_);
-        map_ = createBuffer(g, n * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        map_ = createBuffer(g, total * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         VkCommandBuffer cmd = beginOnce(g);
-        const VkBufferCopy region{0, 0, n * 4};
+        const VkBufferCopy region{0, 0, total * 4};
         vkCmdCopyBuffer(cmd, staging.buf, map_.buf, 1, &region);
         endOnce(g, cmd);
         destroy(g, staging);
         for (int i = 0; i < kRing; ++i) {
-            const VkDescriptorBufferInfo bi[2] = {{ubo_[i].buf, 0, sizeof(SkyBandUbo)}, {map_.buf, 0, n * 4}};
+            const VkDescriptorBufferInfo bi[2] = {{ubo_[i].buf, 0, sizeof(SkyBandUbo)}, {map_.buf, 0, total * 4}};
             VkWriteDescriptorSet w[2];
             for (uint32_t b = 0; b < 2; ++b) {
                 w[b] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -230,7 +260,8 @@ public:
         u.scale[2] = info.scaleKind == "log" ? 1.0f : 0.0f;
         u.scale[3] = static_cast<float>(alpha);
         u.grid[0] = static_cast<float>(info.nside);
-        u.grid[1] = static_cast<float>(height);
+        u.grid[1] = static_cast<float>(levels_);
+        u.grid[2] = static_cast<float>(2.0 * cam.tanHalf / height);
         std::memcpy(mapped_[ring_], &u, sizeof(u));
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
@@ -261,6 +292,7 @@ public:
 
 private:
     static constexpr int kRing = 4;
+    uint32_t levels_ = 1;
     Buffer map_{};
     Buffer ubo_[kRing];
     void* mapped_[kRing]{};

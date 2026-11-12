@@ -2,7 +2,9 @@
 /* Le ciel dans une autre longueur d'onde (ciel_bandes.h) : pour chaque pixel de l'écran, la direction regardée est
    tournée dans le repère du relevé (galactique ou équatorial), convertie en numéro de pixel HEALPix emboîté
    (Górski et al. 2005 ; même calcul que pipeline/natif/ciel_bandes.py, contrôlé contre healpy), et la valeur MESURÉE de
-   ce pixel est lue telle quelle. Pas d'interpolation : on voit le pixel du relevé.
+   ce pixel est lue telle quelle. Pas d'interpolation : on voit le pixel du relevé. Quand un pixel du relevé est plus
+   petit qu'un pixel de l'écran, on lit le niveau de la pyramide (moyenne des pixels mesurés, ciel_bandes.h) qui a la taille
+   du pixel de l'écran : la vue large est la somme du mesuré, sans grain artificiel.
    Couleur : fausses couleurs (palette « inferno », van der Walt et Smith 2015, approchée par un polynôme), échelle
    logarithmique ou linéaire entre deux valeurs données par la fiche de la bande. Pixel sans mesure : hachures grises,
    pour montrer le trou de couverture au lieu d'inventer une valeur. */
@@ -11,7 +13,7 @@ layout(location = 0) out vec4 o;
 layout(std140, set = 0, binding = 0) uniform U {
     vec4 right, up, fwd;   /* vecteurs de la caméra dans le repère du relevé, déjà multipliés par tan(champ/2) */
     vec4 scale;            /* x : bas de l'échelle ; y : haut ; z : 1 = logarithmique ; w : opacité (effacement loin du Soleil) */
-    vec4 grid;             /* x : Nside ; y : hauteur de l'image en pixels ; z, w : rien */
+    vec4 grid;             /* x : Nside ; y : niveaux de la pyramide ; z : angle d'un pixel de l'écran au centre (rad) ; w : rien */
 } u;
 layout(std430, set = 0, binding = 1) readonly buffer Carte { float v[]; } carte;
 
@@ -63,8 +65,16 @@ vec3 inferno(float t) {      /* polynôme de Matt Zucker (Shadertoy WlfXRN, doma
 
 void main() {
     vec2 ndc = uv * 2.0 - 1.0;
-    vec3 dir = normalize(u.fwd.xyz + ndc.x * u.right.xyz - ndc.y * u.up.xyz);
-    float val = carte.v[ang2pixNest(int(u.grid.x), dir)];
+    vec3 ray = u.fwd.xyz + ndc.x * u.right.xyz - ndc.y * u.up.xyz;
+    vec3 dir = normalize(ray);
+    /* angle couvert par ce pixel de l'écran (plus petit au bord de l'image), et taille d'un pixel HEALPix du niveau 0 */
+    float screen = u.grid.z / dot(ray, ray);
+    float hpx = sqrt(4.0 * PI / (12.0 * u.grid.x * u.grid.x));
+    int level = clamp(int(floor(log2(max(screen / hpx, 1.0)))), 0, int(u.grid.y) - 1);
+    int nside = int(u.grid.x) >> level;
+    uint base = 0u;
+    for (int l = 0; l < level; ++l) { uint ns = uint(int(u.grid.x) >> l); base += 12u * ns * ns; }
+    float val = carte.v[base + ang2pixNest(nside, dir)];
     vec3 c;
     if (isnan(val)) {      /* pas de mesure : hachures, une ligne sur huit pixels de l'écran */
         float h = mod(gl_FragCoord.x + gl_FragCoord.y, 8.0);
