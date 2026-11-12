@@ -38,7 +38,7 @@ find_program(GLSLANG glslang REQUIRED)
 set(SPV_DIR ${CMAKE_BINARY_DIR}/spv)
 file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
-foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert)
+foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
     DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} VERBATIM)
@@ -108,3 +108,10 @@ add_subdirectory(physique)
 add_executable(essai_sondes src/essai_sondes.cpp)
 target_compile_options(essai_sondes PRIVATE -Wall -Wextra)
 target_link_options(essai_sondes PRIVATE -static)
+
+# Contrôle sans fenêtre des étoiles Gaia DR3 (gaia.h) : image hors écran, cadence, étoiles dessinées.
+add_executable(essai_gaia src/essai_gaia.cpp)
+target_link_libraries(essai_gaia PRIVATE volk)
+target_compile_options(essai_gaia PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_gaia PRIVATE -static)
+add_dependencies(essai_gaia shaders)

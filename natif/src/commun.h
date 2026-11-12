@@ -87,8 +87,7 @@ double lobe(double l, double mu, double s1, double s2) {
     const double t = (l - mu) / (l < mu ? s1 : s2);
     return std::exp(-0.5 * t * t);
 }
-std::array<uint8_t, 4> colorOfBv(double bv) {
-    const double T = 4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62));
+std::array<uint8_t, 4> colorOfTemperature(double T) {
     double X = 0, Y = 0, Z = 0;
     for (double l = 380; l <= 780; l += 5) {
         const double m = l * 1e-9;
@@ -103,6 +102,7 @@ std::array<uint8_t, 4> colorOfBv(double bv) {
     auto q = [&](double v) { return static_cast<uint8_t>(std::lround(255.0 * v / mx)); };
     return {q(r), q(g), q(b), 255};
 }
+std::array<uint8_t, 4> colorOfBv(double bv) { return colorOfTemperature(4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62))); }
 
 // ---------------------------------------------------------------- un peu d'algèbre (double précision côté processeur)
 struct Vec3 { double x, y, z; };
@@ -200,6 +200,7 @@ Gpu createGpu(bool window = false) {
     on13.dynamicRendering = VK_TRUE;
     VkPhysicalDeviceFeatures feats{};
     feats.largePoints = VK_TRUE;
+    feats.multiDrawIndirect = VK_TRUE;      // étoiles Gaia : un dessin par feuille de l'arbre, en un seul appel (gaia.h)
     feats.samplerAnisotropy = VK_TRUE;      // cartes de surface nettes en vue rasante
     VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &on13};
     dci.queueCreateInfoCount = 1;
@@ -351,19 +352,24 @@ struct StarRenderer {
     Buffer vb[kCols];
     uint32_t count = 0;
 
-    void create(const Gpu& g, const Stars& stars, VkFormat fmt) {
-        const size_t n = static_cast<size_t>(stars.n) + 1;      // + le Soleil
+    // mainOnly : seulement le catalogue principal de la page (étoiles brillantes, noms) ; les autres étoiles viennent
+    // alors de Gaia DR3 (gaia.h), qui en a retiré les doublons de ce catalogue.
+    void create(const Gpu& g, const Stars& stars, VkFormat fmt, bool mainOnly = false) {
+        uint32_t mainCount = 0;
+        std::memcpy(&mainCount, stars.base + 16, 4);
+        const size_t nCat = mainOnly ? std::min<size_t>(mainCount, stars.n) : static_cast<size_t>(stars.n);
+        const size_t n = nCat + 1;      // + le Soleil
         count = static_cast<uint32_t>(n);
         // Couleur : table de 512 pas sur B-V (de -0,5 à 2,7 : étendue du codage de la page), appliquée à chaque étoile.
         std::vector<std::array<uint8_t, 4>> lut(512);
         for (int i = 0; i < 512; ++i) lut[i] = colorOfBv(-0.5 + 3.2 * i / 511.0);
         auto colorOf = [&](double bv) { return lut[static_cast<size_t>(std::clamp((bv + 0.5) / 3.2 * 511.0, 0.0, 511.0))]; };
         std::vector<std::array<uint8_t, 4>> colors(n);
-        for (uint64_t i = 0; i < stars.n; ++i) colors[i] = colorOf(stars.bv()[i]);
+        for (size_t i = 0; i < nCat; ++i) colors[i] = colorOf(stars.bv()[i]);
         colors[n - 1] = colorOf(kSunBv);
         std::vector<float> tmp(n);
         auto column = [&](const float* src, float sun) {
-            std::memcpy(tmp.data(), src, static_cast<size_t>(stars.n) * 4);
+            std::memcpy(tmp.data(), src, nCat * 4);
             tmp[n - 1] = sun;
             return uploadVertices(g, tmp.data(), n * 4);
         };
