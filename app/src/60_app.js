@@ -45,19 +45,8 @@
   const NOW_MS = Date.now(), JD_NOW = 2440587.5 + NOW_MS / 86400000, T_NOW = (JD_NOW - JD_J2000) / 36525;
   const fid = buildCosmo(PLANCK), D_FID = fid.Dtoday;
   /** Distance comobile actuelle en fonction du décalage vers le rouge, pour la cosmologie choisie : table utilisée pour placer chaque galaxie observée. */
-  function surveyLut(C) {
-    const K = 1024, lut = new Float32Array(K + 1), lz = Math.log(1 + DATA.SURV_ZMAX);
-    let iNow = 0; while (iNow < C.n - 1 && C.t[iNow + 1] <= 1e-9) iNow++;
-    let j0 = iNow; while (j0 > 0 && C.a[j0 - 1] < C.a[j0]) j0--;
-    let j = iNow;
-    for (let k = 0; k <= K; k++) {
-      const a = Math.exp(-k / K * lz);
-      while (j > j0 && C.a[j - 1] > a) j--;
-      const chi = j > j0 ? lerp(C.chi[j - 1], C.chi[j], clamp((a - C.a[j - 1]) / (C.a[j] - C.a[j - 1]), 0, 1)) : C.chi[j0] * clamp(a / C.a[j0], 0, 1);
-      lut[k] = Math.max(C.chi[iNow] - chi, 0);
-    }
-    return lut;
-  }
+  let lcOn = false;      /* S7 : la constante S n’existe pas encore au premier appel */
+  function surveyLut(C) { return surveyLutOf(C, DATA.SURV_ZMAX, lcOn); }      /* S7 : 29_cone.js */
   Rr.setSurvey(surveyLut(fid)); let surveyDirty = false;
   // avenir : Soleil, planètes englouties, Andromède
   /* R5 : Mercure et Vénus suivent l'orbite calculée par planetTide (marées et frottement, Schröder et Smith 2008) ; engloutissement à la fin de la spirale. */
@@ -410,7 +399,7 @@
   function openPanel(k) { openKey = openKey === k ? null : k; for (const n in panels) { const on = n === openKey; panels[n][0].hidden = !on; panels[n][1].setAttribute('aria-expanded', on); } if (openKey === 'cosmo') { drawChart(); drawRot(); refreshCosmo(); } if (openKey === 'chrono') evScroll(); }
   for (const n in panels) { panels[n][1].addEventListener('click', () => openPanel(n)); panels[n][0].querySelector('[data-close]').addEventListener('click', () => openPanel(null)); }
   const bind = (id, key, fn) => $(id).addEventListener('change', e => { S.opts[key] = e.target.checked; if (fn) fn(); });
-  bind('c-lab', 'labels'); bind('c-orb', 'orbits'); bind('c-real', 'realSize'); bind('c-hz', 'horizons'); bind('c-com', 'comoving'); bind('c-dm', 'dm', () => drawRot());
+  bind('c-lab', 'labels'); bind('c-orb', 'orbits'); bind('c-real', 'realSize'); bind('c-hz', 'horizons'); bind('c-com', 'comoving'); bind('c-lc', 'lightcone');      /* S7 : appliqué à l'image suivante (lcOn), seulement autour d'aujourd'hui */ bind('c-dm', 'dm', () => drawRot());
   { let busy = false;
     $('c-sim').addEventListener('change', async e => {
       const box = e.target;
@@ -591,7 +580,7 @@
       if (Rj > 0) o.push(Rj < 0.35 ? sig(Rj * 11.21, 2) + NBSP + 'fois le rayon de la Terre' : sig(Rj, 2) + NBSP + 'fois le rayon de Jupiter'); if (ec > 0.1) o.push('orbite allongée (excentricité ' + sig(ec, 2) + ')'); if (T > 0) o.push('environ ' + nf(Math.round(T / 10) * 10, 0) + NBSP + 'K'); if (q[5]) o.push('trouvée en ' + q[5] + (DATA.EXO_METH[q[8]] ? ' ' + DATA.EXO_METH[q[8]] : '')); r.push(['Planète ' + (q[0] || '?'), o.join(', ') || 'orbite mal connue']); }
     if (L.length > 8) r.push(['Et aussi', (L.length - 8) + ' autres planètes']); return r; };
   const survPlus = (o, P, i) => { const z = P.svInfo[i * 3], q = P.svInfo[i * 3 + 2] > 1.5, rows = o.rows;
-    o.rows = () => rows().concat([['Taille de l’univers à l’émission', sig(100 / (1 + z), 3) + NBSP + '% de sa taille actuelle'], ['Distance au moment de l’émission', fmtDist(vlen(o.get()) / (1 + z) / (F.cos.a || 1))]], q ? [['Moteur', 'un trou noir supermassif qui avale la matière autour de lui']] : [], [['Âge de l’univers à l’émission', fmtYears(Math.max(F.age - S.ty / 1e9 - lookbackGyr(z), 0) * 1e9)]], skyRow([P.svDir[i * 3], P.svDir[i * 3 + 1], P.svDir[i * 3 + 2]])); return o; };
+    o.rows = () => rows().concat([['Taille de l’univers à l’émission', sig(100 / (1 + z), 3) + NBSP + '% de sa taille actuelle'], ['Distance au moment de l’émission', fmtDist(vlen(o.get()) / (lcOn ? 1 : 1 + z) / (F.cos.a || 1))]      /* S7 : en vue « lumière », la position est déjà celle de l’émission */], q ? [['Moteur', 'un trou noir supermassif qui avale la matière autour de lui']] : [], [['Âge de l’univers à l’émission', fmtYears(Math.max(F.age - S.ty / 1e9 - lookbackGyr(z), 0) * 1e9)]], skyRow([P.svDir[i * 3], P.svDir[i * 3 + 1], P.svDir[i * 3 + 2]])); return o; };
   const horizon = M => { const d = 5.906 * M; return d < 2e6 ? 'environ ' + nf(Number(d.toPrecision(2)), 0) + NBSP + 'km de diamètre' : fmtDist(d * 1e3) + ' de diamètre'; };       // diamètre de l'horizon : 2 × 2,953 km par masse solaire
   const bigMass = M => M >= 1e9 ? sig(M / 1e9, 2) + NBSP + 'milliards de fois le Soleil' : M >= 1e6 ? sig(M / 1e6, 2) + NBSP + 'millions de fois le Soleil' : nf(Number(M.toPrecision(2)), 0) + NBSP + 'fois le Soleil';
   const BHSM = new Float32Array(b64ToBytes(DATA.BHS.mass).buffer), BHSP = new Float32Array(b64ToBytes(DATA.BHS.per).buffer), BHML = new Float32Array(b64ToBytes(DATA.BHM.logm).buffer);
@@ -697,8 +686,8 @@
   function selNear(i) { const P = Rr.pick, get = () => add3(F.gcRel, [P.nPos[i * 3], P.nPos[i * 3 + 1], P.nPos[i * 3 + 2]], MPC * F.cos.a);
     return { name: NM.near[i] || 'Galaxie', sub: 'Galaxie proche, à distance mesurée', get, rows: () => [['Distance', fmtDist(vlen(get()))]].concat(cf4Rows(DATA.CF4_NEAR && DATA.CF4_NEAR[i]), [['Diamètre', fmtDist(P.nLook[i * 2] * 2 * MPC, 2)], ['S’éloigne à', nf(Math.round(F.cos.Hkms * vlen(get()) / MPC), 0) + NBSP + 'km/s (expansion seule)'], ['Décalage vers le rouge', 'z = ' + zStr(F.cos.Hkms * vlen(get()) / MPC / 299792.458) + ' (expansion seule)']]).concat(nearExtra(i), galMotionRows(get, false), skyRow(get()), cf4Src(DATA.CF4_NEAR && DATA.CF4_NEAR[i])) }; }
   function selSurv(i, PP) { const P = PP || Rr.pick, z = P.svInfo[i * 3], kind = P.svInfo[i * 3 + 2], get = () => add3(F.gcRel, [P.svDir[i * 3], P.svDir[i * 3 + 1], P.svDir[i * 3 + 2]], P.svDist[i] * MPC * F.cos.a);
-    return { name: kind > 1.5 ? 'Quasar' : 'Galaxie', sub: kind > 1.5 ? 'Noyau de galaxie très lumineux, relevé SDSS ou DESI' : kind > 0.5 ? 'Galaxie d’un relevé profond (6dF, 2dF, SDSS ou DESI)' : 'Galaxie du relevé 2MRS', get, rows: () => { const d = P.svDist[i] * MPC * F.cos.a, v = F.cos.Hkms * d / MPC;
-      return [['Décalage vers le rouge', 'z = ' + sig(z, 3)], ['Couleur', kind > 1.5 ? 'calculée : forme moyenne des quasars (SDSS), décalée de z' + (z > DATA.ZCOL.zq ? ' (tel qu’à z = ' + sig(DATA.ZCOL.zq, 3) + ', au-delà le spectre manque)' : '') : 'calculée : spectre d’une spirale Sb (Kinney 1996) décalé de z ; type réel inconnu' + (z > DATA.ZCOL.zg ? ' (tel qu’à z = ' + sig(DATA.ZCOL.zg, 3) + ', au-delà le spectre manque)' : '')], ['Distance à cet instant', fmtDist(d)], ['Sa lumière a voyagé', fmtYears(lookbackGyr(z) * 1e9)], ['S’éloigne à', v > 299792 ? sig(v / 299792.458, 3) + NBSP + 'fois la vitesse de la lumière : c’est l’espace qui s’étire' : nf(Math.round(v / 10) * 10, 0) + NBSP + 'km/s']].concat(galMotionRows(get, true)); } }; }
+    return { name: kind > 1.5 ? 'Quasar' : 'Galaxie', sub: kind > 1.5 ? 'Noyau de galaxie très lumineux, relevé SDSS ou DESI' : kind > 0.5 ? 'Galaxie d’un relevé profond (6dF, 2dF, SDSS ou DESI)' : 'Galaxie du relevé 2MRS', get, rows: () => { const d = P.svDist[i] * MPC * F.cos.a, v = F.cos.Hkms * d * (lcOn ? 1 + z : 1) / MPC;      /* S7 : vitesse d'éloignement d'aujourd'hui, même quand la galaxie est placée là où sa lumière est partie */
+      return [['Décalage vers le rouge', 'z = ' + sig(z, 3)], ['Couleur', kind > 1.5 ? 'calculée : forme moyenne des quasars (SDSS), décalée de z' + (z > DATA.ZCOL.zq ? ' (tel qu’à z = ' + sig(DATA.ZCOL.zq, 3) + ', au-delà le spectre manque)' : '') : 'calculée : spectre d’une spirale Sb (Kinney 1996) décalé de z ; type réel inconnu' + (z > DATA.ZCOL.zg ? ' (tel qu’à z = ' + sig(DATA.ZCOL.zg, 3) + ', au-delà le spectre manque)' : '')], [lcOn ? 'Distance quand sa lumière est partie' : 'Distance à cet instant', fmtDist(d)], ['Sa lumière a voyagé', fmtYears(lookbackGyr(z) * 1e9)], [lcOn ? 'S’éloigne aujourd’hui à' : 'S’éloigne à', v > 299792 ? sig(v / 299792.458, 3) + NBSP + 'fois la vitesse de la lumière : c’est l’espace qui s’étire' : nf(Math.round(v / 10) * 10, 0) + NBSP + 'km/s']].concat(galMotionRows(get, true)); } }; }
   function pickAt(x, y, posOnly) { if (S.logR < 3) return null; let bp = null, lx = 0, ly = 0, lz = 0;      /* posOnly (R3) : rend la position (m) de l'objet sous le point, sans ouvrir de fiche */      // dans l'infiniment petit, on ne sélectionne pas les astres restés derrière le fond
    
     PM.multiplyMatrices(Rr.camera.projectionMatrix, Rr.camera.matrixWorldInverse);
@@ -1241,7 +1230,8 @@
     const pn = placeName(); if (pn !== lastPlace) { $('place').textContent = lastPlace = pn; }
     { const ml = microOn() && S.logR < 3.2 ? microLevel(S.logR).id : ''; if (ml !== lastMl) { lastMl = ml; if (!S.sel) renderCard(); } }
     $('field').textContent = 'Champ large de ' + fmtDist(2 * R);
-    $('prov').textContent = provText(S.logR) + (Rr.dustOn ? ' Étoiles assombries par la poussière mesurée entre elles et la vue.' : '') + (Rr.lens.on ? (Rr.lens.inside ? ' Trop près de ' + Rr.lens.name + ' : non calculé ici.' : ' Lumière déviée par ' + Rr.lens.name + ' : calculée (sans rotation, sans disque).') : '');
+    { const want = !!S.opts.lightcone && Math.abs(S.ty) < 5e7; if (want !== lcOn) { lcOn = want; surveyDirty = true; } }      /* S7 : vue ancrée sur aujourd'hui (à 50 millions d'années près, a change de moins de 0,4 %) */
+    $('prov').textContent = provText(S.logR) + (S.opts.lightcone && S.logR > 22.5 ? (!lcOn ? ' Vue « telle que la lumière nous arrive » : seulement autour d’aujourd’hui.' : S.opts.simWeb ? ' La toile simulée n’est pas déplacée par la vue « telle que la lumière nous arrive ».' : ' Galaxies des relevés placées où leur lumière est partie ; noms d’amas, fond diffus et horizons à leur place d’aujourd’hui.') : '') + (Rr.dustOn ? ' Étoiles assombries par la poussière mesurée entre elles et la vue.' : '') + (Rr.lens.on ? (Rr.lens.inside ? ' Trop près de ' + Rr.lens.name + ' : non calculé ici.' : ' Lumière déviée par ' + Rr.lens.name + ' : calculée (sans rotation, sans disque).') : '');
     const nt = noticeText(); if (nt !== lastNotice) { lastNotice = nt; $('notice').textContent = nt; $('notice').hidden = !nt; }
     renderCard();
 

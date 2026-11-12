@@ -36,3 +36,10 @@ Décision de Marc (11/11/2026) : toutes les recommandations du cadrage (« oui �
 - Branchement : `starPositions` prend la position exacte quand elle existe pour `tEff` (à 1 Ma près), sinon l'épicycle, sans saut visible (fondu interdit : on attend la fin du calcul et on le dit, « calcul des orbites »). Le Soleil (`sunGalAt`) suit la même orbite exacte, pour que tout reste cohérent.
 - Piège : `tEff` n'est pas le temps réel quand la matière noire est retirée (`S.dmMix`, `oSunNo / oSunDM`) ; dans ce mode, le potentiel sans halo doit être utilisé, ou l'orbite exacte coupée et le dire.
 - Fini quand : énergie de chaque orbite conservée à 0,1 % sur 1 Ga ; période du Soleil 220 à 240 Ma ; les 42 passages d'étoiles gardent leurs dates publiées (pris en ligne droite sous 3 Ma, inchangé) ; temps par image sous deux fois la référence pendant la lecture à vitesse maximale ; quatre critiques PASSE.
+
+## État au 12 novembre 2026
+- Fusionnés : S1 (#5), S2 (#7), S3 (#9), S6 (#12), S5 (#14). S7 ajouté (vue « telle que la lumière nous arrive », #25). Page en ligne republiée (version 36).
+- S4 (ciel en tuiles HiPS) : reste au fil des sources astro (A4), qui attend le stockage en ligne.
+- Écartés au cadrage, avec l'accord de Marc : relativité restreinte, extension Gaia Sky ou OpenSpace, WebGPU, filtres et aigrettes d'instruments.
+- Pistes non engagées : nuages de poussière visibles (lumière diffusée, demande un modèle du rayonnement des étoiles, en grande partie supposé) ; mesure de fluidité sur téléphone.
+- Marge de la page en un fichier : environ 0,5 Mo ; tout ajout lourd doit être chargé à part.
