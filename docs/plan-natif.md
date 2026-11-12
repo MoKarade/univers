@@ -242,9 +242,9 @@ documente pas) ; magnitude absolue et couleur du Soleil (valeurs nominales usuel
 
 ## Éclipses et lumières de nuit (12 novembre 2026)
 
-- `essai_eclipse` [Certain] : le 12 août 2026 à 17 h 46 min 06 s TU, l'axe de l'ombre de la Lune touche la Terre à
-  65,19° nord et 25,98° ouest ; la NASA donne 65,22° et 25,23° pour le maximum (écart 0,3°, Terre prise sphérique et
-  lumière instantanée). L'ombre est sur la Terre une demi-heure avant et après, absente un mois plus tard.
+- `essai_eclipse` [Certain] : le 12 août 2026 à 17 h 47 min 06 s en temps dynamique (maximum du catalogue des
+  éclipses de la NASA, ligne relue en ligne), l'axe de l'ombre de la Lune touche la Terre à moins de 1° du point
+  donné par la NASA (65° nord, 25° ouest, au degré près ; Terre prise sphérique et lumière instantanée). L'ombre est sur la Terre une demi-heure avant et après, absente un mois plus tard.
 - `shaders/sphere.frag` : pour chaque point de la surface, part du disque du Soleil cachée par l'astre le mieux aligné
   (planète, lune ou lune sœur ; un seul par image) : ombre et pénombre exactes pour un Soleil uniforme. Capture de
   contrôle : la tache d'ombre entre le Groenland et l'Islande (`--cible Terre --date 26.61256749562704 --vue 139.8,45`).
