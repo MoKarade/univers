@@ -309,3 +309,8 @@ des sources Gaia à distance moins sûre (fil Gaia), texte qui dit à chaque éc
 - Constat : le catalogue principal (58 967 étoiles) venait de la page, arrondi (distance à 0,02 %, vitesse à 0,05 km/s), et 41 087 étoiles sans vitesse radiale dans HYG étaient comptées avec zéro.
 - Fait : `pipeline/natif/etoiles_hyg.py` relit ces étoiles dans HYG v4.1 à pleine précision (même ordre que la page, contrôlé), recalcule la vitesse (mouvement propre + vitesse radiale) et prend la vitesse radiale dans SIMBAD (98 139 étoiles Hipparcos mesurées, miroir de Harvard) : 32 060 vitesses radiales ajoutées, 9 034 restent inconnues (nombre écrit dans etoiles_sans_vr.txt). `etoiles_hyg_appliquer.py` les écrit dans etoiles.bin.
 - Contrôles : positions à 1,1e-4 près de celles de la page (son arrondi) ; vitesse recalculée à 0,005 km/s de HYG en médiane (une exception, HIP 17851, où HYG se contredit) ; HYG et SIMBAD s'accordent à 1,26 km/s en médiane ; test_etoiles.py PASSE.
+
+## Groupe local complet (12 novembre 2026)
+
+- Fait : `pipeline/natif/galaxies_groupe_local.py` ajoute à galaxies_noms.tsv les 44 galaxies naines confirmées à moins de 1 Mpc qui manquaient (Local Volume Database v1.1.2, Pace 2024 : direction et module de distance mesurés). L'appli en montre 113 sur 113.
+- À faire par le fil complétude : régénérer completude_groupe_local.h (zéro manquante) et adapter son essai.
