@@ -163,3 +163,16 @@ finale, interface comprise, dans un fichier (`--fenetre-test`), relu à l'œil e
 - Dit dans le code : l'exposition des surfaces est un réglage d'affichage (en vraie lumière l'image serait blanche).
 - Reste : anneaux de Saturne, nuages et nuit de la Terre, ombres et éclipses, lunes des géantes, Pluton (pas de
   carte), dates hors 1550-2650.
+
+## E4 et E7 : galaxies et cosmologie (12 novembre 2026, 16 h UTC)
+
+- `pipeline/natif/galaxies.py` : 5 566 702 galaxies et quasars de la page (456 459 embarqués + 5 110 243 en flux,
+  dont 1 194 643 quasars) dans `galaxies.bin` (direction, décalage vers le rouge, couleur de la page) ; 122 galaxies
+  et amas nommés dans `galaxies_noms.tsv`.
+- `natif/src/cosmologie.h` : distances de Friedmann avec matière, rayonnement, courbure et énergie noire variable
+  (w0, wa). `essai_cosmologie` [Certain] : identique à astropy à 0,1 Mpc près pour z = 0,1 à 3 ; âge 13,791 Ga.
+- `natif/src/galaxies.h`, `shaders/galaxies.vert` : la distance de chaque galaxie est lue par la carte graphique
+  dans une table de 257 valeurs recalculée quand un curseur bouge : les 5,6 millions de points se replacent à
+  l'image suivante. Panneau « L'univers en expansion » (H0, matière, énergie noire, w0, wa, âge, courbure).
+- Dit à l'écran : éclat des galaxies supposé identique et pâlissant avec la distance ; Voie lactée non dessinée.
+- Reste E4 : Voie lactée, formes et photos des galaxies proches, mouvement du Groupe local, cône de lumière.

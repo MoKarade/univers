@@ -160,7 +160,10 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     const ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 4.0f);
     const bool click = ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse && drag.x == 0 && drag.y == 0;
     const double boostMag = 2.5 * std::log10(sim.brightnessBoost());
-    for (int i = 0; i < count; ++i) {
+    std::vector<ImVec4> placed;      // rectangles des noms déjà posés : un nom ne recouvre jamais un autre
+    for (int pass = -1; pass < count; ++pass) {      // l'astre suivi d'abord : il garde toujours son nom, les autres s'effacent devant lui
+        const int i = pass < 0 ? sim.focus : pass;
+        if (pass >= 0 && i == sim.focus) continue;
         if (!sim.visible(i)) continue;
         const Body& b = sim.bodies[static_cast<size_t>(i)];
         double px = 0, py = 0;
@@ -168,7 +171,9 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
         const bool isFocus = i == sim.focus;
         if (isFocus && discRadiusPx(sim, cam, i, h) > 14) continue;      // vu de près : la fiche porte déjà son nom
         if (!isFocus) {
-            if (b.kind == Kind::Star && sim.apparentMag(i, cam.pos) - boostMag > 4.5) continue;      // trop pâle d'ici pour mériter un nom
+            if (b.kind == Kind::Star && (sim.dist > 3000.0 || sim.apparentMag(i, cam.pos) - boostMag > 4.5)) continue;      // trop pâle d'ici, ou vue trop large
+            if (b.kind == Kind::Planet && sim.dist > 0.05) continue;
+            if (b.kind == Kind::Galaxy && (sim.dist < 2.0e4 || sim.dist > 3.0e9 || (b.priority > 1 && sim.dist < 1.5e6))) continue;
             if (b.kind == Kind::Planet) {      // un nom par planète seulement quand elle se détache de son astre parent
                 double qx = 0, qy = 0;
                 const bool parentOn = cam.project(sim.position(std::max(b.parent, 0)), w, h, qx, qy);
@@ -178,6 +183,13 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
         const char* name = b.name.c_str();
         const ImVec2 size = ImGui::CalcTextSize(name);
         const ImVec2 at{static_cast<float>(px) + 10, static_cast<float>(py) - size.y * 0.5f};
+        const ImVec4 box{at.x - 14, at.y - 3, at.x + size.x + 6, at.y + size.y + 3};
+        if (!isFocus) {
+            bool overlaps = false;
+            for (const ImVec4& r : placed) overlaps |= box.x < r.z && box.z > r.x && box.y < r.w && box.w > r.y;
+            if (overlaps) continue;
+        }
+        placed.push_back(box);
         const bool hover = mouse.x >= at.x - 14 && mouse.x <= at.x + size.x + 4 && mouse.y >= at.y - 4 && mouse.y <= at.y + size.y + 4;
         if (isFocus) dl->AddCircle({static_cast<float>(px), static_cast<float>(py)}, 9, kAccent, 32, 1.5f);
         dl->AddText({at.x + 1, at.y + 1}, IM_COL32(0, 0, 0, 200), name);
@@ -242,7 +254,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     ImGui::TextUnformatted(fb.name.c_str());
     ImGui::PopFont();
     ImGui::Separator();
-    row("Nature", fb.nature, "");
+    row("Nature", fb.natureLabel(), "");
     if (fb.kind == Kind::Planet) {
         row("Distance au Soleil", frDistance(dSun), "éphémérides NASA");
         for (int i = 0; i < count; ++i)
@@ -257,14 +269,18 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
         row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : mouvement mesuré, prolongé en ligne droite");
         row("Éclat vu de la Terre", "magnitude " + frNum(sim.apparentMag(f, {0, 0, 0})), "calculé");
         row("Vitesse", frNum(sim.speedKms(f)) + " km/s par rapport au Soleil", "mesuré");
+    } else if (fb.kind == Kind::Galaxy) {
+        row("Distance au Soleil", frDistance(dSun), "mesuré");
+        ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
     } else {
         row("Rayon", frInt(fb.radiusKm) + " km", "mesuré");
     }
-    if (fb.kind != Kind::Planet)
+    if (fb.kind == Kind::Sun || fb.kind == Kind::Star)
         row("Température", frInt(4600.0 * (1.0 / (0.92 * fb.bv + 1.7) + 1.0 / (0.92 * fb.bv + 0.62))) + " K en surface", "calculé d'après la couleur");
-    row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé");
+    if (fb.kind != Kind::Galaxy) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé");
     ImGui::Separator();
     if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
+    else if (fb.kind == Kind::Galaxy) ImGui::TextDisabled("Sources : Karachentsev et al. 2013 ; McConnachie 2012.");
     else ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
     if (f != 0 && ImGui::Button("Revenir au Soleil")) clicked = 0;
     ImGui::End();
@@ -275,9 +291,45 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     const std::string where = "Tu regardes « " + fb.name + " » depuis " + frDistance(sim.dist) + ".";
     ImGui::TextUnformatted(where.c_str());
     const double boost = sim.brightnessBoost();
-    if (boost > 1.5) ImGui::TextDisabled("Éclat des étoiles multiplié par %s pour qu'elles restent visibles de si loin.", frNum(boost, 2).c_str());
+    if (boost > 1.5 && sim.dist < 1.0e5) ImGui::TextDisabled("Éclat des étoiles multiplié par %s pour qu'elles restent visibles de si loin.", frNum(boost, 2).c_str());
+    if (sim.galaxyGain() > 0.005) {
+        ImGui::TextDisabled("Chaque point lointain est une galaxie ou un quasar, placé d'après son décalage vers le rouge mesuré");
+        ImGui::TextDisabled("(relevés 2MRS, 6dF, 2dF, SDSS, DESI). Leur éclat propre n'est pas dans les données : on leur donne");
+        ImGui::TextDisabled("le même à toutes (supposé), et il pâlit avec la distance.");
+        ImGui::TextDisabled("La Voie lactée elle-même n'est pas encore dessinée : seules ses étoiles mesurées près du Soleil le sont.");
+    }
     ImGui::TextDisabled("Molette : zoomer   •   Glisser : tourner autour   •   Clic sur un nom : le suivre   •   Espace : pause   •   Échap : quitter");
     ImGui::End();
+
+    // En bas à droite, quand on regarde l'univers lointain : les réglages de l'expansion, recalculés en direct.
+    if (sim.dist > 2.0e6) {
+        cosmo::Params& c = sim.cosmology;
+        float h0 = static_cast<float>(c.h0), om = static_cast<float>(c.om), ode = static_cast<float>(c.ode), w0 = static_cast<float>(c.w0), wa = static_cast<float>(c.wa);
+        ImGui::SetNextWindowPos({w - 16, h - 16}, 0, {1, 1});
+        ImGui::Begin("cosmologie", nullptr, fixed);
+        ImGui::TextUnformatted("L'univers en expansion");
+        ImGui::Separator();
+        ImGui::PushItemWidth(240);
+        bool changed = false;
+        changed |= ImGui::SliderFloat("Vitesse d'expansion (km/s par Mpc)", &h0, 60.0f, 80.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Part de matière", &om, 0.05f, 0.60f, "%.3f");
+        changed |= ImGui::SliderFloat("Part d'énergie noire", &ode, 0.30f, 0.95f, "%.3f");
+        changed |= ImGui::SliderFloat("Énergie noire : w0", &w0, -1.6f, -0.4f, "%.2f");
+        changed |= ImGui::SliderFloat("Énergie noire : wa", &wa, -2.0f, 1.0f, "%.2f");
+        ImGui::PopItemWidth();
+        if (ImGui::Button("Valeurs mesurées (Planck 2018)")) {
+            c = cosmo::Params{};
+            sim.cosmologyDirty = true;
+        } else if (changed) {
+            c.h0 = h0; c.om = om; c.ode = ode; c.w0 = w0; c.wa = wa;
+            sim.cosmologyDirty = true;
+        }
+        const double ok = c.omegaK();
+        ImGui::TextDisabled("Âge de l'univers : %s milliards d'années (calculé).", frNum(cosmo::ageGyr(c), 4).c_str());
+        ImGui::TextDisabled("Forme de l'espace : %s (calculé).", std::fabs(ok) < 0.005 ? "plat" : ok > 0 ? "ouvert (courbure négative)" : "fermé (courbure positive)");
+        ImGui::TextDisabled("Bouge un curseur : toutes les galaxies se replacent aussitôt.");
+        ImGui::End();
+    }
     return clicked;
 }
 

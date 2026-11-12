@@ -9,6 +9,7 @@
 #include <imgui_impl_win32.h>
 
 #include "fenetre.h"
+#include "galaxies.h"
 #include "interface.h"
 #include "points_planetes.h"
 #include "spheres.h"
@@ -100,7 +101,7 @@ int runWindow(const WindowOptions& opt) {
     Sim sim;
     sim.stars = &stars;
     sim.spk = hasSpk ? &spk : nullptr;
-    sim.loadBodies(dataDir + "/etoiles_noms.tsv");
+    sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv");
     if (!opt.target.empty()) {
         bool found = false;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
@@ -161,6 +162,9 @@ int runWindow(const WindowOptions& opt) {
     sr.create(g, stars, HdrTarget::kFormat);
     PlanetPoints planets;
     planets.create(g);
+    GalaxyFile galaxyFile;
+    GalaxyRenderer galaxies;
+    if (openGalaxies(dataDir + "/galaxies.bin", galaxyFile)) galaxies.create(g, galaxyFile, HdrTarget::kFormat);
     SphereRenderer spheres;
     spheres.create(g, HdrTarget::kFormat, dataDir + "/textures");
     std::vector<bool> asSphere;
@@ -270,6 +274,10 @@ int runWindow(const WindowOptions& opt) {
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost()), sc.extent.height, sim.years);
 
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
+        if (sim.cosmologyDirty) {
+            galaxies.setCosmology(sim.cosmology);
+            sim.cosmologyDirty = false;
+        }
         spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
         planets.update(sim, cam, asSphere);
@@ -302,6 +310,7 @@ int runWindow(const WindowOptions& opt) {
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, hdr.view, sc.extent);
+        galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
         sr.draw(cmd, pc, sc.extent.width, sc.extent.height);
         planets.draw(cmd);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
@@ -378,6 +387,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     planets.release(g);
+    galaxies.release(g);
     spheres.release(g);
     sr.release(g);
     hdr.release(g);

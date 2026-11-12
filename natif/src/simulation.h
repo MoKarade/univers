@@ -1,6 +1,7 @@
 // Appli PC « Univers » : l'état du simulateur (temps, astres, objet suivi, caméra), sans rien qui dépende de l'affichage.
 #pragma once
 #include "commun.h"
+#include "cosmologie.h"
 #include "ephemeride.h"
 
 namespace {
@@ -17,7 +18,7 @@ constexpr double kLinearLimitYears = 3.0e6;      // au-delà, la ligne droite ne
 // [Approximation assumée : appliquée à toute date ; l'écart réel a varié de quelques dizaines de secondes par siècle.]
 constexpr double kTdbMinusUtc = 69.184;
 
-enum class Kind { Sun, Star, Planet };
+enum class Kind { Sun, Star, Planet, Galaxy };
 
 // Un astre que l'on peut suivre, chercher, nommer à l'écran.
 struct Body {
@@ -31,6 +32,10 @@ struct Body {
     double periodYears = 0;     // planète : durée d'un tour (pour tracer l'orbite)
     double radiusKm = 0;        // rayon moyen
     const char* nature = "";
+    std::string natureText;     // galaxie : genre lu dans le fichier
+    Vec3 fixedPos{0, 0, 0};     // galaxie : position mesurée (années-lumière), immobile pour l'instant
+    int priority = 1;           // galaxie : 1 = nom montré dès qu'on sort de la Voie lactée
+    const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
 };
 
 // Planètes : magnitude H et couleur B-V d'après Mallama et Hilton 2018 (Astronomy and Computing 25, 10) et
@@ -78,9 +83,11 @@ struct Sim {
     double yaw = -1.2, pitch = 0.55;     // direction d'où l'on regarde l'astre suivi (radians)
     double dist = 45.0 * kAuInLy;        // distance de la caméra à l'astre suivi (années-lumière) : au départ, tout le système solaire
     bool touched = false;                // quelqu'un a pris la main : fin du lent tour d'horizon
+    cosmo::Params cosmology;             // paramètres de l'univers en expansion (réglables à l'écran)
+    bool cosmologyDirty = true;          // les distances des galaxies sont à recalculer
 
     // Le Soleil, les planètes (si les éphémérides sont là), puis les étoiles nommées (etoiles_noms.tsv).
-    void loadBodies(const std::string& namesPath) {
+    void loadBodies(const std::string& namesPath, const std::string& galaxiesPath) {
         bodies.clear();
         Body sun;
         sun.name = "Soleil";
@@ -125,6 +132,22 @@ struct Sim {
                 bodies.push_back(body);
             }
         }
+        // Galaxies nommées (galaxies_noms.tsv : nom, x, y, z en années-lumière, genre, priorité).
+        std::ifstream gf(galaxiesPath);
+        while (std::getline(gf, line)) {
+            std::vector<std::string> cols;
+            size_t from = 0;
+            for (size_t tab; (tab = line.find('\t', from)) != std::string::npos; from = tab + 1) cols.push_back(line.substr(from, tab - from));
+            cols.push_back(line.substr(from));
+            if (cols.size() < 6) continue;
+            Body body;
+            body.name = cols[0];
+            body.kind = Kind::Galaxy;
+            body.fixedPos = {std::atof(cols[1].c_str()), std::atof(cols[2].c_str()), std::atof(cols[3].c_str())};
+            body.natureText = cols[4];
+            body.priority = std::atoi(cols[5].c_str());
+            bodies.push_back(body);
+        }
         planetPos.assign(bodies.size(), {0, 0, 0});
         refreshEphemeris();
     }
@@ -153,6 +176,7 @@ struct Sim {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return {0, 0, 0};
         if (b.kind == Kind::Planet) return planetPos[static_cast<size_t>(i)];
+        if (b.kind == Kind::Galaxy) return b.fixedPos;
         const double k = years * kKmsToLyPerYear;      // étoile : ligne droite à la vitesse mesurée
         return {stars->x()[b.star] + stars->vel(0)[b.star] * k, stars->y()[b.star] + stars->vel(1)[b.star] * k, stars->z()[b.star] + stars->vel(2)[b.star] * k};
     }
@@ -168,6 +192,7 @@ struct Sim {
     // en UA et la phase d'une sphère mate (loi de Lambert) [approximation assumée de la vraie courbe de phase].
     double apparentMag(int i, Vec3 from) const {
         const Body& b = bodies[static_cast<size_t>(i)];
+        if (b.kind == Kind::Galaxy) return 99.0;      // éclat des galaxies : pas dans les données pour l'instant
         const Vec3 p = position(i), d = p - from;
         const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
         if (b.kind == Kind::Planet) {
@@ -189,8 +214,13 @@ struct Sim {
 
     // Les étoiles pâlissent en 1/d² : loin de tout, on multiplie leur éclat pour qu'elles restent visibles, et on le dit.
     double brightnessBoost() const {
-        const double k = std::max(1.0, dist / 30.0);
+        const double k = std::clamp(dist / 30.0, 1.0, 70.0);      // plafonné : au-delà de 2 000 années-lumière, les étoiles mesurées se fondent en un point
         return k * k;
+    }
+    // Éclat donné à chaque galaxie des relevés : nul tant qu'on est dans la Voie lactée, plein au-delà de 3 millions d'années-lumière.
+    double galaxyGain() const {
+        const double t = std::clamp((std::log10(std::max(dist, 1.0)) - 4.5) / 2.0, 0.0, 1.0);
+        return 0.10 * t * t * (3.0 - 2.0 * t);
     }
 
     void advance(double dt) {
@@ -201,9 +231,11 @@ struct Sim {
         if (!visible(focus)) focus = 0;       // l'astre suivi n'a plus de position connue : retour au Soleil
     }
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return 1.0e3;
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }
-    void zoom(double notches) { dist = std::clamp(dist * std::pow(0.8, notches), minDist(focus), 4.0e5); }
+    static constexpr double kMaxDist = 9.0e10;      // un peu plus que la distance des objets les plus lointains (z = 7)
+    void zoom(double notches) { dist = std::clamp(dist * std::pow(0.8, notches), minDist(focus), kMaxDist); }
     void orbit(double dx, double dy) {
         yaw -= dx * 0.005;
         pitch = std::clamp(pitch + dy * 0.005, -1.55, 1.55);
@@ -216,7 +248,8 @@ struct Sim {
         double arrive = 50.0;                                                       // étoile : on garde ou on se rapproche à 50 années-lumière
         if (b.kind == Kind::Sun) arrive = 45.0 * kAuInLy;
         if (b.kind == Kind::Planet) arrive = 6.0 * b.radiusKm / kLyInKm;      // planète ou lune : elle remplit un bon tiers de l'écran
-        dist = std::clamp(std::min(dist, arrive), minDist(i), 4.0e5);
+        dist = std::clamp(std::min(dist, arrive), minDist(i), kMaxDist);
+        if (b.kind == Kind::Galaxy) dist = std::max(dist, 3.0e5);      // une galaxie se regarde de loin
     }
 };
 
@@ -244,6 +277,8 @@ std::string frInt(double v) { return frNum(std::round(v), 1 + static_cast<int>(s
 // Une longueur donnée en années-lumière, écrite dans l'unité qui parle.
 std::string frDistance(double ly) {
     const double km = ly * kLyInKm, au = ly / kAuInLy;
+    if (ly >= 1.0e9) return frNum(ly / 1.0e9) + " milliards d'années-lumière";
+    if (ly >= 1.0e6) return frNum(ly / 1.0e6) + " millions d'années-lumière";
     if (ly >= 0.1) return frNum(ly) + (ly >= 2 ? " années-lumière" : " année-lumière");
     if (au >= 0.1) return frNum(au) + " fois la distance Terre-Soleil";
     if (km >= 1.0e6) return frNum(km / 1.0e6) + " millions de km";
