@@ -308,7 +308,8 @@ public:
         if (f && std::getline(f, line)) {
             if (line.size() >= 3 && static_cast<unsigned char>(line[0]) == 0xEF) line = line.substr(3);      // BOM UTF-8
             while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
-            if (!line.empty()) root = (std::filesystem::path(line) / key).string();
+            /* le fichier est en UTF-8 (le chemin du Drive contient « · ») : on le garde en UTF-8 jusqu'à l'ouverture */
+            if (!line.empty()) root = line + "/" + key;
         }
         return true;
     }

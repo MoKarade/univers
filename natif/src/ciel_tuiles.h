@@ -67,6 +67,12 @@ inline uint64_t healpixInterleave(uint32_t x, uint32_t y) {
     return r;
 }
 
+// Chemin écrit en UTF-8 (le Google Drive de l'utilisateur a des noms avec « · » ou des accents). Sous Windows, une
+// std::string serait lue dans la page de code ANSI : on passe par les caractères larges.
+inline std::filesystem::path utf8Path(const std::string& s) {
+    return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()), s.size()));
+}
+
 class SkyTileStream {
 public:
     bool active = false;          // des tuiles fines existent pour la carte chargée
@@ -307,7 +313,7 @@ private:
             const uint64_t tile = keyTile(key);
             char name[32];
             std::snprintf(name, sizeof name, "/p%06llu.bin", static_cast<unsigned long long>(tile >> (2 * L.group)));
-            std::ifstream f(L.path + name, std::ios::binary);
+            std::ifstream f(utf8Path(L.path + name), std::ios::binary);
             if (f) {
                 f.seekg(static_cast<std::streamoff>((L.rank[tile] - 1ull) * tileBytes_));
                 r.data.resize(static_cast<size_t>(width) * width);
