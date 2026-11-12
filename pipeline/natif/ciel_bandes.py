@@ -588,7 +588,7 @@ def main():
                 break
             p = proprietes(r['hips'], r.get('adresse'))
             break
-        except Exception as e:
+        except (Exception, SystemExit) as e:   # proprietes() signale « aucun serveur » par SystemExit
             print(f'  {e} ; copie suivante', flush=True)
     if p is None:
         raise SystemExit(f'{a.nom} : aucune copie du relevé ne répond')
