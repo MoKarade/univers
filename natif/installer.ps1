@@ -44,7 +44,7 @@ if (Test-Path "$Donnees\clones_groupe_local.bin") { Copier-SiChange "$Donnees\cl
 New-Item -ItemType Directory -Force "$Cible\avancement" | Out-Null      # les calculs de fond y écrivent où ils en sont
 if (Test-Path "$Donnees\fusion") { New-Item -ItemType Directory -Force "$Cible\fusion" | Out-Null; Get-ChildItem "$Donnees\fusion" -File | ForEach-Object { Copier-SiChange $_.FullName "$Cible\fusion\$($_.Name)" } }
 # Étoiles Gaia et Voie lactée (fil « Voie lactée et étoiles Gaia »), si les fichiers ont été préparés.
-Get-ChildItem "$Donnees\ciel_*.bin" -ErrorAction SilentlyContinue | ForEach-Object { Copier-SiChange $_.FullName "$Cible\$($_.Name)" }      # cartes du ciel dans d'autres lumières
+Get-ChildItem "$Donnees\ciel_*.bin", "$Donnees\sources_*.bin" -ErrorAction SilentlyContinue | ForEach-Object { Copier-SiChange $_.FullName "$Cible\$($_.Name)" }      # cartes du ciel dans d'autres lumières
 foreach ($f in 'gaia.bin', 'gaia_agrege.bin', 'voie_lactee.bin') { if (Test-Path "$Gaia\$f") { Copier-SiChange "$Gaia\$f" "$Cible\$f" } }
 # Vue de départ : la ceinture d'Orion (étoile nommée de la page), si elle est dans le catalogue.
 $meta = Get-Content "$Cible\etoiles.json" -Raw -Encoding UTF8 | ConvertFrom-Json
