@@ -239,3 +239,15 @@ documente pas) ; magnitude absolue et couleur du Soleil (valeurs nominales usuel
   « Centre de la Voie lactée ». Captures de contrôle : aujourd'hui, +4 Ga (Andromède en approche), +6,5 Ga (fusionnées).
 - À faire : remplacer les fichiers du rejeu par ceux du calcul à 3 millions de particules quand il finit
   (`pipeline/natif/fusion_bin.py`), textes d'interface du temps profond (fil interface), passé lointain.
+
+## Éclipses et lumières de nuit (12 novembre 2026)
+
+- `essai_eclipse` [Certain] : le 12 août 2026 à 17 h 46 min 06 s TU, l'axe de l'ombre de la Lune touche la Terre à
+  65,19° nord et 25,98° ouest ; la NASA donne 65,22° et 25,23° pour le maximum (écart 0,3°, Terre prise sphérique et
+  lumière instantanée). L'ombre est sur la Terre une demi-heure avant et après, absente un mois plus tard.
+- `shaders/sphere.frag` : pour chaque point de la surface, part du disque du Soleil cachée par l'astre le mieux aligné
+  (planète, lune ou lune sœur ; un seul par image) : ombre et pénombre exactes pour un Soleil uniforme. Capture de
+  contrôle : la tache d'ombre entre le Groenland et l'Islande (`--cible Terre --date 26.61256749562704 --vue 139.8,45`).
+- Lumières de nuit de la Terre : carte « Black Marble » de la NASA (via Solar System Scope), montrée du côté nuit ;
+  son éclat est un réglage d'affichage (dit dans le code ; à dire à l'écran par le fil interface).
+- Option de contrôle ajoutée : `--vue longitude,latitude` (direction d'où l'on regarde l'astre suivi).

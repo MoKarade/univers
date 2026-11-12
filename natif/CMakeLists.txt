@@ -81,6 +81,11 @@ add_executable(essai_orientation src/essai_orientation.cpp)
 target_compile_options(essai_orientation PRIVATE -Wall -Wextra)
 target_link_options(essai_orientation PRIVATE -static)
 
+# Contrôle d'une éclipse de Soleil (éphémérides + orientation de la Terre) contre la NASA.
+add_executable(essai_eclipse src/essai_eclipse.cpp)
+target_compile_options(essai_eclipse PRIVATE -Wall -Wextra)
+target_link_options(essai_eclipse PRIVATE -static)
+
 # Contrôle des distances cosmologiques contre astropy.
 add_executable(essai_cosmologie src/essai_cosmologie.cpp)
 target_compile_options(essai_cosmologie PRIVATE -Wall -Wextra)

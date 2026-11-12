@@ -292,6 +292,10 @@ int runWindow(const WindowOptions& opt) {
                     if (opt.dist > 0) sim.dist = opt.dist;
                 }
     }
+    if (opt.hasView) {
+        sim.yaw = opt.yawDeg * kPi / 180.0;
+        sim.pitch = opt.pitchDeg * kPi / 180.0;
+    }
     auto last = std::chrono::steady_clock::now();
     const auto start = last;
     int frame = 0, shown = 0;

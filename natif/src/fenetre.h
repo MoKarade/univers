@@ -10,6 +10,8 @@ struct WindowOptions {
     double dist = 0;            // distance de départ à l'astre suivi, en années-lumière (0 : défaut)
     double years = 0;           // date de départ, en années depuis J2000,0
     bool hasYears = false;
+    double yawDeg = 0, pitchDeg = 0;      // contrôle : direction d'où l'on regarde l'astre suivi (longitude et latitude écliptiques, degrés)
+    bool hasView = false;
 };
 
 int runWindow(const WindowOptions& opt);

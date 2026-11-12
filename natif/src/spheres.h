@@ -25,8 +25,9 @@ constexpr SphereMap kSphereMaps[] = {
     {eph::kMoon, "8k_moon.jpg"},       {eph::kMarsBary, "8k_mars.jpg"},       {eph::kJupiterBary, "8k_jupiter.jpg"},    {eph::kSaturnBary, "8k_saturn.jpg"},
     {eph::kUranusBary, "2k_uranus.jpg"}, {eph::kNeptuneBary, "2k_neptune.jpg"},
     {-1, "8k_saturn_ring_alpha.png"},      // anneaux de Saturne (couleur et opacité selon la distance au centre) : aucun astre à lui seul
+    {-2, "8k_earth_nightmap.jpg"},         // lumières de nuit de la Terre (composite de mesures par satellite, NASA « Black Marble », via Solar System Scope)
 };
-constexpr int kRingMap = 10;
+constexpr int kRingMap = 10, kNightMap = 11;
 // Étendue de l'image des anneaux, en km du centre de Saturne : 72 650 à 140 150. [Calé ici sur deux repères lus dans
 // l'image : la division de Cassini (vers 119 900 km) et le bord extérieur de l'anneau A (136 775 km) ; la source ne
 // documente pas cette étendue : À vérifier.]
@@ -34,7 +35,7 @@ constexpr double kRingInnerKm = 72650.0, kRingOuterKm = 140150.0;
 constexpr int kSphereMapCount = static_cast<int>(sizeof(kSphereMaps) / sizeof(kSphereMaps[0]));
 
 struct SpherePush {
-    float centre[4], droite[4], haut[4], avant[4], soleil[4], rot0[4], rot1[4], rot2[4];
+    float centre[4], droite[4], haut[4], avant[4], soleil[4], rot0[4], rot1[4], rot2[4], ombre[4], ombre2[4];
 };
 
 class SphereRenderer {
@@ -227,8 +228,9 @@ public:
             const Texture& own = textures_[k];
             if (!own.ready) continue;
             const bool ringed = kSphereMaps[k].naif == eph::kSaturnBary && textures_[kRingMap].ready;
+            const bool lit = kSphereMaps[k].naif == eph::kEarth && textures_[kNightMap].ready;
             const VkDescriptorImageInfo info[2] = {{sampler_, own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                                                   {sampler_, ringed ? textures_[kRingMap].view : own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+                                                   {sampler_, ringed ? textures_[kRingMap].view : lit ? textures_[kNightMap].view : own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
             VkWriteDescriptorSet wr[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
             for (uint32_t j = 0; j < 2; ++j) {
                 wr[j].dstSet = own.set;
@@ -281,12 +283,39 @@ public:
                               {0, 0, 0, b.kind == Kind::Sun ? -kSunGain : kSurfaceGain},
                               {static_cast<float>(m.m[0][0]), static_cast<float>(m.m[0][1]), static_cast<float>(m.m[0][2]), ringed ? static_cast<float>(kRingInnerKm / b.radiusKm) : 0.0f},
                               {static_cast<float>(m.m[1][0]), static_cast<float>(m.m[1][1]), static_cast<float>(m.m[1][2]), ringed ? static_cast<float>(kRingOuterKm / b.radiusKm) : 0.0f},
-                              {static_cast<float>(m.m[2][0]), static_cast<float>(m.m[2][1]), static_cast<float>(m.m[2][2]), 0}};
+                              {static_cast<float>(m.m[2][0]), static_cast<float>(m.m[2][1]), static_cast<float>(m.m[2][2]), 0},
+                              {0, 0, 0, 0},
+                              {0, 0, 0, 0}};
             if (b.kind != Kind::Sun) {
                 const Vec3 toSun = unit(Vec3{-p.x, -p.y, -p.z});
                 d.pc.soleil[0] = static_cast<float>(toSun.x);
                 d.pc.soleil[1] = static_cast<float>(toSun.y);
                 d.pc.soleil[2] = static_cast<float>(toSun.z);
+                if (naif == eph::kEarth && textures_[kNightMap].ready) {
+                    d.pc.rot2[3] = 1.0f;
+                    d.pc.ombre2[1] = kNightGain;
+                }
+                // Éclipses : parmi la planète de cet astre et ses lunes, celui qui est le mieux aligné devant le Soleil.
+                const double radius = b.radiusKm / kLyInKm, sunDist = std::sqrt(dot(p, p));
+                d.pc.ombre2[0] = static_cast<float>(std::asin(std::min(1.0, 695700.0 / kLyInKm / sunDist)));
+                double best = 1e300;
+                for (int j = 0; j < static_cast<int>(sim.bodies.size()); ++j) {
+                    const Body& o = sim.bodies[static_cast<size_t>(j)];
+                    if (j == i || o.kind != Kind::Planet || !sim.visible(j) || o.radiusKm <= 0) continue;
+                    if (o.parent != i && b.parent != j && !(b.parent > 0 && o.parent == b.parent)) continue;      // lune, planète, ou lune sœur
+                    const Vec3 v = sim.position(j) - p;
+                    const double along = dot(v, toSun);
+                    if (along <= 0) continue;
+                    const Vec3 perp{v.x - along * toSun.x, v.y - along * toSun.y, v.z - along * toSun.z};
+                    const double miss = std::sqrt(dot(perp, perp)) - o.radiusKm / kLyInKm - radius;      // écart à l'alignement, en longueur
+                    if (miss < best && miss < 4.0 * radius) {
+                        best = miss;
+                        d.pc.ombre[0] = static_cast<float>(v.x / radius);
+                        d.pc.ombre[1] = static_cast<float>(v.y / radius);
+                        d.pc.ombre[2] = static_cast<float>(v.z / radius);
+                        d.pc.ombre[3] = static_cast<float>(o.radiusKm / b.radiusKm);
+                    }
+                }
             }
             // Rectangle de l'écran qui contient le disque.
             const double cx = (dot(c, cam.right) / (z * cam.tanHalf * cam.aspect) * 0.5 + 0.5) * width, cy = (-dot(c, cam.up) / (z * cam.tanHalf) * 0.5 + 0.5) * height;
@@ -338,6 +367,9 @@ private:
     // Réglage d'exposition des surfaces : choisi pour que le côté jour soit lisible à l'écran. En vraie lumière, une
     // planète proche serait des milliers de fois plus brillante que les étoiles et l'image serait blanche.
     static constexpr float kSurfaceGain = 2.6f, kSunGain = 9.0f;
+    // Les lumières de nuit sont, en vrai, des dizaines de milliers de fois plus faibles que le côté jour : cet éclat est
+    // un réglage d'affichage pour qu'elles se voient.
+    static constexpr float kNightGain = 1.6f;
 
     struct Texture {
         VkImage image{};

@@ -1,0 +1,68 @@
+// Contrôle de la chaîne « éphémérides de la NASA + orientation de la Terre » sur une éclipse de Soleil.
+//
+// Éclipse totale du 12 août 2026. D'après la NASA (Fred Espenak, « Total Solar Eclipse of 2026 Aug 12 »), le maximum
+// a lieu à 17 h 46 min 06 s TU, au point de latitude 65°13′ nord et de longitude 25°14′ ouest (près de l'Islande).
+// [Probable : valeurs recopiées de mémoire.] Ici : à cet instant, l'axe de l'ombre (droite Soleil-Lune prolongée) doit
+// toucher la Terre à moins de 1° de ce point. La Terre est prise sphérique (rayon moyen), la lumière instantanée.
+// Second contrôle, sans valeur recopiée : une demi-heure avant et une demi-heure après, l'axe de l'ombre touche encore
+// la Terre (il la balaie pendant environ une heure et demie), et un mois plus tard il la manque.
+// Usage : essai_eclipse <de440.bsp>
+#include <cstdio>
+
+#include "orientation.h"
+
+namespace {
+double daysOf(int y, int m, int d, double hoursUtc) {      // jours TDB depuis J2000,0 (calendrier grégorien)
+    const int a = (14 - m) / 12, yy = y + 4800 - a, mm = m + 12 * a - 3;
+    const long jdn = d + (153 * mm + 2) / 5 + 365L * yy + yy / 4 - yy / 100 + yy / 400 - 32045;
+    return (static_cast<double>(jdn) - 2451545.0) - 0.5 + hoursUtc / 24.0 + 69.184 / 86400.0;
+}
+
+// Point de la Terre touché par l'axe de l'ombre de la Lune ; false si l'axe manque la Terre.
+bool shadowPoint(const eph::Spk& spk, double days, double& lonDeg, double& latDeg) {
+    eph::Vec s, m, e, v;
+    const double et = days * 86400.0;
+    if (!spk.state(eph::kSun, et, s, v) || !spk.state(eph::kMoon, et, m, v) || !spk.state(eph::kEarth, et, e, v)) return false;
+    s = eph::toEcliptic(s);
+    m = eph::toEcliptic(m);
+    e = eph::toEcliptic(e);
+    double d[3] = {m.x - s.x, m.y - s.y, m.z - s.z};      // direction de l'ombre
+    const double n = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    for (double& c : d) c /= n;
+    const double o[3] = {m.x - e.x, m.y - e.y, m.z - e.z};      // Lune vue du centre de la Terre
+    const double b = o[0] * d[0] + o[1] * d[1] + o[2] * d[2];
+    const double c = o[0] * o[0] + o[1] * o[1] + o[2] * o[2] - 6371.0 * 6371.0;
+    const double disc = b * b - c;
+    if (disc < 0) return false;
+    const double t = -b - std::sqrt(disc);
+    if (t < 0) return false;
+    ori::Mat3 rot;
+    ori::eclipticToBody(eph::kEarth, days, rot);
+    ori::subPoint(rot, o[0] + t * d[0], o[1] + t * d[1], o[2] + t * d[2], lonDeg, latDeg);
+    return true;
+}
+}  // namespace
+
+int main(int argc, char** argv) {
+    if (argc < 2) { std::fprintf(stderr, "usage : essai_eclipse <de440.bsp>\n"); return 2; }
+    eph::Spk spk;
+    std::string error;
+    if (!spk.open(argv[1], error)) { std::fprintf(stderr, "ECHEC : %s\n", error.c_str()); return 1; }
+    bool ok = true;
+    const double t0 = daysOf(2026, 8, 12, 17.0 + 46.0 / 60.0 + 6.0 / 3600.0);
+    double lon = 0, lat = 0;
+    const bool hit = shadowPoint(spk, t0, lon, lat);
+    const double dLat = lat - 65.22, dLon = (lon + 25.23) * std::cos(65.22 * ori::kDeg);
+    const bool good = hit && std::sqrt(dLat * dLat + dLon * dLon) < 1.0;
+    ok &= good;
+    std::printf("12 aout 2026, 17 h 46 min 06 s TU : axe de l'ombre a la latitude %.2f, longitude %.2f (NASA : 65,22 et -25,23) -> %s\n", lat, lon,
+                good ? "PASSE" : "ECHEC");
+    double a, b2;
+    const bool before = shadowPoint(spk, t0 - 0.5 / 24.0, a, b2), after = shadowPoint(spk, t0 + 0.5 / 24.0, a, b2), later = shadowPoint(spk, t0 + 30.0, a, b2);
+    const bool span = before && after && !later;
+    ok &= span;
+    std::printf("une demi-heure avant : %s ; une demi-heure apres : %s ; un mois plus tard : %s -> %s\n", before ? "ombre sur la Terre" : "rien", after ? "ombre sur la Terre" : "rien",
+                later ? "ombre sur la Terre" : "rien", span ? "PASSE" : "ECHEC");
+    std::printf(ok ? "PASSE\n" : "ECHEC\n");
+    return ok ? 0 : 1;
+}

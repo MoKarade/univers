@@ -14,7 +14,9 @@ layout(push_constant) uniform Pc {
     vec4 soleil;   /* xyz : direction astre -> Soleil ; w : gain (négatif : l'astre brille par lui-même) */
     vec4 rot0;     /* lignes de la matrice écliptique -> repère de l'astre ; w : bord intérieur des anneaux (en rayons ; 0 : pas d'anneaux) */
     vec4 rot1;     /* w : bord extérieur des anneaux (en rayons) */
-    vec4 rot2;     /* xyz : pôle nord de l'astre */
+    vec4 rot2;     /* xyz : pôle nord de l'astre ; w : 1 si l'image du second emplacement est la carte des lumières de nuit */
+    vec4 ombre;    /* astre qui peut faire de l'ombre : xyz : son centre compté depuis le centre de celui-ci, en rayons de celui-ci ; w : son rayon, même unité (0 : aucun) */
+    vec4 ombre2;   /* x : rayon angulaire du Soleil vu d'ici (radians) ; y : éclat donné aux lumières de nuit */
 } pc;
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 o;
@@ -27,6 +29,17 @@ float ringAlpha(float r, out vec3 colour) {
     vec4 t = texture(anneau, vec2((r - pc.rot0.w) / (pc.rot1.w - pc.rot0.w), 0.5));
     colour = t.rgb;
     return t.a;
+}
+
+/* Part du disque du Soleil cachée par un disque de rayon angulaire ro dont le centre est à l'écart d du sien (rayon rs).
+   Aire commune de deux cercles ; le disque solaire est pris uniforme (son bord plus sombre n'est pas compté). */
+float hidden(float d, float rs, float ro) {
+    if (d >= rs + ro) return 0.0;
+    if (d <= abs(ro - rs)) return ro >= rs ? 1.0 : (ro * ro) / (rs * rs);
+    float a = rs * rs * acos(clamp((d * d + rs * rs - ro * ro) / (2.0 * d * rs), -1.0, 1.0))
+            + ro * ro * acos(clamp((d * d + ro * ro - rs * rs) / (2.0 * d * ro), -1.0, 1.0))
+            - 0.5 * sqrt(max((-d + rs + ro) * (d + rs - ro) * (d - rs + ro) * (d + rs + ro), 0.0));
+    return clamp(a / (PI * rs * rs), 0.0, 1.0);
 }
 
 void main() {
@@ -69,7 +82,20 @@ void main() {
                     light *= 1.0 - ringAlpha(length(hp + S * tr) / rho, rc);
                 }
             }
+            if (pc.ombre.w > 0.0) {                                       /* éclipse : un autre astre passe devant le Soleil vu de ce point */
+                vec3 v = pc.ombre.xyz - hp / rho;
+                float along = dot(v, S);
+                if (along > 0.0) {
+                    float sep = atan(length(v - along * S), along);
+                    float ro = asin(clamp(pc.ombre.w / length(v), 0.0, 1.0));
+                    light *= 1.0 - hidden(sep, pc.ombre2.x, ro);
+                }
+            }
             c = albedo * pc.soleil.w * light;
+            if (pc.rot2.w > 0.5) {                                        /* lumières de nuit : visibles là où le Soleil est couché */
+                vec3 night = textureGrad(anneau, tc, vec2(dux, dFdx(tc.y)), vec2(duy, dFdy(tc.y))).rgb;
+                c += night * pc.ombre2.y * smoothstep(0.05, -0.12, dot(n, S));
+            }
         }
         res = vec4(c, cover);
     }
