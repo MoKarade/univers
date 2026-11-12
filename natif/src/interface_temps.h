@@ -141,6 +141,15 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
 
 // ---------------------------------------------------------------- fiche de l'astre suivi
 
+// Rayon : 0 dans les données veut dire « pas mesuré » (384 des 437 lunes du JPL) : ne jamais écrire « 0 km (mesuré) ».
+void radiusRow(const Body& b, float s) {
+    if (b.radiusKm <= 0) {
+        row("Rayon", "non mesuré", "", s);
+        return;
+    }
+    row("Rayon", (b.radiusKm >= 100 ? frInt(b.radiusKm) : frNum(b.radiusKm)) + " km", "mesuré", s);
+}
+
 void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     const Body& fb = sim.bodies[static_cast<size_t>(f)];
     const Vec3 p = sim.position(f);
@@ -160,7 +169,7 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         const double days = fb.periodYears * 365.25;
         row("Durée d'un tour", fb.periodYears >= 1 ? frNum(fb.periodYears) + " ans" : days >= 2 ? frNum(days) + " jours" : frNum(days * 24.0) + " heures",
             fb.parent > 0 && fb.naif != eph::kMoon ? "calculé d'après les éphémérides" : "mesuré", s);
-        row("Rayon", (fb.radiusKm >= 100 ? frInt(fb.radiusKm) : frNum(fb.radiusKm)) + " km", "mesuré", s);
+        radiusRow(fb, s);
         if (!fb.hasPhotometry) ImGui::TextDisabled("Son éclat et sa surface ne sont pas renseignés ici : un repère marque sa place.");
         if (fb.naif == eph::kEarth) row("Lumières de nuit", "vues par satellite (NASA), grossies pour être visibles", "mesuré", s);
     } else if (fb.kind == Kind::Asteroid && sim.asteroidCat && sim.asteroidSel >= 0) {
@@ -170,12 +179,16 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         row("Distance au Soleil", frDistance(dSun), "calculé d'après son orbite", s);
         const int earth = bodyByName(sim, "Terre");
         if (earth >= 0 && sim.visible(earth)) row("Distance à la Terre", frDistance(distBetween(p, sim.position(earth))), "calculé d'après son orbite", s);
-        row("Orbite : demi-grand axe", frNum(c.semiMajorAxisAu(k)) + " fois la distance Terre-Soleil", jpl, s);
-        row("Excentricité", frNum(c.eccentricity(k)), jpl, s);
-        row("Durée d'un tour", frNum(c.periodYears(k)) + " ans", jpl, s);
-        row("Magnitude absolue H", frNum(c.magnitudeH(k)), jpl, s);
+        const bool comet = c.isComet(k), open = c.eccentricity(k) >= 1.0;
+        // Orbite ouverte (excentricité 1 ou plus) : pas de demi-grand axe ni de durée de tour, l'objet ne revient pas.
+        if (!open) row("Orbite : demi-grand axe", frNum(c.semiMajorAxisAu(k)) + " fois la distance Terre-Soleil", jpl, s);
+        row("Excentricité", frNum(c.eccentricity(k)) + (open ? " (orbite ouverte : ne revient pas)" : ""), jpl, s);
+        if (!open) row("Durée d'un tour", frNum(c.periodYears(k)) + " ans", jpl, s);
+        // Comètes : la dernière colonne n'est pas la magnitude H des astéroïdes ; elle n'est pas montrée tant que sa nature n'est pas confirmée.
+        if (!comet) row("Magnitude absolue H", frNum(c.magnitudeH(k)), jpl, s);
         ImGui::TextDisabled("Position calculée d'après son orbite, sans l'attraction des planètes");
-        ImGui::TextDisabled("(moins de 100 000 km d'écart avec le JPL après 154 jours).");
+        if (comet) ImGui::TextDisabled("(écart avec le JPL non contrôlé pour les comètes, que le dégazage fait aussi dévier).");
+        else ImGui::TextDisabled("(moins de 100 000 km d'écart avec le JPL après 154 jours).");
     } else if (fb.kind == Kind::Probe) {
         const char* traj = sim.years <= kStartYears ? "mesuré : trajectoire reconstruite par le JPL" : "calculé : trajectoire prévue par le JPL";
         row("Distance au Soleil", frDistance(dSun), traj, s);
@@ -196,13 +209,15 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         row(sim.deepTime() ? "Distance à la place actuelle du Soleil" : "Distance au Soleil", frDistance(dSun), deepCalc ? "calculé" : "mesuré", s);
         ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
     } else {
-        row("Rayon", frInt(fb.radiusKm) + " km", "mesuré", s);
+        radiusRow(fb, s);
     }
     if (fb.kind == Kind::Sun || fb.kind == Kind::Star)
         row("Température", frInt(4600.0 * (1.0 / (0.92 * fb.bv + 1.7) + 1.0 / (0.92 * fb.bv + 0.62))) + " K en surface", "calculé d'après la couleur", s);
     if (fb.kind != Kind::Galaxy && fb.kind != Kind::Probe && fb.kind != Kind::Asteroid && (fb.kind != Kind::Planet || fb.hasPhotometry)) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé", s);
     ImGui::Separator();
     if (fb.kind == Kind::Planet && computed) ImGui::TextDisabled("Position : calculée ici (gravité mutuelle, partie des éphémérides JPL DE440 de la NASA).");
+    else if (fb.kind == Kind::Planet && fb.parent > 0 && fb.naif != eph::kMoon)      // lunes des autres planètes : fichiers de satellites du JPL
+        ImGui::TextDisabled("Position : éphémérides des satellites du JPL (NASA), lues telles quelles.");
     else if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
     else if (fb.kind == Kind::Probe) ImGui::TextDisabled("Source : trajectoire JPL Horizons (NASA).");
     else if (fb.kind == Kind::Asteroid) ImGui::TextDisabled("Source : JPL Small-Body Database (NASA).");

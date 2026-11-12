@@ -67,7 +67,10 @@ bool asteroidRow(const Sim& sim, const UiState& ui, int k, bool selected) {
     const float x0 = ImGui::GetCursorPosX();
     const bool hit = ImGui::Selectable(name.c_str(), selected, ImGuiSelectableFlags_AllowOverlap, {px(ui, 440), 0});
     ImGui::SameLine(x0 + ImGui::CalcTextSize(name.c_str()).x + px(ui, 12));
-    ImGui::TextDisabled("astéroïde, orbite à %s fois la distance Terre-Soleil", frNum(sim.asteroidCat->semiMajorAxisAu(static_cast<size_t>(k))).c_str());
+    const asteroides::Catalogue& c = *sim.asteroidCat;
+    const char* what = c.isComet(static_cast<size_t>(k)) ? "comète" : "astéroïde";
+    if (c.eccentricity(static_cast<size_t>(k)) >= 1.0) ImGui::TextDisabled("%s, orbite ouverte", what);
+    else ImGui::TextDisabled("%s, orbite à %s fois la distance Terre-Soleil", what, frNum(c.semiMajorAxisAu(static_cast<size_t>(k))).c_str());
     ImGui::PopID();
     return hit;
 }
