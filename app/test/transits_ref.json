@@ -1,0 +1,132 @@
+{
+"source": "NASA GSFC, catalogues de F. Espenak (temps universel)",
+"mercury": [
+{
+"date": "2032-11-13",
+"greatest_ut": "08:54",
+"sep_arcsec": 572.1
+},
+{
+"date": "2039-11-07",
+"greatest_ut": "08:46",
+"sep_arcsec": 822.3
+},
+{
+"date": "2049-05-07",
+"greatest_ut": "14:24",
+"sep_arcsec": 511.8
+},
+{
+"date": "2052-11-09",
+"greatest_ut": "02:29",
+"sep_arcsec": 318.7
+},
+{
+"date": "2062-05-10",
+"greatest_ut": "21:36",
+"sep_arcsec": 520.5
+},
+{
+"date": "2065-11-11",
+"greatest_ut": "20:06",
+"sep_arcsec": 180.7
+},
+{
+"date": "2078-11-14",
+"greatest_ut": "13:41",
+"sep_arcsec": 674.3
+},
+{
+"date": "2085-11-07",
+"greatest_ut": "13:34",
+"sep_arcsec": 718.5
+},
+{
+"date": "2095-05-08",
+"greatest_ut": "21:05",
+"sep_arcsec": 309.8
+},
+{
+"date": "2098-11-10",
+"greatest_ut": "07:16",
+"sep_arcsec": 214.7
+},
+{
+"date": "2108-05-12",
+"greatest_ut": "04:16",
+"sep_arcsec": 724.7
+},
+{
+"date": "2111-11-14",
+"greatest_ut": "00:53",
+"sep_arcsec": 283.3
+},
+{
+"date": "2124-11-15",
+"greatest_ut": "18:28",
+"sep_arcsec": 778.9
+},
+{
+"date": "2131-11-09",
+"greatest_ut": "18:22",
+"sep_arcsec": 614.4
+},
+{
+"date": "2141-05-10",
+"greatest_ut": "03:43",
+"sep_arcsec": 108.1
+},
+{
+"date": "2144-11-11",
+"greatest_ut": "12:02",
+"sep_arcsec": 112.7
+},
+{
+"date": "2154-05-13",
+"greatest_ut": "10:58",
+"sep_arcsec": 930.6
+},
+{
+"date": "2157-11-14",
+"greatest_ut": "05:40",
+"sep_arcsec": 386.9
+},
+{
+"date": "2170-11-16",
+"greatest_ut": "23:15",
+"sep_arcsec": 880.4
+},
+{
+"date": "2174-05-08",
+"greatest_ut": "03:26",
+"sep_arcsec": 924.4
+},
+{
+"date": "2177-11-09",
+"greatest_ut": "23:09",
+"sep_arcsec": 509.8
+},
+{
+"date": "2187-05-11",
+"greatest_ut": "10:24",
+"sep_arcsec": 96.0
+},
+{
+"date": "2190-11-12",
+"greatest_ut": "16:48",
+"sep_arcsec": 9.1
+}
+],
+"venus": [
+{
+"date": "2117-12-11",
+"greatest_ut": "02:48",
+"sep_arcsec": 723.6
+},
+{
+"date": "2125-12-08",
+"greatest_ut": "16:01",
+"sep_arcsec": 736.4
+}
+]
+}
