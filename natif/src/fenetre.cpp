@@ -10,6 +10,7 @@
 
 #include "fenetre.h"
 #include "interface.h"
+#include "points_planetes.h"
 #include "rendu_fenetre.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -89,12 +90,16 @@ int runWindow(const WindowOptions& opt) {
     gWindowMode = !test;      // dès le début : même un fichier d'étoiles absent est dit à l'écran
     const Stars stars = openStars(opt.starsPath.c_str());
 
+    // Les données sont rangées à côté du fichier d'étoiles : noms des étoiles, éphémérides de la NASA.
+    const size_t cut = opt.starsPath.find_last_of("\\/");
+    const std::string dataDir = cut == std::string::npos ? std::string(".") : opt.starsPath.substr(0, cut);
+    eph::Spk spk;
+    std::string spkError;
+    const bool hasSpk = spk.open(dataDir + "/de440.bsp", spkError);      // absent : le simulateur le dit à l'écran et montre les étoiles
     Sim sim;
     sim.stars = &stars;
-    {
-        const size_t cut = opt.starsPath.find_last_of("\\/");
-        sim.loadBodies((cut == std::string::npos ? std::string(".") : opt.starsPath.substr(0, cut)) + "/etoiles_noms.tsv");
-    }
+    sim.spk = hasSpk ? &spk : nullptr;
+    sim.loadBodies(dataDir + "/etoiles_noms.tsv");
     if (!opt.target.empty()) {
         bool found = false;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
@@ -104,8 +109,10 @@ int runWindow(const WindowOptions& opt) {
             }
         if (!found) fail("--cible : astre inconnu : " + opt.target);
     }
-    if (opt.dist > 0) sim.dist = opt.dist;
     if (opt.hasYears) sim.years = opt.years;
+    sim.refreshEphemeris();
+    if (sim.focus != 0) sim.follow(sim.focus);
+    if (opt.dist > 0) sim.dist = opt.dist;
     if (test) {
         sim.paused = true;
         sim.touched = true;      // contrôle : image fixe, reproductible
@@ -151,6 +158,8 @@ int runWindow(const WindowOptions& opt) {
     }
     StarRenderer sr;
     sr.create(g, stars, HdrTarget::kFormat);
+    PlanetPoints planets;
+    planets.create(g);
     Target hdr, final;
     auto createTargets = [&]() {
         hdr.create(g, HdrTarget::kFormat, sc.extent, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -251,6 +260,8 @@ int runWindow(const WindowOptions& opt) {
         const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost()), sc.extent.height, sim.years);
 
+        planets.update(sim, cam);
+
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplWin32_NewFrame();
         if (test) ImGui::GetIO().DisplaySize = {static_cast<float>(sc.extent.width), static_cast<float>(sc.extent.height)};
@@ -280,6 +291,7 @@ int runWindow(const WindowOptions& opt) {
                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, hdr.view, sc.extent);
         sr.draw(cmd, pc, sc.extent.width, sc.extent.height);
+        planets.draw(cmd);
         vkCmdEndRendering(cmd);
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
@@ -339,8 +351,9 @@ int runWindow(const WindowOptions& opt) {
     if (test) {
         const double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         if (!opt.capture.empty()) writeCapture(g, final, sc.extent, opt.capture);
-        std::printf("fenetre cachee %ux%u : %d images en %.3f s, soit %.1f images par seconde ; astre suivi : %s ; date : %s\nPASSE\n", sc.extent.width,
-                    sc.extent.height, frame, total, frame / total, sim.bodies[static_cast<size_t>(sim.focus)].name.c_str(), frDate(sim.years).c_str());
+        std::printf("fenetre cachee %ux%u : %d images en %.3f s, soit %.1f images par seconde ; astre suivi : %s ; date : %s ; ephemerides : %s\nPASSE\n",
+                    sc.extent.width, sc.extent.height, frame, total, frame / total, sim.bodies[static_cast<size_t>(sim.focus)].name.c_str(),
+                    frDate(sim.years).c_str(), !hasSpk ? spkError.c_str() : sim.ephemValid ? "lues" : "hors plage");
     }
 
     ImGui_ImplVulkan_Shutdown();
@@ -351,6 +364,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, acquired, nullptr);
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
+    planets.release(g);
     sr.release(g);
     hdr.release(g);
     final.release(g);

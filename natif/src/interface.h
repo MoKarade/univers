@@ -7,7 +7,7 @@
 
 namespace {
 
-const ImU32 kInk = IM_COL32(232, 236, 244, 255), kInkSoft = IM_COL32(150, 160, 178, 255), kAccent = IM_COL32(255, 196, 110, 255);
+const ImU32 kInkSoft = IM_COL32(150, 160, 178, 255), kAccent = IM_COL32(255, 196, 110, 255), kOrbit = IM_COL32(110, 140, 200, 110);
 
 void applyStyle() {
     ImGuiStyle& st = ImGui::GetStyle();
@@ -21,6 +21,7 @@ void applyStyle() {
     st.ItemSpacing = {8, 7};
     ImVec4* c = st.Colors;
     c[ImGuiCol_WindowBg] = {0.035f, 0.045f, 0.075f, 0.86f};
+    c[ImGuiCol_PopupBg] = {0.05f, 0.065f, 0.11f, 0.97f};
     c[ImGuiCol_Border] = {0.30f, 0.36f, 0.50f, 0.35f};
     c[ImGuiCol_Text] = {0.91f, 0.93f, 0.96f, 1.0f};
     c[ImGuiCol_TextDisabled] = {0.59f, 0.63f, 0.70f, 1.0f};
@@ -67,36 +68,111 @@ void row(const char* label, const std::string& value, const char* status) {
     }
 }
 
+// Projection sans rejet des points hors de l'écran (pour les tracés) ; false si le point est derrière la caméra.
+bool projectLoose(const Camera& cam, Vec3 p, float w, float h, ImVec2& out) {
+    const Vec3 d = p - cam.pos;
+    const double z = dot(d, cam.fwd);
+    if (z <= 0) return false;
+    out = {static_cast<float>((dot(d, cam.right) / (z * cam.tanHalf * cam.aspect) * 0.5 + 0.5) * w),
+           static_cast<float>((-dot(d, cam.up) / (z * cam.tanHalf) * 0.5 + 0.5) * h)};
+    return std::fabs(out.x) < 1.0e5f && std::fabs(out.y) < 1.0e5f;
+}
+
+// Orbites : la trajectoire réelle lue dans les éphémérides sur un tour centré sur la date courante.
+struct OrbitCache {
+    static constexpr int kPoints = 240;
+    struct Track {
+        double atYears = 1e300;
+        bool valid = false;
+        std::vector<Vec3> pts;      // positions relatives à l'astre parent (Soleil, ou Terre pour la Lune)
+    };
+    std::vector<Track> tracks;
+
+    void update(const Sim& sim) {
+        tracks.resize(sim.bodies.size());
+        for (size_t i = 0; i < sim.bodies.size(); ++i) {
+            const Body& b = sim.bodies[i];
+            if (b.kind != Kind::Planet) continue;
+            Track& t = tracks[i];
+            if (std::fabs(sim.years - t.atYears) < b.periodYears / 240.0) continue;      // encore bon à l'écran
+            t.atYears = sim.years;
+            t.pts.resize(kPoints + 1);
+            t.valid = true;
+            for (int k = 0; k <= kPoints && t.valid; ++k) {
+                const double at = sim.years + (static_cast<double>(k) / kPoints - 0.5) * b.periodYears;
+                Vec3 p, parent{0, 0, 0};
+                t.valid = sim.planetAt(b.naif, at, p) && (b.parent <= 0 || sim.planetAt(sim.bodies[static_cast<size_t>(b.parent)].naif, at, parent));
+                t.pts[static_cast<size_t>(k)] = p - parent;
+            }
+        }
+    }
+};
+
 struct UiState {
     char search[64] = "";
     ImFont* normal = nullptr;
     ImFont* big = nullptr;
+    OrbitCache orbits;
 };
 
-// Dessine toute l'interface pour cette image. Rend le numéro de l'objet dont le nom a été cliqué, ou -1.
+// Dessine toute l'interface pour cette image. Rend le numéro de l'astre dont le nom a été cliqué, ou -1.
 int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     int clicked = -1;
     const ImGuiWindowFlags fixed = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
                                    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings;
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const int count = static_cast<int>(sim.bodies.size());
+
+    // Orbites des planètes et de la Lune.
+    if (sim.ephemValid) {
+        ui.orbits.update(sim);
+        for (int i = 0; i < count; ++i) {
+            const Body& b = sim.bodies[static_cast<size_t>(i)];
+            if (b.kind != Kind::Planet || !ui.orbits.tracks[static_cast<size_t>(i)].valid) continue;
+            const Vec3 parent = b.parent > 0 ? sim.position(b.parent) : Vec3{0, 0, 0};
+            const auto& pts = ui.orbits.tracks[static_cast<size_t>(i)].pts;
+            // Taille apparente de l'orbite : ni un point, ni un trait qui traverse tout l'écran.
+            const Vec3 toParent = parent - cam.pos;
+            const double size = std::sqrt(dot(pts[0], pts[0])) / std::max(std::sqrt(dot(toParent, toParent)), 1e-30) * h;
+            if (size < 6 || size > 60.0 * h) continue;
+            ImVec2 prev;
+            bool hasPrev = false;
+            for (const Vec3& rel : pts) {
+                ImVec2 at;
+                const bool ok = projectLoose(cam, {parent.x + rel.x, parent.y + rel.y, parent.z + rel.z}, w, h, at);
+                if (ok && hasPrev) dl->AddLine(prev, at, i == sim.focus ? IM_COL32(255, 196, 110, 150) : kOrbit, 1.2f);
+                prev = at;
+                hasPrev = ok;
+            }
+        }
+    }
 
     // Noms des astres, posés sur l'image ; un clic sur un nom le fait suivre.
-    ImDrawList* dl = ImGui::GetBackgroundDrawList();
     const ImVec2 mouse = ImGui::GetIO().MousePos;
-    const bool click = ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse &&
-                       ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 4.0f).x == 0 && ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 4.0f).y == 0;
-    for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
+    const ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 4.0f);
+    const bool click = ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse && drag.x == 0 && drag.y == 0;
+    const double boostMag = 2.5 * std::log10(sim.brightnessBoost());
+    for (int i = 0; i < count; ++i) {
+        if (!sim.visible(i)) continue;
+        const Body& b = sim.bodies[static_cast<size_t>(i)];
         double px = 0, py = 0;
         if (!cam.project(sim.position(i), w, h, px, py)) continue;
         const bool isFocus = i == sim.focus;
-        const double mag = sim.apparentMag(i, cam.pos) - 2.5 * std::log10(sim.brightnessBoost());
-        if (!isFocus && mag > 4.5) continue;      // trop pâle d'ici pour mériter un nom
-        const char* name = sim.bodies[static_cast<size_t>(i)].name.c_str();
+        if (!isFocus) {
+            if (b.kind == Kind::Star && sim.apparentMag(i, cam.pos) - boostMag > 4.5) continue;      // trop pâle d'ici pour mériter un nom
+            if (b.kind == Kind::Planet) {      // un nom par planète seulement quand elle se détache de son astre parent
+                double qx = 0, qy = 0;
+                const bool parentOn = cam.project(sim.position(std::max(b.parent, 0)), w, h, qx, qy);
+                if (parentOn && std::hypot(px - qx, py - qy) < 22) continue;
+            }
+        }
+        const char* name = b.name.c_str();
         const ImVec2 size = ImGui::CalcTextSize(name);
         const ImVec2 at{static_cast<float>(px) + 10, static_cast<float>(py) - size.y * 0.5f};
         const bool hover = mouse.x >= at.x - 14 && mouse.x <= at.x + size.x + 4 && mouse.y >= at.y - 4 && mouse.y <= at.y + size.y + 4;
         if (isFocus) dl->AddCircle({static_cast<float>(px), static_cast<float>(py)}, 9, kAccent, 32, 1.5f);
         dl->AddText({at.x + 1, at.y + 1}, IM_COL32(0, 0, 0, 200), name);
-        dl->AddText(at, isFocus || hover ? kAccent : kInkSoft, name);
+        dl->AddText(at, isFocus || hover ? kAccent : (b.kind == Kind::Star ? kInkSoft : IM_COL32(200, 214, 240, 255)), name);
         if (hover && click) clicked = i;
     }
 
@@ -104,11 +180,11 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     ImGui::SetNextWindowPos({16, 16});
     ImGui::Begin("chercher", nullptr, fixed);
     ImGui::SetNextItemWidth(260);
-    ImGui::InputTextWithHint("##q", "Chercher un astre (ex. Sirius)", ui.search, sizeof(ui.search));
+    ImGui::InputTextWithHint("##q", "Chercher un astre (ex. Jupiter)", ui.search, sizeof(ui.search));
     if (ui.search[0]) {
         int shown = 0;
-        for (int i = 0; i < static_cast<int>(sim.bodies.size()) && shown < 8; ++i) {
-            if (!containsNoCase(sim.bodies[static_cast<size_t>(i)].name, ui.search)) continue;
+        for (int i = 0; i < count && shown < 8; ++i) {
+            if (!sim.visible(i) || !containsNoCase(sim.bodies[static_cast<size_t>(i)].name, ui.search)) continue;
             ++shown;
             if (ImGui::Selectable(sim.bodies[static_cast<size_t>(i)].name.c_str(), i == sim.focus, 0, {260, 0})) {
                 clicked = i;
@@ -123,8 +199,8 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     ImGui::SetNextWindowPos({w * 0.5f, 16}, 0, {0.5f, 0});
     ImGui::Begin("temps", nullptr, fixed);
     ImGui::PushFont(ui.big);
-    const std::string date = frDate(sim.years);
-    ImGui::SetCursorPosX((ImGui::GetWindowSize().x - ImGui::CalcTextSize(date.c_str()).x) * 0.5f);
+    const std::string date = frDate(sim.years, kRates[sim.rate].yearsPerSecond < 0.02);
+    ImGui::SetCursorPosX(std::max(14.0f, (ImGui::GetWindowSize().x - ImGui::CalcTextSize(date.c_str()).x) * 0.5f));
     ImGui::TextUnformatted(date.c_str());
     ImGui::PopFont();
     if (ImGui::Button(sim.paused ? "Reprendre" : "Pause")) sim.paused = !sim.paused;
@@ -139,42 +215,55 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     }
     ImGui::SameLine();
     if (ImGui::Button("Aujourd'hui")) sim.years = kStartYears;
+    if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");
+    else if (!sim.ephemValid) ImGui::TextDisabled("Planètes masquées : les éphémérides de la NASA vont de 1550 à 2650. Au-delà : position inconnue pour l'instant.");
     if (std::fabs(sim.years - kStartYears) >= kLinearLimitYears * 0.999)
         ImGui::TextDisabled("Limite : au-delà de 3 millions d'années, les étoiles ne vont plus en ligne droite (à venir).");
     ImGui::End();
 
     // À droite : la fiche de l'astre suivi.
     const int f = sim.focus;
+    const Body& fb = sim.bodies[static_cast<size_t>(f)];
     const Vec3 p = sim.position(f);
     const double dSun = std::sqrt(dot(p, p));
-    ImGui::SetNextWindowPos({w - 16, 16}, 0, {1, 0});
+    const bool today = std::fabs(sim.years - kStartYears) < 1.0;
+    ImGui::SetNextWindowPos({w - 16, 124}, 0, {1, 0});      // sous la barre du temps : les deux ne se recouvrent jamais
     ImGui::Begin("fiche", nullptr, fixed);
     ImGui::PushFont(ui.big);
-    ImGui::TextUnformatted(sim.bodies[static_cast<size_t>(f)].name.c_str());
+    ImGui::TextUnformatted(fb.name.c_str());
     ImGui::PopFont();
     ImGui::Separator();
-    if (f == 0) {
-        row("Nature", "notre étoile", "");
-        row("Éclat propre", "magnitude absolue " + frNum(sim.absMag(f)), "mesuré");
-    } else {
+    row("Nature", fb.nature, "");
+    if (fb.kind == Kind::Planet) {
+        row("Distance au Soleil", frDistance(dSun), "éphémérides NASA");
+        for (int i = 0; i < count; ++i)
+            if (sim.bodies[static_cast<size_t>(i)].naif == eph::kEarth && i != f) {
+                const Vec3 d = p - sim.position(i);
+                row("Distance à la Terre", frDistance(std::sqrt(dot(d, d))), "éphémérides NASA");
+            }
+        row("Durée d'un tour", fb.periodYears >= 1 ? frNum(fb.periodYears) + " ans" : frNum(fb.periodYears * 365.25) + " jours", "mesuré");
+        row("Rayon", frInt(fb.radiusKm) + " km", "mesuré");
+    } else if (fb.kind == Kind::Star) {
         // Aujourd'hui la distance est une mesure ; à une autre date, c'est la mesure prolongée en ligne droite.
-        row("Distance au Soleil", frDistance(dSun), std::fabs(sim.years - kStartYears) < 1.0 ? "mesuré" : "calculé : mouvement mesuré, prolongé en ligne droite");
+        row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : mouvement mesuré, prolongé en ligne droite");
         row("Éclat vu de la Terre", "magnitude " + frNum(sim.apparentMag(f, {0, 0, 0})), "calculé");
-        row("Éclat propre", "magnitude absolue " + frNum(sim.absMag(f)), "mesuré");
         row("Vitesse", frNum(sim.speedKms(f)) + " km/s par rapport au Soleil", "mesuré");
+    } else {
+        row("Rayon", frInt(fb.radiusKm) + " km", "mesuré");
     }
-    const double bv = sim.bv(f);
-    row("Température", frNum(4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62)), 2) + " K en surface", "calculé d'après la couleur");
+    if (fb.kind != Kind::Planet)
+        row("Température", frInt(4600.0 * (1.0 / (0.92 * fb.bv + 1.7) + 1.0 / (0.92 * fb.bv + 0.62))) + " K en surface", "calculé d'après la couleur");
     row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé");
     ImGui::Separator();
-    ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
+    if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
+    else ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
     if (f != 0 && ImGui::Button("Revenir au Soleil")) clicked = 0;
     ImGui::End();
 
     // En bas à gauche : où l'on est, et comment s'en servir.
     ImGui::SetNextWindowPos({16, h - 16}, 0, {0, 1});
     ImGui::Begin("aide", nullptr, fixed);
-    const std::string where = "Tu regardes « " + sim.bodies[static_cast<size_t>(f)].name + " » depuis " + frDistance(sim.dist) + ".";
+    const std::string where = "Tu regardes « " + fb.name + " » depuis " + frDistance(sim.dist) + ".";
     ImGui::TextUnformatted(where.c_str());
     const double boost = sim.brightnessBoost();
     if (boost > 1.5) ImGui::TextDisabled("Éclat des étoiles multiplié par %s pour qu'elles restent visibles de si loin.", frNum(boost, 2).c_str());

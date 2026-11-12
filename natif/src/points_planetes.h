@@ -1,0 +1,65 @@
+// Appli PC « Univers » : les planètes et la Lune vues comme des points lumineux (avant les surfaces).
+// Elles passent par le même dessin que les étoiles : on donne à chacune, à chaque image, la magnitude « absolue »
+// qui, vue de la caméra, redonne exactement son éclat calculé (lumière du Soleil renvoyée, phase comprise).
+#pragma once
+#include "simulation.h"
+
+namespace {
+
+struct PlanetPoints {
+    static constexpr uint32_t kMax = 32;
+    Buffer vb[StarRenderer::kCols];
+    float* cols[StarRenderer::kCols] = {};
+    uint32_t count = 0;
+
+    void create(const Gpu& g) {
+        for (int i = 0; i < StarRenderer::kCols; ++i) {
+            vb[i] = createBuffer(g, kMax * 4, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            void* p = nullptr;
+            check(vkMapMemory(g.dev, vb[i].mem, 0, kMax * 4, 0, &p), "tampon des planètes");
+            cols[i] = static_cast<float*>(p);
+            std::memset(p, 0, kMax * 4);
+        }
+    }
+
+    void update(const Sim& sim, const Camera& cam) {
+        count = 0;
+        if (!sim.ephemValid) return;
+        for (int i = 0; i < static_cast<int>(sim.bodies.size()) && count < kMax; ++i) {
+            const Body& b = sim.bodies[static_cast<size_t>(i)];
+            if (b.kind != Kind::Planet) continue;
+            const Vec3 p = sim.position(i), d = p - cam.pos;
+            const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
+            cols[0][count] = static_cast<float>(p.x);
+            cols[1][count] = static_cast<float>(p.y);
+            cols[2][count] = static_cast<float>(p.z);
+            cols[3][count] = static_cast<float>(sim.apparentMag(i, cam.pos) - 5.0 * std::log10(dist / 3.2615638) + 5.0);
+            const auto c = colorOfBv(b.bv);
+            std::memcpy(&cols[4][count], c.data(), 4);
+            cols[5][count] = cols[6][count] = cols[7][count] = 0;
+            ++count;
+        }
+    }
+
+    // À appeler juste après StarRenderer::draw (même pipeline, mêmes constantes).
+    void draw(VkCommandBuffer cmd) const {
+        if (!count) return;
+        VkBuffer bufs[StarRenderer::kCols];
+        VkDeviceSize offs[StarRenderer::kCols];
+        for (int i = 0; i < StarRenderer::kCols; ++i) {
+            bufs[i] = vb[i].buf;
+            offs[i] = 0;
+        }
+        vkCmdBindVertexBuffers(cmd, 0, StarRenderer::kCols, bufs, offs);
+        vkCmdDraw(cmd, count, 1, 0, 0);
+    }
+
+    void release(const Gpu& g) {
+        for (auto& b : vb) {
+            vkUnmapMemory(g.dev, b.mem);
+            destroy(g, b);
+        }
+    }
+};
+
+}  // namespace

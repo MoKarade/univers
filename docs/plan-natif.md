@@ -131,3 +131,22 @@ Règles : chaque calcul porté de la page garde ses contrôles (mêmes référen
 Dear ImGui (demandé par le cahier des charges), habillée aux couleurs de la page, tout expliqué à l'écran (Marc ne
 lit pas les commandes dans le chat ; la molette est un zoom). Contrôle sans fenêtre visible : l'appli rend son image
 finale, interface comprise, dans un fichier (`--fenetre-test`), relu à l'œil et par des mesures.
+
+## E1 et E2 : état (12 novembre 2026, 15 h 30 UTC)
+
+- E1 fait : `natif/src/simulation.h` (temps, astres, caméra), `interface.h` (Dear ImGui v1.91.9b : recherche, date
+  et vitesses, fiche avec « mesuré / calculé », noms cliquables, aide), `fenetre.cpp`, `rendu_fenetre.h`. Étoiles en
+  mouvement rectiligne à leur vitesse mesurée (limite ± 3 millions d'années, dite à l'écran).
+  Contrôle : Alpha du Centaure au plus près vers l'an 29 000 à 2,87 années-lumière (publié : environ 3).
+  Erreur trouvée et corrigée grâce à ce contrôle : les vitesses du catalogue principal sont en repère galactique.
+- E2, première partie : `natif/src/ephemeride.h` lit directement le fichier DE440 de la NASA (114 Mo, 1550 à 2650).
+  `essai_ephem` contre JPL Horizons (`app/test/nbody_ref.json`, 112 valeurs de 1650 à aujourd'hui) [Certain] :
+  planètes et Soleil à mieux que 1 mm, Terre 3,5 m, Lune 282 m (écart entre DE440 et DE441 dans le passé).
+  À comparer aux 0,3 à 2,5 secondes d'arc de la page (des centaines à des milliers de km).
+  Dans l'appli : Soleil, 8 planètes, Pluton, Lune, orbites tracées d'après les éphémérides, fiches, suivi.
+  Hors de 1550-2650 : planètes masquées, « position inconnue pour l'instant », dit à l'écran.
+- E2, reste à faire : les surfaces (sphères avec les cartes de la page), les lunes des autres planètes, le calcul
+  des positions hors de 1550-2650 (port de `21_nbody.js`), les éclipses.
+- Approximations dites dans le code : phase de Lambert pour l'éclat des planètes ; TDB − UTC fixé à 69,184 s ;
+  magnitudes H, couleurs et rayons recopiés de mémoire [Probable], à relire contre les sources.
+- Contrôle visuel sans fenêtre : `univers.exe etoiles.bin --fenetre-test 60 --capture f.ppm --cible Terre --distance 1e-7`.
