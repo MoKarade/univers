@@ -21,7 +21,17 @@ namespace {
 struct SkyBandUbo {      // std140 : tout en vec4
     float right[4], up[4], fwd[4];
     float scale[4];      // bas, haut, logarithmique (1) ou linéaire (0), opacité
-    float grid[4];       // Nside, nombre de niveaux de la pyramide, angle d'un pixel de l'écran au centre (rad), rien
+    float grid[4];       // Nside, nombre de niveaux de la pyramide, angle d'un pixel de l'écran au centre (rad), échelle des points
+    float eqRight[4], eqUp[4], eqFwd[4];      // vecteurs de la caméra en équatorial ICRS (catalogues de sources), unitaires
+    float proj[4];       // 1 / (tan(champ/2) × rapport largeur/hauteur), 1 / tan(champ/2), rien, grandeur médiane du catalogue
+};
+
+// Catalogue de sources de la bande (sources_<bande>.bin, pipeline/natif/sources_bandes.py) : directions mesurées.
+struct SkySourcesInfo {
+    std::string label, reference, quantity, unit;
+    std::vector<std::pair<std::string, int>> groups;      // nom du groupe, nombre de sources
+    uint32_t count = 0;
+    double median = 0;
 };
 
 // Fiche d'une bande, lue dans le JSON du fichier. Les textes sont ceux du script : source, mesure, unité, référence.
@@ -129,6 +139,7 @@ public:
     bool create(const Gpu& g, VkFormat hdrFormat) {
         for (auto& u : ubo_) u = createBuffer(g, sizeof(SkyBandUbo), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         for (int i = 0; i < kRing; ++i) check(vkMapMemory(g.dev, ubo_[i].mem, 0, sizeof(SkyBandUbo), 0, &mapped_[i]), "ciel par bande");
+        dummy_ = createBuffer(g, 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         createPipeline(g, hdrFormat);
         ready = true;
         return true;
@@ -189,10 +200,61 @@ public:
         vkCmdCopyBuffer(cmd, staging.buf, map_.buf, 1, &region);
         endOnce(g, cmd);
         destroy(g, staging);
+        info = in;
+        loadSources(g, path);
+        writeSets(g, total * 4);
+        loaded = true;
+        return true;
+    }
+
+    // Catalogue de sources de la même famille de bande, dans le même dossier : sources_<bande>.bin (facultatif).
+    void loadSources(const Gpu& g, const std::string& mapPath) {
+        if (srcCount_) destroy(g, src_);
+        srcCount_ = 0;
+        sources = SkySourcesInfo{};
+        const std::string dir = std::filesystem::path(mapPath).parent_path().string();
+        std::ifstream f(dir + "/sources_" + info.band + ".bin", std::ios::binary);
+        if (!f) return;
+        char magic[8];
+        uint32_t h[4];
+        f.read(magic, 8);
+        f.read(reinterpret_cast<char*>(h), sizeof(h));
+        if (!f || std::memcmp(magic, "UNIVSRC1", 8) != 0 || h[0] == 0) return;
+        std::string js(h[1], '\0');
+        f.read(js.data(), h[1]);
+        f.seekg(static_cast<std::streamoff>((24 + h[1] + 15) / 16 * 16));
+        std::vector<uint32_t> rec(static_cast<size_t>(h[0]) * 8);
+        f.read(reinterpret_cast<char*>(rec.data()), static_cast<std::streamsize>(rec.size() * 4));
+        if (!f) return;
+        sources.label = jsonString(js, "libelle");
+        sources.reference = jsonString(js, "reference");
+        sources.quantity = jsonString(js, "grandeur");
+        sources.unit = jsonString(js, "unite");
+        sources.median = jsonNumber(js, "grandeur_p50", 1.0);
+        sources.count = h[0];
+        const size_t gp = js.find("\"groupes\": [");
+        if (gp != std::string::npos) {      // noms des groupes, dans l'ordre des numéros, puis leurs nombres dans « comptes »
+            size_t p = gp + 12;
+            const size_t end = js.find(']', p);
+            while (true) {
+                const size_t a = js.find('"', p);
+                if (a == std::string::npos || a > end) break;
+                const size_t b = js.find('"', a + 1);
+                const std::string name = js.substr(a + 1, b - a - 1);
+                sources.groups.push_back({name, static_cast<int>(jsonNumber(js.substr(js.find("\"comptes\"")), name))});
+                p = b + 1;
+            }
+        }
+        src_ = uploadStorage(g, rec.data(), rec.size() * 4);
+        srcCount_ = h[0];
+    }
+
+    void writeSets(const Gpu& g, VkDeviceSize mapBytes) {
         for (int i = 0; i < kRing; ++i) {
-            const VkDescriptorBufferInfo bi[2] = {{ubo_[i].buf, 0, sizeof(SkyBandUbo)}, {map_.buf, 0, total * 4}};
-            VkWriteDescriptorSet w[2];
-            for (uint32_t b = 0; b < 2; ++b) {
+            const VkDescriptorBufferInfo bi[3] = {{ubo_[i].buf, 0, sizeof(SkyBandUbo)}, {map_.buf, 0, mapBytes},
+                                                  srcCount_ ? VkDescriptorBufferInfo{src_.buf, 0, srcCount_ * 32ull} : VkDescriptorBufferInfo{dummy_.buf, 0, 32}};
+            VkWriteDescriptorSet w[3];
+            for (uint32_t b = 0; b < 3; ++b) {
                 w[b] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
                 w[b].dstSet = sets_[i];
                 w[b].dstBinding = b;
@@ -200,12 +262,27 @@ public:
                 w[b].descriptorType = b == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 w[b].pBufferInfo = &bi[b];
             }
-            vkUpdateDescriptorSets(g.dev, 2, w, 0, nullptr);
+            vkUpdateDescriptorSets(g.dev, 3, w, 0, nullptr);
         }
-        info = in;
-        loaded = true;
-        return true;
     }
+
+    static Buffer uploadStorage(const Gpu& g, const void* data, size_t bytes) {
+        Buffer staging = createBuffer(g, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        void* p = nullptr;
+        check(vkMapMemory(g.dev, staging.mem, 0, bytes, 0, &p), "sources du ciel");
+        std::memcpy(p, data, bytes);
+        vkUnmapMemory(g.dev, staging.mem);
+        Buffer b = createBuffer(g, bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        VkCommandBuffer cmd = beginOnce(g);
+        const VkBufferCopy region{0, 0, bytes};
+        vkCmdCopyBuffer(cmd, staging.buf, b.buf, 1, &region);
+        endOnce(g, cmd);
+        destroy(g, staging);
+        return b;
+    }
+
+    bool showSources = true;     // cercles du catalogue de la bande (s'il y en a un)
+    SkySourcesInfo sources;      // catalogue de sources dessiné avec la carte (vide s'il n'y en a pas)
 
     // Texte à afficher avec la bande : d'où vient la carte, ce qu'elle mesure, sa finesse, sa couverture, l'échelle.
     std::vector<std::string> legend(double distLy) const {
@@ -221,6 +298,18 @@ public:
         std::snprintf(b, sizeof b, "Fausses couleurs, échelle %s de %.3g à %.3g %s. Hachures : pas de mesure.",
                       info.scaleKind == "log" ? "logarithmique" : "linéaire", info.lo, info.hi, info.unit.c_str());
         l.push_back(b);
+        if (sources.count) {
+            static const char* colors[] = {"blanc", "cyan", "vert", "rose", "bleu"};
+            std::snprintf(b, sizeof b, "Cercles : %u sources, %s (%s) ; taille selon le %s. Direction mesurée, distance non montrée.",
+                          sources.count, sources.label.c_str(), sources.reference.c_str(), sources.quantity.c_str());
+            l.push_back(b);
+            std::string g;
+            for (size_t k = 0; k < sources.groups.size() && k < 5; ++k) {
+                if (!g.empty()) g += " ; ";
+                g += std::string(colors[k]) + " : " + sources.groups[k].first + " (" + std::to_string(sources.groups[k].second) + ")";
+            }
+            if (!g.empty()) l.push_back(g + ".");
+        }
         const double a = opacityAt(distLy);
         if (a >= 1.0) l.push_back("Vu depuis la Terre : une carte du ciel n'a pas de profondeur.");
         else if (a > 0.0) l.push_back("On s'éloigne du Soleil : la carte, vue depuis la Terre, s'efface (plus du tout au-delà de 1 parsec).");
@@ -240,8 +329,9 @@ public:
         static const double G[3][3] = {{-0.0548755604162154, -0.8734370902348850, -0.4838350155487132},
                                        {+0.4941094278755837, -0.4448296299600112, +0.7469822444972189},
                                        {-0.8676661490190047, -0.1980763734312015, +0.4559837761750669}};
+        auto toEq = [&](Vec3 v) { return Vec3{v.x, ce * v.y - se * v.z, se * v.y + ce * v.z}; };
         auto toSurvey = [&](Vec3 v) {
-            const Vec3 e{v.x, ce * v.y - se * v.z, se * v.y + ce * v.z};
+            const Vec3 e = toEq(v);
             if (!info.galactic) return e;
             return Vec3{G[0][0] * e.x + G[0][1] * e.y + G[0][2] * e.z, G[1][0] * e.x + G[1][1] * e.y + G[1][2] * e.z,
                         G[2][0] * e.x + G[2][1] * e.y + G[2][2] * e.z};
@@ -262,6 +352,18 @@ public:
         u.grid[0] = static_cast<float>(info.nside);
         u.grid[1] = static_cast<float>(levels_);
         u.grid[2] = static_cast<float>(2.0 * cam.tanHalf / height);
+        const Vec3 er = toEq(cam.right), eu = toEq(cam.up), ef = toEq(cam.fwd);
+        const Vec3* eqv[3] = {&er, &eu, &ef};
+        float* dst[3] = {u.eqRight, u.eqUp, u.eqFwd};
+        for (int k = 0; k < 3; ++k) {
+            dst[k][0] = static_cast<float>(eqv[k]->x);
+            dst[k][1] = static_cast<float>(eqv[k]->y);
+            dst[k][2] = static_cast<float>(eqv[k]->z);
+        }
+        u.proj[0] = static_cast<float>(1.0 / (cam.tanHalf * cam.aspect));
+        u.proj[1] = static_cast<float>(1.0 / cam.tanHalf);
+        u.proj[3] = static_cast<float>(sources.median > 0 ? sources.median : 1.0);
+        u.grid[3] = static_cast<float>(height / 1080.0);
         std::memcpy(mapped_[ring_], &u, sizeof(u));
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
@@ -270,6 +372,10 @@ public:
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &sets_[ring_], 0, nullptr);
         vkCmdDraw(cmd, 3, 1, 0, 0);
+        if (srcCount_ && showSources) {      // catalogue de la bande : un cercle par source, à sa direction mesurée
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineSrc_);
+            vkCmdDraw(cmd, srcCount_, 1, 0, 0);
+        }
         ring_ = (ring_ + 1) % kRing;
     }
 
@@ -277,6 +383,11 @@ public:
         if (!ready) return;
         vkDeviceWaitIdle(g.dev);
         if (loaded) destroy(g, map_);
+        if (srcCount_) destroy(g, src_);
+        destroy(g, dummy_);
+        vkDestroyPipeline(g.dev, pipelineSrc_, nullptr);
+        vkDestroyShaderModule(g.dev, vsSrc_, nullptr);
+        vkDestroyShaderModule(g.dev, fsSrc_, nullptr);
         vkDestroyPipeline(g.dev, pipeline_, nullptr);
         vkDestroyPipelineLayout(g.dev, layout_, nullptr);
         vkDestroyDescriptorPool(g.dev, pool_, nullptr);
@@ -293,7 +404,10 @@ public:
 private:
     static constexpr int kRing = 4;
     uint32_t levels_ = 1;
-    Buffer map_{};
+    uint32_t srcCount_ = 0;
+    Buffer map_{}, src_{}, dummy_{};
+    VkPipeline pipelineSrc_{};
+    VkShaderModule vsSrc_{}, fsSrc_{};
     Buffer ubo_[kRing];
     void* mapped_[kRing]{};
     VkDescriptorSet sets_[kRing]{};
@@ -305,13 +419,14 @@ private:
     VkShaderModule vs_{}, fs_{};
 
     void createPipeline(const Gpu& g, VkFormat fmt) {
-        const VkDescriptorSetLayoutBinding binds[2] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-                                                       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+        const VkDescriptorSetLayoutBinding binds[3] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                                       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                                       {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        dl.bindingCount = 2;
+        dl.bindingCount = 3;
         dl.pBindings = binds;
         check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &setLayout_), "agencement du ciel par bande");
-        const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kRing}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kRing}};
+        const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kRing}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 * kRing}};
         VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         dp.maxSets = kRing;
         dp.poolSizeCount = 2;
@@ -380,6 +495,13 @@ private:
         pci.pDynamicState = &ds;
         pci.layout = layout_;
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_), "pipeline du ciel par bande");
+        // Même agencement pour les sources : des points (cercles) au lieu du triangle plein écran.
+        vsSrc_ = shader(g, "ciel_sources.vert.spv");
+        fsSrc_ = shader(g, "ciel_sources.frag.spv");
+        stages[0].module = vsSrc_;
+        stages[1].module = fsSrc_;
+        ia.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+        check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipelineSrc_), "pipeline des sources du ciel");
     }
 };
 
