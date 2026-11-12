@@ -86,30 +86,57 @@ def convertir_fusion(d):
 DRIVE = 'G:/My Drive/Univers/archives/physique'      # règle de Marc (12/11/2026) : le maximum sur le Drive
 
 
-def archiver(d, nom):
-    """Copie sur le Drive les paquets d'images complets (listés dans fusion.json), puis fusion.json lui-même : une copie
-    complète du calcul y est gardée. Les fichiers restent aussi sur le PC tant que l'appli les dessine. Une fois le
-    premier instantané écrit, le départ (déjà sur le Drive) quitte le PC."""
+def separer(d, nom):
+    """Règle de Marc (12/11/2026) et accord du fil appli PC : sur le PC, seulement les ÉTOILES (disque, bulbe), dans
+    C:/tmp/natif/donnees/<calcul> ; le paquet complet (avec le halo de matière noire) part sur le Drive, dans
+    archives/physique/<calcul>, puis quitte le PC. Fait pour chaque paquet complet listé dans fusion.json.
+    Dans le dossier d'affichage : mêmes noms de fichiers, « affichees » ne compte que les étoiles, composantes.bin ne
+    garde que 1 (disque) et 2 (bulbe)."""
     import json, shutil
-    js = os.path.join(d, 'fusion.json')
-    if not os.path.isdir(os.path.dirname(DRIVE)) or not os.path.exists(js): return
-    cible = os.path.join(DRIVE, nom); os.makedirs(cible, exist_ok=True)
-    try: fichiers = [f for f, _ in json.load(open(js, encoding='utf-8'))['fichiers']]
+    import numpy as np
+    js = os.path.join(d, 'fusion.json'); cb = os.path.join(d, 'composantes.bin')
+    if not os.path.exists(js) or not os.path.exists(cb): return
+    aff = os.path.join(NATIF, 'donnees', nom); drive = os.path.join(DRIVE, nom)
+    fait = os.path.join(aff, 'fusion.json')
+    if os.path.exists(fait) and os.path.getmtime(fait) >= os.path.getmtime(js): return      # rien de neuf depuis le dernier passage
+    try: m = json.load(open(js, encoding='utf-8'))
     except Exception: return
-    for f in fichiers + ['composantes.bin', 'composantes.json', 'fusion.json']:
-        a, b = os.path.join(d, f), os.path.join(cible, f)
-        if os.path.exists(a) and (not os.path.exists(b) or os.path.getsize(b) != os.path.getsize(a) or f == 'fusion.json'):
-            shutil.copyfile(a, b + '.partiel'); os.replace(b + '.partiel', b)
+    os.makedirs(aff, exist_ok=True)
+    drive_ok = os.path.isdir(os.path.dirname(DRIVE))
+    if drive_ok: os.makedirs(drive, exist_ok=True)
+    comp = np.fromfile(cb, np.int8); etoile = comp > 0
+    counts = m['affichees']; bornes = np.cumsum([0] + counts)
+    m_aff = dict(m); m_aff['affichees'] = [int(etoile[bornes[k]:bornes[k + 1]].sum()) for k in range(len(counts))]
+    m_aff['composantes'] = 'composantes.bin : 1 disque, 2 bulbe (le halo de matière noire est sur le Drive : archives/physique/' + nom + ')'
+    n_all, n_et = int(len(comp)), int(etoile.sum())
+    for f, k in m['fichiers']:
+        a, b = os.path.join(d, f), os.path.join(aff, f)
+        if os.path.exists(b) and os.path.getsize(b) == k * n_et * 6 and not os.path.exists(a): continue
+        if not os.path.exists(a): continue
+        if os.path.getsize(a) != k * n_all * 6: continue      # paquet incomplet
+        x = np.fromfile(a, np.int16).reshape(k, n_all, 3)
+        x[:, etoile].tofile(b + '.tmp'); os.replace(b + '.tmp', b)
+        if drive_ok:
+            shutil.copyfile(a, os.path.join(drive, f) + '.partiel'); os.replace(os.path.join(drive, f) + '.partiel', os.path.join(drive, f))
+            os.remove(a)      # le paquet complet n'est plus que sur le Drive
+    comp[etoile].tofile(os.path.join(aff, 'composantes.bin.tmp')); os.replace(os.path.join(aff, 'composantes.bin.tmp'), os.path.join(aff, 'composantes.bin'))
+    for f in ('composantes.json', 'fusion_noms.tsv'):
+        if os.path.exists(os.path.join(d, f)): shutil.copyfile(os.path.join(d, f), os.path.join(aff, f))
+    json.dump(m_aff, open(os.path.join(aff, 'fusion.json.tmp'), 'w', encoding='utf-8'), ensure_ascii=False)
+    os.replace(os.path.join(aff, 'fusion.json.tmp'), os.path.join(aff, 'fusion.json'))
+    if drive_ok:
+        for f in ('fusion.json', 'composantes.bin', 'composantes.json'):
+            shutil.copyfile(os.path.join(d, f), os.path.join(drive, f))
     if os.path.exists(os.path.join(d, 'etat.npz')) and os.path.exists(os.path.join(d, 'depart.npz')):
-        os.remove(os.path.join(d, 'depart.npz'))
+        os.remove(os.path.join(d, 'depart.npz'))      # déjà sur le Drive
+    convertir_fusion(aff)
 
 
 def calcul_particules(dossier, fichier, nom, total, detail):
     j = os.path.join(NATIF, dossier, 'journal.txt')
     if not os.path.exists(j): return 'terminé'
-    convertir_fusion(os.path.join(NATIF, dossier))
-    try: archiver(os.path.join(NATIF, dossier), dossier)
-    except OSError as e: print('archive :', e, flush=True)
+    try: separer(os.path.join(NATIF, dossier), dossier)
+    except OSError as e: print('séparation :', e, flush=True)
     lignes = open(j, encoding='utf-8', errors='replace').read().splitlines()
     t = 0.0
     for l in reversed(lignes):
