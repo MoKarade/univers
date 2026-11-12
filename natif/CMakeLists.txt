@@ -80,3 +80,8 @@ target_link_options(essai_ephem PRIVATE -static)
 add_executable(essai_orientation src/essai_orientation.cpp)
 target_compile_options(essai_orientation PRIVATE -Wall -Wextra)
 target_link_options(essai_orientation PRIVATE -static)
+
+# Contrôle des distances cosmologiques contre astropy.
+add_executable(essai_cosmologie src/essai_cosmologie.cpp)
+target_compile_options(essai_cosmologie PRIVATE -Wall -Wextra)
+target_link_options(essai_cosmologie PRIVATE -static)
