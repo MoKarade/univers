@@ -5,7 +5,12 @@ Source : OpenNGC, Mattia Verga, https://github.com/mattiaverga/OpenNGC (database
 licence CC BY-SA 4.0. Contournement de la recherche SIMBAD en direct : la page en ligne ne peut appeler aucun serveur
 extérieur, et le CDS (Strasbourg) était en panne le 11/11/2026.
 
-Par objet : [noms affichés, type, AD (degrés), Déc (degrés), magnitude B, grand axe (minutes d'arc), z, constellation].
+Par objet : [noms affichés, type, AD (degrés), Déc (degrés), magnitude B, grand axe (minutes d'arc), z, constellation, lien].
+- z : décalage héliocentrique d'OpenNGC (NED) ramené au repère du Groupe local par la même formule que les relevés
+  de la page (Yahil et al. 1977, pipeline/build_data2.py, lg_frame), pour tomber au même endroit qu'eux.
+- lien : ['n', i] ou ['l', i] quand l'objet est une galaxie que la page a déjà, à distance mesurée (DATA.NEAR, Karachentsev ;
+  DATA.LOCAL, Groupe local), associée par position (moins de 1,5 minute d'arc, comme pour Cosmicflows-4). La page ouvre
+  alors sa fiche à elle au lieu d'en créer une seconde.
 - Objets « Dup » (doublons d'un autre numéro) et « NonEx » (inexistants) écartés.
 - Noms : « NGC 1300 », « IC 434 », « M 104 », puis les noms usuels du catalogue (en anglais).
 - Une valeur absente reste absente (null).
@@ -14,9 +19,16 @@ Usage : python pipeline/sources/build_openngc.py <dossier_raw>
 """
 import csv
 import json
+import math
 import os
 import re
 import sys
+
+import build_cf4
+
+CKMS = 299792.458
+# matrice équatorial -> galactique (même valeur que pipeline/build_data2.py, A_GAL)
+A_GAL = [[-0.0548755604162154, -0.8734370902348850, -0.4838350155487132], [0.4941094278755837, -0.4448296299600112, 0.7469822444972189], [-0.8676661490190047, -0.1980763734312015, 0.4559837761750669]]
 
 ECARTES = {'Dup', 'NonEx'}
 
@@ -44,6 +56,14 @@ def nom_propre(n):
     return '%s %s%s' % (m.group(1), m.group(2), m.group(3).strip()) if m else n
 
 
+def z_groupe_local(ra, dec, z):
+    """Comme lg_frame de build_data2.py : z + (−79 gx + 296 gy − 36 gz) / c, g = direction en coordonnées galactiques."""
+    a, d = math.radians(ra), math.radians(dec)
+    e = (math.cos(d) * math.cos(a), math.cos(d) * math.sin(a), math.sin(d))
+    g = [sum(A_GAL[k][j] * e[j] for j in range(3)) for k in range(3)]
+    return z + (-79.0 * g[0] + 296.0 * g[1] - 36.0 * g[2]) / CKMS
+
+
 def lire(chemin):
     return list(csv.DictReader(open(chemin, encoding='utf-8'), delimiter=';'))
 
@@ -65,7 +85,18 @@ def main(raw):
             noms.append('M %d' % int(r['M']))
         noms += [c.strip() for c in (r.get('Common names') or '').split(',') if c.strip()]
         z = nombre(r.get('Redshift'))
-        out.append([' · '.join(noms), r['Type'], ra, dec, nombre(r.get('B-Mag')), nombre(r.get('MajAx')), z, r.get('Const') or None])
+        z = None if z is None else round(z_groupe_local(ra, dec, z), 6)
+        out.append([' · '.join(noms), r['Type'], ra, dec, nombre(r.get('B-Mag')), nombre(r.get('MajAx')), z, r.get('Const') or None, None])
+    # liens vers les galaxies que la page a déjà (position à moins de 1,5')
+    near, _, local, _ = build_cf4.galaxies_de_la_page()
+    gal = [[0, o[2], o[3]] for o in out]
+    galaxies = {'G', 'GPair', 'GTrpl', 'GGroup'}
+    for tag, dirs in (('n', near), ('l', local)):
+        for i, k in enumerate(build_cf4.associer(dirs, gal)):
+            if k is not None and out[k][1] in galaxies and out[k][8] is None:
+                out[k][8] = [tag, i]
+    print('liens vers les galaxies de la page : %d proches, %d du Groupe local'
+          % (sum(1 for o in out if o[8] and o[8][0] == 'n'), sum(1 for o in out if o[8] and o[8][0] == 'l')))
     print('OpenNGC : %d lignes lues, %d gardées, %d écartées (doublons, inexistants, sans position) ; %d avec z ; %d Messier'
           % (len(lignes), len(out), ecartes, sum(1 for o in out if o[6] is not None), sum(1 for o in out if ' · M ' in o[0] + ' ')))
     m = {o[0].split(' · ')[0]: o for o in out}
@@ -77,7 +108,7 @@ def main(raw):
             raise SystemExit('contrôle de position en échec : rien écrit')
     chemin = os.path.join(raw, 'openngc.json')
     with open(chemin, 'w', encoding='utf-8', newline='\n') as f:
-        json.dump({'src': 'OpenNGC (Mattia Verga), CC BY-SA 4.0', 'cols': ['noms', 'type', 'ra', 'dec', 'bmag', 'majax', 'z', 'const'], 'o': out},
+        json.dump({'src': 'OpenNGC (Mattia Verga), CC BY-SA 4.0', 'cols': ['noms', 'type', 'ra', 'dec', 'bmag', 'majax', 'z_groupe_local', 'const', 'lien'], 'o': out},
                   f, ensure_ascii=False, separators=(',', ':'))
     print('écrit', chemin, os.path.getsize(chemin), 'octets')
 

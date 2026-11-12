@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Test à l'écran « recherche NGC/IC » (lot S, A5 par contournement : catalogue OpenNGC déposé à part de la page).
 
-- en ouvrant « Aller à », le catalogue se charge ; « M104 » trouve NGC 4594 (la Sombrero) ;
-- la toucher ouvre sa fiche (z tel que donné par OpenNGC, distance calculée comme les galaxies des relevés : à si faible z,
-  c·z/H0 à 3 % près avec H0 = 67,4) et y va ;
+- en ouvrant « Aller à », le catalogue se charge ; « NGC4594 » (la Sombrero, déjà dans la page) renvoie à sa fiche de la page ;
+- NGC 4889 (amas de Coma) est placée dans la bonne direction et à la même distance que le point de relevé voisin, la vue y va,
+  et la vue cône de lumière change sa distance et son libellé comme pour les relevés ;
 - « M42 » (nébuleuse d'Orion, sans décalage vers le rouge) ouvre sa fiche sans déplacement, distance « inconnue ici » ;
 - sans le fichier, la recherche des noms de la page marche encore et la page n'a pas d'erreur.
 Lancer : python3 app/build.py puis python -X utf8 app/test/lot_s_ngc.py [desk|phone]
@@ -62,25 +62,49 @@ def main():
         pg, logs = ouvrir("'openngc.json'")
         res = []
         for _ in range(60):            # le fichier se charge en arrière-plan à l'ouverture du panneau
-            res = chercher(pg, 'M104')
+            res = chercher(pg, 'NGC4594')
             if any('NGC 4594' in r for r in res):
                 break
             pg.wait_for_timeout(500)
-        check(any('NGC 4594' in r and 'catalogue NGC/IC' in r for r in res), '« M104 » trouve NGC 4594 : %s' % res[:3])
-        lr0 = pg.evaluate('__U.S.logR')
+        # 1) la Sombrero est déjà dans la page (galaxies proches à distance mesurée) : renvoi à sa fiche, pas de seconde fiche
+        check(any('NGC 4594' in r and 'fiche de la page' in r for r in res), '« NGC4594 » renvoie à la fiche de la page : %s' % res[:2])
         pg.evaluate("[...document.querySelectorAll('#find-res button')].find(b => /NGC 4594/.test(b.textContent)).click()")
         pg.wait_for_function("!document.getElementById('card').hidden", timeout=60000)
-        txt = pg.evaluate("(() => { const m = document.getElementById('card-more'); if (m && !m.hidden && /^Plus/.test(m.textContent)) m.click(); return document.getElementById('card').innerText; })()").replace(NB, ' ').replace(' ', ' ')
-        z = [o for o in __import__('json').load(open(os.path.join(RAW, 'openngc.json'), encoding='utf-8'))['o'] if o[0].startswith('NGC 4594 ')][0][6]
-        zs = ('%.3g' % z).replace('.', ',')
-        manque = [a for a in ('NGC 4594', 'z = ' + zs, 'calculée d’après z', 'OpenNGC') if a not in txt]
-        check(not manque, 'fiche de la Sombrero%s' % ((' : manque %s dans « %s »' % (manque, txt.replace(chr(10), ' / ')[:300])) if manque else ''))
-        dist = pg.evaluate("(() => { const o = __U.S.sel; return o ? Math.hypot(...o.get().map((v, k) => v - __U.F.gcRel[k])) / 3.0856775814913673e22 / __U.F.cos.a : null; })()")
-        att = 299792.458 * z / 67.4
-        check(dist is not None and abs(dist / att - 1) < 0.03, 'distance calculée : %.2f Mpc (c·z/H0 = %.2f Mpc)' % (dist or 0, att))
-        pg.wait_for_function(f"Math.abs(__U.S.logR - {lr0}) > 3", timeout=120000)
-        check(True, 'la vue part vers la galaxie (échelle %.1f → %.1f)' % (lr0, pg.evaluate('__U.S.logR')))
-        pg.screenshot(path='/tmp/lot_s_ngc_%s_m104.png' % MODE)
+        sub = pg.evaluate("document.getElementById('card-sub').textContent")
+        check('Galaxie proche' in sub, 'fiche ouverte : « %s »' % sub)
+
+        # 2) NGC 4889 (amas de Coma, z ≈ 0,02, absente des galaxies proches) : placée comme les relevés.
+        #    Contrôle indépendant : le point 2MRS le plus proche dans cette direction est à la même distance (3 %).
+        pg.evaluate("__U.select(null); document.getElementById('b-find').click()")
+        chercher(pg, 'NGC 4889')
+        pg.evaluate("[...document.querySelectorAll('#find-res button')].find(b => /^NGC 4889/.test(b.textContent) && /catalogue NGC/.test(b.textContent)).click()")
+        pg.wait_for_function("!document.getElementById('card').hidden", timeout=60000)
+        r = pg.evaluate("""(() => { const o = __U.S.sel, F = __U.F, P = __U.Rr.pick, v = o.get().map((x, k) => (x - F.gcRel[k]) / 3.0856775814913673e22 / F.cos.a), d = Math.hypot(...v), u = v.map(x => x / d);
+            let best = null; for (let i = 0; i < P.svN; i++) { const c = u[0] * P.svDir[i * 3] + u[1] * P.svDir[i * 3 + 1] + u[2] * P.svDir[i * 3 + 2]; if (!best || c > best.c) best = { c, d: P.svDist[i] }; }
+            const e = 23.4392911 * Math.PI / 180, ra = 195.03387 * Math.PI / 180, de = 27.977 * Math.PI / 180, ex = Math.cos(de) * Math.cos(ra), ey = Math.cos(de) * Math.sin(ra), ez = Math.sin(de);
+            const w = [ex, Math.cos(e) * ey + Math.sin(e) * ez, -Math.sin(e) * ey + Math.cos(e) * ez];
+            return { d, dir: Math.acos(Math.min(1, u[0] * w[0] + u[1] * w[1] + u[2] * w[2])) * 180 / Math.PI, voisin: Math.acos(Math.min(1, best.c)) * 180 / Math.PI, dv: best.d, lr: o.lr }; })()""")
+        check(r['dir'] < 0.01, 'direction de NGC 4889 : écart %.4f° (attendu < 0,01°)' % r['dir'])
+        check(r['voisin'] < 0.2 and abs(r['d'] / r['dv'] - 1) < 0.03, 'même distance que le point de relevé voisin (%.2f° d’écart) : %.1f contre %.1f Mpc' % (r['voisin'], r['d'], r['dv']))
+        pg.wait_for_function(f"Math.abs(__U.S.logR - {r['lr']}) < 0.15", timeout=120000)
+        pg.wait_for_function("!__U.S.anim", timeout=120000)      # fin du vol
+        f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 20', timeout=180000)
+        # projection à l'écran, même calcul que app/test/zoom_objet.py (PROJ)
+        cen = pg.evaluate("""(() => { const U = window.__U, F = U.F, R = U.Rr, p = U.S.sel.get();
+            const PM = new THREE.Matrix4().multiplyMatrices(R.camera.projectionMatrix, R.camera.matrixWorldInverse), e = PM.elements;
+            const X = (p[0] - F.tg[0]) * F.s, Y = (p[1] - F.tg[1]) * F.s, Z = (p[2] - F.tg[2]) * F.s, w = e[3] * X + e[7] * Y + e[11] * Z + e[15];
+            if (w <= 0) return null; const sx = ((e[0] * X + e[4] * Y + e[8] * Z + e[12]) / w * 0.5 + 0.5) * R.cssW, sy = (0.5 - (e[1] * X + e[5] * Y + e[9] * Z + e[13]) / w * 0.5) * R.cssH;
+            return { off: Math.hypot(sx - R.cssW / 2, sy - R.cssH / 2) / (R.cssW / 2), centre: U.S.center ? U.S.center.name : null }; })()""")
+        check(cen and cen['off'] < 0.1 and cen['centre'] == 'NGC 4889', 'arrivée : NGC 4889 au centre (écart %.3f de la demi-largeur), centre = %s' % ((cen or {}).get('off', 9), (cen or {}).get('centre')))
+        pg.screenshot(path='/tmp/lot_s_ngc_%s_ngc4889.png' % MODE)
+        lab0 = pg.evaluate("document.getElementById('card').innerText")
+        pg.evaluate("__U.S.opts.lightcone = true")
+        f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 6', timeout=180000)
+        d1 = pg.evaluate("(() => { const o = __U.S.sel, F = __U.F; return Math.hypot(...o.get().map((x, k) => (x - F.gcRel[k]))) / 3.0856775814913673e22 / F.cos.a; })()")
+        lab1 = pg.evaluate("__U.select(__U.S.sel); document.getElementById('card').innerText")
+        check(d1 < r['d'] * 0.995 and 'au moment de l’émission' in lab1 and 'à cet instant' in lab0, 'vue cône de lumière : %.1f → %.1f Mpc, libellé changé' % (r['d'], d1))
+        pg.evaluate("__U.S.opts.lightcone = false")
+        check(not logs, 'aucune erreur de page (%d)' % len(logs))
 
         pg.evaluate("__U.select(null); __U.goStop(__U.STOPS.find(s => /Système solaire/.test(s.name)), true); document.getElementById('b-find').click()")
         pg.wait_for_function("__U.S.logR < 14", timeout=120000)

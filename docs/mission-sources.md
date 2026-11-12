@@ -52,9 +52,9 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 
 ### S7 — Recherche par nom (A5, contournement)
 - Pourquoi un contournement : la page en ligne ne peut appeler aucun serveur extérieur (SIMBAD en direct impossible), et le CDS était en panne.
-- Après : « Aller à » trouve aussi les 13 372 objets du catalogue ouvert OpenNGC (NGC, IC, Messier, noms usuels anglais ; « M104 » comme « M 104 »). Fiche : distance, z, position, constellation, magnitude, taille, source. Une galaxie de z ≥ 0,003 est placée à la distance tirée de z, comme les galaxies des relevés ; sinon la fiche s'ouvre sans déplacement, distance « inconnue ici ».
-- Données : `pipeline/sources/build_openngc.py` → `openngc.json` (808 ko), déposé à part de la page (fichier joint de l'artefact), chargé à l'ouverture de « Aller à ». Contrôle bloquant : positions de NGC 224, NGC 4594 et NGC 1976.
-- Fini quand : test `app/test/lot_s_ngc.py` (M104 trouvée, fiche et distance c·z/H0 à 3 % près, départ de la vue ; M42 sans déplacement ; sans le fichier, la recherche locale marche) sur ordinateur et téléphone ; critiques PASSE.
+- Après : « Aller à » trouve aussi les 13 372 objets du catalogue ouvert OpenNGC (NGC, IC, Messier, noms usuels anglais ; « M104 » comme « M 104 »). Fiche : distance, z, position, constellation, magnitude, taille, source. Une galaxie que la page a déjà (190 galaxies proches, 20 du Groupe local, associées par position) renvoie à sa fiche. Sinon, une galaxie de z ≥ 0,01 (z ramené au repère du Groupe local comme les relevés) est placée à la distance tirée de z, vue cône de lumière comprise ; plus près, la vitesse propre domine et la fiche s'ouvre sans déplacement, distance « inconnue ici ».
+- Données : `pipeline/sources/build_openngc.py` → `openngc.json` (881 ko), déposé à part de la page (fichier joint de l'artefact), chargé à l'ouverture de « Aller à ». Contrôle bloquant : positions de NGC 224, NGC 4594 et NGC 1976.
+- Fini quand : test `app/test/lot_s_ngc.py` (NGC 4594 renvoie à sa fiche de la page ; NGC 4889 dans la bonne direction, à la même distance que le point de relevé voisin, au centre à l'arrivée, distance et libellé changés en vue cône de lumière ; M42 sans déplacement ; sans le fichier, la recherche locale marche) sur ordinateur et téléphone ; critiques PASSE.
 - Écarté : le vrai ciel DSS (A4). Contourné (copie de l'ESA, branche `sources-ciel`), mais mesuré à l'écran il n'ajoute presque rien aux millions d'étoiles Gaia de la page ; non publié.
 
 ### Ensuite (A4, A5, A7)
