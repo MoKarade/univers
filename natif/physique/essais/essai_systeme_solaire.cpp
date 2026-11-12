@@ -6,6 +6,7 @@
 // 3. Continuité à la borne, réponses « inconnu » (false) aux bons endroits, table ±10 millions d'années, plusieurs fils.
 // Usage : essai_systeme_solaire <de440.bsp> [orbites_planetes.bin]
 // Imprime PASSE ou ECHEC par ligne ; code de sortie 0 si tout passe, 1 sinon.
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <thread>
@@ -77,6 +78,19 @@ int main(int argc, char** argv) {
         ok(ss.etat(phys::kMars, 2461354.5 + 1e6 * 365.25, p, v, st), "dans un million d'années : Mars calculée par la table");
         ok(!ss.etat(phys::kCeres, 2461354.5 + 1e6 * 365.25, p, v, st), "dans un million d'années : Cérès inconnue (absente de la table)");
         ok(!ss.etat(phys::kMars, 2461354.5 + 2e7 * 365.25, p, v, st), "dans 20 millions d'années : « inconnu » (chaos)");
+    }
+
+    // 3 bis. Suivi pas à pas (le temps qui défile) : mêmes positions que les requêtes isolées, et bien plus rapide.
+    {
+        phys::Suivi su(ss); double w = 0; const double j0 = phys::kDe440Fin + 900 * 365.25;
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int k = 0; k < 400; k++) { const double jd = j0 + k * 3.0; phys::Vec3 a, b, c2, d2; phys::Statut s1, s2;
+            if (su.aller(jd) && ss.etat(3, jd, c2, d2, s2) && su.etat(3, a, b, s1)) w = std::fmax(w, std::hypot(a.x - c2.x, a.y - c2.y, a.z - c2.z)); }
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        ok(w < 1.0, "suivi pas à pas sur 400 dates (3 jours d'écart) : même Terre-Lune qu'une requête isolée à %.3f km près (%.0f ms en tout, requêtes isolées comprises)", w, ms);
+        phys::Suivi s3(ss); const auto t1 = std::chrono::steady_clock::now(); for (int k = 0; k < 400; k++) s3.aller(j0 + 4000 + k * 3.0);
+        const double ms2 = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count();
+        ok(ms2 < 200, "suivi seul : 400 dates en %.1f ms", ms2);
     }
 
     // 4. Plusieurs fils d'exécution : mêmes réponses.

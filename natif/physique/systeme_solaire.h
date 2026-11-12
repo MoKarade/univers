@@ -50,12 +50,36 @@ public:
     // Point de reprise k (0 = à la borne) du côté choisi, pour les essais ; nullptr s'il n'existe pas.
     const nb::State* reprise(bool apres, size_t k) const { const auto& c = apres ? apres_ : avant_; return k < c.size() ? &c[k] : nullptr; }
 
+    friend class Suivi;
+
 private:
     std::vector<nb::State> avant_, apres_;      // points de reprise, du plus proche de DE440 au plus loin
     double debutDirect_ = 0, finDirect_ = 0;
     nb::LongTable table_;
-    static constexpr double kPasReprise = 20 * 365.25;
+    static constexpr double kPas = nbody_donnees::kDtDays, kPasReprise = 1826 * kPas;      // ≈ 20 ans, multiple exact du pas : tout le calcul reste sur la même grille de dates
     bool etatDirect(double jd, nb::State& s) const;
+    // État sur la grille (borne + k pas de 4 jours) le plus proche de jd du côté de la borne, depuis le point de reprise voisin.
+    bool grille(double jd, nb::State& s) const;
+    static void finir(nb::State& s, double jd) { nb::Integrator it(s); it.advanceTo(jd, kPas); s = it.state(); }      // dernier pas partiel, sur une copie
+};
+
+// Suivi d'une suite de dates proches (le temps qui défile) : garde le dernier état et avance pas à pas depuis lui, au lieu de
+// repartir d'un point de reprise à chaque requête. Un Suivi par fil d'exécution (il garde un état) ; le SystemeSolaire,
+// lui, reste partagé en lecture.
+class Suivi {
+public:
+    explicit Suivi(const SystemeSolaire& ss) : ss_(&ss) {}
+    // Porte le suivi à jd ; false si jd est dans DE440 ou hors des plages.
+    bool aller(double jd);
+    // État héliocentrique (km, km/s) du corps à la date du dernier aller() réussi.
+    bool etat(int naif, Vec3& pos, Vec3& vit, Statut& statut) const;
+    double jd() const { return jd_; }
+
+private:
+    const SystemeSolaire* ss_;
+    nb::State g_{}, s_{};      // g_ : sur la grille ; s_ : à la date demandée
+    bool direct_ = false, ok_ = false;
+    double jd_ = 0;
 };
 
 }  // namespace phys

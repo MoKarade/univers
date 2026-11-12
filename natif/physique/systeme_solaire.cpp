@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdlib>
 
 namespace phys {
 
@@ -88,15 +89,20 @@ Plage SystemeSolaire::plageTable() const {
     return {nbody_donnees::kJd0 + table_.firstYear() * 365.25, nbody_donnees::kJd0 + table_.lastYear() * 365.25};
 }
 
-bool SystemeSolaire::etatDirect(double jd, nb::State& s) const {
+bool SystemeSolaire::grille(double jd, nb::State& s) const {
     const bool apres = jd > kDe440Fin;
     const auto& cps = apres ? apres_ : avant_;
     if (cps.empty()) return false;
     const double jdB = apres ? kDe440Fin : kDe440Debut, d = std::fabs(jd - jdB);
-    const long k = (long)std::llround(d / kPasReprise);
-    if (k >= (long)cps.size()) return false;
-    nb::Integrator it(cps[k]); it.advanceTo(jd); s = it.state();
+    const long k = (long)std::floor(d / kPasReprise); if (k >= (long)cps.size()) return false;
+    const long pasEntiers = (long)std::floor((d - k * kPasReprise) / kPas);      // pas entiers depuis le point de reprise, sans dépasser jd
+    nb::Integrator it(cps[k]); it.step(apres ? kPas : -kPas, pasEntiers); s = it.state();
     return true;
+}
+
+bool SystemeSolaire::etatDirect(double jd, nb::State& s) const {
+    if (!grille(jd, s)) return false;
+    finir(s, jd); return true;
 }
 
 bool SystemeSolaire::etat(int naif, double jd, Vec3& pos, Vec3& vit, Statut& statut) const {
@@ -129,6 +135,37 @@ bool SystemeSolaire::positions(double jd, std::span<Vec3> out) const {
     Vec3 v; Statut st;
     for (int i = 0; i < 9; i++) if (!etat(kCodes[i], jd, out[i], v, st)) return false;
     for (int i = 9; i < nb::kN; i++) out[i] = {NAN, NAN, NAN};      // la table ne donne pas les astéroïdes : inconnus (NaN), jamais devinés
+    return true;
+}
+
+bool Suivi::aller(double jd) {
+    const auto& S = *ss_; ok_ = false;
+    if (jd >= kDe440Debut && jd <= kDe440Fin) return false;
+    if ((jd >= S.debutDirect_ && jd < kDe440Debut) || (jd > kDe440Fin && jd <= S.finDirect_)) {
+        const bool apres = jd > kDe440Fin, memeCote = direct_ && ((g_.jd > kDe440Fin) == apres);
+        const double jdB = apres ? kDe440Fin : kDe440Debut, d = std::fabs(jd - jdB), cible = jdB + (apres ? 1 : -1) * std::floor(d / SystemeSolaire::kPas) * SystemeSolaire::kPas;
+        const long n = std::lround((cible - g_.jd) / SystemeSolaire::kPas);
+        /* temps qui défile : pas entiers depuis le dernier état de la grille (vers le passé aussi, le schéma est réversible) ;
+           les mêmes pas que depuis le point de reprise, donc le même résultat qu'une requête isolée */
+        if (memeCote && std::abs(n) * SystemeSolaire::kPas < SystemeSolaire::kPasReprise && (std::floor(std::fabs(g_.jd - jdB) / SystemeSolaire::kPasReprise) == std::floor(d / SystemeSolaire::kPasReprise))) { nb::Integrator it(g_); it.step(n >= 0 ? SystemeSolaire::kPas : -SystemeSolaire::kPas, std::abs(n)); g_ = it.state(); }
+        else if (!S.grille(jd, g_)) return false;
+        s_ = g_; SystemeSolaire::finir(s_, jd);
+        direct_ = true; ok_ = true; jd_ = jd; return true;
+    }
+    direct_ = false; Vec3 p, v; Statut st;
+    if (!S.etat(kMars, jd, p, v, st)) return false;      // la table couvre-t-elle cette date ?
+    ok_ = true; jd_ = jd; return true;
+}
+
+bool Suivi::etat(int naif, Vec3& pos, Vec3& vit, Statut& statut) const {
+    if (!ok_) return false;
+    if (!direct_) return ss_->etat(naif, jd_, pos, vit, statut);
+    statut = Statut::Calcule;
+    if (naif == kSoleil) { pos = {}; vit = {}; return true; }
+    const int i = indexOf(naif); if (i < 0) return false;
+    const auto sv = sunVel(s_);
+    pos = {s_.Q[3 * i] * kAuKm, s_.Q[3 * i + 1] * kAuKm, s_.Q[3 * i + 2] * kAuKm};
+    vit = {(s_.V[3 * i] - sv[0]) * kKmS, (s_.V[3 * i + 1] - sv[1]) * kKmS, (s_.V[3 * i + 2] - sv[2]) * kKmS};
     return true;
 }
 
