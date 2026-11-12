@@ -105,3 +105,17 @@ Corrections :
 - en volume, seules les sources dont la parallaxe vaut plus de 5 fois son erreur (distance à mieux que 20 %), source par
   source sur le serveur : 93,8 millions de sources, 3 181 655 cases, 30,3 % de cette lumière. Les 1,61 milliard d'autres
   sont « ciel seul » (vues du Soleil, sans profondeur) : rien n'est placé à une distance mal mesurée.
+
+### Les étoiles Gaia sur leur orbite, à toute date (12 novembre 2026, 20 h UTC)
+
+- `gaia.vert` : même mouvement que les étoiles du catalogue principal (`orbite_galactique.glsl` du fil natif) : ligne droite
+  mesurée, raccordée sans seuil à l'orbite calculée autour de la Galaxie. Plus de coupure à 3 Ma.
+- 72,4 millions d'étoiles n'ont pas de vitesse radiale mesurée : elle compte pour nulle (l'étoile ne s'éloigne ni ne
+  s'approche du Soleil au départ). C'est une supposition sur l'évolution, dite à l'écran ; l'état présent reste mesuré.
+- Feuilles de l'arbre : chacune suit l'orbite de son centre (vitesse moyenne de ses étoiles) et sa boîte grandit de
+  100 km/s × temps (dispersion, marge large), jusqu'à couvrir la Galaxie ; la lumière sautée suit sa feuille.
+- Lumière additionnée (`gaia_agrege.bin`) : sans vitesses, montrée seulement à moins de 3 Ma des mesures.
+- Lueur de la Voie lactée : décalée de l'opposé du chemin du Soleil (`orbite::decalageSoleil`), la barre tourne.
+- Mesuré (carte partagée avec l'appli de Marc et la fusion) : 57 images/s aujourd'hui, 58 à +50 Ma, 21 à +230 Ma (vue de
+  60 000 al, toutes les étoiles dessinées une fois dispersées). Captures : C:	mp
+atif\essai-mw\orbites_4dates.png.
