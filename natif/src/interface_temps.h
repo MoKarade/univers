@@ -61,20 +61,31 @@ void dateJumpPopup(Sim& sim, UiState& ui) {
     ImGui::EndPopup();
 }
 
-// Au-delà de 3 millions d'années : ce qui est montré, et d'où cela vient.
+// Loin d'aujourd'hui : ce qui est montré, et d'où cela vient (fil natif, 87c910e : orbites des étoiles jusqu'à 1 milliard
+// d'années, puis fondu vers le calcul de la fusion entre 800 millions et 1 milliard d'années, Sim::starShare).
 void deepTimeNote(const Sim& sim) {
-    if (sim.deepTime()) {
-        ImGui::TextDisabled("Au-delà de 3 millions d'années : seules les galaxies du Groupe local dont le mouvement est calculé sont montrées "
-                            "(calcul complet de la rencontre avec Andromède, un scénario).");
+    if (!sim.deepTime()) return;
+    if (sim.starShare() > 0) {
+        ImGui::TextDisabled("Étoiles : position de départ mesurée, orbite autour de la Galaxie calculée dans un potentiel [modèle] ; "
+                            "fiable sur environ 100 millions d'années pour les étoiles du disque, indicative au-delà.");
+        if (kRates[sim.rate].yearsPerSecond < 1.0e7 && !sim.paused)
+            ImGui::TextDisabled("Un tour de la Galaxie prend environ 230 millions d'années : à cette vitesse, la rotation est réelle mais invisible.");
+    }
+    if (sim.starShare() < 1) {
+        ImGui::TextDisabled("Au-delà de 800 millions d'années, le calcul complet de la rencontre avec Andromède (un scénario) prend le relais "
+                            "des étoiles mesurées%s.", sim.starShare() > 0 ? " (fondu jusqu'à 1 milliard d'années)" : "");
         if (sim.replay)
             ImGui::TextDisabled("Dans ce calcul, la Voie lactée et Andromède fusionnent dans %s milliards d'années (énergie conservée à %s %% près).",
                                 frNum(sim.replay->fusionGa(), 3).c_str(), frNum(100.0 * sim.replay->deriveEnergie(), 2).c_str());
-        return;
+        else ImGui::TextDisabled("Ce calcul n'est pas chargé.");
     }
-    if (std::fabs(sim.years - kStartYears) >= kLinearLimitYears * 0.999) {
-        if (sim.replay) ImGui::TextDisabled("Au-delà de 3 millions d'années, les étoiles ne vont plus en ligne droite : seules les galaxies calculées restent.");
-        else ImGui::TextDisabled("Limite : au-delà de 3 millions d'années, il faut le calcul de la rencontre avec Andromède, qui n'est pas chargé.");
-    }
+}
+
+// Planètes : montrées seulement si au moins une a une position à la date affichée.
+bool anyPlanetShown(const Sim& sim) {
+    for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
+        if (sim.bodies[static_cast<size_t>(i)].kind == Kind::Planet && sim.bodies[static_cast<size_t>(i)].parent == 0 && sim.visible(i)) return true;
+    return false;
 }
 
 void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
@@ -127,8 +138,8 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     dateJumpPopup(sim, ui);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);      // les remarques passent à la ligne : la barre garde sa largeur
     if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");
-    else if (sim.deepTime() && !sim.visible(0)) {
-    }      // temps profond : le système solaire n'est plus suivi, la remarque ci-dessous le dit
+    else if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim))
+        ImGui::TextDisabled("Planètes non montrées à cette date : leur calcul couvre 10 millions d'années avant et après aujourd'hui.");
     else if (!sim.ephemValid && !sim.outer) ImGui::TextDisabled("Hors de 1550-2650 (plage des éphémérides de la NASA) : calcul des planètes en préparation.");
     else if (!sim.ephemValid)
         ImGui::TextDisabled("Hors de 1550-2650 : planètes calculées ici (gravité mutuelle partie des éphémérides de la NASA) ; lunes et orbites non montrées.");
@@ -201,9 +212,9 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         }
     } else if (fb.kind == Kind::Star) {
         // Aujourd'hui la distance est une mesure ; à une autre date, c'est la mesure prolongée en ligne droite.
-        row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : mouvement mesuré, prolongé en ligne droite", s);
+        row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : départ mesuré, orbite calculée autour de la Galaxie", s);
         row("Éclat vu de la Terre", "magnitude " + frNum(sim.apparentMag(f, {0, 0, 0})), "calculé", s);
-        row("Vitesse", frNum(sim.speedKms(f)) + " km/s par rapport au Soleil", "mesuré", s);
+        row(today ? "Vitesse" : "Vitesse aujourd'hui", frNum(sim.speedKms(f)) + " km/s par rapport au Soleil", "mesuré", s);
     } else if (fb.kind == Kind::Galaxy) {
         // En temps profond, la place vient du calcul de la rencontre avec Andromède (sauf le centre de la Voie lactée, origine du repère).
         const bool deepCalc = sim.deepTime() && fb.name != "Centre de la Voie lactée";
