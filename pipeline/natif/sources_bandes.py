@@ -38,9 +38,10 @@ CATALOGUES = {
                  'gal': 4, 'sbg': 4}),
     'erass1cl': dict(
         # Le nom exact du fichier n'est pas connu d'avance : il est lu sur la page des catalogues de la DR1 (lien vers un
-        # .fits dont le nom contient « cl » et « primary »).
+        # .fits dont le nom contient « cl » et « primary »). Le 12/11/2026 la page ne donnait qu'une archive .fits.tgz :
+        # lien relevé à la main sur la page (catalogue primaire de Bulbul et al., version 3.2), la recherche reste en secours.
         page='https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/', motif=('cl', 'primary'),
-        urls=[],
+        urls=['https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/BulbulE_DR1/erass1cl_primary_v3.2.fits.tgz'],
         bande='X', libelle="Amas et groupes de galaxies d'eROSITA (eRASS1, confirmés en optique)",
         reference='Bulbul et al. 2024, A&A 685, A106 (eRASS1, amas primaires) ; Merloni et al. 2024, A&A 682, A34',
         grandeur='décalage vers le rouge', unite='z', taille='fixe',
@@ -54,7 +55,7 @@ def trouver_url(page, motif):
     """Lien vers un fichier .fits de la page dont le nom contient tous les mots du motif (le plus récent en premier)."""
     import re, urllib.parse
     html = urllib.request.urlopen(page, timeout=60).read().decode('utf-8', 'replace')
-    liens = [urllib.parse.urljoin(page, h) for h in re.findall(r'href=["\']([^"\']+\.fits(?:\.gz)?)["\']', html, re.I)]
+    liens = [urllib.parse.urljoin(page, h) for h in re.findall(r'href=["\']([^"\']+\.fits(?:\.gz|\.tgz|\.tar\.gz)?)["\']', html, re.I)]
     bons = [l for l in liens if all(m.lower() in l.rsplit('/', 1)[-1].lower() for m in motif)]
     print('  liens trouvés : ' + (', '.join(bons) or 'aucun'), flush=True)
     return sorted(bons, reverse=True)
@@ -76,8 +77,9 @@ def telecharger(urls, chemin):
             print(f'  {url}', flush=True)
             with urllib.request.urlopen(url, timeout=120) as r:
                 octets = r.read()
-            if octets[:6] != b'SIMPLE':
-                print('  pas un fichier FITS', flush=True)
+            # FITS (SIMPLE), gzip (1f 8b : .gz ou .tgz) ; une page d'erreur HTML n'est ni l'un ni l'autre
+            if octets[:6] != b'SIMPLE' and octets[:2] != bytes([0x1F, 0x8B]):
+                print('  pas un fichier FITS ni une archive gzip', flush=True)
                 continue
             with open(chemin + '.part', 'wb') as f:
                 f.write(octets)
@@ -147,7 +149,15 @@ def main():
         raise SystemExit('fichier du catalogue introuvable sur la page')
     c = dict(c, urls=urls)
     chemin = telecharger(urls, os.path.join(sortie, 'cache_catalogues', urls[0].rsplit('/', 1)[1]))
-    if chemin.endswith('.gz'):
+    if chemin.endswith(('.tgz', '.tar.gz')):      # archive : on n'en sort que le fichier .fits, sous son seul nom
+        import tarfile, shutil
+        with tarfile.open(chemin) as tar:
+            membre = next(m for m in tar.getmembers() if m.isfile() and m.name.lower().endswith(('.fits', '.fit')))
+            sortie_fits = os.path.join(os.path.dirname(chemin), os.path.basename(membre.name))
+            with tar.extractfile(membre) as fi, open(sortie_fits, 'wb') as fo:
+                shutil.copyfileobj(fi, fo)
+        chemin = sortie_fits
+    elif chemin.endswith('.gz'):
         import gzip, shutil
         with gzip.open(chemin) as fi, open(chemin[:-3], 'wb') as fo:
             shutil.copyfileobj(fi, fo)

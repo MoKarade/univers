@@ -563,6 +563,45 @@ def reference_planck(url, ref):
     return ref
 
 
+def controle_ordre(adresse, ordre, w, cache, table, nb=16):
+    """Compare la carte faite à l'ordre `ordre` avec l'ordre au-dessus ramené à la même finesse (moyenne des 4 enfants
+    mesurés, ordre emboîté), sur `nb` tuiles réparties sur le ciel. Renvoie l'écart relatif des médianes (None si rien à
+    comparer). Raison : le 12/11/2026 les tuiles d'ordre 2 de la copie IRSA de WISE W3 et W4 étaient identiques entre
+    elles et sans rapport avec l'ordre 3 (moyenne 0,54 contre 273 et 103)."""
+    ntuiles = 12 * 4 ** ordre
+    gros, fins = [], []
+    for n in np.linspace(0, ntuiles - 1, nb).astype(int):
+        octets = telecharger(adresse, ordre, int(n), cache)
+        enfants = [telecharger(adresse, ordre + 1, 4 * int(n) + k, cache) for k in range(4)]
+        if not octets or not all(enfants):
+            continue
+        parent = np.full(w * w, np.nan)
+        parent[table] = lire_fits(octets)
+        fin = np.full(4 * w * w, np.nan)
+        for k, e in enumerate(enfants):
+            fin[k * w * w + table] = lire_fits(e)
+        with np.errstate(all='ignore'):
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)
+                fin = np.nanmean(fin.reshape(-1, 4), axis=1)
+        gros.append(parent); fins.append(fin)
+    if not gros:
+        print(f'  contrôle ordre {ordre} / {ordre + 1} : aucune tuile comparable')
+        return None
+    g, f = np.concatenate(gros), np.concatenate(fins)
+    mg, mf, quoi = np.nanmedian(g), np.nanmedian(f), 'médianes'
+    if mf == 0 or not np.isfinite(mf):       # carte de comptage presque vide : les médianes valent 0, on prend les moyennes
+        mg, mf, quoi = np.nanmean(g), np.nanmean(f), 'moyennes'
+    ecart = abs(mg - mf) / abs(mf) if mf else float('inf')
+    print(f'  contrôle ordre {ordre} / {ordre + 1} (moyenne des 4 enfants), {len(gros)} tuiles : {quoi} {mg:.4g} et {mf:.4g}, '
+          f'écart {ecart * 100:.1f} %')
+    if ecart > 0.2:
+        print(f'  ATTENTION : l’ordre {ordre} ne colle pas à l’ordre {ordre + 1} (écart {ecart * 100:.0f} %) : '
+              f'relancer avec --depuis-ordre-plus-fin 1')
+    return ecart
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('sortie')
@@ -571,6 +610,10 @@ def main():
     ap.add_argument('--nside-max', type=int, default=2048)
     ap.add_argument('--simultanes', type=int, default=8)
     ap.add_argument('--cache')
+    ap.add_argument('--depuis-ordre-plus-fin', type=int, default=None, dest='plus_fin',
+                    help="télécharge N ordres plus fins et ramène la carte à la finesse voulue par moyenne des 4 enfants "
+                         "(sinon : 'ordre_source_plus' de la fiche, 0 par défaut)")
+    ap.add_argument('--controle-seul', action='store_true', help="seulement comparer l'ordre choisi et l'ordre au-dessus")
     ap.add_argument('--liste', action='store_true')
     a = ap.parse_args()
     if a.liste or not a.nom:
@@ -605,21 +648,29 @@ def main():
         ordre = a.ordre if a.ordre is not None else max(0, min(ordre_max, int(math.log2(a.nside_max // w)) if a.nside_max >= w else 0))
         ordre = min(ordre, ordre_max)
         repere = p.get('hips_frame', 'equatorial')
+        plus = a.plus_fin if a.plus_fin is not None else int(r.get('ordre_source_plus', 0))
+        plus = max(0, min(plus, ordre_max - ordre))
         nside = w << ordre
-        ntuiles = 12 * 4 ** ordre
+        ordre_dl = ordre + plus
+        ntuiles = 12 * 4 ** ordre_dl
         # une copie de secours a son propre cache : ses tuiles ne doivent jamais se mêler à celles du relevé principal
         sous = a.nom if r['hips'] == RELEVES[a.nom]['hips'] else a.nom + '__' + r['hips'].replace('/', '_')
         cache = a.cache or os.path.join(a.sortie, 'cache_hips', sous)
         print(f'{r["libelle"]} : {r["hips"]}, serveur {adresse}, repère {repere}, tuiles {w} px, ordre {ordre} '
-              f'(maximum {ordre_max}), Nside {nside}, {ntuiles} tuiles')
+              f'(maximum {ordre_max}), Nside {nside}, {ntuiles} tuiles'
+              + (f' (téléchargées à l’ordre {ordre_dl}, puis moyenne des enfants mesurés)' if plus else ''))
 
         tables = orientations(w)
         table = tables[0]
-        carte = np.full(12 * nside * nside, np.nan, dtype=np.float32)
+        if a.controle_seul:
+            controle_ordre(adresse, ordre, w, cache, table)
+            return
+        nside_dl = w << ordre_dl
+        carte = np.full(12 * nside_dl * nside_dl, np.nan, dtype=np.float32)
         absentes = 0
         t0 = time.time()
         with cf.ThreadPoolExecutor(a.simultanes) as ex:
-            futurs = {ex.submit(telecharger, adresse, ordre, n, cache): n for n in range(ntuiles)}
+            futurs = {ex.submit(telecharger, adresse, ordre_dl, n, cache): n for n in range(ntuiles)}
             for k, fu in enumerate(cf.as_completed(futurs)):
                 n = futurs[fu]
                 octets = fu.result()
@@ -634,6 +685,16 @@ def main():
                     print(f'  {k + 1}/{ntuiles} tuiles, {time.time() - t0:.0f} s', flush=True)
         if absentes == ntuiles:
             raise SystemExit('toutes les tuiles sont absentes : serveur en panne ? (vider le cache avant de relancer)')
+        import warnings
+        for _ in range(plus):      # ordre emboîté : les 4 enfants d'un pixel se suivent ; moyenne des seuls enfants mesurés
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)      # pixel sans aucun enfant mesuré : il reste vide (NaN)
+                carte = np.nanmean(carte.reshape(-1, 4), axis=1).astype(np.float32)
+        if plus:
+            absentes = f'{absentes} (à l’ordre {ordre_dl})'
+            ntuiles = 12 * 4 ** ordre      # la suite (contrôle des orientations) travaille sur les tuiles de l'ordre gardé
+        else:
+            controle_ordre(adresse, ordre, w, cache, table)
     mesure = np.isfinite(carte)
     couverture = float(mesure.mean())
     vals = carte[mesure]
