@@ -83,10 +83,10 @@ def convertir_fusion(d):
     if os.path.exists(cb + '.tmp'): os.replace(cb + '.tmp', cb)
 
 
-def fusion():
-    j = os.path.join(NATIF, 'fusion-toutes', 'journal.txt')
+def calcul_particules(dossier, fichier, nom, total, detail):
+    j = os.path.join(NATIF, dossier, 'journal.txt')
     if not os.path.exists(j): return 'terminé'
-    convertir_fusion(os.path.join(NATIF, 'fusion-toutes'))
+    convertir_fusion(os.path.join(NATIF, dossier))
     lignes = open(j, encoding='utf-8', errors='replace').read().splitlines()
     t = 0.0
     for l in reversed(lignes):
@@ -95,15 +95,24 @@ def fusion():
     fini = any(l.startswith('{') and 'fusion_ga' in l for l in lignes)
     pause = any('occupée' in l for l in lignes[-3:])
     etat = 'terminé' if fini else 'en pause' if pause else 'en cours' if actif(j, 900) else 'en pause'
-    ecrire('fusion_toutes_etoiles', nom='Fusion Voie lactée–Andromède, 1 million d’étoiles gardées', fait=10 if fini else t, total=10,
-           unite='milliards d’années', debut=iso(os.path.getctime(j)), maj=iso(time.time()), etat=etat,
-           detail='3 millions de particules qui s’attirent toutes, sur la carte graphique')
+    ecrire(fichier, nom=nom, fait=total if fini else t, total=total, unite='milliards d’années', debut=iso(os.path.getctime(j)), maj=iso(time.time()),
+           etat=etat, detail=detail)
     return etat
+
+
+def fusion():
+    return calcul_particules('fusion-toutes', 'fusion_toutes_etoiles', 'Fusion Voie lactée–Andromède, 1 million d’étoiles gardées', 10,
+                             '3 millions de particules qui s’attirent toutes, sur la carte graphique')
+
+
+def voie_lactee():
+    return calcul_particules('voie-lactee-seule', 'voie_lactee_bras', 'Voie lactée seule : naissance des bras et de la barre', 4.7,
+                             '10,5 millions de particules qui s’attirent toutes, sur la carte graphique')
 
 
 def main():
     while True:
-        etats = [telechargement(), horizon(), chaos(), fusion()]
+        etats = [telechargement(), horizon(), chaos(), fusion(), voie_lactee()]
         if all(e in ('terminé', 'échec') for e in etats): break
         time.sleep(20)
 
