@@ -109,7 +109,10 @@ int runWindow(const WindowOptions& opt) {
         }
     std::vector<sondes::Probe> probes;
     const bool hasProbes = sondes::load(dataDir + "/sondes.bin", probes);      // facultatif
+    asteroides::Catalogue asteroidCat;
+    const bool hasAsteroidCat = asteroidCat.load(dataDir + "/asteroides.bin", dataDir + "/asteroides_noms.txt");      // facultatif
     Sim sim;
+    sim.asteroidCat = hasAsteroidCat ? &asteroidCat : nullptr;
     sim.probes = hasProbes ? &probes : nullptr;
     sim.stars = &stars;
     sim.spk = hasSpk ? &spk : nullptr;

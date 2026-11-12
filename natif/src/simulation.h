@@ -1,5 +1,6 @@
 // Appli PC « Univers » : l'état du simulateur (temps, astres, objet suivi, caméra), sans rien qui dépende de l'affichage.
 #pragma once
+#include "asteroides_catalogue.h"
 #include "commun.h"
 #include "completude.h"
 #include "cosmologie.h"
@@ -24,7 +25,7 @@ constexpr double kLinearLimitYears = 3.0e6;      // au-delà, la ligne droite ne
 // [Approximation assumée : appliquée à toute date ; l'écart réel a varié de quelques dizaines de secondes par siècle.]
 constexpr double kTdbMinusUtc = 69.184;
 
-enum class Kind { Sun, Star, Planet, Galaxy, Probe };
+enum class Kind { Sun, Star, Planet, Galaxy, Probe, Asteroid };
 
 // Un astre que l'on peut suivre, chercher, nommer à l'écran.
 struct Body {
@@ -135,6 +136,15 @@ struct Sim {
                 if (r.naif == eph::kEarth) earth = i;
             }
             add(kMoon, earth);
+            if (asteroidCat) {      // place de l'astéroïde désigné (vide au départ)
+                Body a;
+                a.name = "Astéroïde";
+                a.kind = Kind::Asteroid;
+                a.parent = 0;
+                a.natureText = "astéroïde";
+                bodies.push_back(a);
+                asteroidBody = static_cast<int>(bodies.size()) - 1;
+            }
             // Sondes : trajectoires réelles (sondes.bin). Montrées seulement aux dates où le JPL donne leur position.
             for (size_t k = 0; probes && k < probes->size(); ++k) {
                 Body p;
@@ -251,6 +261,16 @@ struct Sim {
         planetValid.assign(bodies.size(), 0);
         planetComputed.assign(bodies.size(), 0);
         for (size_t i = 0; i < bodies.size(); ++i) {
+            if (bodies[i].kind == Kind::Asteroid) {      // astéroïde désigné : son orbite mesurée, à moins de 300 ans de sa date
+                const double jd = 2451545.0 + years * 365.25 + kTdbMinusUtc / 86400.0;
+                if (asteroidCat && asteroidSel >= 0 && std::fabs(jd - asteroidCat->epochJd) < 300.0 * 365.25) {
+                    double au[3];
+                    asteroidCat->position(static_cast<size_t>(asteroidSel), jd, au);
+                    planetPos[i] = {au[0] * kAuInLy, au[1] * kAuInLy, au[2] * kAuInLy};
+                    planetValid[i] = 1;
+                }
+                continue;
+            }
             if (bodies[i].kind == Kind::Probe) {      // sonde : sa trajectoire réelle, ou rien hors des dates fournies
                 double pos[3], vel[3];
                 if (probes && (*probes)[static_cast<size_t>(bodies[i].probe)].at(2451545.0 + years * 365.25 + kTdbMinusUtc / 86400.0, pos, vel)) {
@@ -316,6 +336,10 @@ struct Sim {
     const phys::fusion::Rejeu* replay = nullptr;
     // Indicateur de complétude et de précision par échelle (completude.h), calculé une fois au chargement ; nul avant.
     const std::array<completude::Echelle, 5>* completeness = nullptr;
+    // Astéroïde désigné : un seul à la fois occupe la place `asteroidBody` de la liste des astres (nom, fiche, suivi).
+    const asteroides::Catalogue* asteroidCat = nullptr;      // à poser avant loadBodies
+    int asteroidBody = -1;      // rang de cette place dans bodies ; -1 : pas de catalogue
+    int asteroidSel = -1;       // rang de l'astéroïde désigné dans le catalogue ; -1 : aucun
     const std::vector<sondes::Probe>* probes = nullptr;      // trajectoires réelles des sondes (JPL Horizons) ; à poser avant loadBodies
     std::vector<int> replayRef;          // par astre : -1 aucun ; 100 + g : centre de la galaxie g du calcul ; k >= 0 : traceur k ; -2 : centre de la Voie lactée
     std::vector<Vec3> galPos;            // position de chaque galaxie à la date courante
@@ -387,7 +411,7 @@ struct Sim {
     // le Soleil, tant que le système solaire est suivi (10 millions d'années) ; une galaxie, si sa position est connue.
     bool visible(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
-        if (b.kind == Kind::Planet || b.kind == Kind::Probe) return planetValid[static_cast<size_t>(i)] != 0;
+        if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return std::fabs(years - kStartYears) <= 1.0e7;
         return !deepTime();
@@ -397,7 +421,7 @@ struct Sim {
     Vec3 position(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return {0, 0, 0};
-        if (b.kind == Kind::Planet || b.kind == Kind::Probe) return planetPos[static_cast<size_t>(i)];
+        if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetPos[static_cast<size_t>(i)];
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galPos.size() && galValid[static_cast<size_t>(i)] ? galPos[static_cast<size_t>(i)] : b.fixedPos;
         const double k = years * kKmsToLyPerYear;      // étoile : ligne droite à la vitesse mesurée
         return {stars->x()[b.star] + stars->vel(0)[b.star] * k, stars->y()[b.star] + stars->vel(1)[b.star] * k, stars->z()[b.star] + stars->vel(2)[b.star] * k};
@@ -414,7 +438,7 @@ struct Sim {
     // en UA et la phase d'une sphère mate (loi de Lambert) [approximation assumée de la vraie courbe de phase].
     double apparentMag(int i, Vec3 from) const {
         const Body& b = bodies[static_cast<size_t>(i)];
-        if (b.kind == Kind::Galaxy || b.kind == Kind::Probe) return 99.0;      // éclat des galaxies et des sondes : pas dans les données
+        if (b.kind == Kind::Galaxy || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return 99.0;      // éclat des galaxies et des sondes : pas dans les données
         const Vec3 p = position(i), d = p - from;
         const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
         if (b.kind == Kind::Planet) {
@@ -462,6 +486,7 @@ struct Sim {
         double arrive = 50.0;                                                 // étoile : on garde ou on se rapproche à 50 années-lumière
         if (b.kind == Kind::Sun) arrive = 45.0 * kAuInLy;
         if (b.kind == Kind::Planet) arrive = 6.0 * b.radiusKm / kLyInKm;      // planète ou lune : elle remplit un bon tiers de l'écran
+        if (b.kind == Kind::Asteroid) arrive = 0.05 * kAuInLy;                // astéroïde (un point) : on voit ses voisins de la ceinture
         if (b.kind == Kind::Probe) arrive = 3.0e6 / kLyInKm;                  // sonde (un point) : on voit son voisinage, à 3 millions de km
         double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
@@ -562,7 +587,7 @@ struct Sim {
     }
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
         if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return 1.0e3;
-        if (bodies[static_cast<size_t>(i)].kind == Kind::Probe) return 1.0e-10;      // environ 1 000 km
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Probe || bodies[static_cast<size_t>(i)].kind == Kind::Asteroid) return 1.0e-10;      // environ 1 000 km
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }
     static constexpr double kMaxDist = 9.0e10;      // un peu plus que la distance des objets les plus lointains (z = 7)
@@ -579,6 +604,36 @@ struct Sim {
         pitch = std::clamp(pitch + dy * 0.005, -1.55, 1.55);
     }
     // Suivre l'astre i tout de suite, sans vol (départ du programme, contrôles).
+    // Désigne l'astéroïde de rang k du catalogue : il prend la place `asteroidBody` (nom, position) et peut être suivi.
+    // Rend le rang de cette place dans bodies, ou -1 s'il n'y a pas de catalogue.
+    int selectAsteroid(int k) {
+        if (!asteroidCat || asteroidBody < 0 || k < 0 || static_cast<uint64_t>(k) >= asteroidCat->n) return -1;
+        asteroidSel = k;
+        bodies[static_cast<size_t>(asteroidBody)].name = asteroidCat->label(static_cast<size_t>(k));
+        refreshEphemeris();
+        return asteroidBody;
+    }
+
+    // L'astéroïde le plus proche d'un point de l'écran (clic), à moins de maxPx pixels ; -1 si aucun.
+    int nearestAsteroid(const Camera& cam, double px, double py, double w, double h, double maxPx) const {
+        if (!asteroidCat) return -1;
+        const double jd = 2451545.0 + years * 365.25 + kTdbMinusUtc / 86400.0;
+        if (std::fabs(jd - asteroidCat->epochJd) >= 300.0 * 365.25) return -1;
+        int best = -1;
+        double bestD = maxPx * maxPx;
+        for (uint64_t k = 0; k < asteroidCat->n; ++k) {
+            double au[3], x = 0, y = 0;
+            asteroidCat->position(k, jd, au);
+            if (!cam.project({au[0] * kAuInLy, au[1] * kAuInLy, au[2] * kAuInLy}, w, h, x, y)) continue;
+            const double d = (x - px) * (x - px) + (y - py) * (y - py);
+            if (d < bestD) {
+                bestD = d;
+                best = static_cast<int>(k);
+            }
+        }
+        return best;
+    }
+
     void follow(int i) {
         if (!visible(i)) return;
         flying = false;
