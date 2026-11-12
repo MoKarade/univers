@@ -517,11 +517,13 @@ struct Sim {
 
     // Les étoiles pâlissent en 1/d² : loin de tout, on multiplie leur éclat pour qu'elles restent visibles, et on le dit.
     double brightnessBoost() const {
-        // Jusqu'à 300 années-lumière l'éclat est multiplié pour compenser la distance (au plus 100 fois). Entre 3 000 et
-        // 30 000 années-lumière la multiplication s'efface : vue de loin, la Galaxie est montrée par sa lumière d'ensemble
-        // (voie_lactee.h), et des étoiles grossies y feraient une tache trompeuse autour du Soleil (constaté par capture).
-        double k = std::clamp(dist / 30.0, 1.0, 10.0);
-        if (dist > 3000.0) k = 1.0 + (k - 1.0) * std::clamp(1.0 - std::log10(dist / 3000.0), 0.0, 1.0);
+        // Jusqu'à 300 années-lumière l'éclat est multiplié pour compenser la distance (au plus 100 fois), puis il reste à
+        // 100. À partir de là, chaque pixel additionne de plus en plus d'étoiles : l'image passe d'elle-même des étoiles une
+        // à une à leur lumière regroupée, à éclat par pixel constant, et l'ensemble rapetisse en s'éloignant, comme une vraie
+        // galaxie. Demande de Marc (12 novembre 2026) : « quand on augmente les distances on généralise au fur et à mesure ».
+        // Ce qu'on voit de loin est donc la somme des étoiles MESURÉES (rien d'ajouté) : un nuage autour du Soleil, parce que
+        // Gaia ne mesure bien les distances que dans notre région de la Galaxie.
+        const double k = std::clamp(dist / 30.0, 1.0, 10.0);
         return k * k;
     }
     // Astéroïdes : montrés à l'échelle du système solaire (plein éclat jusqu'à 60 fois la distance Terre-Soleil, éteints
