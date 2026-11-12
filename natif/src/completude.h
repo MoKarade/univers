@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include "completude_groupe_local.h"
+
 namespace completude {
 
 enum class Nature { Mesure, Calcule, Ajuste, Suppose, Estimation, Inconnu };
@@ -492,22 +494,38 @@ inline Echelle voieLactee(const Comptes& c) {
 }
 
 inline Echelle groupeLocal(const Comptes& c) {
+    namespace gl = groupe_local;
     Echelle e;
     e.nom = "Groupe local";
-    e.part = c.galaxiesGroupeLocal / kGalaxiesGroupeLocal;
-    e.complet = pourcent(e.part) + " des galaxies connues à moins de 1 Mpc (" + entier(c.galaxiesGroupeLocal) + " sur " + entier(kGalaxiesGroupeLocal) + ")";
+    // Recoupement nom par nom (pipeline/natif/completude_groupe_local.py) : valable tant que l'appli a les mêmes galaxies
+    // nommées qu'au moment du recoupement ; sinon, simple comparaison des nombres, et le recoupement est à refaire.
+    const bool recoupe = c.galaxiesGroupeLocal == gl::kNommeesAuRecoupement;
+    const double present = recoupe ? gl::kAppariees : c.galaxiesGroupeLocal;
+    e.part = present / kGalaxiesGroupeLocal;
+    e.complet = pourcent(e.part) + " des galaxies connues à moins de 1 Mpc (" + entier(present) + " sur " + entier(kGalaxiesGroupeLocal) + ")";
     e.precision = "erreur de distance de chaque galaxie : non gardée";
     e.mesure = "positions mesurées aujourd'hui ; calculées dans le temps profond";
     e.lignes = {
-        {"Galaxies nommées à moins de 1 Mpc", sur(c.galaxiesGroupeLocal, kGalaxiesGroupeLocal), Nature::Mesure, "Local Volume Database v1.1.2 (Pace), 04/11/2026"},
+        {"Galaxies de la Local Volume Database présentes", sur(present, kGalaxiesGroupeLocal), Nature::Mesure,
+         recoupe ? "recoupement par direction avec la LVDB v1.1.2 (Pace), 12/11/2026" : "nombres seulement : recoupement à refaire"},
         {"Erreur de distance", "non gardée dans galaxies_noms.tsv", Nature::Inconnu, ""},
         {"Positions au-delà de 3 millions d'années", "calcul de la fusion (300 000 particules)", Nature::Calcule, "pipeline/fusion/calcul.py"},
     };
-    e.manques = {
-        entier(kGalaxiesGroupeLocal - c.galaxiesGroupeLocal) + " galaxies naines de la Local Volume Database",
-        "Garder l'erreur de distance de chaque galaxie",
-        "Formes et étoiles des galaxies proches",
-    };
+    if (recoupe && gl::kHorsLvdbN > 0) {
+        std::string hors;
+        for (int i = 0; i < gl::kHorsLvdbN; ++i) hors += std::string(i ? ", " : "") + gl::kHorsLvdb[i];
+        e.lignes.push_back({"Montrées ici, absentes de la LVDB à moins de 1 Mpc", hors, Nature::Mesure, "nature débattue ou distance différente"});
+    }
+    e.manques.clear();
+    if (recoupe) {
+        std::string noms;
+        for (int i = 0; i < gl::kManquantesN; ++i) noms += std::string(i ? ", " : "") + gl::kManquantes[i].nom;
+        e.manques.push_back(entier(gl::kManquantesN) + " galaxies naines, de la plus proche à la plus lointaine : " + noms);
+    } else {
+        e.manques.push_back(entier(kGalaxiesGroupeLocal - present) + " galaxies de la Local Volume Database (relancer completude_groupe_local.py pour les nommer)");
+    }
+    e.manques.push_back("Garder l'erreur de distance de chaque galaxie");
+    e.manques.push_back("Formes et étoiles des galaxies proches");
     return e;
 }
 
@@ -574,7 +592,10 @@ inline void detail(const Echelle& e) {
         ImGui::EndTable();
     }
     ImGui::TextUnformatted("Ce qui manque :");
-    for (const std::string& m : e.manques) ImGui::BulletText("%s", m.c_str());
+    for (const std::string& m : e.manques) {
+        ImGui::Bullet();
+        ImGui::TextWrapped("%s", m.c_str());      /* une liste de noms peut être longue */
+    }
 }
 #endif
 

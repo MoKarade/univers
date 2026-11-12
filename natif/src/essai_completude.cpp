@@ -153,6 +153,8 @@ int main(int argc, char** argv) {
     std::printf("\n");
     verifie(std::fabs(r[1].part - 470.0 / 540.0) < 1e-12, "voisinage : (481 - 11) / 540");
     verifie(std::fabs(r[2].part - 6153611.0 / 1811709771.0) < 1e-15, "Voie lactée : part de Gaia DR3");
-    verifie(std::fabs(r[3].part - 70.0 / 113.0) < 1e-12, "Groupe local : 70 / 113");
+    verifie(std::fabs(r[3].part - 69.0 / 113.0) < 1e-12, "Groupe local : 69 / 113 retrouvées par recoupement (Canis Major n'est pas dans la LVDB)");
+    verifie(r[3].manques[0].find("44 galaxies naines") == 0 && r[3].manques[0].find("Draco II") != std::string::npos,
+            "Groupe local : les 44 manquantes nommées, Draco II la plus proche");
     return gEchecs ? 1 : 0;
 }

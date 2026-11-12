@@ -41,7 +41,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 | Système solaire | 99,7 % (9 planètes et Pluton, 16 lunes sur 461, 1 580 289 astéroïdes sur 1 580 368, 0 comète, 5 sondes sur 5) | planètes < 1 mm, Lune 282 m, Triton 255 km, sondes 0,7 km au plus, astéroïdes < 300 000 km (10 corps dont Cérès et Vesta) | éphémérides de la NASA ; astéroïdes calculés ici |
 | Étoiles voisines | avec gaia.bin : 86 % (467 sur 540 : 150 Gaia + 317 du catalogue principal) | Gaia : distance à mieux que 10 % ; catalogue principal : pas de 198 UA | positions mesurées ; vitesse radiale mesurée pour 77 des 150 étoiles Gaia |
 | Voie lactée | avec gaia.bin et gaia_agrege.bin : 99,6 % des sources de Gaia DR3 (98 278 356 vues une à une, 1 707 918 961 additionnées par case, non vues une à une ; 920 197 143 de celles-ci placées à leur distance) | une à une : distance à mieux que 10 % ; additionnées : 31 % de leur lumière sans distance mesurée | étoiles et sommes mesurées ; aucun modèle de la galaxie (choix de Marc, 12/11) |
-| Groupe local | 62 % (70 sur 113) | erreur par galaxie non gardée | mesuré aujourd'hui ; calculé dans le temps profond |
+| Groupe local | 61 % (69 sur 113, recoupées une à une par direction ; Canis Major montrée mais absente de la LVDB) | erreur par galaxie non gardée | mesuré aujourd'hui ; calculé dans le temps profond |
 | Univers lointain | 5 566 702 objets ; 0,00028 à 0,0028 % de l'estimation | décalage arrondi à 9,5 km/s × (1 + z) | distance 100 % calculée |
 
 ## Ce qui manque, pour monter ces chiffres
@@ -64,7 +64,7 @@ Voie lactée
   de la galaxie par des mesures (docs/gaia-voie-lactee.md).
 
 Groupe local
-- 43 galaxies naines de la Local Volume Database ; l'erreur de distance de chaque galaxie ; leurs formes.
+- 44 galaxies naines de la Local Volume Database, nommées dans l'appli (liste : `natif/src/completude_groupe_local.h`, refaite par `pipeline/natif/completude_groupe_local.py <galaxies_noms.tsv>`) ; l'erreur de distance de chaque galaxie ; leurs formes.
 
 Univers lointain
 - Distances mesurées sans le décalage (Cosmicflows) ; éclat et forme ; relevés plus récents ; chiffrer l'effet du
