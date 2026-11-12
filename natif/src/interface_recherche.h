@@ -35,7 +35,11 @@ void addAsteroidResults(const Sim& sim, UiState& ui, std::vector<int>& found) {
     const std::string q = ui.search;
     if (q != ui.astQuery) {
         ui.astQuery = q;
-        if (!ui.astIndex.built) ui.astIndex.build(sim.asteroidCat->names);
+        if (!ui.astIndex.built) {      // comètes en tête : « halley » donne 1P/Halley avant l'astéroïde Halley (2688)
+            std::vector<char> comets(sim.asteroidCat->names.size(), 0);
+            for (size_t k = 0; k < comets.size(); ++k) comets[k] = sim.asteroidCat->isComet(k) ? 1 : 0;
+            ui.astIndex.build(sim.asteroidCat->names, comets);
+        }
         ui.astFound = ui.astIndex.find(q, 6);
     }
     for (const int k : ui.astFound) found.push_back(-(k + 2));

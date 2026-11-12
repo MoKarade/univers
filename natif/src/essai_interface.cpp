@@ -41,6 +41,9 @@ int main() {
     expect(idx.find("2000 cm", 6) == std::vector<int>{4}, "index : désignation");
     expect(idx.find("tat", 6) == std::vector<int>{6}, "index : un nom ne compte qu'une fois");
     expect(idx.find("s\nr", 6).empty() && idx.find("c", 6).empty(), "index : retour à la ligne ou 1 caractère refusés");
+    NameIndex first;
+    first.build({"Halley~2688", "Ceres~1", "Halley~1P~c"}, {0, 0, 1});
+    expect(first.find("halley", 6) == std::vector<int>{2, 0}, "index : la comète passe devant (rangs d'origine)");
     std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
     return failures ? 1 : 0;
 }

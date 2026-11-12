@@ -88,15 +88,25 @@ inline bool parseDate(const std::string& raw, double& years) {
 struct NameIndex {
     std::string all;                 // noms en minuscules sans accents, chacun suivi de '\n'
     std::vector<uint32_t> start;     // début de chaque nom dans `all`, plus la fin du texte
+    std::vector<int> order;          // rang d'origine de chaque nom de l'index (vide : même ordre que la liste)
     bool built = false;
 
-    void build(const std::vector<std::string>& names) {
+    // `first` : les noms à mettre en tête (ex. les comètes, pour que « halley » trouve 1P/Halley avant l'astéroïde 2688) ;
+    // les autres suivent dans l'ordre de la liste.
+    void build(const std::vector<std::string>& names, const std::vector<char>& first = {}) {
         all.clear();
         start.clear();
+        order.clear();
         start.reserve(names.size() + 1);
-        for (const std::string& n : names) {
+        if (!first.empty()) {
+            order.reserve(names.size());
+            for (int pass = 0; pass < 2; ++pass)
+                for (size_t k = 0; k < names.size(); ++k)
+                    if ((k < first.size() && first[k]) == (pass == 0)) order.push_back(static_cast<int>(k));
+        }
+        for (size_t i = 0; i < names.size(); ++i) {
             start.push_back(static_cast<uint32_t>(all.size()));
-            all += fold(n);
+            all += fold(names[order.empty() ? i : static_cast<size_t>(order[i])]);
             all += '\n';
         }
         start.push_back(static_cast<uint32_t>(all.size()));
@@ -109,7 +119,7 @@ struct NameIndex {
         if (q.size() < 2 || q.find('\n') != std::string::npos) return out;
         for (size_t pos = 0; static_cast<int>(out.size()) < max && (pos = all.find(q, pos)) != std::string::npos;) {
             const int k = static_cast<int>(std::upper_bound(start.begin(), start.end(), static_cast<uint32_t>(pos)) - start.begin()) - 1;
-            out.push_back(k);
+            out.push_back(order.empty() ? k : order[static_cast<size_t>(k)]);
             pos = start[static_cast<size_t>(k) + 1];      // un nom ne compte qu'une fois
         }
         return out;

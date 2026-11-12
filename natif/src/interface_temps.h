@@ -175,7 +175,8 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     } else if (fb.kind == Kind::Asteroid && sim.asteroidCat && sim.asteroidSel >= 0) {
         const size_t k = static_cast<size_t>(sim.asteroidSel);
         const asteroides::Catalogue& c = *sim.asteroidCat;
-        const char* jpl = "mesuré (JPL Small-Body Database)";
+        // Source : orbite à jour de JPL Horizons pour une comète, JPL Small-Body Database pour un astéroïde (fil du rendu).
+        const char* jpl = c.isComet(k) ? "mesuré (orbite à jour de JPL Horizons)" : "mesuré (JPL Small-Body Database)";
         row("Distance au Soleil", frDistance(dSun), "calculé d'après son orbite", s);
         const int earth = bodyByName(sim, "Terre");
         if (earth >= 0 && sim.visible(earth)) row("Distance à la Terre", frDistance(distBetween(p, sim.position(earth))), "calculé d'après son orbite", s);
@@ -187,7 +188,7 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         // Comètes : la dernière colonne n'est pas la magnitude H des astéroïdes ; elle n'est pas montrée tant que sa nature n'est pas confirmée.
         if (!comet) row("Magnitude absolue H", frNum(c.magnitudeH(k)), jpl, s);
         ImGui::TextDisabled("Position calculée d'après son orbite, sans l'attraction des planètes");
-        if (comet) ImGui::TextDisabled("(écart avec le JPL non contrôlé pour les comètes, que le dégazage fait aussi dévier).");
+        if (comet) ImGui::TextDisabled("(moins de 150 000 km d'écart avec le JPL après 157 jours).");
         else ImGui::TextDisabled("(moins de 100 000 km d'écart avec le JPL après 154 jours).");
     } else if (fb.kind == Kind::Probe) {
         const char* traj = sim.years <= kStartYears ? "mesuré : trajectoire reconstruite par le JPL" : "calculé : trajectoire prévue par le JPL";
@@ -220,6 +221,8 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         ImGui::TextDisabled("Position : éphémérides des satellites du JPL (NASA), lues telles quelles.");
     else if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
     else if (fb.kind == Kind::Probe) ImGui::TextDisabled("Source : trajectoire JPL Horizons (NASA).");
+    else if (fb.kind == Kind::Asteroid && sim.asteroidCat && sim.asteroidSel >= 0 && sim.asteroidCat->isComet(static_cast<size_t>(sim.asteroidSel)))
+        ImGui::TextDisabled("Source : orbite à jour de JPL Horizons (NASA).");
     else if (fb.kind == Kind::Asteroid) ImGui::TextDisabled("Source : JPL Small-Body Database (NASA).");
     else if (fb.kind == Kind::Galaxy && sim.deepTime() && fb.name != "Centre de la Voie lactée")
         ImGui::TextDisabled("Position : calcul complet de la rencontre avec Andromède (scénario), parti des mesures de McConnachie 2012.");
