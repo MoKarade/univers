@@ -23,7 +23,7 @@ struct SkyBandUbo {      // std140 : tout en vec4
     float scale[4];      // bas, haut, logarithmique (1) ou linéaire (0), opacité
     float grid[4];       // Nside, nombre de niveaux de la pyramide, angle d'un pixel de l'écran au centre (rad), échelle des points
     float eqRight[4], eqUp[4], eqFwd[4];      // vecteurs de la caméra en équatorial ICRS (catalogues de sources), unitaires
-    float proj[4];       // 1 / (tan(champ/2) × rapport largeur/hauteur), 1 / tan(champ/2), rien, grandeur médiane du catalogue
+    float proj[4];       // 1 / (tan(champ/2) × rapport largeur/hauteur), 1 / tan(champ/2), rien, 1
 };
 
 // Catalogue de sources de la bande (sources_<bande>.bin, pipeline/natif/sources_bandes.py) : directions mesurées.
@@ -32,6 +32,7 @@ struct SkySourcesInfo {
     std::vector<std::pair<std::string, int>> groups;      // nom du groupe, nombre de sources
     uint32_t count = 0;
     double median = 0, minimum = 0, maximum = 0;
+    uint32_t firstColor = 0;     // couleur du premier groupe (les suivants prennent les couleurs suivantes)
     bool fixedSize = false;      // tous les cercles de même taille (la grandeur n'est pas un éclat, par exemple un décalage vers le rouge)
 };
 
@@ -208,22 +209,30 @@ public:
         return true;
     }
 
-    // Catalogue de sources fait pour cette carte, dans le même dossier : un fichier sources_*.bin dont la fiche nomme la
-    // carte dans « cartes » (facultatif ; le premier trouvé).
+    // Catalogues de sources faits pour cette carte, dans le même dossier : les fichiers sources_*.bin dont la fiche nomme
+    // la carte dans « cartes » (facultatif ; plusieurs possibles, mis bout à bout dans un seul tampon). Chaque groupe de
+    // chaque catalogue reçoit sa couleur (8 au plus) ; la grandeur est rapportée à la médiane de son catalogue.
     void loadSources(const Gpu& g, const std::string& mapPath) {
         if (srcCount_) destroy(g, src_);
         srcCount_ = 0;
-        sources = SkySourcesInfo{};
+        catalogs.clear();
+        std::vector<uint32_t> all;
         const std::filesystem::path dir = std::filesystem::path(mapPath).parent_path();
+        std::vector<std::string> files;
         std::error_code ec;
         for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
             const std::string name = e.path().filename().string();
-            if (name.rfind("sources_", 0) != 0 || e.path().extension() != ".bin") continue;
-            if (readSources(g, e.path().string())) return;
+            if (name.rfind("sources_", 0) == 0 && e.path().extension() == ".bin") files.push_back(e.path().string());
         }
+        std::sort(files.begin(), files.end());
+        uint32_t color = 0;
+        for (const auto& path : files) readSources(path, all, color);
+        if (all.empty()) return;
+        src_ = uploadStorage(g, all.data(), all.size() * 4);
+        srcCount_ = static_cast<uint32_t>(all.size() / 8);
     }
 
-    bool readSources(const Gpu& g, const std::string& path) {
+    bool readSources(const std::string& path, std::vector<uint32_t>& all, uint32_t& color) {
         std::ifstream f(path, std::ios::binary);
         if (!f) return false;
         char magic[8];
@@ -239,30 +248,43 @@ public:
         std::vector<uint32_t> rec(static_cast<size_t>(h[0]) * 8);
         f.read(reinterpret_cast<char*>(rec.data()), static_cast<std::streamsize>(rec.size() * 4));
         if (!f) return false;
-        sources.label = jsonString(js, "libelle");
-        sources.reference = jsonString(js, "reference");
-        sources.quantity = jsonString(js, "grandeur");
-        sources.unit = jsonString(js, "unite");
-        sources.median = jsonNumber(js, "grandeur_p50", 1.0);
-        sources.minimum = jsonNumber(js, "grandeur_min");
-        sources.maximum = jsonNumber(js, "grandeur_max");
-        sources.fixedSize = jsonString(js, "taille") == "fixe";
-        sources.count = h[0];
+        SkySourcesInfo c;
+        c.label = jsonString(js, "libelle");
+        c.reference = jsonString(js, "reference");
+        c.quantity = jsonString(js, "grandeur");
+        c.unit = jsonString(js, "unite");
+        c.median = jsonNumber(js, "grandeur_p50", 1.0);
+        c.minimum = jsonNumber(js, "grandeur_min");
+        c.maximum = jsonNumber(js, "grandeur_max");
+        c.fixedSize = jsonString(js, "taille") == "fixe";
+        c.count = h[0];
+        c.firstColor = color;
         const size_t gp = js.find("\"groupes\": [");
         if (gp != std::string::npos) {      // noms des groupes, dans l'ordre des numéros, puis leurs nombres dans « comptes »
             size_t p = gp + 12;
             const size_t end = js.find(']', p);
+            const size_t counts = js.find("\"comptes\"");
             while (true) {
                 const size_t a = js.find('"', p);
                 if (a == std::string::npos || a > end) break;
                 const size_t b = js.find('"', a + 1);
                 const std::string name = js.substr(a + 1, b - a - 1);
-                sources.groups.push_back({name, static_cast<int>(jsonNumber(js.substr(js.find("\"comptes\"")), name))});
+                c.groups.push_back({name, counts == std::string::npos ? 0 : static_cast<int>(jsonNumber(js.substr(counts), name))});
                 p = b + 1;
             }
         }
-        src_ = uploadStorage(g, rec.data(), rec.size() * 4);
-        srcCount_ = h[0];
+        const float med = static_cast<float>(c.median > 0 ? c.median : 1.0);
+        for (size_t i = 0; i < c.count; ++i) {
+            float v;
+            std::memcpy(&v, &rec[i * 8 + 3], 4);
+            v /= med;
+            std::memcpy(&rec[i * 8 + 3], &v, 4);
+            rec[i * 8 + 4] = std::min<uint32_t>(rec[i * 8 + 4] + color, 7);      // couleur
+            rec[i * 8 + 5] = c.fixedSize ? 1 : 0;                                 // taille fixe
+        }
+        color += static_cast<uint32_t>(std::max<size_t>(c.groups.size(), 1));
+        all.insert(all.end(), rec.begin(), rec.end());
+        catalogs.push_back(std::move(c));
         return true;
     }
 
@@ -299,7 +321,7 @@ public:
     }
 
     bool showSources = true;     // cercles du catalogue de la bande (s'il y en a un)
-    SkySourcesInfo sources;      // catalogue de sources dessiné avec la carte (vide s'il n'y en a pas)
+    std::vector<SkySourcesInfo> catalogs;      // catalogues de sources dessinés avec la carte (vide s'il n'y en a pas)
 
     // Texte à afficher avec la bande : d'où vient la carte, ce qu'elle mesure, sa finesse, sa couverture, l'échelle.
     std::vector<std::string> legend(double distLy) const {
@@ -315,21 +337,21 @@ public:
         std::snprintf(b, sizeof b, "Fausses couleurs, échelle %s de %.3g à %.3g %s. Hachures : pas de mesure.",
                       info.scaleKind == "log" ? "logarithmique" : "linéaire", info.lo, info.hi, info.unit.c_str());
         l.push_back(b);
-        if (sources.count) {
-            static const char* colors[] = {"blanc", "cyan", "vert", "rose", "bleu"};
-            if (sources.fixedSize)
+        static const char* colors[] = {"blanc", "cyan", "vert", "rose", "bleu", "orange", "jaune", "violet"};
+        for (const SkySourcesInfo& c : catalogs) {
+            if (c.fixedSize)
                 std::snprintf(b, sizeof b, "Cercles : %u sources, %s (%s) ; %s mesuré de %.3g à %.3g. Direction mesurée, distance non montrée ici.",
-                              sources.count, sources.label.c_str(), sources.reference.c_str(), sources.quantity.c_str(), sources.minimum, sources.maximum);
+                              c.count, c.label.c_str(), c.reference.c_str(), c.quantity.c_str(), c.minimum, c.maximum);
             else
                 std::snprintf(b, sizeof b, "Cercles : %u sources, %s (%s) ; taille selon le %s. Direction mesurée, distance non montrée.",
-                              sources.count, sources.label.c_str(), sources.reference.c_str(), sources.quantity.c_str());
+                              c.count, c.label.c_str(), c.reference.c_str(), c.quantity.c_str());
             l.push_back(b);
-            std::string g;
-            for (size_t k = 0; k < sources.groups.size() && k < 5; ++k) {
-                if (!g.empty()) g += " ; ";
-                g += std::string(colors[k]) + " : " + sources.groups[k].first + " (" + std::to_string(sources.groups[k].second) + ")";
+            std::string gs;
+            for (size_t k = 0; k < c.groups.size(); ++k) {
+                if (!gs.empty()) gs += " ; ";
+                gs += std::string(colors[std::min<size_t>(c.firstColor + k, 7)]) + " : " + c.groups[k].first + " (" + std::to_string(c.groups[k].second) + ")";
             }
-            if (!g.empty()) l.push_back(g + ".");
+            if (!gs.empty()) l.push_back(gs + ".");
         }
         const double a = opacityAt(distLy);
         if (a >= 1.0) l.push_back("Vu depuis la Terre : une carte du ciel n'a pas de profondeur.");
@@ -383,8 +405,7 @@ public:
         }
         u.proj[0] = static_cast<float>(1.0 / (cam.tanHalf * cam.aspect));
         u.proj[1] = static_cast<float>(1.0 / cam.tanHalf);
-        u.proj[2] = sources.fixedSize ? 1.0f : 0.0f;
-        u.proj[3] = static_cast<float>(sources.median > 0 ? sources.median : 1.0);
+        u.proj[3] = 1.0f;      // grandeurs déjà rapportées à la médiane de leur catalogue (loadSources)
         u.grid[3] = static_cast<float>(height / 1080.0);
         std::memcpy(mapped_[ring_], &u, sizeof(u));
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
