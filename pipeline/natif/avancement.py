@@ -83,7 +83,14 @@ def convertir_fusion(d):
     if os.path.exists(cb + '.tmp'): os.replace(cb + '.tmp', cb)
 
 
-DRIVE = 'G:/My Drive/Univers/archives/physique'      # règle de Marc (12/11/2026) : le maximum sur le Drive
+DESTINATION = os.path.join(NATIF, 'destination_drive.txt')      # une ligne : le dossier du Drive où ranger (règle de Marc, 12/11/2026)
+
+
+def drive():
+    """Dossier du Drive où ranger les paquets complets, lu à chaque passage dans destination_drive.txt ; vide (fichier absent
+    ou vide) : rien ne part sur le Drive et tout reste sur le PC."""
+    try: return open(DESTINATION, encoding='utf-8').read().strip()
+    except OSError: return ''
 
 
 def separer(d, nom):
@@ -96,14 +103,14 @@ def separer(d, nom):
     import numpy as np
     js = os.path.join(d, 'fusion.json'); cb = os.path.join(d, 'composantes.bin')
     if not os.path.exists(js) or not os.path.exists(cb): return
-    aff = os.path.join(NATIF, 'donnees', nom); drive = os.path.join(DRIVE, nom)
+    racine = drive(); aff = os.path.join(NATIF, 'donnees', nom); drive_dir = os.path.join(racine, nom) if racine else ''
     fait = os.path.join(aff, 'fusion.json')
     if os.path.exists(fait) and os.path.getmtime(fait) >= os.path.getmtime(js): return      # rien de neuf depuis le dernier passage
     try: m = json.load(open(js, encoding='utf-8'))
     except Exception: return
     os.makedirs(aff, exist_ok=True)
-    drive_ok = os.path.isdir(os.path.dirname(DRIVE))
-    if drive_ok: os.makedirs(drive, exist_ok=True)
+    drive_ok = bool(racine) and os.path.isdir(os.path.dirname(os.path.normpath(racine)))
+    if drive_ok: os.makedirs(drive_dir, exist_ok=True)
     comp = np.fromfile(cb, np.int8); etoile = comp > 0
     counts = m['affichees']; bornes = np.cumsum([0] + counts)
     m_aff = dict(m); m_aff['affichees'] = [int(etoile[bornes[k]:bornes[k + 1]].sum()) for k in range(len(counts))]
@@ -111,13 +118,13 @@ def separer(d, nom):
     n_all, n_et = int(len(comp)), int(etoile.sum())
     for f, k in m['fichiers']:
         a, b = os.path.join(d, f), os.path.join(aff, f)
-        if os.path.exists(b) and os.path.getsize(b) == k * n_et * 6 and not os.path.exists(a): continue
-        if not os.path.exists(a): continue
+        if not os.path.exists(a): continue      # déjà traité (le complet est sur le Drive)
+        if os.path.exists(b) and os.path.getsize(b) == k * n_et * 6 and not drive_ok: continue      # en attente du Drive
         if os.path.getsize(a) != k * n_all * 6: continue      # paquet incomplet
         x = np.fromfile(a, np.int16).reshape(k, n_all, 3)
         x[:, etoile].tofile(b + '.tmp'); os.replace(b + '.tmp', b)
         if drive_ok:
-            shutil.copyfile(a, os.path.join(drive, f) + '.partiel'); os.replace(os.path.join(drive, f) + '.partiel', os.path.join(drive, f))
+            shutil.copyfile(a, os.path.join(drive_dir, f) + '.partiel'); os.replace(os.path.join(drive_dir, f) + '.partiel', os.path.join(drive_dir, f))
             os.remove(a)      # le paquet complet n'est plus que sur le Drive
     comp[etoile].tofile(os.path.join(aff, 'composantes.bin.tmp')); os.replace(os.path.join(aff, 'composantes.bin.tmp'), os.path.join(aff, 'composantes.bin'))
     for f in ('composantes.json', 'fusion_noms.tsv'):
@@ -126,8 +133,8 @@ def separer(d, nom):
     os.replace(os.path.join(aff, 'fusion.json.tmp'), os.path.join(aff, 'fusion.json'))
     if drive_ok:
         for f in ('fusion.json', 'composantes.bin', 'composantes.json'):
-            shutil.copyfile(os.path.join(d, f), os.path.join(drive, f))
-    if os.path.exists(os.path.join(d, 'etat.npz')) and os.path.exists(os.path.join(d, 'depart.npz')):
+            shutil.copyfile(os.path.join(d, f), os.path.join(drive_dir, f))
+    if drive_ok and os.path.exists(os.path.join(d, 'etat.npz')) and os.path.exists(os.path.join(d, 'depart.npz')):
         os.remove(os.path.join(d, 'depart.npz'))      # déjà sur le Drive
     convertir_fusion(aff)
 
