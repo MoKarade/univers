@@ -81,3 +81,9 @@ Ordre : A1, N0, N1, puis A2 à A5 et N2 en alternance selon les mesures.
   « Fusion - conditions de départ » (`calcul.py depart N`), puis téléchargées dans `pipeline/fusion/sortie/`.
 - À surveiller (note du fil gravité) : le traceur du Soleil migre vers le centre à cause d'une barre du disque
   modèle ; la page ne prend pas le Soleil du calcul.
+
+## N0 : fait (12 novembre 2026)
+
+Outils portables dans `C:\dev\outils-natif`, aucun droit d'administrateur, aucun geste de Marc (`natif/README.md`).
+`natif/src/essai_vulkan.cpp` fabriqué et lancé : PASSE, sans fenêtre. La carte offre tout ce que le cahier des
+charges demande à Vulkan [Certain : lu par le programme].

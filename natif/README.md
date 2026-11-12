@@ -21,5 +21,14 @@ pilote NVIDIA déjà installé.
 `src/essai_vulkan.cpp` : dessine un triangle hors écran (aucune fenêtre), relit l'image, vérifie deux pixels et
 affiche ce que la carte sait faire (rendu dynamique, mesh shaders, double précision).
 
-État au 12 novembre 2026 : écrit, **pas encore fabriqué ni lancé** (le garde-fou de la session a refusé de lancer
-les outils téléchargés ; accord de Marc demandé).
+Fabriquer et lancer (Git Bash) :
+
+```bash
+T=/c/dev/outils-natif; export PATH="$T/llvm-mingw-20261104-ucrt-x86_64/bin:$T/cmake-4.4.5-windows-x86_64/bin:$T:$T/glslang/bin:$PATH"
+cmake -S natif -B /c/tmp/natif/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+cmake --build /c/tmp/natif/build && /c/tmp/natif/build/essai_vulkan.exe
+```
+
+Résultat du 12 novembre 2026 sur le PC de Marc (accord de Marc pour lancer ces outils) [Certain] : PASSE.
+RTX 5080, Vulkan 1.4.357 ; rendu dynamique, ressources sans liaison fixe, dessin indirect compté, mesh shaders et
+double précision dans les shaders : tous disponibles. Pixel du centre 255 127 0, pixel du coin 0 0 51.
