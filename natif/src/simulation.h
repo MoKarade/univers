@@ -92,6 +92,16 @@ constexpr int kRateCount = static_cast<int>(sizeof(kRates) / sizeof(kRates[0]));
 // Orbites exactes (double précision, bibliothèque de physique) du Soleil et des étoiles nommées : le même calcul que
 // celui de la carte graphique (orbites_gpu.h), pour que les noms et le point visé suivent les étoiles dessinées.
 // Deux états par étoile, au pas d'avant et au pas d'après la date (1 million d'années), reliés par une courbe de Hermite.
+// Comment ce qui est montré est obtenu, famille par famille (demande de Marc, 12 novembre 2026 : « je veux voir quand ça
+// montre ce qui a été calculé en amont sur carte graphique ou approximation »). Rempli à chaque image par fenetre.cpp.
+enum class CalcMode { Measured, Exact, Precomputed, Approx, Hidden };      // mesuré, calculé exactement, précalculé, approché, non montré
+struct CalcState {
+    std::string family;      // « Étoiles Gaia », « Planètes et lunes »…
+    CalcMode mode;
+    long lagSteps;           // pas de calcul encore à faire pour la date demandée (0 : à jour)
+    std::string detail;      // une phrase : d'où ça vient
+};
+
 struct ExactOrbits {
     std::vector<phys::Vec3> g0, v0;      // départ : position (kpc) et vitesse (km/s) galactocentriques ; rang 0 : le Soleil
     mutable phys::galaxie::Orbites o;
@@ -172,6 +182,14 @@ struct Sim {
     int skyBand = -1;
     std::vector<std::string> skyBandLabels, skyLegend;
     const std::vector<SkyBandInfo>* skyBandInfos = nullptr;      // fiches des cartes (famille, échelle, unité), pour l'interface
+    std::vector<CalcState> calcStates;
+    long gaiaOrbitLagSteps = -1;         // -1 : pas d'orbites exactes pour Gaia (fichier absent) ; sinon pas restant à calculer
+    const char* planetMethod = "";       // hors des éphémérides de la NASA : « suivi pas à pas » ou « table précalculée »
+    // Le temps ne dépasse jamais le calcul exact des orbites : quand la date demandée (yearsGoal) n'est pas encore
+    // calculée, la date montrée (years) avance aussi vite que la carte graphique calcule, et timeHeld vaut vrai.
+    bool timeHeld = false;
+    double yearsGoal = 0;
+    double lastAdvance = 0;              // années ajoutées par le dernier advance() (le temps qui défile)
     long orbitLagSteps = 0;              // pas d'orbite (1 million d'années) que la carte graphique doit encore calculer
     double asteroidEpochJd = 0;          // date des orbites des astéroïdes (0 : pas d'astéroïdes)
     uint64_t asteroidCount = 0;
@@ -395,6 +413,7 @@ struct Sim {
             planetValid[i] = (planetAt(bodies[i].posNaif, years, planetPos[i]) || planetAt(bodies[i].naif, years, planetPos[i])) ? 1 : 0;
             if (bodies[i].naif == eph::kEarth && !planetValid[i]) ephemValid = false;      // la Terre sans position : hors de la plage de de440.bsp
         }
+        planetMethod = ephemValid ? "" : std::fabs(years) > 20000.0 ? "table précalculée" : "suivi pas à pas";
         if (ephemValid || !outer) return;
         // Hors de la plage de la NASA : positions calculées (gravité mutuelle partie de l'état DE440 aux bornes, puis table
         // des orbites sur des millions d'années). Le suivi avance pas à pas avec le temps qui défile. La Lune vient de la
@@ -701,8 +720,10 @@ struct Sim {
     }
 
     void advance(double dt) {
+        const double before = years;
         if (!paused) years += (backward ? -1.0 : 1.0) * kRates[rate].yearsPerSecond * dt;
         years = std::clamp(years, minYears(), maxYears());
+        lastAdvance = years - before;
         if (!touched) yaw += 0.035 * dt;      // lent tour d'horizon, 2 degrés par seconde
         refreshEphemeris();
         refreshGalaxies();

@@ -220,6 +220,10 @@ public:
         if (ready) orbits_.advance(g, cmd, years - (static_cast<double>(file_.epoch) - 2000.0), budget);
     }
     long orbitLagSteps() const { return orbits_.lagSteps; }
+    // Pour brider le temps sur le calcul exact (fenetre.cpp) : pas où se trouve l'état, date des mesures, état prêt.
+    long orbitStep() const { return orbits_.stepAt; }
+    double orbitEpochYears() const { return static_cast<double>(file_.epoch) - 2000.0; }
+    bool orbitReady() const { return ready && orbits_.readyToDraw(); }
     const GaiaOrbits& orbits() const { return orbits_; }
 
     void release(const Gpu& g) {
