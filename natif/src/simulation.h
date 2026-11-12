@@ -194,6 +194,30 @@ struct Sim {
                 const Vec3 r1 = a - pa, r2 = b2 - pb;
                 const double angle = std::acos(std::clamp(dot(r1, r2) / std::sqrt(dot(r1, r1) * dot(r2, r2)), -1.0, 1.0));
                 m.periodYears = angle > 0 ? 2.0 * kPi / angle * step : 0;
+                // Orbite allongée : la vitesse du moment ne donne pas la durée du tour (Callirrhoé : 3,09 ans au lieu de 2).
+                // On suit donc la lune dans les éphémérides jusqu'à ce qu'elle ait fait un tour complet (360 degrés cumulés).
+                if (m.periodYears > 0) {
+                    const double ds = m.periodYears / 400.0;
+                    double turned = 0, t = years;
+                    Vec3 prev = r1;
+                    bool whole = true;
+                    for (int k = 0; k < 4000 && turned < 2.0 * kPi && whole; ++k) {
+                        Vec3 q, pq;
+                        t += ds;
+                        whole = planetAt(code, t, q) && planetAt(bodies[static_cast<size_t>(parent)].posNaif, t, pq);
+                        if (!whole) break;
+                        const Vec3 cur = q - pq;
+                        const double da = std::acos(std::clamp(dot(prev, cur) / std::sqrt(dot(prev, prev) * dot(cur, cur)), -1.0, 1.0));
+                        if (turned + da >= 2.0 * kPi) {      // fin du tour à l'intérieur de ce pas
+                            t -= ds * (turned + da - 2.0 * kPi) / da;
+                            turned = 2.0 * kPi;
+                            break;
+                        }
+                        turned += da;
+                        prev = cur;
+                    }
+                    if (whole && turned >= 2.0 * kPi) m.periodYears = t - years;
+                }
                 if (m.periodYears > 0) bodies.push_back(m);
             }
         }
