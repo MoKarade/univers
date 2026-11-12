@@ -1,6 +1,7 @@
 // Appli PC « Univers » : l'état du simulateur (temps, astres, objet suivi, caméra), sans rien qui dépende de l'affichage.
 #pragma once
 #include "asteroides_catalogue.h"
+#include <thread>
 #include "commun.h"
 #include "completude.h"
 #include "cosmologie.h"
@@ -619,18 +620,33 @@ struct Sim {
         if (!asteroidCat) return -1;
         const double jd = 2451545.0 + years * 365.25 + kTdbMinusUtc / 86400.0;
         if (std::fabs(jd - asteroidCat->epochJd) >= 300.0 * 365.25) return -1;
+        // Partagé entre les cœurs du processeur : 1,58 million d'orbites prenaient 140 ms sur un seul (mesuré).
+        const unsigned nt = std::max(1u, std::min(32u, std::thread::hardware_concurrency()));
+        std::vector<int> bests(nt, -1);
+        std::vector<double> bestDs(nt, maxPx * maxPx);
+        std::vector<std::thread> workers;
+        const uint64_t n = asteroidCat->n;
+        for (unsigned t = 0; t < nt; ++t)
+            workers.emplace_back([&, t] {
+                for (uint64_t k = n * t / nt; k < n * (t + 1) / nt; ++k) {
+                    double au[3], x = 0, y = 0;
+                    asteroidCat->position(k, jd, au);
+                    if (!cam.project({au[0] * kAuInLy, au[1] * kAuInLy, au[2] * kAuInLy}, w, h, x, y)) continue;
+                    const double d = (x - px) * (x - px) + (y - py) * (y - py);
+                    if (d < bestDs[t]) {
+                        bestDs[t] = d;
+                        bests[t] = static_cast<int>(k);
+                    }
+                }
+            });
+        for (std::thread& th : workers) th.join();
         int best = -1;
         double bestD = maxPx * maxPx;
-        for (uint64_t k = 0; k < asteroidCat->n; ++k) {
-            double au[3], x = 0, y = 0;
-            asteroidCat->position(k, jd, au);
-            if (!cam.project({au[0] * kAuInLy, au[1] * kAuInLy, au[2] * kAuInLy}, w, h, x, y)) continue;
-            const double d = (x - px) * (x - px) + (y - py) * (y - py);
-            if (d < bestD) {
-                bestD = d;
-                best = static_cast<int>(k);
+        for (unsigned t = 0; t < nt; ++t)
+            if (bests[t] >= 0 && bestDs[t] < bestD) {
+                bestD = bestDs[t];
+                best = bests[t];
             }
-        }
         return best;
     }
 

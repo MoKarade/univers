@@ -4,6 +4,7 @@
 // convertie pour l'écran et l'interface (interface.h) est dessinée par-dessus, dans une image finale ;
 // (3) l'image finale est copiée dans la fenêtre. En contrôle (`--fenetre-test`), la fenêtre reste cachée et
 // l'image finale peut être écrite dans un fichier (`--capture`) : c'est exactement ce que Marc verrait.
+#include <chrono>
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 #include <imgui_impl_win32.h>
@@ -145,6 +146,14 @@ int runWindow(const WindowOptions& opt) {
                 sim.focus = i;
                 found = true;
             }
+        if (!found && sim.asteroidCat) {      // sinon : un astéroïde du catalogue (ex. Ceres)
+            const std::vector<int> k = sim.asteroidCat->search(opt.target, 1);
+            const int body = k.empty() ? -1 : sim.selectAsteroid(k[0]);
+            if (body >= 0) {
+                sim.focus = body;
+                found = true;
+            }
+        }
         if (!found) fail("--cible : astre inconnu : " + opt.target);
     }
     // Calcul complet de la rencontre avec Andromède (dossier fusion/ à côté des données) : facultatif.
@@ -474,6 +483,12 @@ int runWindow(const WindowOptions& opt) {
     if (test) {
         const double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         if (!opt.capture.empty()) writeCapture(g, final, sc.extent, opt.capture);
+        if (!opt.capture.empty() && sim.asteroidCat) {      // mesure : durée d'une recherche de l'astéroïde sous un clic
+            const auto t0 = std::chrono::steady_clock::now();
+            const int k = sim.nearestAsteroid(sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height), sc.extent.width * 0.5, sc.extent.height * 0.5, sc.extent.width, sc.extent.height, 12.0);
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            std::printf("clic sur un asteroide : %.1f ms pour %llu orbites (trouve : %d)\n", ms, static_cast<unsigned long long>(sim.asteroidCat->n), k);
+        }
         std::printf("fenetre cachee %ux%u : %d images en %.3f s, soit %.1f images par seconde ; astre suivi : %s ; date : %s ; ephemerides : %s\nPASSE\n",
                     sc.extent.width, sc.extent.height, frame, total, frame / total, sim.bodies[static_cast<size_t>(sim.focus)].name.c_str(),
                     frDate(sim.years).c_str(), !hasSpk ? spkError.c_str() : sim.ephemValid ? "lues" : "hors plage");
