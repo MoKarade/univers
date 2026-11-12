@@ -48,3 +48,10 @@ Chaque étape suit la boucle de `CLAUDE.md` (construire, quatre critiques, résu
 - **Événements** : passages de Mercure et de Vénus devant le Soleil, 1600 à 2300, calculés par la page (`app/src/23_events.js`, `gen/transits.js`) ; contrôle (`app/test/evenements.test.js`) : de 2026 à 2200, les 23 passages de Mercure et les 2 de Vénus du catalogue de la NASA, aucun de plus, milieu à 2,3 min au plus, distance des centres à 0,5″. De 1600 à 2300 : 94 et 12 passages, comme le catalogue.
 
 Pas encore fait : G2 branché dans la page au-delà de ±3 000 ans, G4, G5, G6.
+
+## Planètes sur des millions d'années (12 novembre 2026)
+
+- Calcul long (`pipeline/gravite/long.js`, sur le PC de Marc) : 21 Ma vers l'avenir (102 min), 20 Ma vers le passé (arrêté là). Énergie conservée à 2 × 10⁻⁸.
+- Contrôle contre La2004 (Laskar et al. 2004, excentricité de la Terre, `compare_la2004.js`), corrélation par tranche d'un million d'années : avenir 0,9998 / 0,9986 / 0,97 / 0,98 / 0,93 / 0,98 / 0,94 / 0,86 / 0,84 / 0,79 / 0,84 (0 à 11 Ma), puis < 0,6 ; passé 0,9999 / 0,999 / 0,998 / 0,993 / 0,987 / 0,966 / 0,953 / 0,84 / 0,90 / 0,79 / 0,74. Au-delà d'environ 10 Ma, notre calcul s'écarte de la référence (Lune moyennée en anneau, pas de marées ni d'aplatissement du Soleil).
+- Donc la page n'utilise la table que sur ±10 Ma (`orbites_planetes.txt`, 2,1 Mo, joint) ; au-delà : « position inconnue », orbites figées indicatives.
+- Lecture de la table (`app/test/long.test.js`, extrait ±200 000 ans) : 0,2° pour les planètes rocheuses, 1° pour les géantes (Jupiter et Saturne lues tous les 250 ans).
