@@ -171,6 +171,7 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     }
     ImGui::PopTextWrapPos();
     ui.timeW = ImGui::GetWindowWidth();
+    ui.timeRight = ImGui::GetWindowPos().x + ImGui::GetWindowWidth();
     ui.timeBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
     ImGui::End();
 }

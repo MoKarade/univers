@@ -171,7 +171,9 @@ struct UiState {
     bool welcome = false, help = false, openGoTo = false;
     bool keepGoTo = false;
     bool completeness = false;      // détail de la complétude ouvert
-    bool openNotes = false;         // contrôle : « Ce qui est mesuré, calculé ou supposé » déplié
+    bool openNotes = false;
+    bool howOpen = false;           // tableau « Comment c'est obtenu » ouvert
+    float timeRight = 0, howW = 0;  // bord droit de la barre du temps, largeur de la ligne « Comment c'est obtenu »         // contrôle : « Ce qui est mesuré, calculé ou supposé » déplié
     std::string astQuery;           // recherche d'astéroïdes : dernier texte cherché (123 530 noms : on ne refait pas à chaque image)
     std::vector<int> astFound;
     ui_outils::NameIndex astIndex;  // construit à la première recherche
@@ -296,6 +298,7 @@ void firstFrame(Sim& sim, UiState& ui) {
     if (e == "aide") ui.help = true;
     if (e == "completude") ui.completeness = true;
     if (e == "notes") ui.openNotes = true;
+    if (e == "methode") ui.howOpen = true;
     if (e == "menu") ui.keepGoTo = true;
     if (e.rfind("recherche:", 0) == 0) std::snprintf(ui.search, sizeof(ui.search), "%s", e.substr(10).c_str());
     if (e.rfind("visite:", 0) == 0) {
