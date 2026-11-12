@@ -184,9 +184,11 @@ function fusAt(arr, stride, k, t, out) {
   out[0] = lerp(arr[a], arr[b], f); out[1] = lerp(arr[a + 1], arr[b + 1], f); out[2] = lerp(arr[a + 2], arr[b + 2], f); return out;
 }
 /* Extrema de la distance entre deux corps du calcul complet : [[t, d, 'min'|'max'], …]. */
-function fusExtrema(k) { const F = FUSC, d = [], out = [], p = [0, 0, 0];
+function fusExtrema(k) { const F = FUSC, d = [], out = [], W = 10;      /* extremum vrai : le plus petit (ou grand) sur ±0,2 Ga, et d'au moins 2 kpc ; écarte le bruit du calcul */
   for (let i = 0; i < F.n; i++) { const a = i * 12 + k * 3; d.push(Math.hypot(F.c[a], F.c[a + 1], F.c[a + 2])); }
-  for (let i = 1; i < F.n - 1; i++) { if (d[i] < d[i - 1] && d[i] <= d[i + 1]) out.push([F.t[i], d[i], 'min']); if (d[i] > d[i - 1] && d[i] >= d[i + 1]) out.push([F.t[i], d[i], 'max']); }
+  for (let i = 1; i < F.n - 1; i++) { const w = d.slice(Math.max(0, i - W), Math.min(F.n, i + W + 1)), lo = Math.min(...w), hi = Math.max(...w);
+    if (d[i] === lo && hi - lo > 2 && (!out.length || out[out.length - 1][2] !== 'min')) out.push([F.t[i], d[i], 'min']);
+    else if (d[i] === hi && hi - lo > 2 && out.length && out[out.length - 1][2] !== 'max') out.push([F.t[i], d[i], 'max']); }
   return out; }
 
 function andromedaOrbit(C, vtKms, Vin, fus) {
@@ -225,13 +227,15 @@ function andromedaOrbit(C, vtKms, Vin, fus) {
     }
   };
   run(1); run(-1);
-  if (fus && FUSC && Math.abs(vt0 * sc - vt0) < 0.5) {      /* R10 : de 0 à 10 Ga, l'orbite vient du calcul complet ; avant aujourd'hui, du calcul de la page (même départ) */
-    const p = [0, 0, 0], q = [0, 0, 0], o = [0, 0, 0, 0, 0, 0], h = 0.005;
+  if (fus && FUSC && Math.abs(vt0 * sc - vt0) < 0.5) {      /* R10 : de 0 à la fusion, l'orbite vient du calcul complet ; avant aujourd'hui, du calcul de la page (même départ) ; après la fusion, centres confondus */
+    const p = [0, 0, 0], o = [0, 0, 0, 0, 0, 0], H = 0.1, aF = t => { const a = [0, 0, 0], b = [0, 0, 0], c = [0, 0, 0]; fusAt(FUSC.c, 4, 1, t - H, a); fusAt(FUSC.c, 4, 1, t, b); fusAt(FUSC.c, 4, 1, t + H, c); return [0, 1, 2].map(i => (a[i] - 2 * b[i] + c[i]) / (H * H)); };
     for (let idx = 0; idx < n; idx++) { const t = T0 + idx * 0.01; if (t < 0) continue;
-      if (t > FUSC.tEnd) { tab.set([0, 0, 0], idx * 3); tabF.set([0, 0, 0], idx * 3); continue; }
-      fusAt(FUSC.c, 4, 1, t, p); tab.set(p, idx * 3); fusAt(FUSC.c, 4, 1, Math.min(t + h, FUSC.tEnd), q);
-      const v = [(q[0] - p[0]) / h, (q[1] - p[1]) / h, (q[2] - p[2]) / h]; acc(p, v, t, true, o); tabF.set([o[3], o[4], o[5]], idx * 3); }
-    res.peri = fusExtrema(1).filter(e => e[2] === 'min').map(e => [e[0], e[1]]); res.tMerge = FUSC.ga; res.fus = true;
+      if (t >= FUSC.ga) { tab.set([0, 0, 0], idx * 3); tabF.set([0, 0, 0], idx * 3); continue; }
+      fusAt(FUSC.c, 4, 1, t, p); tab.set(p, idx * 3);
+      /* tabF : ce que le calcul complet ajoute à l'attraction du modèle (frottement, Grand Nuage, Triangle), accélération lissée sur ±0,1 Ga, pour que les étoiles d'Andromède suivent son centre */
+      const af = t > H && t < FUSC.ga - H ? aF(t) : null; acc(p, [0, 0, 0], t, false, o);
+      tabF.set(af ? [af[0] - o[0], af[1] - o[1], af[2] - o[2]] : [0, 0, 0], idx * 3); }
+    res.peri = fusExtrema(1).filter(e => e[2] === 'min' && e[0] < FUSC.ga).map(e => [e[0], e[1]]); res.tMerge = FUSC.ga; res.fus = true;
   }
   return res;
 }
@@ -345,10 +349,11 @@ function lmcOrbit(massScale, fus) {
     }
   }
   if (fus && FUSC) {      /* R10 : de 0 à 10 Ga, le Grand Nuage du calcul complet (il y a sa masse, et la Voie lactée recule sous son attraction) */
-    const p = [0, 0, 0];
-    for (let idx = 0; idx < n; idx++) { const t = T0 + idx * DT; if (t < 0) continue; if (t > FUSC.tEnd) { tab.set([0, 0, 0], idx * 3); continue; } fusAt(FUSC.c, 4, 3, t, p); tab.set(p, idx * 3); }
     const ex = fusExtrema(3); res.peri = []; res.apo = []; res.tMerge = null;
     for (const e of ex) { if (e[2] === 'min') res.peri.push([e[0], e[1]]); else { res.apo.push([e[0], e[1]]); if (res.peri.length && e[1] < 15 && res.tMerge === null) res.tMerge = e[0]; } }
+    if (res.tMerge === null) { const m = ex.find(e => e[2] === 'min' && e[1] < 5); if (m) res.tMerge = m[0]; }
+    const p = [0, 0, 0];
+    for (let idx = 0; idx < n; idx++) { const t = T0 + idx * DT; if (t < 0) continue; if (t > FUSC.tEnd || (res.tMerge !== null && t >= res.tMerge)) { tab.set([0, 0, 0], idx * 3); continue; } fusAt(FUSC.c, 4, 3, t, p); tab.set(p, idx * 3); }
     res.fus = true;
   }
   return res;

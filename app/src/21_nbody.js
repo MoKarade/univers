@@ -180,13 +180,15 @@ function nbFromData(D) {
    l'intégration longue (long.js), chargée à part de la page au-delà de ±3 000 ans. Longitude moyenne
    tous les 1 000 ans, autres éléments tous les 10 000 ans ; entre deux dates, λ avance au mouvement
    moyen réel (nombre de tours retrouvé par la troisième loi de Kepler), les autres éléments en ligne droite.
-   Les petites oscillations plus rapides que 1 000 ans (dont la « grande inégalité » Jupiter-Saturne,
-   900 ans, ≈ 0,3° et 0,8°) ne sont pas suivies entre deux dates de la table.
+   Jupiter et Saturne ont quatre points par millier d'années (leur « grande inégalité », ≈ 900 ans).
+   Les autres oscillations plus rapides que 1 000 ans ne sont pas suivies entre deux dates de la table.
    -------------------------------------------------------------------------- */
 let NB_LONG = null;
 function nbLongLoad(buf) {
   const h = new Float64Array(buf, 0, 7), nP = h[3], nF = h[4], NK = h[5], SL = h[6], n = nP + nF + 1, nS = Math.floor((n - 1) / SL) + 1;
+  const o2 = 56 + n * NK * 4 + nS * NK * 5 * 4;
   NB_LONG = { jd0: h[1], dd: h[2], nP, nF, NK, SL, n, lam: new Float32Array(buf, 56, n * NK), slow: new Float32Array(buf, 56 + n * NK * 4, nS * NK * 5),
+    lq: h[0] >= 2 ? new Float32Array(buf, o2, (n - 1) * 6) : null,
     idx: Object.fromEntries(NB_BODIES.slice(0, NK).map((b, i) => [b[0], i])) };
   return NB_LONG;
 }
@@ -201,8 +203,13 @@ function nbLongState(key, T, out) {
   const S = L.slow, o0 = (ks * NK + b) * 5, o1 = ((ks + 1) * NK + b) * 5, has1 = ks + 1 < nS;
   const g = q => has1 ? S[o0 + q] + (S[o1 + q] - S[o0 + q]) * fs : S[o0 + q], ga = q => has1 ? nbAng(S[o0 + q], S[o1 + q], fs) : S[o0 + q];
   const a = g(0), e = g(1), I = g(2), O = ga(3), om = ga(4);
-  const l0 = L.lam[k * NK + b], l1 = L.lam[(k + 1) * NK + b], turn = 0.01720209895 / Math.pow(a, 1.5) * L.dd, d = l1 - l0, dl = d + Math.round((turn - d) / TAU) * TAU;
-  const lam = l0 + f * dl, M = wrapPi(lam - om), E = keplerE(M, e), w = om - O;
+  const turn = 0.01720209895 / Math.pow(a, 1.5) * L.dd, jb = key === 'jupiter' ? 0 : key === 'saturn' ? 1 : -1;
+  let lam;
+  if (jb >= 0 && L.lq) {      /* Jupiter et Saturne : quatre points par millier d'années (leur « grande inégalité » dure ≈ 900 ans) */
+    const u = f * 4, q = Math.min(Math.floor(u), 3), node = m => m === 0 ? L.lam[k * NK + b] : m === 4 ? L.lam[(k + 1) * NK + b] : L.lq[(k * 3 + m - 1) * 2 + jb];
+    const l0 = node(q), d = node(q + 1) - l0; lam = l0 + (u - q) * (d + Math.round((turn / 4 - d) / TAU) * TAU);
+  } else { const l0 = L.lam[k * NK + b], d = L.lam[(k + 1) * NK + b] - l0; lam = l0 + f * (d + Math.round((turn - d) / TAU) * TAU); }
+  const M = wrapPi(lam - om), E = keplerE(M, e), w = om - O;
   const cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(O), sO = Math.sin(O), cI = Math.cos(I), sI = Math.sin(I);
   const o = out || {};
   o.a = a; o.e = e; o.E = E; o.M = M; o.long = true;

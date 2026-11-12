@@ -16,5 +16,14 @@ andromedaAt(O, -1, p); andromedaAt(O0, -1, q); ok(Math.hypot(p[0] - q[0], p[1] -
 ok(O.peri.length && O.peri[0][0] > 4 && O.peri[0][0] < 5.5, `premier passage au plus près : ${O.peri[0][0]} Ga à ${O.peri[0][1].toFixed(0)} kpc`);
 const L = lmcOrbit(1, true); andromedaAt(L, 0, p); ok(Math.hypot(p[0] - DATA.LMC.pos[0], p[1] - DATA.LMC.pos[1], p[2] - DATA.LMC.pos[2]) < 0.1, 'Grand Nuage aujourd’hui à sa position mesurée');
 ok(L.fus, `Grand Nuage : avalé à ${L.tMerge} Ga dans le calcul complet (Cautun et al. 2019 : environ 2,4 Ga, autres masses jusqu’à plus de 7 Ga)`);
+ok(L.peri.length && Math.abs(L.peri[0][0] - 3.12) < 0.05 && L.peri[0][1] < 20, `Grand Nuage : premier passage au plus près ${L.peri[0][0]} Ga à ${L.peri[0][1].toFixed(1)} kpc (le bruit près du point le plus lointain est écarté)`);
+{ let z = 0; for (let t = F.ga; t < 14; t += 0.05) { andromedaAt(O, t, p); z = Math.max(z, Math.hypot(...p)); andromedaAt(O, t, q, true); z = Math.max(z, Math.hypot(...q)); }
+  ok(z === 0, 'après la fusion : centres confondus, plus de coup de frottement'); }
+/* Étoiles simulées pendant et après la rencontre (dynAdvance) avec l'orbite du calcul complet : elles restent liées. */
+{ const T = dynTables(), N = 300, D = { n: N, nMW: N, t: 4.0, t0: 4.0, x: new Float64Array(N * 3), v: new Float64Array(N * 3), out: new Float32Array(N * 3), kind: new Uint8Array(N).fill(2), rx: new Float64Array(N * 3), rv: new Float64Array(N * 3), p0: new Float32Array(N * 3), om: new Float32Array(N), r0: new Float32Array(N), A: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] };
+  for (let i = 0; i < N; i++) { const R = 3 + 12 * i / N, a = i * 2.4, sp = vCirc(R, true) * KMS_KPC_GYR; D.x.set([R * Math.cos(a), R * Math.sin(a), 0], i * 3); D.v.set([sp * Math.sin(a), -sp * Math.cos(a), 0], i * 3); }
+  const med = () => { const r = []; for (let i = 0; i < N; i++) r.push(Math.hypot(D.x[i * 3], D.x[i * 3 + 1], D.x[i * 3 + 2])); r.sort((a, b) => a - b); return r[N >> 1]; };
+  const rs = []; for (const t of [5.44, 6, 8, 10]) { dynAdvance(D, O, t, 1e7, T); rs.push(med().toFixed(1)); }
+  ok(rs.every(r => r < 60), `étoiles de la Voie lactée, rayon médian à 5,44 / 6 / 8 / 10 Ga : ${rs.join(' / ')} kpc (restent liées)`); }
 { const raw = JSON.parse(rd('test/fusion_centres.json')); ok(raw.lgv.length === 38 && F.nTr === 38, '38 naines traceuses, chacune reliée à sa galaxie de la page'); }
 process.exit(fail ? 1 : 0);
