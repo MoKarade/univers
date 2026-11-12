@@ -9,3 +9,15 @@ target_include_directories(essai_systeme_solaire PRIVATE ${CMAKE_CURRENT_SOURCE_
 target_link_libraries(essai_systeme_solaire PRIVATE univers_physique)
 target_compile_options(essai_systeme_solaire PRIVATE -Wall -Wextra)
 target_link_options(essai_systeme_solaire PRIVATE -static)
+
+# Essai : orbites des étoiles dans la Voie lactée (barre comprise), comparées à la page.
+add_executable(essai_galaxie essais/essai_galaxie.cpp)
+target_link_libraries(essai_galaxie PRIVATE univers_physique)
+target_compile_options(essai_galaxie PRIVATE -Wall -Wextra)
+target_link_options(essai_galaxie PRIVATE -static)
+
+# Essai : rejeu du calcul complet de la fusion (centres, traceurs, images des étoiles).
+add_executable(essai_fusion essais/essai_fusion.cpp)
+target_link_libraries(essai_fusion PRIVATE univers_physique)
+target_compile_options(essai_fusion PRIVATE -Wall -Wextra)
+target_link_options(essai_fusion PRIVATE -static)
