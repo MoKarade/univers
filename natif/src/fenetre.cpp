@@ -248,6 +248,7 @@ int runWindow(const WindowOptions& opt) {
     sky.create(g, HdrTarget::kFormat);
     const std::vector<SkyBandInfo> skyBands = listSkyBands(dataDir);
     for (const SkyBandInfo& b : skyBands) sim.skyBandLabels.push_back(b.label);
+    sim.skyBandInfos = &skyBands;
     int skyLoaded = -1;
     if (opt.skyBand >= 0) sim.skyBand = opt.skyBand;
     OrbitGpu orbits;      // orbite exacte de chaque étoile, calculée sur la carte graphique
@@ -441,7 +442,8 @@ int runWindow(const WindowOptions& opt) {
         // Orbites exactes : la carte rattrape la date montrée (tout d'un coup pendant un contrôle, 64 pas par image sinon).
         orbits.advance(cmd, sim.years, test ? 1000000 : 64);
         const bool skyOnly = sim.skyBand >= 0 && sky.loaded;
-        sim.orbitLagSteps = orbits.lagSteps;
+        gaia.advance(g, cmd, sim.years, test ? 1000000 : 1);      // étoiles Gaia : 27 ms par pas (mesure du fil Gaia) ; épicycles pendant le rattrapage
+        sim.orbitLagSteps = std::max(orbits.lagSteps, gaia.orbitLagSteps());
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
         if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));

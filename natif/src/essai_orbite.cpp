@@ -20,8 +20,8 @@ void verifie(bool ok, const std::string& quoi) {
     if (!ok) ++echecs;
 }
 double constante(const std::string& src, const std::string& nom) {
-    const size_t i = src.find("const float " + nom + " = ");
-    return i == std::string::npos ? std::nan("") : std::stod(src.substr(i + 15 + nom.size()));
+    const size_t i = src.find(" " + nom + " = ");      // « const float A = 1, B = 2; » : chaque nom est précédé d'un espace
+    return i == std::string::npos ? std::nan("") : std::stod(src.substr(i + 4 + nom.size()));
 }
 bool proche(double a, double b, double rel = 2e-7) { return std::fabs(a - b) <= rel * std::max(std::fabs(a), std::fabs(b)); }
 double norme(phys::Vec3 a) { return std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z); }
@@ -61,14 +61,19 @@ int main(int argc, char** argv) {
         std::ifstream fc(dir + "/orbites_pas.comp");
         std::stringstream sc;
         sc << fc.rdbuf();
-        const std::string comp = sc.str();
         const g::Potentiel P;
+        for (const char* fichier : {"orbites_pas.comp", "gaia.vert"}) {      // gaia.vert porte une copie du même calcul
+        std::ifstream fk(dir + "/" + fichier);
+        std::stringstream sk;
+        sk << fk.rdbuf();
+        const std::string comp = sk.str();
         verifie(proche(constante(comp, "OP_G"), g::kG) && proche(constante(comp, "OP_MB"), g::kMb) && proche(constante(comp, "OP_AB"), g::kAb) &&
                     proche(constante(comp, "OP_MD"), g::kMd) && proche(constante(comp, "OP_AD"), g::kAd) && proche(constante(comp, "OP_BD"), g::kBd) &&
                     proche(constante(comp, "OP_RS"), g::kRs) && proche(constante(comp, "OP_GMH"), P.GMs) && proche(constante(comp, "OP_K"), g::kKmsKpcToRadGa) &&
                     proche(constante(comp, "OP_RB"), P.Rb) && proche(constante(comp, "OP_ABAR"), P.Ab) && proche(constante(comp, "OP_BAR0"), g::barAngleAt(0)) &&
                     proche(constante(comp, "OP_BARW"), g::kBarOmegaKmsKpc * g::kKmsKpcToRadGa),
-                "constantes du calcul exact de la carte graphique (orbites_pas.comp) = bibliothèque de physique");
+                std::string("constantes du calcul exact de la carte graphique (") + fichier + ") = bibliothèque de physique");
+        }
     }
     // 2. Temps courts : ligne droite mesurée.
     const Vec3 pos{12.0, -30.0, 4.0}, vel{-20.0, 35.0, 8.0};

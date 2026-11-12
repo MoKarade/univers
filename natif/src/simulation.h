@@ -2,6 +2,7 @@
 #pragma once
 #include "asteroides_catalogue.h"
 #include <thread>
+#include "ciel_bandes.h"
 #include "commun.h"
 #include "completude.h"
 #include "cosmologie.h"
@@ -170,6 +171,7 @@ struct Sim {
     // ciel mesurées dans une autre lumière, fenetre.cpp). skyLegend : texte de la carte montrée, à afficher en permanence.
     int skyBand = -1;
     std::vector<std::string> skyBandLabels, skyLegend;
+    const std::vector<SkyBandInfo>* skyBandInfos = nullptr;      // fiches des cartes (famille, échelle, unité), pour l'interface
     long orbitLagSteps = 0;              // pas d'orbite (1 million d'années) que la carte graphique doit encore calculer
     double asteroidEpochJd = 0;          // date des orbites des astéroïdes (0 : pas d'astéroïdes)
     uint64_t asteroidCount = 0;
