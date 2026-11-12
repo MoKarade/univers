@@ -661,10 +661,14 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     ImGui::SameLine();
     if (ImGui::Button("Date…")) ImGui::OpenPopup("date");
     dateJumpPopup(sim, ui);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);      // les remarques passent à la ligne : la barre garde sa largeur
     if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");
-    else if (!sim.ephemValid) ImGui::TextDisabled("Planètes masquées : les éphémérides de la NASA vont de 1550 à 2650. Au-delà : position inconnue pour l'instant.");
+    else if (!sim.ephemValid && !sim.outer) ImGui::TextDisabled("Hors de 1550-2650 (plage des éphémérides de la NASA) : calcul des planètes en préparation.");
+    else if (!sim.ephemValid)
+        ImGui::TextDisabled("Hors de 1550-2650 : planètes calculées ici (gravité mutuelle partie des éphémérides de la NASA) ; lunes et orbites non montrées.");
     if (std::fabs(sim.years - kStartYears) >= kLinearLimitYears * 0.999)
         ImGui::TextDisabled("Limite : au-delà de 3 millions d'années, les étoiles ne vont plus en ligne droite (à venir).");
+    ImGui::PopTextWrapPos();
     ImGui::End();
 }
 
@@ -676,13 +680,16 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     const double dSun = std::sqrt(dot(p, p));
     const bool today = std::fabs(sim.years - kStartYears) < 1.0;
     const float s = ui.s;
+    // Source de la position : éphéméride de la NASA dans sa plage, calcul ici au-delà.
+    const bool computed = static_cast<size_t>(f) < sim.planetComputed.size() && sim.planetComputed[static_cast<size_t>(f)];
+    const char* src = computed ? "calculé" : "éphémérides NASA";
     row("Nature", natureOf(fb), "", s);
     if (fb.kind == Kind::Planet) {
-        row("Distance au Soleil", frDistance(dSun), "éphémérides NASA", s);
+        row("Distance au Soleil", frDistance(dSun), src, s);
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
-            if (sim.bodies[static_cast<size_t>(i)].naif == eph::kEarth && i != f) row("Distance à la Terre", frDistance(distBetween(p, sim.position(i))), "éphémérides NASA", s);
+            if (sim.bodies[static_cast<size_t>(i)].naif == eph::kEarth && i != f) row("Distance à la Terre", frDistance(distBetween(p, sim.position(i))), src, s);
         if (fb.parent > 0)
-            row(("Distance à " + sim.bodies[static_cast<size_t>(fb.parent)].name).c_str(), frDistance(distBetween(p, sim.position(fb.parent))), "éphémérides NASA", s);
+            row(("Distance à " + sim.bodies[static_cast<size_t>(fb.parent)].name).c_str(), frDistance(distBetween(p, sim.position(fb.parent))), src, s);
         const double days = fb.periodYears * 365.25;
         row("Durée d'un tour", fb.periodYears >= 1 ? frNum(fb.periodYears) + " ans" : days >= 2 ? frNum(days) + " jours" : frNum(days * 24.0) + " heures",
             fb.parent > 0 && fb.naif != eph::kMoon ? "calculé d'après les éphémérides" : "mesuré", s);
@@ -703,7 +710,8 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         row("Température", frInt(4600.0 * (1.0 / (0.92 * fb.bv + 1.7) + 1.0 / (0.92 * fb.bv + 0.62))) + " K en surface", "calculé d'après la couleur", s);
     if (fb.kind != Kind::Galaxy && (fb.kind != Kind::Planet || fb.hasPhotometry)) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé", s);
     ImGui::Separator();
-    if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
+    if (fb.kind == Kind::Planet && computed) ImGui::TextDisabled("Position : calculée ici (gravité mutuelle, partie des éphémérides JPL DE440 de la NASA).");
+    else if (fb.kind == Kind::Planet) ImGui::TextDisabled("Position : éphémérides JPL DE440 de la NASA, lues telles quelles.");
     else if (fb.kind == Kind::Galaxy) ImGui::TextDisabled("Sources : Karachentsev et al. 2013 ; McConnachie 2012.");
     else ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
 }
@@ -717,8 +725,8 @@ void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlag
     ImGui::PushFont(ui.big);
     ImGui::TextUnformatted(sim.bodies[static_cast<size_t>(f)].name.c_str());
     ImGui::PopFont();
-    ImGui::SameLine();
-    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX() + px(ui, 20), ImGui::GetWindowContentRegionMax().x - px(ui, 28)));
+    // Bouton de fermeture juste après le nom (une position calée sur le bord droit ferait grandir la fiche sans fin).
+    ImGui::SameLine(0, px(ui, 24));
     if (ImGui::SmallButton(" × ")) ui.cardClosedFor = f;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Fermer la fiche");
     ImGui::Separator();
@@ -818,6 +826,7 @@ std::string tourCaption(const Sim& sim, int step) {
         case 0: return "La Terre, éclairée par le Soleil à la date affichée.";
         case 1: return "La Lune, à la place donnée par les éphémérides de la NASA.";
         case 2:
+            if (!sim.ephemValid) return "Le système solaire : planètes placées par le calcul de gravité mutuelle (hors de la plage de la NASA).";
             return "Le système solaire : orbites tirées des éphémérides de la NASA" +
                    (sim.asteroidCount ? ", et " + frInt(static_cast<double>(sim.asteroidCount)) + " astéroïdes sur leurs orbites mesurées." : std::string("."));
         case 3: return "Jupiter, la plus grande planète, et ses lunes.";
