@@ -37,6 +37,9 @@ foreach ($f in 'mar099s.bsp', 'jup365.bsp', 'sat441.bsp', 'nep097.bsp', 'plu060.
     if (Test-Path $src) { Copier-SiChange $src "$Cible\$f" }
 }
 # Calcul de la fusion avec Andromède (centres des galaxies, traceurs, étoiles affichées), s'il est là.
+if (Test-Path "$Donnees\fusion-3m") { New-Item -ItemType Directory -Force "$Cible\fusion-3m" | Out-Null; Get-ChildItem "$Donnees\fusion-3m" -File | ForEach-Object { Copier-SiChange $_.FullName "$Cible\fusion-3m\$($_.Name)" } }
+if (Test-Path "$Donnees\clones_groupe_local.bin") { Copier-SiChange "$Donnees\clones_groupe_local.bin" "$Cible\clones_groupe_local.bin" }
+New-Item -ItemType Directory -Force "$Cible\avancement" | Out-Null      # les calculs de fond y écrivent où ils en sont
 if (Test-Path "$Donnees\fusion") { New-Item -ItemType Directory -Force "$Cible\fusion" | Out-Null; Get-ChildItem "$Donnees\fusion" -File | ForEach-Object { Copier-SiChange $_.FullName "$Cible\fusion\$($_.Name)" } }
 # Étoiles Gaia et Voie lactée (fil « Voie lactée et étoiles Gaia »), si les fichiers ont été préparés.
 Get-ChildItem "$Donnees\ciel_*.bin" -ErrorAction SilentlyContinue | ForEach-Object { Copier-SiChange $_.FullName "$Cible\$($_.Name)" }      # cartes du ciel dans d'autres lumières

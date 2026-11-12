@@ -11,6 +11,7 @@
 
 #include "asteroides.h"
 #include "ciel_bandes.h"
+#include "clones.h"
 #include "fenetre.h"
 #include "orbites_gpu.h"
 #include "fusion_points.h"
@@ -178,8 +179,10 @@ int runWindow(const WindowOptions& opt) {
     }
     // Calcul complet de la rencontre avec Andromède (dossier fusion/ à côté des données) : facultatif.
     phys::fusion::Rejeu replay;
-    const bool hasReplay = replay.charger(dataDir + "/fusion/fusion_centres.bin", dataDir + "/fusion");
-    sim.linkReplay(hasReplay ? &replay : nullptr, dataDir + "/fusion/fusion_noms.tsv");
+    // Calcul de la fusion : celui à 3 millions de particules (dossier fusion-3m) s'il est là, sinon celui à 300 000.
+    const std::string fusionDir = dataDir + (std::filesystem::exists(dataDir + "/fusion-3m/fusion_centres.bin") ? "/fusion-3m" : "/fusion");
+    const bool hasReplay = replay.charger(fusionDir + "/fusion_centres.bin", fusionDir);
+    sim.linkReplay(hasReplay ? &replay : nullptr, fusionDir + "/fusion_noms.tsv");
     if (opt.hasYears) sim.years = opt.years;
     sim.refreshEphemeris();
     if (sim.focus != 0) sim.follow(sim.focus);
@@ -248,6 +251,7 @@ int runWindow(const WindowOptions& opt) {
     MilkyWayRenderer milkyWay;
     if (kShowModelledMilkyWay) milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
     sim.hasGaia = gaiaOk;
+    sim.gaiaCellDispersionKms = gaiaOk ? gaia.cellDispersionKms : 0;
     sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
     sim.gaiaCount = gaiaOk ? gaia.count : 0;
     sim.hasMilkyWay = milkyWay.ready;
@@ -278,6 +282,18 @@ int runWindow(const WindowOptions& opt) {
     sim.completeness = &rapportCompletude;
     FusionPoints fusionPoints;
     fusionPoints.create(g, hasReplay ? static_cast<uint32_t>(replay.nombreEtoiles()) : 0);
+    ClonePoints clones;      // nuage des 10 000 scénarios du Groupe local (précalculés par le fil physique)
+    if (clones.create(g, dataDir + "/clones_groupe_local.bin")) {
+        sim.cloneCount = clones.n;
+        sim.cloneMergeProbability = clones.probability;
+        sim.cloneMergeGa[0] = clones.t16;
+        sim.cloneMergeGa[1] = clones.t50;
+        sim.cloneMergeGa[2] = clones.t84;
+    }
+    int milkyWayCentre = -1;
+    for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
+        if (sim.bodies[static_cast<size_t>(i)].name == "Centre de la Voie lactée") milkyWayCentre = i;
+    double tasksTimer = 10;
     double galaxyScaleAt = 1e300;      // date (années) du dernier calcul du facteur d'échelle de l'univers
     SphereRenderer spheres;
     spheres.create(g, HdrTarget::kFormat, dataDir + "/textures");
@@ -419,7 +435,7 @@ int runWindow(const WindowOptions& opt) {
             if (need) {
                 VkCommandBuffer once = beginOnce(g);
                 if (gaiaOk) {
-                    gaia.advance(g, once, wanted, test && !opt.hasPath ? 1000000 : 1);
+                    gaia.advance(g, once, wanted, test && !opt.hasPath ? 1000000 : 64);      // le fil Gaia borne lui-même le travail par image
                     const double lo = static_cast<double>(gaia.orbitStep()) * OrbitGpu::kStepYears + off;
                     shownYears = std::clamp(wanted, lo, lo + OrbitGpu::kStepYears - 1.0);
                     gaia.advance(g, once, shownYears, 0);      // retard recompté pour la date réellement montrée
@@ -446,7 +462,6 @@ int runWindow(const WindowOptions& opt) {
             sim.gaiaOrbitLagSteps = gaiaOk ? (gaia.orbitReady() ? 0 : std::max(1L, gaia.orbitLagSteps())) : -1;
             // Comment c'est obtenu, famille par famille.
             const double w = orbite::poidsOrbite(sim.years), share = sim.starShare();
-            const bool nearNow = std::fabs(sim.years - kStartYears) < kLinearLimitYears;
             sim.calcStates.clear();
             sim.calcStates.push_back({"Planètes et lunes", sim.ephemValid ? CalcMode::Measured : sim.outer ? CalcMode::Exact : CalcMode::Hidden, 0,
                                       sim.ephemValid ? "éphémérides de la NASA, lues telles quelles" : sim.outer ? std::string("calculé ici (gravité mutuelle), ") + sim.planetMethod : "hors des dates connues"});
@@ -462,13 +477,17 @@ int runWindow(const WindowOptions& opt) {
                                           w < 0.01 ? "position et vitesse mesurées, ligne droite" : gaia.orbitReady() ? "départ mesuré ; orbite calculée exactement sur la carte graphique, potentiel de la Galaxie [modèle]"
                                                                                                                       : "épicycles (approché) pendant la préparation du calcul exact"});
             if (sim.hasGaiaAggregate)
-                sim.calcStates.push_back({"Lumière additionnée des autres sources Gaia", nearNow ? CalcMode::Measured : CalcMode::Hidden, 0,
-                                          "somme de sources mesurées, sans vitesse : montrée seulement près d'aujourd'hui"});
+                sim.calcStates.push_back({"Lumière additionnée des autres sources Gaia", share <= 0 ? CalcMode::Hidden : w < 0.01 ? CalcMode::Measured : gaia.orbitReady() ? CalcMode::Exact : CalcMode::Approx,
+                                          sim.gaiaOrbitLagSteps > 0 ? sim.gaiaOrbitLagSteps : 0,
+                                          "somme de sources mesurées, rangée par cases ; chaque case suit l'orbite de la vitesse moyenne mesurée de ses sources"});
             sim.calcStates.push_back({"Galaxies du Groupe local", sim.deepTime() ? (sim.replay ? CalcMode::Precomputed : CalcMode::Hidden) : CalcMode::Measured, 0,
                                       sim.deepTime() ? "rejeu du calcul de la rencontre avec Andromède (fait à l'avance sur la carte graphique)" : "positions mesurées"});
             if (sim.replay)
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           "points du calcul fait à l'avance : un scénario, pas des étoiles mesurées"});
+            if (sim.cloneCount)
+                sim.calcStates.push_back({"Scénarios du Groupe local", clones.count ? CalcMode::Precomputed : CalcMode::Hidden, 0,
+                                          "10 000 routes possibles des galaxies voisines, calculées à l'avance d'après l'incertitude des mesures"});
             sim.calcStates.push_back({"Galaxies lointaines", CalcMode::Measured, 0, "positions mesurées ; expansion de l'univers calculée"});
         }
         const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
@@ -489,6 +508,12 @@ int runWindow(const WindowOptions& opt) {
         }
         sim.skyLegend = sim.skyBand >= 0 ? sky.legend(std::sqrt(dot(cam.pos, cam.pos))) : std::vector<std::string>{};
         fusionPoints.update(sim, cam, pc.par[0]);
+        if (milkyWayCentre >= 0) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
+        tasksTimer += dt;
+        if (tasksTimer > 2.0) {      // calculs de fond du PC : relus toutes les 2 secondes
+            tasksTimer = 0;
+            sim.tasks = readTasks(dataDir + "/avancement");
+        }
         spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
         planets.update(sim, cam, asSphere);
@@ -536,11 +561,12 @@ int runWindow(const WindowOptions& opt) {
             orbiting.par[0] *= static_cast<float>(sim.starShare());
             orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years));      // années depuis J2000, date des positions
         }
-        if (!skyOnly && fusionPoints.count) {
+        if (!skyOnly && (fusionPoints.count || clones.count)) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
             still.par[2] = 0;
             sr.bind(cmd, still, sc.extent.width, sc.extent.height);
             fusionPoints.draw(cmd);
+            clones.draw(cmd);
         }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
                        sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // cachés dans une autre lumière : on ne les voit qu'en lumière visible
@@ -592,7 +618,7 @@ int runWindow(const WindowOptions& opt) {
         else if (pr != VK_SUCCESS) fail("affichage", pr);
 
         ++frame;
-        if (test && (holdOn || pathActive)) frame = 0;      // contrôle : les images ne comptent qu'une fois la date atteinte et calculée
+        if (test && (holdOn || pathActive || (gaiaOk && gaia.orbitLagSteps() != 0))) frame = 0;      // contrôle : les images ne comptent qu'une fois la date atteinte et calculée
         ++shown;
         titleTimer += dt;
         if (!test && titleTimer > 0.5) {
@@ -632,6 +658,7 @@ int runWindow(const WindowOptions& opt) {
     gaia.release(g);
     milkyWay.release(g);
     fusionPoints.release(g);
+    clones.release(g);
     asteroids.release(g);
     galaxies.release(g);
     spheres.release(g);

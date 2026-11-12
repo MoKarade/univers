@@ -12,6 +12,7 @@
 // rattrapage, gaia.vert prend les épicycles (orbite_galactique.glsl).
 // Le Soleil est le dernier état : le monde du simulateur reste centré sur lui.
 #pragma once
+#include <algorithm>
 #include <atomic>
 #include <thread>
 #include <vector>
@@ -23,12 +24,17 @@ namespace {
 class GaiaOrbits {
 public:
     static constexpr double kStepYears = 1.0e6;
-    uint32_t count = 0;          // étoiles + le Soleil (dernier)
-    long stepAt = 0;             // l'état est au pas stepAt (années depuis les mesures de Gaia / 1 Ma)
-    long lagSteps = 0;           // pas restant pour rejoindre la date montrée
+    static constexpr double kStarStepsPerFrame = 4.0e7;      // au plus 40 M étoiles × pas par image (environ 10 ms mesurés)
+    uint32_t count = 0;          // étoiles + cases + le Soleil (dernier)
+    long target = 0;             // pas de la date montrée (années depuis les mesures de Gaia / 1 Ma, arrondi vers le bas)
+    long lagSteps = 0;           // retard du plus en retard des morceaux voulus
+    long stepAt = 0;             // pas du dernier morceau (cases et Soleil) : sert au contrôle
     Buffer state;
 
-    bool readyToDraw() const { return uploaded_ && lagSteps == 0; }
+    // Un morceau est prêt à dessiner en orbite exacte s'il est au pas de la date montrée, ainsi que le dernier morceau
+    // (cases et Soleil, origine du repère).
+    bool rangeReady(size_t r) const { return uploaded_ && step_[r] == target && step_.back() == target; }
+    bool readyToDraw() const { return uploaded_ && step_.back() == target; }
     bool initialReady() const { return initDone_.load(); }
     const std::vector<float>& initial() const { return initial_; }
     // Contrôle : relit les n premiers états (8 flottants par étoile).
@@ -49,45 +55,86 @@ public:
     }
 
     // stars : 16 octets par étoile (x, y, z en al, ...) ; vel : 8 octets par étoile (i16, pas de 0,05 km/s).
-    void create(const Gpu& g, const uint8_t* stars, const uint8_t* vel, uint64_t n) {
-        count = static_cast<uint32_t>(n + 1);
+    // ranges : morceaux d'étoiles avancés chacun à son rythme (les feuilles de l'arbre) ; un dernier morceau est ajouté
+    // pour les autres corps (extraPos, extraVel : cases de lumière additionnée) et le Soleil, avancé à chaque image.
+    void create(const Gpu& g, const uint8_t* stars, const uint8_t* vel, uint64_t n, std::vector<std::pair<uint32_t, uint32_t>> ranges,
+                std::vector<Vec3> extraPos = {}, std::vector<Vec3> extraVel = {}) {
+        extraPos_ = std::move(extraPos);
+        extraVel_ = std::move(extraVel);
+        count = static_cast<uint32_t>(n + extraPos_.size() + 1);
+        ranges_ = std::move(ranges);
+        ranges_.push_back({static_cast<uint32_t>(n), static_cast<uint32_t>(extraPos_.size() + 1)});
+        step_.assign(ranges_.size(), 0);
         state = createBuffer(g, static_cast<VkDeviceSize>(count) * 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         worker_ = std::thread([this, stars, vel, n] { computeInitial(stars, vel, n); });
         createPipeline(g);
     }
 
-    // Avance l'état vers la date montrée, `budget` pas au plus. Hors d'une passe de dessin.
-    // since : années depuis les mesures de Gaia.
-    void advance(const Gpu& g, VkCommandBuffer cmd, double since, long budget) {
+    // Avance vers la date montrée les morceaux voulus (wanted : les feuilles dessinées) et toujours le dernier (cases et
+    // Soleil). Les autres feuilles attendent : elles rattraperont quand elles seront voulues (même calcul, différé).
+    // budget : pas d'un million d'années au plus par morceau et par image. Hors d'une passe de dessin. since : années
+    // depuis les mesures de Gaia.
+    void advance(const Gpu& g, VkCommandBuffer cmd, double since, long budget, const std::vector<uint32_t>& wanted) {
+        target = static_cast<long>(std::floor(since / kStepYears));
         if (!initDone_.load()) { lagSteps = 1; return; }
-        if (!uploaded_) { upload(g); uploaded_ = true; stepAt = 0; }
-        const long target = static_cast<long>(std::floor(since / kStepYears));
-        if (target != stepAt && std::labs(target) < std::labs(target - stepAt) && std::labs(target - stepAt) > budget) {
-            upload(g);      // plus court en repartant d'aujourd'hui (les états mesurés)
-            stepAt = 0;
+        if (!uploaded_) { upload(g, 0, count); uploaded_ = true; }
+        // Par tours : à chaque tour, un pas pour chaque morceau en retard ; les morceaux voisins au même pas partent en un
+        // seul calcul ; une seule barrière par tour. Équitable : aucun morceau voulu n'attend derrière les autres.
+        std::vector<uint32_t> want;
+        want.reserve(wanted.size() + 1);
+        for (uint32_t r : wanted)
+            if (r + 1 < ranges_.size()) want.push_back(r);
+        std::sort(want.begin(), want.end());
+        want.push_back(static_cast<uint32_t>(ranges_.size() - 1));      // cases et Soleil : toujours
+        for (uint32_t r : want) {
+            long& at = step_[r];
+            if (at != target && std::labs(target) < std::labs(target - at) && std::labs(target - at) > budget) {
+                upload(g, ranges_[r].first, ranges_[r].second);      // plus court en repartant d'aujourd'hui (états mesurés)
+                at = 0;
+            }
         }
-        if (target != stepAt) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout_, 0, 1, &set_, 0, nullptr);
+        double starSteps = 0;
+        bool bound = false;
+        for (long round = 0; round < budget; ++round) {
+            double roundStars = 0;
+            for (uint32_t r : want)
+                if (step_[r] != target) roundStars += ranges_[r].second;
+            if (roundStars == 0 || (round > 0 && starSteps + roundStars > kStarStepsPerFrame)) break;
+            if (!bound) {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout_, 0, 1, &set_, 0, nullptr);
+                bound = true;
+            }
+            size_t k = 0;
+            while (k < want.size()) {
+                const uint32_t r = want[k];
+                if (step_[r] == target) { ++k; continue; }
+                const long at = step_[r];
+                uint32_t first = ranges_[r].first, n = ranges_[r].second;
+                size_t e = k + 1;      // voisins contigus, au même pas : un seul calcul
+                while (e < want.size() && step_[want[e]] == at && ranges_[want[e]].first == first + n) { n += ranges_[want[e]].second; ++e; }
+                const double dir = target > at ? 1.0 : -1.0;
+                const OrbitGpu::StepPush p{static_cast<float>(at * 1.0e-3), static_cast<float>(dir * 1.0e-3), first, n};
+                vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(p), &p);
+                vkCmdDispatch(cmd, (n + 255) / 256, 1, 1);
+                for (size_t q = k; q < e; ++q) step_[want[q]] += static_cast<long>(dir);
+                k = e;
+            }
+            VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+            mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 1, &mb, 0,
+                                 nullptr, 0, nullptr);
+            starSteps += roundStars;
         }
-        while (target != stepAt && budget-- > 0) {
-            const double dir = target > stepAt ? 1.0 : -1.0;
-            const OrbitGpu::StepPush p{static_cast<float>(stepAt * 1.0e-3), static_cast<float>(dir * 1.0e-3), 0, count};
-            vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(p), &p);
-            vkCmdDispatch(cmd, (count + 255) / 256, 1, 1);
-            VkMemoryBarrier b{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-            b.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 1, &b,
-                                 0, nullptr, 0, nullptr);
-            stepAt += static_cast<long>(dir);
-        }
-        lagSteps = std::labs(target - stepAt);
+        lagSteps = 0;
+        for (uint32_t r : want) lagSteps = std::max(lagSteps, std::labs(target - step_[r]));
+        stepAt = step_.back();
     }
 
     // Part du pas écoulée depuis l'état (0 à 1).
-    float fraction(double since) const { return static_cast<float>(std::clamp(since / kStepYears - static_cast<double>(stepAt), 0.0, 1.0)); }
+    float fraction(double since) const { return static_cast<float>(std::clamp(since / kStepYears - static_cast<double>(target), 0.0, 1.0)); }
 
     void release(const Gpu& g) {
         if (worker_.joinable()) worker_.join();
@@ -104,6 +151,9 @@ private:
     std::atomic<bool> initDone_{false};
     bool uploaded_ = false;
     std::vector<float> initial_;
+    std::vector<Vec3> extraPos_, extraVel_;
+    std::vector<std::pair<uint32_t, uint32_t>> ranges_;      // (première étoile, nombre)
+    std::vector<long> step_;                                 // pas où en est chaque morceau
     VkPipeline pipe_{};
     VkPipelineLayout layout_{};
     VkDescriptorSetLayout setLayout_{};
@@ -112,7 +162,7 @@ private:
     VkShaderModule cs_{};
 
     void computeInitial(const uint8_t* stars, const uint8_t* vel, uint64_t n) {
-        initial_.assign(static_cast<size_t>(n + 1) * 8, 0.0f);
+        initial_.assign(static_cast<size_t>(count) * 8, 0.0f);
         const phys::galaxie::Potentiel P;
         const phys::Vec3 s = phys::galaxie::soleilPos(), sv = phys::galaxie::soleilVit();
         auto fill = [&](size_t i, Vec3 pos, Vec3 v) {
@@ -139,21 +189,22 @@ private:
                 }
             });
         for (auto& x : th) x.join();
-        fill(n, {0, 0, 0}, {0, 0, 0});      // le Soleil
+        for (size_t k = 0; k < extraPos_.size(); ++k) fill(n + k, extraPos_[k], extraVel_[k]);
+        fill(count - 1, {0, 0, 0}, {0, 0, 0});      // le Soleil
         initDone_.store(true);
     }
 
-    void upload(const Gpu& g) {
+    void upload(const Gpu& g, uint32_t first, uint32_t n) {
         constexpr VkDeviceSize kChunk = 256ull << 20;
-        const VkDeviceSize size = static_cast<VkDeviceSize>(count) * 32;
+        const VkDeviceSize base = static_cast<VkDeviceSize>(first) * 32, size = static_cast<VkDeviceSize>(n) * 32;
         Buffer staging = createBuffer(g, std::min(size, kChunk), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         void* p = nullptr;
         check(vkMapMemory(g.dev, staging.mem, 0, VK_WHOLE_SIZE, 0, &p), "états Gaia");
         for (VkDeviceSize off = 0; off < size; off += kChunk) {
             const VkDeviceSize m = std::min(kChunk, size - off);
-            std::memcpy(p, reinterpret_cast<const uint8_t*>(initial_.data()) + off, m);
+            std::memcpy(p, reinterpret_cast<const uint8_t*>(initial_.data()) + base + off, m);
             VkCommandBuffer c = beginOnce(g);
-            const VkBufferCopy region{0, off, m};
+            const VkBufferCopy region{0, base + off, m};
             vkCmdCopyBuffer(c, staging.buf, state.buf, 1, &region);
             endOnce(g, c);
         }

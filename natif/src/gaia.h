@@ -99,7 +99,7 @@ struct GaiaPush {
     uint32_t sun;        // rang du Soleil dans les états d'orbite
     float frac;          // part du pas d'un million d'années écoulée depuis l'état
     float exact;         // 1 : orbite exacte (états calculés à jour) ; 0 : épicycles
-    float pad;
+    uint32_t cellBase;   // rang du premier état des cases de lumière additionnée
 };
 static_assert(sizeof(GaiaPush) == 128, "constantes Gaia : 128 octets");
 
@@ -116,6 +116,7 @@ public:
     // Lumière additionnée des autres sources Gaia (gaia_agrege.bin, facultatif, à côté de gaia.bin) : cases placées à
     // leur distance, et lumière sans distance (« ciel seul ») montrée seulement près du Soleil.
     uint32_t cellCount = 0, skyCount = 0;
+    float cellDispersionKms = 0;      // dispersion médiane des vitesses sur le ciel dans une case (à dire à l'écran)
     static constexpr double kSkyOnlyRadiusLy = 100.0;
     static constexpr uint32_t kCellSpread = 8;
     static constexpr double kAggregateYears = 3.0e6;      // lumière additionnée montrée à moins de 3 millions d'années des mesures      // même valeur que SPREAD dans gaia_agrege.vert
@@ -165,7 +166,9 @@ public:
         }
         for (int i = 0; i < kRing; ++i) check(vkMapMemory(g.dev, indirect_[i].mem, 0, VK_WHOLE_SIZE, 0, &mapped_[i]), "dessins indirects");
         loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
-        orbits_.create(g, file_.stars, file_.velocities, file_.n);      // orbites exactes : états de départ calculés dans un fil à part
+        std::vector<std::pair<uint32_t, uint32_t>> leafRanges(file_.leafCount);
+        for (uint32_t i = 0; i < file_.leafCount; ++i) leafRanges[i] = {static_cast<uint32_t>(file_.leaves[i].first), file_.leaves[i].n};
+        orbits_.create(g, file_.stars, file_.velocities, file_.n, std::move(leafRanges), cellPos_, cellVel_);      // étoiles, puis cases, puis le Soleil      // orbites exactes : états de départ calculés dans un fil à part
         createPipeline(g, hdrFormat);
         ready = true;
         return true;
@@ -177,7 +180,7 @@ public:
         const double since = years - (static_cast<double>(file_.epoch) - 2000.0);      // années depuis les mesures de Gaia
         PushConstants pc = pushConstants(cam, exposure, height, since);
         pc.par[3] = static_cast<float>(since / 1.0e9);      // orbite autour de la Galaxie (gaia.vert)
-        const GaiaPush gp{pc, orbits_.count - 1, orbits_.fraction(since), orbits_.readyToDraw() ? 1.0f : 0.0f, 0.0f};
+        const GaiaPush gp{pc, orbits_.count - 1, orbits_.fraction(since), orbits_.readyToDraw() ? 1.0f : 0.0f, static_cast<uint32_t>(file_.n)};
         const uint32_t n = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
                                         file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
@@ -191,25 +194,35 @@ public:
             vkCmdBindVertexBuffers(cmd, 0, 1, &rest_[ring_].buf, &off);
             vkCmdDraw(cmd, restPoints, 1, 0, 0);
         }
-        // Lumière additionnée : sans vitesses, elle n'existe qu'au présent mesuré (à moins de kAggregateYears des mesures).
-        if (cellCount + skyCount > 0 && std::fabs(since) < kAggregateYears) {
-            PushConstants pa = pc;
-            pa.par[3] = static_cast<float>(cam.tanHalf);
+        // Lumière additionnée : les cases en volume suivent le même mouvement que les étoiles (vitesse moyenne mesurée de
+        // leurs sources) ; le ciel seul (sans distance ni vitesse) n'existe qu'au présent mesuré (kAggregateYears).
+        if (cellCount + skyCount > 0) {
+            GaiaPush pa = gp;
+            pa.base.camHi[3] = static_cast<float>(cam.tanHalf);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, aggPipeline_);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &aggSet_, 0, nullptr);
             vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
             if (cellCount) vkCmdDraw(cmd, cellCount, kCellSpread, 0, 0);      // kCellSpread points par case (gaia_agrege.vert)
-            if (skyCount && std::sqrt(dot(cam.pos, cam.pos)) < kSkyOnlyRadiusLy) {
-                pa.camLo[3] = 1.0f;
+            if (skyCount && std::fabs(since) < kAggregateYears && std::sqrt(dot(cam.pos, cam.pos)) < kSkyOnlyRadiusLy) {
+                pa.base.camLo[3] = 1.0f;
                 vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
                 vkCmdDraw(cmd, skyCount, 1, cellCount, 0);
             }
         }
-        if (n > 0) {
+        if (n + epicycleLeaves_ > 0) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &set_, 0, nullptr);
-            vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(gp), &gp);
-            vkCmdDrawIndirect(cmd, indirect_[ring_].buf, 0, n, sizeof(VkDrawIndirectCommand));
+            if (n > 0) {
+                vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(gp), &gp);
+                vkCmdDrawIndirect(cmd, indirect_[ring_].buf, 0, n, sizeof(VkDrawIndirectCommand));
+            }
+            if (epicycleLeaves_ > 0) {
+                GaiaPush ge = gp;
+                ge.exact = 0.0f;
+                vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ge), &ge);
+                vkCmdDrawIndirect(cmd, indirect_[ring_].buf, static_cast<VkDeviceSize>(file_.leafCount - epicycleLeaves_) * sizeof(VkDrawIndirectCommand),
+                                  epicycleLeaves_, sizeof(VkDrawIndirectCommand));
+            }
         }
         ring_ = (ring_ + 1) % kRing;
     }
@@ -217,13 +230,15 @@ public:
     // Avance les orbites exactes vers la date montrée (budget : pas d'un million d'années au plus). Hors d'une passe de dessin,
     // avant draw. years : années depuis J2000,0. Sans cet appel, les étoiles suivent les épicycles (comme avant).
     void advance(const Gpu& g, VkCommandBuffer cmd, double years, long budget) {
-        if (ready) orbits_.advance(g, cmd, years - (static_cast<double>(file_.epoch) - 2000.0), budget);
+        if (ready) orbits_.advance(g, cmd, years - (static_cast<double>(file_.epoch) - 2000.0), budget, visible_);
     }
     long orbitLagSteps() const { return orbits_.lagSteps; }
     // Pour brider le temps sur le calcul exact (fenetre.cpp) : pas où se trouve l'état, date des mesures, état prêt.
     long orbitStep() const { return orbits_.stepAt; }
     double orbitEpochYears() const { return static_cast<double>(file_.epoch) - 2000.0; }
     bool orbitReady() const { return ready && orbits_.readyToDraw(); }
+    // Contrôle : la prochaine avance porte sur toutes les feuilles, pas seulement les visibles.
+    void wantAllLeaves() { visible_.resize(file_.leafCount); for (uint32_t i = 0; i < file_.leafCount; ++i) visible_[i] = i; }
     const GaiaOrbits& orbits() const { return orbits_; }
 
     void release(const Gpu& g) {
@@ -263,6 +278,8 @@ private:
     double shiftYears_ = 0;
     GaiaFile file_;
     GaiaOrbits orbits_;
+    std::vector<uint32_t> visible_;      // feuilles dessinées à la dernière image : ce sont elles que les orbites exactes avancent
+    uint32_t epicycleLeaves_ = 0;        // feuilles dessinées en épicycles à la dernière image (orbite exacte pas encore rattrapée)
     Buffer stars_, velocities_, colors_, indirect_[kRing];
     void* mapped_[kRing]{};
     Buffer rest_[kRing];
@@ -272,6 +289,7 @@ private:
     VkPipeline pipeline_{}, restPipeline_{}, aggPipeline_{};
     VkShaderModule restVs_{}, aggVs_{};
     Buffer cells_;
+    std::vector<Vec3> cellPos_, cellVel_;      // centre (al) et vitesse moyenne (km/s) des cases, pour leurs orbites
     VkDescriptorSet aggSet_{};
 
     void loadAggregate(const Gpu& g, const std::string& path) {
@@ -281,15 +299,24 @@ private:
         char head[64];
         f.seekg(0);
         f.read(head, 64);
-        if (!f || std::memcmp(head, "UNIVGAG1", 8) != 0) return;
+        if (!f || std::memcmp(head, "UNIVGAG2", 8) != 0) return;      // cases de 48 octets, avec leur vitesse moyenne
         uint64_t nc = 0;
         uint32_t ns = 0;
         std::memcpy(&nc, head + 8, 8);
         std::memcpy(&ns, head + 16, 4);
-        if (size < 64 + (nc + ns) * 32) return;
-        std::vector<char> data((nc + ns) * 32);
+        std::memcpy(&cellDispersionKms, head + 40, 4);
+        if (size < 64 + (nc + ns) * 48) return;
+        std::vector<char> data((nc + ns) * 48);
         f.read(data.data(), static_cast<std::streamsize>(data.size()));
         if (!f) return;
+        cellPos_.resize(nc);
+        cellVel_.resize(nc);
+        for (uint64_t i = 0; i < nc; ++i) {
+            float c[12];
+            std::memcpy(c, data.data() + i * 48, 48);
+            cellPos_[i] = {c[0], c[1], c[2]};
+            cellVel_[i] = {c[8], c[9], c[10]};
+        }
         cells_ = uploadStorage(g, data.data(), data.size());
         cellCount = static_cast<uint32_t>(nc);
         skyCount = ns;
@@ -319,9 +346,10 @@ private:
                                 {cam.fwd.x * tx + cam.right.x, cam.fwd.y * tx + cam.right.y, cam.fwd.z * tx + cam.right.z},
                                 {cam.fwd.x * ty - cam.up.x, cam.fwd.y * ty - cam.up.y, cam.fwd.z * ty - cam.up.z},
                                 {cam.fwd.x * ty + cam.up.x, cam.fwd.y * ty + cam.up.y, cam.fwd.z * ty + cam.up.z}};
-        uint32_t k = 0;
+        uint32_t k = 0, kb = 0;      // feuilles en orbite exacte (début de la liste) et en épicycles (fin de la liste)
         drawn = 0;
         restPoints = 0;
+        visible_.clear();
         for (uint32_t i = 0; i < file_.leafCount; ++i) {
             const GaiaLeaf& L = file_.leaves[i];
             const Vec3 o = moved ? shift_[i] : Vec3{0, 0, 0};
@@ -352,9 +380,13 @@ private:
                 if (rest && take < L.n) addRest(i, L, cam, absLim, dPc, pxPerRad, rest, o);
             }
             if (take == 0) continue;
-            out[k++] = {take, 1, static_cast<uint32_t>(L.first), 0};
+            visible_.push_back(i);
+            const VkDrawIndirectCommand c{take, 1, static_cast<uint32_t>(L.first), 0};
+            if (!moved || orbits_.rangeReady(i)) out[k++] = c;      // à jour (ou temps proche : ligne droite)
+            else out[file_.leafCount - 1 - kb++] = c;               // pas encore rattrapée : épicycles en attendant
             drawn += take;
         }
+        epicycleLeaves_ = kb;
         return k;
     }
 

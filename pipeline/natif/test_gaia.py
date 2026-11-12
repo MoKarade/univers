@@ -112,9 +112,11 @@ def voie(chemin):
 
 def agrege(chemin):
     h = np.fromfile(chemin, np.uint8, 64)
-    verifie(bytes(h[:8]) == b'UNIVGAG1', 'signature UNIVGAG1')
+    verifie(bytes(h[:8]) == b'UNIVGAG2', 'signature UNIVGAG2')
     nc, ns = int(h[8:16].view('<u8')[0]), int(h[16:20].view('<u4')[0])
-    t = np.fromfile(chemin, np.dtype([('p', '<f4', 3), ('m', '<f4'), ('r', '<f4'), ('e', '<f4'), ('c', '<u4'), ('n', '<u4')]), nc + ns, offset=64)
+    t = np.fromfile(chemin, np.dtype([('p', '<f4', 3), ('m', '<f4'), ('r', '<f4'), ('e', '<f4'), ('c', '<u4'), ('n', '<u4'), ('v', '<f4', 3), ('s', '<f4')]), nc + ns, offset=64)
+    verifie(np.all(np.isfinite(t['v'][:nc])) and float(np.median(np.linalg.norm(t['v'][:nc], axis=1))) < 300,
+            f'vitesses des cases finies, médiane {float(np.median(np.linalg.norm(t["v"][:nc], axis=1))):.0f} km/s')
     sources = int(t['n'].sum(dtype=np.int64))
     # DR3 : 1 811 709 771 sources ; ici toutes celles qui ont une magnitude G, moins les 98 346 986 dessinées une à une
     verifie(1.70e9 < sources < 1.72e9, f'{sources} sources additionnées ({nc} cases 3D, {ns} pixels de ciel seul)')

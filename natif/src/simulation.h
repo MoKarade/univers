@@ -2,6 +2,7 @@
 #pragma once
 #include "asteroides_catalogue.h"
 #include <thread>
+#include "avancement.h"
 #include "ciel_bandes.h"
 #include "commun.h"
 #include "completude.h"
@@ -182,7 +183,13 @@ struct Sim {
     int skyBand = -1;
     std::vector<std::string> skyBandLabels, skyLegend;
     const std::vector<SkyBandInfo>* skyBandInfos = nullptr;      // fiches des cartes (famille, échelle, unité), pour l'interface
+    std::vector<TaskProgress> tasks;     // calculs de fond du PC (avancement.h), relus toutes les 2 secondes
+    // Scénarios du Groupe local (clones.h) : nombre, part qui finit par une fusion Voie lactée-Andromède, et date de cette
+    // fusion (16e, 50e, 84e centile, en milliards d'années) ; 0 scénario : fichier absent.
+    uint32_t cloneCount = 0;
+    double cloneMergeProbability = 0, cloneMergeGa[3] = {0, 0, 0};
     std::vector<CalcState> calcStates;
+    double gaiaCellDispersionKms = 0;    // dispersion médiane des vitesses dans une case de lumière additionnée (fil Gaia), à dire à l'écran
     long gaiaOrbitLagSteps = -1;         // -1 : pas d'orbites exactes pour Gaia (fichier absent) ; sinon pas restant à calculer
     const char* planetMethod = "";       // hors des éphémérides de la NASA : « suivi pas à pas » ou « table précalculée »
     // Le temps ne dépasse jamais le calcul exact des orbites : quand la date demandée (yearsGoal) n'est pas encore
@@ -413,7 +420,15 @@ struct Sim {
             planetValid[i] = (planetAt(bodies[i].posNaif, years, planetPos[i]) || planetAt(bodies[i].naif, years, planetPos[i])) ? 1 : 0;
             if (bodies[i].naif == eph::kEarth && !planetValid[i]) ephemValid = false;      // la Terre sans position : hors de la plage de de440.bsp
         }
-        planetMethod = ephemValid ? "" : std::fabs(years) > 20000.0 ? "table précalculée" : "suivi pas à pas";
+        // Hors des éphémérides de la NASA : suivi pas à pas dans les plages de calcul direct du fil physique (20 000 ans de
+        // chaque côté de DE440), table précalculée au-delà, rien hors de la table.
+        planetMethod = "";
+        if (!ephemValid && outer) {
+            const double jdNow = 2451545.0 + years * 365.25;
+            const phys::Plage av = outer->plageAvant(), ap = outer->plageApres(), tb = outer->plageTable();
+            if ((jdNow >= av.debut && jdNow <= av.fin) || (jdNow >= ap.debut && jdNow <= ap.fin)) planetMethod = "suivi pas à pas";
+            else if (jdNow >= tb.debut && jdNow <= tb.fin) planetMethod = "table précalculée";
+        }
         if (ephemValid || !outer) return;
         // Hors de la plage de la NASA : positions calculées (gravité mutuelle partie de l'état DE440 aux bornes, puis table
         // des orbites sur des millions d'années). Le suivi avance pas à pas avec le temps qui défile. La Lune vient de la
