@@ -26,6 +26,7 @@ struct SkyBandUbo {      // std140 : tout en vec4
     float eqRight[4], eqUp[4], eqFwd[4];      // vecteurs de la caméra en équatorial ICRS (catalogues de sources), unitaires
     float proj[4];       // 1 / (tan(champ/2) × rapport largeur/hauteur), 1 / tan(champ/2), rien, 1
     float fine[4];       // tuiles fines (ciel_tuiles.h) : ordre le plus grossier, le plus fin, log2(largeur), 1 si présentes
+    float cut[4];        // par catalogue : grandeur relative (à la médiane) sous laquelle une source n'est pas dessinée
 };
 
 // Catalogue de sources de la bande (sources_<bande>.bin, pipeline/natif/sources_bandes.py) : directions mesurées.
@@ -36,12 +37,16 @@ struct SkySourcesInfo {
     double median = 0, minimum = 0, maximum = 0;
     uint32_t firstColor = 0;     // couleur du premier groupe (les suivants prennent les couleurs suivantes)
     bool fixedSize = false;      // tous les cercles de même taille (la grandeur n'est pas un éclat, par exemple un décalage vers le rouge)
+    std::vector<float> sortedRel;      // grandeurs relatives, de la plus forte à la plus faible (seuil selon le champ)
+    float cut = 0;                     // seuil de la dernière image (0 : toutes dessinées)
+    uint32_t shown = 0;                // nombre de sources au-dessus du seuil, sur tout le ciel
 };
 
 // Fiche d'une bande, lue dans le JSON du fichier. Les textes sont ceux du script : source, mesure, unité, référence.
 struct SkyBandInfo {
     std::string path, key, label, band, measure, unit, wavelength, reference, publishedCoverage, survey, scaleKind;
     double resolutionArcmin = 0, mapResolutionArcmin = 0, coverage = 0, lo = 0, hi = 0, median = 0;
+    double softness = 1;      // échelle asinh : en dessous, l'échelle devient linéaire (autour de zéro)
     uint32_t nside = 0;
     bool galactic = false;
 };
@@ -97,7 +102,14 @@ inline bool readSkyBandHeader(const std::string& path, SkyBandInfo& info, std::s
     info.hi = jsonNumber(js, "p999");
     info.median = jsonNumber(js, "p50");
     if (info.scaleKind.empty()) info.scaleKind = "log";
-    if (info.scaleKind == "log" && info.lo <= 0) info.lo = info.median > 0 ? info.median * 1e-2 : 1e-30;
+    // Échelle logarithmique demandée mais des valeurs mesurées ≤ 0 (carte dont le niveau moyen a été retiré, comme Planck
+    // PR4) : asinh, logarithmique pour les fortes valeurs et linéaire autour de zéro. Ces pixels gardent leur valeur
+    // au lieu de tomber au noir.
+    if (info.scaleKind == "log" && info.lo <= 0) {
+        info.scaleKind = "asinh";
+        info.softness = std::max(std::fabs(info.median) * 0.1, (info.hi - info.lo) * 1e-4);
+        if (!(info.softness > 0)) info.softness = 1;
+    }
     dataOffset = static_cast<std::streamoff>((24 + h[2] + 15) / 16 * 16);
     return true;
 }
@@ -289,9 +301,13 @@ public:
             std::memcpy(&rec[i * 8 + 3], &v, 4);
             rec[i * 8 + 4] = std::min<uint32_t>(rec[i * 8 + 4] + color, 7);      // couleur
             rec[i * 8 + 5] = c.fixedSize ? 1 : 0;                                 // taille fixe
+            rec[i * 8 + 6] = static_cast<uint32_t>(std::min<size_t>(catalogs.size(), 3));      // numéro du catalogue (seuil)
+            if (!c.fixedSize) c.sortedRel.push_back(v);
         }
         color += static_cast<uint32_t>(std::max<size_t>(c.groups.size(), 1));
         all.insert(all.end(), rec.begin(), rec.end());
+        std::sort(c.sortedRel.begin(), c.sortedRel.end(), std::greater<float>());
+        c.shown = c.count;
         catalogs.push_back(std::move(c));
         return true;
     }
@@ -376,13 +392,17 @@ public:
             l.push_back(b);
         }
         std::snprintf(b, sizeof b, "Fausses couleurs, échelle %s de %.3g à %.3g %s. Hachures : pas de mesure.",
-                      info.scaleKind == "log" ? "logarithmique" : "linéaire", info.lo, info.hi, info.unit.c_str());
+                      info.scaleKind == "log" ? "logarithmique" : (info.scaleKind == "asinh" ? "asinh (log au-dessus du seuil de douceur, linéaire autour de zéro)" : "linéaire"),
+                      info.lo, info.hi, info.unit.c_str());
         l.push_back(b);
         static const char* colors[] = {"blanc", "cyan", "vert", "rose", "bleu", "orange", "jaune", "violet"};
         for (const SkySourcesInfo& c : catalogs) {
             if (c.fixedSize)
                 std::snprintf(b, sizeof b, "Cercles : %u sources, %s (%s) ; %s mesuré de %.3g à %.3g. Direction mesurée, distance non montrée ici.",
                               c.count, c.label.c_str(), c.reference.c_str(), c.quantity.c_str(), c.minimum, c.maximum);
+            else if (c.cut > 0)
+                std::snprintf(b, sizeof b, "Cercles : les %u plus fortes des %u sources, %s (%s), %s au-dessus de %.3g %s ; resserrer le champ pour voir les plus faibles.",
+                              c.shown, c.count, c.label.c_str(), c.reference.c_str(), c.quantity.c_str(), c.cut * c.median, c.unit.c_str());
             else
                 std::snprintf(b, sizeof b, "Cercles : %u sources, %s (%s) ; taille selon le %s. Direction mesurée, distance non montrée.",
                               c.count, c.label.c_str(), c.reference.c_str(), c.quantity.c_str());
@@ -431,7 +451,7 @@ public:
         std::memcpy(u.fwd, ff, 16);
         u.scale[0] = static_cast<float>(info.lo);
         u.scale[1] = static_cast<float>(info.hi);
-        u.scale[2] = info.scaleKind == "log" ? 1.0f : 0.0f;
+        u.scale[2] = info.scaleKind == "asinh" ? 2.0f : (info.scaleKind == "log" ? 1.0f : 0.0f);
         u.scale[3] = static_cast<float>(alpha);
         u.grid[0] = static_cast<float>(info.nside);
         u.grid[1] = static_cast<float>(levels_);
@@ -446,7 +466,25 @@ public:
         }
         u.proj[0] = static_cast<float>(1.0 / (cam.tanHalf * cam.aspect));
         u.proj[1] = static_cast<float>(1.0 / cam.tanHalf);
+        u.proj[2] = static_cast<float>(info.softness);
         u.proj[3] = 1.0f;      // grandeurs déjà rapportées à la médiane de leur catalogue (loadSources)
+        // Seuil des sources selon le champ : environ kSourcesOnScreen par catalogue à l'écran, en supposant les sources
+        // réparties sur tout le ciel ; on garde les plus fortes (flux mesuré), jamais un tirage au hasard.
+        {
+            const double a = std::atan(tx), bb = std::atan(ty);
+            const double omega = 4.0 * std::asin(std::sin(a) * std::sin(bb));      // angle solide du champ (rectangle)
+            const double keep = kSourcesOnScreen * 4.0 * kPi / std::max(omega, 1e-12);
+            for (size_t k = 0; k < catalogs.size(); ++k) {
+                SkySourcesInfo& c = catalogs[k];
+                c.cut = 0;
+                c.shown = c.count;
+                if (!c.fixedSize && keep < c.sortedRel.size()) {
+                    c.cut = c.sortedRel[static_cast<size_t>(keep)];
+                    c.shown = static_cast<uint32_t>(keep);
+                }
+                if (k < 4) u.cut[k] = c.cut;
+            }
+        }
         u.grid[3] = static_cast<float>(height / 1080.0);
         if (tiles_.active) {      // tuiles fines : celles de l'écran sont demandées, celles qui sont lues sont envoyées
             requestTiles(cam, width, height, false);
@@ -525,6 +563,7 @@ public:
 
 private:
     static constexpr int kRing = 4;
+    static constexpr double kSourcesOnScreen = 1000.0;      // sources d'un catalogue à l'écran, à peu près, en champ large
     const Gpu* gpu_ = nullptr;
     SkyTileStream tiles_;
     uint32_t levels_ = 1;

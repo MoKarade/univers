@@ -112,18 +112,32 @@ void main() {
     float hpx = sqrt(4.0 * PI / (12.0 * u.grid.x * u.grid.x));
     bool fineFound;
     float val = fineValue(dir, screen, fineFound);
-    int level = clamp(int(floor(log2(max(screen / hpx, 1.0)))), 0, int(u.grid.y) - 1);
-    int nside = int(u.grid.x) >> level;
-    uint base = 0u;
-    for (int l = 0; l < level; ++l) { uint ns = uint(int(u.grid.x) >> l); base += 12u * ns * ns; }
-    if (!fineFound) val = carte.v[base + ang2pixNest(nside, dir)];
+    if (!fineFound) {
+        /* niveau de la pyramide en continu : entre deux niveaux, moyenne pondérée des deux moyennes mesurées (sinon un
+           cercle net apparaît là où le niveau change, le pixel de l'écran grandissant du centre vers le bord) */
+        float lf = clamp(log2(max(screen / hpx, 1.0)), 0.0, u.grid.y - 1.0);
+        int l0 = int(floor(lf));
+        int l1 = min(l0 + 1, int(u.grid.y) - 1);
+        float f = lf - float(l0);
+        uint base = 0u;
+        for (int l = 0; l < l0; ++l) { uint ns = uint(int(u.grid.x) >> l); base += 12u * ns * ns; }
+        int ns0 = int(u.grid.x) >> l0;
+        float v0 = carte.v[base + ang2pixNest(ns0, dir)];
+        float v1 = v0;
+        if (l1 != l0) v1 = carte.v[base + 12u * uint(ns0) * uint(ns0) + ang2pixNest(ns0 >> 1, dir)];
+        val = isnan(v0) ? v1 : (isnan(v1) ? v0 : mix(v0, v1, f));
+    }
     vec3 c;
     if (isnan(val)) {      /* pas de mesure : hachures, une ligne sur huit pixels de l'écran */
         float h = mod(gl_FragCoord.x + gl_FragCoord.y, 8.0);
         c = h < 1.5 ? vec3(0.22) : vec3(0.04);
     } else {
         float t;
-        if (u.scale.z > 0.5) t = val > 0.0 ? (log(val) - log(u.scale.x)) / (log(u.scale.y) - log(u.scale.x)) : 0.0;
+        if (u.scale.z > 1.5) {      /* asinh : logarithmique pour les grandes valeurs, linéaire autour de zéro (cartes à valeurs
+                                       négatives mesurées, par exemple Planck dont le monopôle est retiré) ; douceur u.proj.z */
+            float k = u.proj.z;
+            t = (asinh(val / k) - asinh(u.scale.x / k)) / (asinh(u.scale.y / k) - asinh(u.scale.x / k));
+        } else if (u.scale.z > 0.5) t = val > 0.0 ? (log(val) - log(u.scale.x)) / (log(u.scale.y) - log(u.scale.x)) : 0.0;
         else t = (val - u.scale.x) / (u.scale.y - u.scale.x);
         c = inferno(clamp(t, 0.0, 1.0));
     }
