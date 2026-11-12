@@ -39,9 +39,9 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 - Fini quand : test `pipeline/sources/test_build_cf4.py` (M31 → PGC 2557, M33 → 5818, NGC 4258 → 39600, refus de l'arrière-plan de NGC 3274, aucun doublon) ; test `app/test/lot_s.py` : fiches de NGC 4258 et de M31 avec mesure, précision, méthodes et source, 20 galaxies proches associées portent la mesure, une galaxie sans mesure n'a pas de ligne vide ; critiques PASSE.
 
 ### S4 — Laniakea (A2)
-- Après : la frontière du bassin d'attraction de la Voie lactée est tracée en points bleu clair entre 10^23,8 et 10^25,8 m, avec le nom « Laniakea (bassin d'attraction) ».
+- Après : la frontière du bassin d'attraction de la Voie lactée est tracée en points bleu clair entre 10^23,8 et 10^25,8 m, avec le nom « Laniakea : frontière en bleu » posé sur l'attracteur publié.
 - Données : Dupuy et Courtois 2023 (A&A 678, A176), grille des bassins d'attraction 128³ du champ Cosmicflows-4 (cube de 1000 Mpc/h). `pipeline/sources/build_laniakea.py` → `app/gen/laniakea.js` (47 ko, 2 898 faces de frontière).
-- Contrôles du script : le tableau est rangé (SGZ, SGY, SGX) ; c'est la seule orientation sur 48 où les six attracteurs de la table 1 tombent dans leur bassin, et les six volumes égalent la table à 3 % près. Conversion vers la page vérifiée sur Coma, Persée et la Vierge (moins de 2,5° d'écart).
+- Contrôles du script : le tableau est rangé (SGZ, SGY, SGX) ; c'est la seule orientation sur 48 où les six attracteurs de la table 1 tombent dans leur bassin, et les six volumes égalent la table à 3 % près. Conversion vers la page contrôlée dans le script, de façon bloquante, sur Coma, Persée et la Vierge tels que la page les place (2,5°, 1,3° et 2,1° d'écart ; seuil 4°). L'unicité de l'orientation (1 sur 48) est aussi testée par le script.
 - Unités : Mpc/h convertis avec h = 0,674 (H0 de la page) pour coïncider avec les galaxies placées par leur décalage vers le rouge ; avec le H0 de Cosmicflows-4 (74,6), 10 % plus près. Dit dans « Ce qui est vrai ici ».
 - Pas fait : les courants de vitesse eux-mêmes (flèches), les autres bassins (Apus, Shapley…).
 - Fini quand : test `app/test/lot_s.py` (points visibles à 10^24,95 m et masqués dans le système solaire, nom sur ordinateur) ; critiques PASSE.

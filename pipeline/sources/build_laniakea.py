@@ -20,6 +20,7 @@ tout serait 10 % plus près : écart dit dans la fiche.
 Usage : python pipeline/sources/build_laniakea.py <dossier_raw>   (venv avec astropy)
 """
 import base64
+import itertools
 import json
 import math
 import os
@@ -39,6 +40,43 @@ RX = np.array([[1, 0, 0], [0, math.cos(EPS), math.sin(EPS)], [0, -math.sin(EPS),
 ATTRACTEURS = {1: ('Laniakea', (-62, -8, 39), 1.9), 2: ('Apus', (-125, -23, -31), 9.5), 3: ('Hercule', (-39, 70, 78), 3.1),
                4: ('Lepus', (-62, -39, -109), 8.1), 5: ('Persée-Poissons', (47, -23, -31), 4.8), 6: ('Shapley', (-141, 62, -16), 7.9)}
 # Dupuy et Courtois 2023, table 1, reconstruction « galaxies » : attracteur SGX, SGY, SGZ (Mpc/h), volume (10^6 (Mpc/h)^3)
+
+
+def place_attracteurs(b):
+    """Nombre d'attracteurs publiés qui tombent dans le bassin de leur étiquette."""
+    pas = COTE / N
+    return sum(int(b[tuple(int(math.floor(p[k] / pas + N / 2)) for k in range(3))]) == lab for lab, (_, p, _) in ATTRACTEURS.items())
+
+
+def orientation_unique(brut):
+    """Parmi les 48 orientations du tableau, seule (SGZ, SGY, SGX) -> transposition (2, 1, 0) sans retournement
+    doit placer les six attracteurs dans leur bassin."""
+    bonnes = []
+    for perm in itertools.permutations(range(3)):
+        for fl in itertools.product((False, True), repeat=3):
+            b = np.transpose(brut, perm)
+            for k in range(3):
+                if fl[k]:
+                    b = np.flip(b, k)
+            if place_attracteurs(b) == len(ATTRACTEURS):
+                bonnes.append((perm, fl))
+    print('orientations plaçant les 6 attracteurs :', bonnes)
+    if bonnes != [((2, 1, 0), (False, False, False))]:
+        raise SystemExit('orientation non unique ou différente : rien écrit')
+
+
+def controle_conversion():
+    """La conversion supergalactique -> page doit retrouver la direction des amas que la page place déjà (DATA.FAR)."""
+    s = open(os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data.js'), encoding='utf-8').read()
+    far, _ = json.JSONDecoder().raw_decode(s[s.index('"FAR":') + 6:])
+    page = {f['n']: np.array(f['pos']) for f in far}
+    for nom, sg in (('Amas de Coma', (-2.6, 70.0, 10.7)), ('Amas de Persée', (50.0, -10.0, -12.0)), ('Amas de la Vierge', (-3.0, 15.0, -1.0))):
+        a = sg_vers_page(np.array([sg]))[0]
+        g = page[nom]
+        ang = math.degrees(math.acos(float(a @ g / np.linalg.norm(a) / np.linalg.norm(g))))
+        print('  %-18s écart de direction %.1f°' % (nom, ang))
+        if ang > 4.0:
+            raise SystemExit('conversion vers la page non confirmée : rien écrit')
 
 
 def controle(b):
@@ -62,8 +100,11 @@ def sg_vers_page(xyz_mpc_h):
 
 def main(raw):
     dossier = os.path.join(raw, 'cf4grid')
-    b = np.transpose(fits.getdata(os.path.join(dossier, 'CF4_new_128-z008_BoA.fits')).astype(int), (2, 1, 0))   # -> (SGX, SGY, SGZ)
+    brut = fits.getdata(os.path.join(dossier, 'CF4_new_128-z008_BoA.fits')).astype(int)
+    orientation_unique(brut)
+    b = np.transpose(brut, (2, 1, 0))   # -> (SGX, SGY, SGZ)
     controle(b)
+    controle_conversion()
     lan = b == ETIQUETTE_LANIAKEA
     c = N // 2
     if not lan[c, c, c]:
@@ -94,10 +135,12 @@ def main(raw):
           % (lan.sum(), r_eq, len(bord), len(faces), np.round(centre_sg, 1)))
     pos = sg_vers_page(sg).astype('<f4')
     centre = sg_vers_page(centre_sg[None, :])[0]
+    attracteur = sg_vers_page(np.array([ATTRACTEURS[1][1]], dtype=float))[0]
     payload = {'LANIAKEA': {
         'pos': base64.b64encode(np.ascontiguousarray(pos).tobytes()).decode(),   # Mpc comobiles, écliptique J2000
         'n': int(len(pos)),
         'centre': [round(float(x), 2) for x in centre],
+        'attracteur': [round(float(x), 2) for x in attracteur],   # Dupuy et Courtois 2023, table 1 : [-62, -8, 39] Mpc/h
         'r_eq_mpc_h': round(float(r_eq), 1),
         'cellule_mpc_h': pas,
         'src': 'Dupuy et Courtois 2023 (A&A 678, A176), bassins d’attraction du champ de vitesses Cosmicflows-4',
