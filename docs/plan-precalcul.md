@@ -69,3 +69,11 @@ Conséquence pour l'affichage : au-delà de l'horizon, l'appli montre le nuage d
 - Les deux publications sont reproduites. Avec les mesures les plus récentes (wu2026), en vrais Ga (l'unité de temps du carnet vaut 0,978 Ga) : la fusion a lieu dans 90 % des cas. Dates : 5 % → 4,43 ; 16 % → 4,89 ; médiane 6,38 ; 84 % → 7,63 ; 95 % → 8,52. M33 rejoint M31 dans 19 % des cas ; le Grand Nuage est absorbé par la Voie lactée dans 99,7 %.
 - Notre rejeu R9 (fusion à 5,44 Ga, avec le mouvement propre central de Wu et al. 2025) tombe au 28ᵉ centile des cas qui fusionnent : c'est un scénario plausible. Réserve : R9 date la fusion à la coalescence des centres, les clones à un passage sous 20 kpc.
 - La limite vient des mesures. L'erreur sur le mouvement propre de M31 (±8 µas/an) fait varier la date de fusion de ±1,4 Ga (16 à 84 %). Plus de particules n'y change rien.
+
+### Fusion à 3 M de particules : crédibilité (12/11/2026) [mesuré, pipeline/fusion/analyse_forme.py]
+- Disques de départ : aplatissement c/a = 0,18 et 0,19 (Voie lactée, M31), épaisseur médiane 0,35 et 0,40 kpc, rayon médian 4,2 et 4,8 kpc. Avant la rencontre, ils s'épaississent lentement : 0,55 kpc à 4 Ga, chauffage numérique et marées.
+- Rencontre : premier passage à 4,64 Ga, à 2,4 kpc (presque de face, vitesse de côté de Wu et al. 2025 : 34 km/s). Centres confondus à 5,42 à 5,7 Ga. Littérature : van der Marel et al. 2012, premier passage 3,9 Ga et fusion 5,9 Ga ; Cox & Loeb 2008, fusion vers 5 Ga. Clones Wu 2026 : le premier passage sous 20 kpc tombe au 10ᵉ centile des cas qui fusionnent.
+- Reste : elliptique triaxiale (b/a 0,8, c/a 0,6), profil de Sérsic n = 3,9 et Re = 6,1 kpc (proche de la loi de de Vaucouleurs, n = 4), comme le reste « Milkomeda » de Cox & Loeb 2008. Plus de disque ni de bras : c'est le résultat attendu, pas un défaut.
+- Soleil à 10 Ga : à 67 kpc du centre du reste. Cox & Loeb 2008 le trouvent le plus souvent au-delà de 20 kpc.
+- Défaut réel : seules 30 000 étoiles sur 3 M de particules (1 %) étaient gardées dans les images. Calcul relancé avec --toutes (1 M d'étoiles, ~3 Go), θ 0,7 comme le calcul du fil natif, et la composante de chaque étoile (disque ou bulbe) dans composantes.bin.
+- Limites : disques de départ lisses (modèle d'équilibre AGAMA, sans bras mesurés) ; un seul scénario (mouvement propre central). La fourchette des dates vient des clones.
