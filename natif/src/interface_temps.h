@@ -78,8 +78,13 @@ void deepTimeNote(const Sim& sim) {
     gaiaMotionNote(sim);
     if (!sim.deepTime()) return;
     if (sim.starShare() > 0) {
-        ImGui::TextDisabled("Étoiles : position de départ mesurée, orbite autour de la Galaxie calculée dans un potentiel [modèle] ; "
-                            "fiable sur environ 100 millions d'années pour les étoiles du disque, indicative au-delà.");
+        // 345c11d : orbite exacte (intégrée pas à pas sur la carte graphique) pour le catalogue principal ; Gaia en épicycles
+        // tant que le fil Gaia n'a pas basculé. Limite mesurée par le fil physique : le modèle de la Galaxie (±2,5 % sur la
+        // rotation, soit 1,6 kpc et 10 degrés d'écart à 100 millions d'années).
+        ImGui::TextDisabled("Étoiles du catalogue principal : position de départ mesurée, orbite exacte calculée dans un potentiel de la Galaxie [modèle].");
+        if (sim.hasGaia) ImGui::TextDisabled("Étoiles Gaia : départ mesuré, orbite approchée (épicycles) dans le même potentiel.");
+        ImGui::TextDisabled("Au-delà d'environ 100 millions d'années, la limite est ce modèle de la Galaxie : ±2,5 %% sur la rotation, "
+                            "soit environ 5 000 années-lumière et 10 degrés d'écart à 100 millions d'années.");
         if (kRates[sim.rate].yearsPerSecond < 1.0e7 && !sim.paused)
             ImGui::TextDisabled("Un tour de la Galaxie prend environ 230 millions d'années : à cette vitesse, la rotation est réelle mais invisible.");
     }
@@ -150,12 +155,20 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     dateJumpPopup(sim, ui);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);      // les remarques passent à la ligne : la barre garde sa largeur
     if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");
-    else if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim))
-        ImGui::TextDisabled("Planètes non montrées à cette date : leur calcul couvre 10 millions d'années avant et après aujourd'hui.");
-    else if (!sim.ephemValid && !sim.outer) ImGui::TextDisabled("Hors de 1550-2650 (plage des éphémérides de la NASA) : calcul des planètes en préparation.");
-    else if (!sim.ephemValid)
-        ImGui::TextDisabled("Hors de 1550-2650 : planètes calculées ici (gravité mutuelle partie des éphémérides de la NASA) ; lunes et orbites non montrées.");
-    deepTimeNote(sim);
+    // Ce qui ne vaut qu'à une autre date qu'aujourd'hui : rangé sous un titre qui se déplie (la barre restait sinon
+    // haute de sept paragraphes en temps profond). Seul ce qui est en cours reste toujours visible.
+    if (sim.orbitLagSteps > 0)
+        ImGui::TextDisabled("Calcul exact des orbites en cours : encore %s millions d'années à parcourir.", frInt(static_cast<double>(sim.orbitLagSteps)).c_str());
+    if (ui.openNotes) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+    if (std::fabs(sim.years - kStartYears) >= 1.0 && ImGui::CollapsingHeader("Ce qui est mesuré, calculé ou supposé à cette date")) {
+        if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim))
+            ImGui::TextDisabled("Planètes non montrées à cette date : leur calcul couvre 10 millions d'années avant et après aujourd'hui.");
+        else if (!sim.ephemValid && !sim.outer) ImGui::TextDisabled("Hors de 1550-2650 (plage des éphémérides de la NASA) : calcul des planètes en préparation.");
+        else if (!sim.ephemValid)
+            ImGui::TextDisabled("Hors de 1550-2650 : planètes calculées ici (gravité mutuelle partie des éphémérides de la NASA) ; lunes et orbites non montrées.");
+        else ImGui::TextDisabled("Planètes, Lune et lunes : éphémérides de la NASA, lues telles quelles.");
+        deepTimeNote(sim);
+    }
     ImGui::PopTextWrapPos();
     ui.timeW = ImGui::GetWindowWidth();
     ui.timeBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
