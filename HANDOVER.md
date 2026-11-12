@@ -149,3 +149,8 @@ Les formats binaires des fichiers en flux sont définis par leur décodeur (`loa
 - Écart au 99ᵉ centile : 0,25 mag près du Soleil, jusqu'à environ 0,7 mag quand la caméra est à 1,5 kpc ou plus (revue indépendante, 3000 trajets par position).
 - Coût : jusqu'à 2 × 66 lectures de texture par étoile (sautées pour les étoiles à plus de 3 magnitudes sous la coupure) ; en rendu logiciel, images/s de 11–20 à 9–10 avec la poussière (59 000 étoiles). Étoiles Gaia en flux : non mesuré (millions de points, à surveiller sur téléphone).
 - Pas fait : les nuages eux-mêmes ne brillent pas (pas de lumière diffusée ni d'émission) ; fond (Voie lactée en points, panorama) non assombri ; au-delà de 1,25 kpc ou de 406 pc du plan : poussière inconnue ici.
+
+## Vue « telle que la lumière nous arrive » (S7, 12 novembre 2026)
+- Case dans le panneau Cosmologie (`c-lc`). Les galaxies et quasars des relevés (embarqués et en flux) sont placés à la distance qu'ils avaient quand ils ont émis la lumière reçue aujourd'hui : a(émission) × χ = χ / (1 + z), la distance angulaire. Calcul : `app/src/29_cone.js` (`surveyLutOf`, même table que la vue normale, multipliée par a). Fiche : « Distance quand sa lumière est partie » ; la vitesse d'éloignement reste celle d'aujourd'hui. Ligne de provenance qui le dit.
+- Vérifié (`app/test/cone.test.js`) contre astropy (mêmes paramètres que la page) : écart < 0,5 % de z = 0,1 à 3 ; distance la plus grande à z = 1,59 (1794 Mpc), au-delà les galaxies reviennent plus près.
+- Pas changé, et dit à l'écran : fond diffus et horizons restent à leur distance d'aujourd'hui ; galaxies proches et Groupe local inchangés (écart < 1 % à leur distance). Vue pensée pour la date d'aujourd'hui.
