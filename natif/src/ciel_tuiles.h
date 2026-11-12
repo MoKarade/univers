@@ -4,11 +4,17 @@
 // eROSITA : pixel de 6,4″ à l'ordre HiPS 6) font des centaines de Go : on ne charge que les tuiles qui sont à l'écran,
 // au niveau de finesse qu'un pixel de l'écran peut montrer. Le reste du ciel reste sur la carte entière, plus grossière.
 //
-// Fichiers (pipeline/natif/tuiles_bandes.py), dans un dossier par relevé :
-//   ordre_K.bin = « UNIVTIL1 », 4 entiers 32 bits (K, largeur w d'une tuile, nombre de tuiles 12·4^K, 0), une table de
-//   12·4^K décalages 64 bits (0 = tuile absente : rien de mesuré là), puis les tuiles. Une tuile = w² valeurs float16
-//   dans l'ordre HEALPix emboîté : c'est exactement le morceau [n·w², (n+1)·w²) de la carte Nside = w·2^K. NaN = pas de
-//   mesure. Les ordres plus grossiers que le dernier sont la moyenne des 4 enfants mesurés (somme du mesuré).
+// Fichiers (pipeline/natif/tuiles_bandes.py). Les tuiles font des centaines de Go : elles sont sur le Google Drive de
+// l'utilisateur (lecteur G:, en diffusion : Drive les télécharge à la demande et les garde en cache). Sur le PC, seul
+// un index par ordre :
+//   index (PC)   : <dossier de la carte>/tuiles/<relevé>/ordre_K.idx = « UNIVTIL2 », 4 entiers 32 bits (K, largeur w
+//                  d'une tuile, nombre de tuiles 12·4^K, g), puis 12·4^K entiers 32 bits : rang de la tuile dans son
+//                  paquet + 1, ou 0 si la tuile est absente (rien de mesuré là).
+//   paquets      : <racine>/<relevé>/ordre_K/p######.bin, ###### = numéro de tuile >> 2g (les 4^g tuiles d'un paquet
+//                  sont voisines sur le ciel) ; les tuiles présentes bout à bout, sans en-tête.
+// Une tuile = w² valeurs float16 dans l'ordre HEALPix emboîté : c'est exactement le morceau [n·w², (n+1)·w²) de la
+// carte Nside = w·2^K. NaN = pas de mesure. Les ordres plus grossiers que le dernier sont la moyenne des 4 enfants
+// mesurés (somme du mesuré).
 //
 // Sur la carte graphique : une réserve de N emplacements de tuile, et une table de pages (un entier par tuile possible de
 // chaque ordre : 0 = pas chargée, sinon emplacement + 1). Le shader descend du niveau voulu vers le plus grossier chargé,
@@ -65,36 +71,37 @@ class SkyTileStream {
 public:
     bool active = false;          // des tuiles fines existent pour la carte chargée
     uint32_t width = 0, logWidth = 0, orderMin = 0, orderMax = 0;
-    std::string dir;
+    std::string dir, root;
     uint32_t shownOrder = 0;      // ordre le plus fin chargé au centre de l'écran (0 : aucune tuile fine)
     uint32_t pending() const { return static_cast<uint32_t>(inFlight_); }
 
-    // Cherche les fichiers ordre_K.bin du relevé : on ne garde que les ordres plus fins que la carte entière (Nside > baseNside).
-    bool open(const Gpu& g, const std::string& tileDir, uint32_t baseNside, uint32_t slots = 1024) {
+    // Cherche les index ordre_K.idx du relevé dans indexDir ; les paquets sont dans bundleRoot. On ne garde que les ordres
+    // plus fins que la carte entière (Nside > baseNside).
+    bool open(const Gpu& g, const std::string& indexDir, const std::string& bundleRoot, uint32_t baseNside, uint32_t slots = 1024) {
         close(g);
         std::error_code ec;
-        if (!std::filesystem::is_directory(tileDir, ec)) return false;
+        if (!std::filesystem::is_directory(indexDir, ec)) return false;
         std::vector<Level> lv;
         uint32_t w = 0;
         for (uint32_t k = 0; k <= 12; ++k) {
-            const std::string p = tileDir + "/ordre_" + std::to_string(k) + ".bin";
-            std::ifstream f(p, std::ios::binary);
+            std::ifstream f(indexDir + "/ordre_" + std::to_string(k) + ".idx", std::ios::binary);
             if (!f) continue;
             char magic[8];
             uint32_t h[4];
             f.read(magic, 8);
             f.read(reinterpret_cast<char*>(h), sizeof h);
-            if (!f || std::memcmp(magic, "UNIVTIL1", 8) != 0 || h[0] != k || h[1] == 0 || (h[1] & (h[1] - 1)) != 0) continue;
+            if (!f || std::memcmp(magic, "UNIVTIL2", 8) != 0 || h[0] != k || h[1] == 0 || (h[1] & (h[1] - 1)) != 0 || h[3] > k) continue;
             if (static_cast<uint64_t>(h[1]) << k <= baseNside) continue;
             if (w && h[1] != w) continue;      // une seule largeur de tuile par relevé
-            w = h[1];
             Level L;
             L.order = k;
-            L.path = p;
-            L.offsets.resize(12ull << (2 * k));
-            if (h[2] != L.offsets.size()) continue;
-            f.read(reinterpret_cast<char*>(L.offsets.data()), static_cast<std::streamsize>(L.offsets.size() * 8));
+            L.group = h[3];
+            L.path = bundleRoot + "/ordre_" + std::to_string(k);
+            L.rank.resize(12ull << (2 * k));
+            if (h[2] != L.rank.size()) continue;
+            f.read(reinterpret_cast<char*>(L.rank.data()), static_cast<std::streamsize>(L.rank.size() * 4));
             if (!f) continue;
+            w = h[1];
             lv.push_back(std::move(L));
         }
         if (lv.empty()) return false;
@@ -107,7 +114,8 @@ public:
         while ((1u << logWidth) < w) ++logWidth;
         orderMin = levels_.front().order;
         orderMax = levels_.back().order;
-        dir = tileDir;
+        dir = indexDir;
+        root = bundleRoot;
         tileBytes_ = static_cast<VkDeviceSize>(w) * w * 2;
         slots_ = slots;
         pages_ = 4ull * ((1ull << (2 * (orderMax + 1))) - (1ull << (2 * orderMin)));      // Σ 12·4^k, k = orderMin … orderMax
@@ -121,7 +129,7 @@ public:
         slotSeen_.assign(slots_, 0);
         state_.clear();
         stop_ = false;
-        worker_ = std::thread([this] { run(); });
+        for (auto& t : workers_) t = std::thread([this] { run(); });
         active = true;
         return true;
     }
@@ -161,7 +169,7 @@ public:
             auto it = state_.find(key);
             if (it == state_.end()) {
                 const Level& L = level(keyOrder(key));
-                state_[key] = L.offsets[keyTile(key)] == 0 ? kAbsent : kLoading;      // absente : rien de mesuré là
+                state_[key] = L.rank[keyTile(key)] == 0 ? kAbsent : kLoading;      // absente : rien de mesuré là
             } else if (it->second >= 0) {
                 slotSeen_[it->second] = frame_;
             }
@@ -176,7 +184,7 @@ public:
             for (uint64_t key : need) {
                 auto it = state_.find(key);
                 if (it == state_.end() || it->second != kLoading) continue;
-                if (running_ && runningKey_ == key) continue;
+                if (std::find(runningKeys_.begin(), runningKeys_.end(), key) != runningKeys_.end()) continue;
                 bool read = false;
                 for (const Read& r : done_)
                     if (r.key == key) { read = true; break; }
@@ -213,7 +221,8 @@ public:
             stop_ = true;
         }
         cv_.notify_all();
-        if (worker_.joinable()) worker_.join();
+        for (auto& t : workers_)
+            if (t.joinable()) t.join();
         vkDeviceWaitIdle(g.dev);
         vkUnmapMemory(g.dev, page_.mem);
         vkUnmapMemory(g.dev, staging_.mem);
@@ -223,6 +232,7 @@ public:
         levels_.clear();
         queue_.clear();
         done_.clear();
+        runningKeys_.clear();
         state_.clear();
         running_ = inFlight_ = 0;
         active = false;
@@ -231,9 +241,9 @@ public:
 
 private:
     struct Level {
-        uint32_t order = 0;
-        std::string path;
-        std::vector<uint64_t> offsets;
+        uint32_t order = 0, group = 0;
+        std::string path;                 // dossier des paquets de cet ordre
+        std::vector<uint32_t> rank;       // rang dans le paquet + 1 ; 0 = absente
     };
     struct Read {
         uint64_t key;
@@ -254,12 +264,12 @@ private:
     std::unordered_map<uint64_t, int> state_;      // clé → emplacement (≥ 0), kLoading ou kAbsent
     uint64_t frame_ = 0;
 
-    std::thread worker_;
+    std::thread workers_[4];      // plusieurs lectures en même temps : chacune peut attendre le réseau (Drive)
     std::mutex mu_;
     std::condition_variable cv_;
     std::deque<uint64_t> queue_;
     std::vector<Read> done_;
-    uint64_t runningKey_ = kNone;
+    std::vector<uint64_t> runningKeys_;
     int running_ = 0, inFlight_ = 0;
     bool stop_ = false;
 
@@ -279,10 +289,8 @@ private:
         return makeKey(k, (static_cast<uint64_t>(face) << (2 * k)) + healpixInterleave(static_cast<uint32_t>(ix), static_cast<uint32_t>(iy)));
     }
 
-    // Fil de lecture : une tuile à la fois, depuis le fichier de son ordre.
+    // Fils de lecture : une tuile à la fois chacun, lue dans son paquet (sur le Drive : Drive la télécharge si besoin).
     void run() {
-        std::vector<std::ifstream> files(levels_.size());
-        for (size_t i = 0; i < levels_.size(); ++i) files[i].open(levels_[i].path, std::ios::binary);
         while (true) {
             uint64_t key;
             {
@@ -291,23 +299,26 @@ private:
                 if (stop_) return;
                 key = queue_.front();
                 queue_.pop_front();
-                runningKey_ = key;
-                running_ = 1;
+                runningKeys_.push_back(key);
+                ++running_;
             }
             Read r{key, {}};
-            const size_t li = keyOrder(key) - orderMin;
-            const uint64_t off = levels_[li].offsets[keyTile(key)];
-            std::ifstream& f = files[li];
-            f.clear();
-            f.seekg(static_cast<std::streamoff>(off));
-            r.data.resize(static_cast<size_t>(width) * width);
-            f.read(reinterpret_cast<char*>(r.data.data()), static_cast<std::streamsize>(tileBytes_));
-            if (!f) r.data.clear();
+            const Level& L = levels_[keyOrder(key) - orderMin];
+            const uint64_t tile = keyTile(key);
+            char name[32];
+            std::snprintf(name, sizeof name, "/p%06llu.bin", static_cast<unsigned long long>(tile >> (2 * L.group)));
+            std::ifstream f(L.path + name, std::ios::binary);
+            if (f) {
+                f.seekg(static_cast<std::streamoff>((L.rank[tile] - 1ull) * tileBytes_));
+                r.data.resize(static_cast<size_t>(width) * width);
+                f.read(reinterpret_cast<char*>(r.data.data()), static_cast<std::streamsize>(tileBytes_));
+                if (!f) r.data.clear();
+            }
             {
                 std::lock_guard<std::mutex> lk(mu_);
                 done_.push_back(std::move(r));
-                running_ = 0;
-                runningKey_ = kNone;
+                runningKeys_.erase(std::find(runningKeys_.begin(), runningKeys_.end(), key));
+                --running_;
             }
         }
     }

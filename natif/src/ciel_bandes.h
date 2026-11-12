@@ -208,8 +208,8 @@ public:
         info = in;
         loadSources(g, path);
         tiles_.close(g);
-        const std::string tdir = tileDir(path, in.key);
-        if (!tdir.empty()) tiles_.open(g, tdir, in.nside);
+        std::string tindex, troot;
+        if (tileDirs(path, in.key, tindex, troot)) tiles_.open(g, tindex, troot, in.nside);
         writeSets(g, total * 4);
         loaded = true;
         return true;
@@ -294,20 +294,23 @@ public:
         return true;
     }
 
-    // Dossier des tuiles fines d'une bande : « tuiles/<nom> » à côté de la carte, ou dans le dossier nommé par le fichier
-    // « tuiles_dossier.txt » à côté de la carte (les tuiles font des centaines de Go : elles restent où elles ont été faites).
-    static std::string tileDir(const std::string& mapPath, const std::string& key) {
-        if (key.empty()) return {};
+    // Tuiles fines d'une bande : index dans « tuiles/<nom> » à côté de la carte ; paquets dans <racine>/<nom>, la racine
+    // étant la première ligne de « tuiles_dossier.txt » à côté de la carte (le Google Drive), sinon à côté de l'index.
+    static bool tileDirs(const std::string& mapPath, const std::string& key, std::string& index, std::string& root) {
+        if (key.empty()) return false;
         const std::filesystem::path dir = std::filesystem::path(mapPath).parent_path();
         std::error_code ec;
-        if (std::filesystem::is_directory(dir / "tuiles" / key, ec)) return (dir / "tuiles" / key).string();
+        if (!std::filesystem::is_directory(dir / "tuiles" / key, ec)) return false;
+        index = (dir / "tuiles" / key).string();
+        root = index;
         std::ifstream f(dir / "tuiles_dossier.txt");
-        std::string root;
-        if (f && std::getline(f, root)) {
-            while (!root.empty() && (root.back() == '\r' || root.back() == ' ')) root.pop_back();
-            if (!root.empty() && std::filesystem::is_directory(std::filesystem::path(root) / key, ec)) return (std::filesystem::path(root) / key).string();
+        std::string line;
+        if (f && std::getline(f, line)) {
+            if (line.size() >= 3 && static_cast<unsigned char>(line[0]) == 0xEF) line = line.substr(3);      // BOM UTF-8
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+            if (!line.empty()) root = (std::filesystem::path(line) / key).string();
         }
-        return {};
+        return true;
     }
 
     void writeSets(const Gpu& g, VkDeviceSize mapBytes) {
