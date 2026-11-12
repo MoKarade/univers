@@ -22,12 +22,14 @@
 
 namespace completude {
 
-enum class Nature { Mesure, Calcule, Estimation, Inconnu };
+enum class Nature { Mesure, Calcule, Ajuste, Suppose, Estimation, Inconnu };
 
 inline const char* motNature(Nature n) {
     switch (n) {
     case Nature::Mesure: return "mesuré";
     case Nature::Calcule: return "calculé";
+    case Nature::Ajuste: return "ajusté sur des mesures";
+    case Nature::Suppose: return "supposé";
     case Nature::Estimation: return "estimation publiée, non mesurée";
     default: return "inconnu";
     }
@@ -49,6 +51,7 @@ constexpr double kCometesConnues = 4088;                   // JPL SBDB, requête
 constexpr int kSondesSortie = 5;                           // NASA : Pioneer 10 et 11, Voyager 1 et 2, New Horizons (sortie du système solaire)
 constexpr double kObjets10pc = 540;                        // Reylé et al. 2021, A&A 650 A201 : étoiles, naines brunes, exoplanètes
 constexpr double kSourcesGaiaDr3 = 1811709771;             // ESA, Gaia DR3 (cosmos.esa.int/web/gaia/dr3)
+constexpr double kGaiaVitessesRadiales = 25878867;         // gaia.bin du 12/11/2026 : vitesses radiales mesurées (docs/gaia-voie-lactee.md)
 constexpr double kEtoilesVoieLacteeMin = 1.0e11, kEtoilesVoieLacteeMax = 4.0e11;   // NASA Goddard (Blueshift) : estimation
 constexpr double kGalaxiesGroupeLocal = 113;               // Local Volume Database v1.1.2 (Pace, 04/11/2026) : confirmées, < 1 Mpc
 constexpr double kGalaxiesMin = 2.0e11, kGalaxiesMax = 2.0e12;     // Lauer et al. 2021 (centaines de milliards) ; Conselice et al. 2016
@@ -69,6 +72,8 @@ struct Comptes {
     int sondes = 0;                    // sondes dont la trajectoire réelle est chargée
     uint64_t etoiles = 0;
     uint64_t etoilesCatalogue[3] = {}; // principal (HYG / Hipparcos), Gaia embarqué, Gaia en flux
+    uint64_t etoilesGaia = 0;          // gaia.bin (Gaia DR3, parallaxe > 10 fois son erreur) quand il est chargé ; 0 sinon
+    bool voieLactee = false;           // Voie lactée dessinée en volume (voie_lactee.bin)
     uint64_t etoiles10pc = 0;
     uint64_t doublons10pc = 0;         // paires de deux catalogues différents à moins de kDoublonLy
     uint64_t principalSansVitesseRadiale = 0;      // composante radiale nulle (< 0,2 km/s) : vitesse radiale non mesurée
@@ -115,9 +120,12 @@ inline Comptes compterEtoiles(Comptes c, const float* x, const float* y, const f
 }
 
 // Astres de l'appli (Sim de simulation.h, gardé en paramètre pour ne pas dépendre de ses détails) et fichier d'étoiles.
+// etoilesGaia : nombre d'étoiles de gaia.bin (GaiaRenderer::count) ; pris seulement si sim.hasGaia.
 template <class SimT>
-Comptes compter(const SimT& sim, uint64_t galaxiesReleves) {
+Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia = 0) {
     Comptes c;
+    c.etoilesGaia = sim.hasGaia ? etoilesGaia : 0;
+    c.voieLactee = sim.hasMilkyWay;
     c.asteroides = sim.asteroidCount;
     c.galaxiesReleves = galaxiesReleves;
     for (const auto& b : sim.bodies) {
@@ -248,27 +256,53 @@ inline Echelle voisinage(const Comptes& c) {
     return e;
 }
 
+// Étoiles de la Voie lactée réellement dessinées : avec gaia.bin, le catalogue principal (noms, fiches ; Gaia en a retiré
+// les doublons) et les 98 millions d'étoiles Gaia ; sans lui, tout etoiles.bin.
+inline double etoilesDessinees(const Comptes& c) {
+    return c.etoilesGaia ? double(c.etoilesCatalogue[0] + c.etoilesGaia) : double(c.etoiles);
+}
+
 inline Echelle voieLactee(const Comptes& c) {
     Echelle e;
     e.nom = "Voie lactée";
-    e.part = double(c.etoiles) / kSourcesGaiaDr3;
-    e.complet = pourcent(e.part) + " des sources de Gaia DR3 (" + entier(double(c.etoiles)) + " étoiles)";
-    e.precision = "distance à mieux que 20 % (Gaia : parallaxe 5 fois son erreur)";
-    e.mesure = "positions mesurées ; la Voie lactée elle-même n'est pas dessinée";
-    e.lignes = {
-        {"Étoiles présentes", entier(double(c.etoiles)) + " (principal " + entier(double(c.etoilesCatalogue[0])) + ", Gaia " +
-                                  entier(double(c.etoilesCatalogue[1] + c.etoilesCatalogue[2])) + ")", Nature::Mesure, "etoiles.bin"},
-        {"Sources de Gaia DR3", sur(double(c.etoiles), kSourcesGaiaDr3), Nature::Mesure, "ESA, Gaia DR3"},
-        {"Étoiles de la Voie lactée", pourcent(c.etoiles / kEtoilesVoieLacteeMax) + " à " + pourcent(c.etoiles / kEtoilesVoieLacteeMin) +
-                                          " de 100 à 400 milliards", Nature::Estimation, "NASA Goddard (estimation, aucun recensement)"},
-        {"Erreur de distance, Gaia", "< 20 % en flux, < 17 % embarqué (1 σ)", Nature::Mesure, "sélection parallax_over_error > 5 et > 6 (pipeline/fetch_*.py)"},
-        {"Erreur de distance, catalogue principal", "non gardée dans le fichier", Nature::Inconnu, "HYG (Hipparcos)"},
-    };
-    e.manques = {
-        "Le reste de Gaia DR3 (" + entier(kSourcesGaiaDr3 - double(c.etoiles)) + " sources)",
-        "Garder l'erreur de distance de chaque étoile dans le fichier",
-        "Dessiner la Voie lactée (disque, bras, gaz) d'après des cartes mesurées",
-    };
+    const double n = etoilesDessinees(c);
+    e.part = n / kSourcesGaiaDr3;
+    e.complet = pourcent(e.part) + " des sources de Gaia DR3 (" + entier(n) + " étoiles)";
+    e.precision = c.etoilesGaia ? "distance à mieux que 10 % (Gaia : parallaxe 10 fois son erreur)"
+                                : "distance à mieux que 20 % (Gaia : parallaxe 5 fois son erreur)";
+    e.mesure = c.voieLactee ? "étoiles mesurées ; galaxie dessinée par un modèle ajusté sur des mesures (3 hypothèses)"
+                            : "étoiles mesurées ; la Voie lactée elle-même n'est pas dessinée";
+    if (c.etoilesGaia) {
+        e.lignes = {
+            {"Étoiles présentes", entier(n) + " (Gaia " + entier(double(c.etoilesGaia)) + ", catalogue principal " + entier(double(c.etoilesCatalogue[0])) + ")",
+             Nature::Mesure, "gaia.bin (Gaia DR3) et etoiles.bin"},
+            {"Sources de Gaia DR3", sur(n, kSourcesGaiaDr3), Nature::Mesure, "ESA, Gaia DR3"},
+            {"Erreur de distance, Gaia", "< 10 % (1 σ)", Nature::Mesure, "sélection parallaxe > 10 fois son erreur (pipeline/natif/gaia_telecharger.py)"},
+            {"Vitesse radiale mesurée", sur(kGaiaVitessesRadiales, double(c.etoilesGaia)) + " ; les autres : comptée nulle", Nature::Mesure,
+             "gaia.bin du 12/11/2026 (docs/gaia-voie-lactee.md)"},
+        };
+    } else {
+        e.lignes = {
+            {"Étoiles présentes", entier(n) + " (principal " + entier(double(c.etoilesCatalogue[0])) + ", Gaia " +
+                                      entier(double(c.etoilesCatalogue[1] + c.etoilesCatalogue[2])) + ")", Nature::Mesure, "etoiles.bin"},
+            {"Sources de Gaia DR3", sur(n, kSourcesGaiaDr3), Nature::Mesure, "ESA, Gaia DR3"},
+            {"Erreur de distance, Gaia", "< 20 % en flux, < 17 % embarqué (1 σ)", Nature::Mesure, "sélection parallax_over_error > 5 et > 6 (pipeline/fetch_*.py)"},
+        };
+    }
+    e.lignes.push_back({"Étoiles de la Voie lactée", pourcent(n / kEtoilesVoieLacteeMax) + " à " + pourcent(n / kEtoilesVoieLacteeMin) + " de 100 à 400 milliards",
+                        Nature::Estimation, "NASA Goddard (estimation, aucun recensement)"});
+    e.lignes.push_back({"Erreur de distance, catalogue principal", "non gardée dans le fichier", Nature::Inconnu, "HYG (Hipparcos)"});
+    if (c.voieLactee) {
+        e.lignes.push_back({"Galaxie dessinée (disques, bulbe, barres, poussière)", "modèle publié, ajusté par d'autres sur des mesures", Nature::Ajuste,
+                            "Bland-Hawthorn et Gerhard 2016 ; Licquia et al. 2015 ; Reid et al. 2019 ; Edenhofer et al. 2024"});
+        e.lignes.push_back({"Partage de la lumière entre composantes", "au prorata des masses", Nature::Suppose, "docs/gaia-voie-lactee.md"});
+        e.lignes.push_back({"Lumière ajoutée par les bras", "disque doublé sur leur axe", Nature::Suppose, "docs/gaia-voie-lactee.md"});
+        e.lignes.push_back({"Largeur de la barre longue", "0,5 kpc", Nature::Suppose, "docs/gaia-voie-lactee.md"});
+    }
+    e.manques = {"Le reste de Gaia DR3 (" + entier(kSourcesGaiaDr3 - n) + " sources, dont celles à parallaxe moins sûre)",
+                 "Garder l'erreur de distance de chaque étoile dans le fichier"};
+    if (c.voieLactee) e.manques.push_back("Remplacer les trois hypothèses du modèle de la galaxie par des mesures");
+    else e.manques.push_back("Dessiner la Voie lactée (disque, bras, gaz) d'après des cartes mesurées");
     return e;
 }
 
