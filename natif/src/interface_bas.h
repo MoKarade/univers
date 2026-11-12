@@ -60,7 +60,10 @@ void whatYouSee(const Sim& sim) {
     } else if (sim.dist > 3000.0) {
         // gaia_agrege.bin (fil Gaia, docs/gaia-voie-lactee.md) : la lumière des autres sources Gaia, additionnée par case.
         if (sim.hasGaia && sim.gaiaCount) {
-            if (sim.hasGaiaAggregate) {
+            if (sim.hasGaiaAggregate && sim.deepTime()) {      // lumière additionnée : montrée seulement au présent (fil Gaia)
+                ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une, sur leur orbite ;", frInt(static_cast<double>(sim.gaiaCount)).c_str());
+                ImGui::TextDisabled("la lumière additionnée des autres sources Gaia n'est montrée qu'au présent.");
+            } else if (sim.hasGaiaAggregate) {
                 ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une ; le reste des sources Gaia est additionné par pixel, sans modèle.",
                                     frInt(static_cast<double>(sim.gaiaCount)).c_str());
             } else {
@@ -69,7 +72,7 @@ void whatYouSee(const Sim& sim) {
             }
             // Rayons : vus par capture seulement avec la lumière additionnée (erreur de distance jusqu'à 100 %) ; avec les seules
             // étoiles une à une (erreur < 10 %), aucun rayon visible à 60 000 al (comparaison du 12/11/2026).
-            if (sim.hasGaiaAggregate) raysNote();
+            if (sim.hasGaiaAggregate && !sim.deepTime()) raysNote();
         } else {
             ImGui::TextDisabled("Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
             ImGui::TextDisabled("car elle demanderait un modèle.");
@@ -222,6 +225,7 @@ void drawHelp(UiState& ui, float w, float h) {
     helpLine(ui, "Origine", "revenir au Soleil");
     helpLine(ui, "Espace", "arrêter ou faire avancer le temps");
     helpLine(ui, "Page préc. / suiv.", "temps plus rapide / plus lent");
+    helpLine(ui, "F2  F3", "lumière du ciel précédente / suivante (radio … gamma)");
     helpLine(ui, "F1", "afficher ou cacher cette aide");
     helpLine(ui, "Échap", "fermer la recherche ou un menu ; sinon quitter");
     ImGui::Spacing();
