@@ -23,6 +23,7 @@ Définition de « fini » validée par Marc, vérifiée ici sur cinq écrans : t
      (coupé s'il est long ; le toucher ouvre sa fiche avec la date et la source) ; tiroir fermé, l'âge de
      l'univers laisse sa ligne au bandeau tant qu'il est affiché (7 s), et reste visible tiroir ouvert.
      La chronologie s'ouvre aussi en touchant la date : ses commandes restent à deux touchers.
+     Téléphone en paysage : fiche ouverte, la barre des échelles s'efface (pincement ou « Aller à »).
   8. Fiche lisible : contraste du texte sur le fond de la fiche d'au moins 4,5, thème sombre et thème clair.
 
 Lancer : python3 app/build.py puis python3 app/test/ui_chevauchement.py [phone small land mid desk]
