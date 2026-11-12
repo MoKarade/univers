@@ -52,6 +52,22 @@ inline std::vector<double> distanceTable(const Params& p, double zMax, int steps
     return out;
 }
 
+// Facteur d'échelle a (1 aujourd'hui) à tGyr milliards d'années d'aujourd'hui (positif : avenir), en suivant
+// da/dt = a H0 E(a) par la méthode de Runge-Kutta d'ordre 4, pas de 2 millions d'années.
+inline double scaleFactorAt(const Params& p, double tGyr) {
+    const double h = p.h0 / 977.7922216807891;      // H0 en milliards d'années^-1
+    auto f = [&](double a) { return a * h * p.e(1.0 / a - 1.0); };
+    const int steps = static_cast<int>(std::ceil(std::fabs(tGyr) / 0.002));
+    if (steps == 0) return 1.0;
+    const double dt = tGyr / steps;
+    double a = 1.0;
+    for (int i = 0; i < steps; ++i) {
+        const double k1 = f(a), k2 = f(a + 0.5 * dt * k1), k3 = f(a + 0.5 * dt * k2), k4 = f(a + dt * k3);
+        a = std::max(a + dt / 6.0 * (k1 + 2 * k2 + 2 * k3 + k4), 1e-6);
+    }
+    return a;
+}
+
 // Âge de l'univers aujourd'hui, en milliards d'années : intégrale de da / (a H(a)) de 0 à 1.
 inline double ageGyr(const Params& p) {
     const int n = 20000;

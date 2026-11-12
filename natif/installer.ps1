@@ -36,6 +36,8 @@ foreach ($f in 'mar099s.bsp', 'jup365.bsp', 'sat441.bsp', 'nep097.bsp', 'plu060.
     $src = Join-Path (Split-Path $Ephem) $f
     if (Test-Path $src) { Copier-SiChange $src "$Cible\$f" }
 }
+# Calcul de la fusion avec Andromède (centres des galaxies, traceurs, étoiles affichées), s'il est là.
+if (Test-Path "$Donnees\fusion") { New-Item -ItemType Directory -Force "$Cible\fusion" | Out-Null; Get-ChildItem "$Donnees\fusion" -File | ForEach-Object { Copier-SiChange $_.FullName "$Cible\fusion\$($_.Name)" } }
 # Vue de départ : la ceinture d'Orion (étoile nommée de la page), si elle est dans le catalogue.
 $meta = Get-Content "$Cible\etoiles.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $orion = $meta.nommees | Where-Object { $_.n -like 'Alnilam*' } | Select-Object -First 1

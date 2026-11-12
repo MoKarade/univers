@@ -144,10 +144,11 @@ public:
     }
 
     // Recalcule la table des distances pour une cosmologie : toutes les galaxies sont replacées à l'image suivante.
-    void setCosmology(const cosmo::Params& p) {
+    // scale : facteur d'échelle de l'univers à la date montrée (1 aujourd'hui) : les distances grandissent avec lui.
+    void setCosmology(const cosmo::Params& p, double scale = 1.0) {
         if (!ready) return;
         const auto t = cosmo::distanceTable(p, kGalaxyZMax, 256);
-        for (int k = 0; k < 260; ++k) mapped_[k] = static_cast<float>(t[static_cast<size_t>(std::min(k, 256))] * cosmo::kMpcInLy);
+        for (int k = 0; k < 260; ++k) mapped_[k] = static_cast<float>(t[static_cast<size_t>(std::min(k, 256))] * cosmo::kMpcInLy * scale);
     }
 
     // À appeler dans la passe en grande dynamique. gain : éclat de chaque point (0 : rien n'est dessiné).

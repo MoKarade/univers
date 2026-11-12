@@ -3,6 +3,8 @@
 #include "commun.h"
 #include "cosmologie.h"
 #include "ephemeride.h"
+#include "galaxie_orbites.h"
+#include "groupe_local.h"
 #include "systeme_solaire.h"
 
 namespace {
@@ -70,7 +72,8 @@ struct Rate {
 };
 constexpr Rate kRates[] = {{"Temps réel", 1.0 / kYearSeconds},        {"1 heure par seconde", 3600.0 / kYearSeconds}, {"1 jour par seconde", 1.0 / 365.25},
                            {"1 mois par seconde", 1.0 / 12.0},         {"1 an par seconde", 1.0},                      {"100 ans par seconde", 100.0},
-                           {"10 000 ans par seconde", 1.0e4},          {"100 000 ans par seconde", 1.0e5}};
+                           {"10 000 ans par seconde", 1.0e4},          {"100 000 ans par seconde", 1.0e5},
+                           {"10 millions d'années par seconde", 1.0e7}, {"200 millions d'années par seconde", 2.0e8}};
 constexpr int kRateCount = static_cast<int>(sizeof(kRates) / sizeof(kRates[0]));
 
 struct Sim {
@@ -206,8 +209,18 @@ struct Sim {
             body.priority = std::atoi(cols[5].c_str());
             bodies.push_back(body);
         }
+        // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
+        Body centre;
+        centre.name = "Centre de la Voie lactée";
+        centre.kind = Kind::Galaxy;
+        centre.fixedPos = fromGalactocentric({0, 0, 0});
+        centre.natureText = "centre de notre galaxie (Sagittarius A*)";
+        bodies.push_back(centre);
         planetPos.assign(bodies.size(), {0, 0, 0});
+        replayRef.assign(bodies.size(), -1);
+        replayRef.back() = -2;
         refreshEphemeris();
+        refreshGalaxies();
     }
 
     // Position héliocentrique d'un corps des éphémérides à une date donnée (années-lumière, écliptique J2000). false : hors de la plage.
@@ -261,15 +274,94 @@ struct Sim {
     }
     std::vector<char> outerOk_;
 
+    // ---------------------------------------------------------------- temps profond et Groupe local
+    // Jusqu'à 3 millions d'années d'aujourd'hui, tout est montré dans le repère du Soleil. Au-delà (vers l'avenir, jusqu'à
+    // la fin du calcul de la fusion), seules les galaxies dont le mouvement est calculé sont montrées : celles du calcul
+    // complet de la rencontre avec Andromède (phys::fusion::Rejeu). Le repère reste celui d'aujourd'hui, attaché au centre
+    // de la Voie lactée : l'origine est l'endroit où se trouve le Soleil aujourd'hui par rapport à ce centre.
+    const phys::fusion::Rejeu* replay = nullptr;
+    std::vector<int> replayRef;          // par astre : -1 aucun ; 100 + g : centre de la galaxie g du calcul ; k >= 0 : traceur k ; -2 : centre de la Voie lactée
+    std::vector<Vec3> galPos;            // position de chaque galaxie à la date courante
+    std::vector<char> galValid;
+
+    bool deepTime() const { return std::fabs(years - kStartYears) > kLinearLimitYears; }
+    double replayGa() const { return (years - kStartYears) / 1.0e9; }
+    double maxYears() const { return kStartYears + (replay ? replay->finGa() * 1.0e9 : kLinearLimitYears); }
+    double minYears() const { return kStartYears - kLinearLimitYears; }
+
+    // Repère galactocentrique de la page (kpc, relatif au centre de la Voie lactée) -> repère du simulateur (années-lumière,
+    // écliptique J2000, origine : place actuelle du Soleil). Matrice DATA.M_GAL2ECL de la page (app/gen/data.js) ; place du
+    // Soleil : 8,2 kpc du centre (GAL.R0), direction de Sagittarius A* (DATA.SGRA_GAL).
+    static Vec3 fromGalactocentric(phys::Vec3 g) {
+        static constexpr double M[3][3] = {{-0.0548756577, 0.4941094372, -0.8676661376}, {-0.993821367, -0.1109908412, -0.0003515418}, {-0.0964766946, 0.8622858559, 0.4971472117}};
+        const phys::Vec3 s = phys::galaxie::soleilPos();
+        const double v[3] = {g.x - s.x, g.y - s.y, g.z - s.z};
+        const double kpc = 3261.5637769;
+        return {(M[0][0] * v[0] + M[0][1] * v[1] + M[0][2] * v[2]) * kpc, (M[1][0] * v[0] + M[1][1] * v[1] + M[1][2] * v[2]) * kpc,
+                (M[2][0] * v[0] + M[2][1] * v[1] + M[2][2] * v[2]) * kpc};
+    }
+
+    // Relie les galaxies nommées au calcul de la fusion (noms des traceurs : fusion_noms.tsv, dans l'ordre du calcul).
+    void linkReplay(const phys::fusion::Rejeu* r, const std::string& namesPath) {
+        replay = r;
+        replayRef.assign(bodies.size(), -1);
+        std::vector<std::string> names;
+        std::ifstream f(namesPath);
+        for (std::string line; std::getline(f, line);) names.push_back(line);
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            const Body& b = bodies[i];
+            if (b.kind != Kind::Galaxy) continue;
+            if (b.name == "Centre de la Voie lactée") replayRef[i] = -2;
+            else if (!r) continue;
+            else if (b.name == "Andromède (M31)") replayRef[i] = 100 + phys::fusion::kAndromede;
+            else if (b.name == "Galaxie du Triangle (M33)") replayRef[i] = 100 + phys::fusion::kTriangle;
+            else if (b.name == "Grand Nuage de Magellan") replayRef[i] = 100 + phys::fusion::kGrandNuage;
+            else
+                for (size_t k = 0; k < names.size() && static_cast<int>(k) < r->nombreTraceurs(); ++k)
+                    if (names[k] == b.name) replayRef[i] = static_cast<int>(k);
+        }
+        refreshGalaxies();
+    }
+
+    void refreshGalaxies() {
+        galPos.assign(bodies.size(), {0, 0, 0});
+        galValid.assign(bodies.size(), 0);
+        const double tGa = replayGa();
+        const bool deep = deepTime();
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            const Body& b = bodies[i];
+            if (b.kind != Kind::Galaxy) continue;
+            const int ref = i < replayRef.size() ? replayRef[i] : -1;
+            if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
+                galPos[i] = b.fixedPos;
+                galValid[i] = 1;
+                continue;
+            }
+            phys::Vec3 g;
+            const bool ok = replay && ref >= 0 && (ref >= 100 ? replay->centre(ref - 100, tGa, g) : replay->traceur(ref, tGa, g));
+            if (!ok) continue;      // mouvement non calculé : la galaxie n'est pas montrée à cette date
+            galPos[i] = fromGalactocentric(g);
+            galValid[i] = 1;
+        }
+    }
+
     // Une planète ou une lune n'est montrée que si sa position est connue à la date courante.
-    bool visible(int i) const { return bodies[static_cast<size_t>(i)].kind != Kind::Planet || planetValid[static_cast<size_t>(i)]; }
+    // Une étoile n'est montrée qu'à moins de 3 millions d'années d'aujourd'hui (au-delà, la ligne droite ne vaut plus) ;
+    // le Soleil, tant que le système solaire est suivi (10 millions d'années) ; une galaxie, si sa position est connue.
+    bool visible(int i) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        if (b.kind == Kind::Planet) return planetValid[static_cast<size_t>(i)] != 0;
+        if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
+        if (b.kind == Kind::Sun) return std::fabs(years - kStartYears) <= 1.0e7;
+        return !deepTime();
+    }
 
     // Position à la date courante (années-lumière, repère écliptique centré sur le Soleil).
     Vec3 position(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return {0, 0, 0};
         if (b.kind == Kind::Planet) return planetPos[static_cast<size_t>(i)];
-        if (b.kind == Kind::Galaxy) return b.fixedPos;
+        if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galPos.size() && galValid[static_cast<size_t>(i)] ? galPos[static_cast<size_t>(i)] : b.fixedPos;
         const double k = years * kKmsToLyPerYear;      // étoile : ligne droite à la vitesse mesurée
         return {stars->x()[b.star] + stars->vel(0)[b.star] * k, stars->y()[b.star] + stars->vel(1)[b.star] * k, stars->z()[b.star] + stars->vel(2)[b.star] * k};
     }
@@ -406,12 +498,19 @@ struct Sim {
 
     void advance(double dt) {
         if (!paused) years += (backward ? -1.0 : 1.0) * kRates[rate].yearsPerSecond * dt;
-        years = std::clamp(years, kStartYears - kLinearLimitYears, kStartYears + kLinearLimitYears);
+        years = std::clamp(years, minYears(), maxYears());
         if (!touched) yaw += 0.035 * dt;      // lent tour d'horizon, 2 degrés par seconde
         refreshEphemeris();
+        refreshGalaxies();
         stepFlight(dt);
-        if (!visible(focus)) {                // l'astre suivi n'a plus de position connue : retour au Soleil
+        if (!visible(focus)) {                // l'astre suivi n'a plus de position connue : retour au Soleil, ou au centre de la Voie lactée
             focus = 0;
+            if (!visible(0))
+                for (size_t i = 0; i < bodies.size(); ++i)
+                    if (i < replayRef.size() && replayRef[i] == -2) {
+                        focus = static_cast<int>(i);
+                        dist = std::max(dist, 3.0e5);
+                    }
             flying = false;
         }
     }

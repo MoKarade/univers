@@ -10,6 +10,7 @@
 
 #include "asteroides.h"
 #include "fenetre.h"
+#include "fusion_points.h"
 #include "galaxies.h"
 #include "interface.h"
 #include "points_planetes.h"
@@ -138,6 +139,10 @@ int runWindow(const WindowOptions& opt) {
             }
         if (!found) fail("--cible : astre inconnu : " + opt.target);
     }
+    // Calcul complet de la rencontre avec Andromède (dossier fusion/ à côté des données) : facultatif.
+    phys::fusion::Rejeu replay;
+    const bool hasReplay = replay.charger(dataDir + "/fusion/fusion_centres.bin", dataDir + "/fusion");
+    sim.linkReplay(hasReplay ? &replay : nullptr, dataDir + "/fusion/fusion_noms.tsv");
     if (opt.hasYears) sim.years = opt.years;
     sim.refreshEphemeris();
     if (sim.focus != 0) sim.follow(sim.focus);
@@ -196,6 +201,9 @@ int runWindow(const WindowOptions& opt) {
     asteroids.create(g, dataDir + "/asteroides.bin", HdrTarget::kFormat);
     sim.asteroidEpochJd = asteroids.ready ? asteroids.epochJd : 0;
     sim.asteroidCount = asteroids.ready ? asteroids.count : 0;
+    FusionPoints fusionPoints;
+    fusionPoints.create(g, hasReplay ? static_cast<uint32_t>(replay.nombreEtoiles()) : 0);
+    double galaxyScaleAt = 1e300;      // date (années) du dernier calcul du facteur d'échelle de l'univers
     SphereRenderer spheres;
     spheres.create(g, HdrTarget::kFormat, dataDir + "/textures");
     std::vector<bool> asSphere;
@@ -311,10 +319,14 @@ int runWindow(const WindowOptions& opt) {
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost()), sc.extent.height, sim.years);
 
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
-        if (sim.cosmologyDirty) {
-            galaxies.setCosmology(sim.cosmology);
+        // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
+        // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
+        if (sim.cosmologyDirty || std::fabs(sim.years - galaxyScaleAt) > 1.0e6) {
+            galaxies.setCosmology(sim.cosmology, cosmo::scaleFactorAt(sim.cosmology, (sim.years - kStartYears) / 1.0e9));
+            galaxyScaleAt = sim.years;
             sim.cosmologyDirty = false;
         }
+        fusionPoints.update(sim, cam, pc.par[0]);
         spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
         planets.update(sim, cam, asSphere);
@@ -348,7 +360,13 @@ int runWindow(const WindowOptions& opt) {
                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, hdr.view, sc.extent);
         galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
-        sr.draw(cmd, pc, sc.extent.width, sc.extent.height);
+        if (!sim.deepTime()) sr.draw(cmd, pc, sc.extent.width, sc.extent.height);      // étoiles mesurées : à moins de 3 millions d'années d'aujourd'hui
+        if (fusionPoints.count) {
+            PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
+            still.par[2] = 0;
+            sr.bind(cmd, still, sc.extent.width, sc.extent.height);
+            fusionPoints.draw(cmd);
+        }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
                        sc.extent.width, sc.extent.height, asteroids.ready ? static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);
         // (l'ordre compte : après les astéroïdes, le dessin des étoiles n'est plus lié ; les planètes le relient)
@@ -429,6 +447,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     planets.release(g);
+    fusionPoints.release(g);
     asteroids.release(g);
     galaxies.release(g);
     spheres.release(g);
