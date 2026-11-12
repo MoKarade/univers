@@ -45,55 +45,64 @@ RELEVES = {
         mesure="Brillance du ciel à 30 GHz (surtout synchrotron et fond cosmologique)",
         unite='K_CMB', resolution_arcmin=32.3, longueur_onde='1 cm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='lin'),
+        couverture_publiee='tout le ciel', echelle='lin',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_030-field-IQU_1024_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_030-field-IQU_1024_R3.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_030_1024_R3.00_full.fits'])]),
     'planck44': dict(
         hips='CDS/P/PLANCK/R3/LFI44', bande='micro-ondes', libelle='Micro-ondes 44 GHz (Planck)',
         mesure="Brillance du ciel à 44 GHz",
         unite='K_CMB', resolution_arcmin=27.0, longueur_onde='6,8 mm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='lin'),
+        couverture_publiee='tout le ciel', echelle='lin',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_044-field-IQU_1024_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_044-field-IQU_1024_R3.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_044_1024_R3.00_full.fits'])]),
     'planck70': dict(
         hips='CDS/P/PLANCK/R3/LFI70', bande='micro-ondes', libelle='Micro-ondes 70 GHz (Planck)',
         mesure="Brillance du ciel à 70 GHz (fond diffus cosmologique)",
         unite='K_CMB', resolution_arcmin=13.2, longueur_onde='4,3 mm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='lin'),
+        couverture_publiee='tout le ciel', echelle='lin',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_070-field-IQU_1024_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_070-field-IQU_1024_R3.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/LFI_SkyMap_070_1024_R3.00_full.fits'])]),
     'planck100': dict(
         hips='CDS/P/PLANCK/R3/HFI100', bande='micro-ondes', libelle='Micro-ondes 100 GHz (Planck)',
         mesure="Brillance du ciel à 100 GHz (fond diffus cosmologique)",
         unite='K_CMB', resolution_arcmin=9.7, longueur_onde='3 mm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='lin'),
+        couverture_publiee='tout le ciel', echelle='lin',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_100-field-IQU_2048_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_100_2048_R3.01_full.fits'])]),
     'planck143': dict(
         hips='CDS/P/PLANCK/R3/HFI143', bande='micro-ondes', libelle='Micro-ondes 143 GHz (Planck)',
         mesure="Brillance du ciel à 143 GHz (fond diffus cosmologique)",
         unite='K_CMB', resolution_arcmin=7.3, longueur_onde='2,1 mm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='lin'),
+        couverture_publiee='tout le ciel', echelle='lin',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_143-field-IQU_2048_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_143_2048_R3.01_full.fits'])]),
     'planck217': dict(
         hips='CDS/P/PLANCK/R3/HFI217', bande='micro-ondes', libelle='Micro-ondes 217 GHz (Planck)',
         mesure="Brillance du ciel à 217 GHz",
         unite='K_CMB', resolution_arcmin=5.0, longueur_onde='1,4 mm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='lin'),
+        couverture_publiee='tout le ciel', echelle='lin',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_217-field-IQU_2048_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_217_2048_R3.01_full.fits'])]),
     'planck353': dict(
         hips='CDS/P/PLANCK/R3/HFI353', bande='micro-ondes', libelle='Micro-ondes 353 GHz (Planck)',
         mesure="Brillance du ciel à 353 GHz (surtout la poussière froide de la Galaxie)",
         unite='K_CMB', resolution_arcmin=4.9, longueur_onde='850 µm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_353-field-IQU_2048_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_353_2048_R3.01_full.fits'])]),
     'planck545': dict(
         hips='CDS/P/PLANCK/R3/HFI545', bande='micro-ondes', libelle='Micro-ondes 545 GHz (Planck)',
         mesure="Brillance du ciel à 545 GHz (poussière froide)",
         unite='MJy/sr', resolution_arcmin=4.8, longueur_onde='550 µm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_545-field-I_2048_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_545_2048_R3.01_full.fits'])]),
     'planck857': dict(
         hips='CDS/P/PLANCK/R3/HFI857', bande='micro-ondes', libelle='Micro-ondes 857 GHz (Planck)',
         mesure="Brillance du ciel à 857 GHz (poussière froide)",
         unite='MJy/sr', resolution_arcmin=4.6, longueur_onde='350 µm',
         reference='Planck Collaboration 2020, A&A 641, A1 (PR3) ; cartes HEALPix de la Planck Legacy Archive (ESA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(fichiers=['https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_857-field-I_2048_R4.00_full.fits', 'https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/HFI_SkyMap_857_2048_R3.01_full.fits'])]),
 
     # --- Infrarouge lointain : AKARI, instrument FIS (JAXA), relevé du ciel entier.
     'akari90': dict(
@@ -101,32 +110,37 @@ RELEVES = {
         mesure='Brillance du ciel à 90 µm (poussière tiède chauffée par les étoiles)', unite='MJy/sr',
         resolution_arcmin=1.3, longueur_onde='90 µm',
         reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier)',
-        couverture_publiee='98 % du ciel', echelle='log'),
+        couverture_publiee='98 % du ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/AKARI/WideS', reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     'akari140': dict(
         hips='CDS/P/AKARI/FIS/WideL', bande='infrarouge', libelle='Infrarouge lointain 140 µm (AKARI)',
         mesure='Brillance du ciel à 140 µm (poussière froide)', unite='MJy/sr',
         resolution_arcmin=1.5, longueur_onde='140 µm',
         reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier)',
-        couverture_publiee='98 % du ciel', echelle='log'),
+        couverture_publiee='98 % du ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/AKARI/WideL', reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     # --- Infrarouge moyen et proche : WISE (NASA) et 2MASS. Valeurs en unités brutes du détecteur (DN), comme publiées.
     'wise12': dict(
         hips='CDS/P/allWISE/W3', bande='infrarouge', libelle='Infrarouge moyen 12 µm (WISE)',
         mesure='Brillance du ciel à 12 µm (grains de poussière chauds, molécules aromatiques)', unite='DN (unité du détecteur)',
         resolution_arcmin=6.5 / 60, longueur_onde='12 µm',
         reference='Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(adresse='https://irsa.ipac.caltech.edu/data/hips/CDS/AllWISE/W3', reference="Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC) ; tuiles HiPS du CDS, copie de l'IRSA")]),
     'wise22': dict(
         hips='CDS/P/allWISE/W4', bande='infrarouge', libelle='Infrarouge moyen 22 µm (WISE)',
         mesure='Brillance du ciel à 22 µm', unite='DN (unité du détecteur)',
         resolution_arcmin=12.0 / 60, longueur_onde='22 µm',
         reference='Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(adresse='https://irsa.ipac.caltech.edu/data/hips/CDS/AllWISE/W4', reference="Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC) ; tuiles HiPS du CDS, copie de l'IRSA")]),
     'wise3': dict(
         hips='CDS/P/allWISE/W1', bande='infrarouge', libelle='Infrarouge proche 3,4 µm (WISE)',
         mesure='Brillance du ciel à 3,4 µm (surtout la lumière des étoiles)', unite='DN (unité du détecteur)',
         resolution_arcmin=6.1 / 60, longueur_onde='3,4 µm',
         reference='Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(adresse='https://irsa.ipac.caltech.edu/data/hips/CDS/AllWISE/W1', reference="Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC) ; tuiles HiPS du CDS, copie de l'IRSA")]),
     '2massk': dict(
         hips='CDS/P/2MASS/K', bande='infrarouge', libelle='Infrarouge proche 2,2 µm (2MASS K)',
         mesure='Brillance du ciel en bande Ks (2,2 µm)', unite='DN (unité du détecteur)',
@@ -146,20 +160,23 @@ RELEVES = {
         mesure='Brillance du ciel en ultraviolet lointain (étoiles chaudes, lumière diffusée par la poussière)',
         unite='MJy/sr × 2,04', resolution_arcmin=4.2 / 60, longueur_onde='154 nm',
         reference='Martin et al. 2005, ApJ 619, L1 ; Bianchi et al. 2017, ApJS 230, 24 (GALEX GR6/7)',
-        couverture_publiee='environ 2/3 du ciel, plan galactique évité', echelle='log'),
+        couverture_publiee='environ 2/3 du ciel, plan galactique évité', echelle='log',
+        secours=[dict(adresse='https://irsa.ipac.caltech.edu/data/hips/CDS/GALEX/GR6-03-2014/AIS-FD', unite='unité du relevé (non précisée par la fiche)', reference="Martin et al. 2005, ApJ 619, L1 ; relevé AIS de GALEX GR6 (tuiles HiPS du CDS, copie de l'IRSA)")]),
     'galexnuv': dict(
         hips='CDS/P/GALEXGR6_7/NUV', bande='ultraviolet', libelle='Ultraviolet proche 231 nm (GALEX)',
         mesure='Brillance du ciel en ultraviolet proche', unite='MJy/sr × 0,72',
         resolution_arcmin=5.3 / 60, longueur_onde='231 nm',
         reference='Martin et al. 2005, ApJ 619, L1 ; Bianchi et al. 2017, ApJS 230, 24 (GALEX GR6/7)',
-        couverture_publiee='environ 3/4 du ciel, plan galactique évité', echelle='log'),
+        couverture_publiee='environ 3/4 du ciel, plan galactique évité', echelle='log',
+        secours=[dict(adresse='https://irsa.ipac.caltech.edu/data/hips/CDS/GALEX/GR6-03-2014/AIS-ND', unite='unité du relevé (non précisée par la fiche)', reference="Martin et al. 2005, ApJ 619, L1 ; relevé AIS de GALEX GR6 (tuiles HiPS du CDS, copie de l'IRSA)")]),
     # --- Rayons X.
     'rass': dict(
         hips='CDS/P/RASS', bande='X', libelle='Rayons X mous 0,1 à 2,4 keV (ROSAT)',
         mesure='Photons X comptés (gaz à un million de degrés, restes de supernovas, amas de galaxies)',
         unite='coups (unité du relevé)', resolution_arcmin=1.8, longueur_onde='0,5 à 12 nm',
         reference='Voges et al. 1999, A&A 349, 389 (ROSAT All-Sky Survey, MPE)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/RASS', unite='coups/s', reference='Voges et al. 1999, A&A 349, 389 (ROSAT All-Sky Survey, MPE) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     'erosita': dict(
         hips='erosita/dr1/rate/024', bande='X', libelle='Rayons X 0,2 à 2,3 keV (eROSITA DR1)',
         mesure='Taux de photons X comptés', unite='coups/s par pixel',
@@ -171,26 +188,30 @@ RELEVES = {
         mesure='Photons X durs comptés (trous noirs et étoiles à neutrons qui avalent de la matière)',
         unite='unité du relevé (non précisée par la fiche)', resolution_arcmin=12.0, longueur_onde='0,04 à 0,07 nm',
         reference='Krivonos et al. 2012, A&A 545, A27 (INTEGRAL/IBIS, plan galactique, IKI)',
-        couverture_publiee='bande autour du plan de la Galaxie (31 % du ciel)', echelle='lin'),
+        couverture_publiee='bande autour du plan de la Galaxie (31 % du ciel)', echelle='lin',
+        secours=[dict(hips='ov-gso/P/INTEGRAL/17-35keV', unite='mCrab', reference='Krivonos et al. 2012, A&A 545, A27 (INTEGRAL/IBIS, plan galactique, IKI) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     # --- Rayons gamma : Fermi-LAT (NASA), cartes de SkyView (HEASARC).
     'fermi1': dict(
         hips='CDS/P/Fermi/3', bande='gamma', libelle='Gamma 300 MeV à 1 GeV (Fermi-LAT)',
         mesure='Photons gamma comptés (300 MeV à 1 GeV)', unite='coups (unité du relevé)',
         resolution_arcmin=60.0, longueur_onde='moins de 1e-6 nm',
         reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/Fermi/Band3', unite='coups/s/cm²/sr', resolution_arcmin=60.0, reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     'fermi2': dict(
         hips='CDS/P/Fermi/4', bande='gamma', libelle='Gamma 1 à 3 GeV (Fermi-LAT)',
         mesure='Photons gamma comptés (1 à 3 GeV)', unite='coups (unité du relevé)',
         resolution_arcmin=30.0, longueur_onde='moins de 1e-6 nm',
         reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/Fermi/Band4', unite='coups/s/cm²/sr', resolution_arcmin=24.0, reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     'fermi3': dict(
         hips='CDS/P/Fermi/5', bande='gamma', libelle='Gamma 3 à 300 GeV (Fermi-LAT)',
         mesure='Photons gamma comptés (3 à 300 GeV)', unite='coups (unité du relevé)',
         resolution_arcmin=10.0, longueur_onde='moins de 1e-6 nm',
         reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/Fermi/Band5', unite='coups/s/cm²/sr', resolution_arcmin=12.0, reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
 }
 
 
@@ -205,9 +226,14 @@ def lire_texte(url, essais=4):
             time.sleep(2 ** k)
 
 
-def proprietes(hips_id):
-    """Fiche du relevé (fichier properties) : adresse du serveur, repère, largeur des tuiles, ordre maximal."""
-    rec = lire_texte(MOC + '?' + urllib.parse.urlencode({'ID': hips_id, 'get': 'record'}))
+def proprietes(hips_id, adresse=None):
+    """Fiche du relevé (fichier properties) : adresse du serveur, repère, largeur des tuiles, ordre maximal.
+    adresse : serveur connu du relevé (copie publiée par un autre centre, par exemple l'IRSA) ; sa fiche est lue
+    directement, sans passer par le registre du CDS."""
+    if adresse:
+        rec = lire_texte(adresse.rstrip('/') + '/properties') + f'\nhips_service_url = {adresse}\n'
+    else:
+        rec = lire_texte(MOC + '?' + urllib.parse.urlencode({'ID': hips_id, 'get': 'record'}))
     p = {}
     for ligne in rec.splitlines():
         if '=' in ligne and not ligne.lstrip().startswith('#'):
@@ -386,6 +412,157 @@ def orientations(w):
     return res
 
 
+# --- Cartes HEALPix entières (FITS, table binaire), quand l'équipe du relevé publie la carte elle-même : Planck.
+_JRLL = np.array([2,2,2,2,3,3,3,3,4,4,4,4]); _JPLL = np.array([1,3,5,7,0,2,4,6,1,3,5,7])
+def ring_vers_emboite(nside, pix):
+    """Numéro HEALPix « en anneaux » vers « emboîté » (algorithme de pix2xyf_ring, Górski et al. 2005, code C de HEALPix)."""
+    pix = np.asarray(pix, dtype=np.int64)
+    ncap = 2*nside*(nside-1); npix = 12*nside*nside; nl2 = 2*nside
+    iring = np.zeros_like(pix); iphi = np.zeros_like(pix); kshift = np.zeros_like(pix); nr = np.zeros_like(pix); face = np.zeros_like(pix)
+    n = (pix < ncap)
+    ir = (1 + np.floor(np.sqrt(1 + 2*pix[n].astype(np.float64)))).astype(np.int64) >> 1
+    ip = pix[n] - 2*ir*(ir-1) + 1  # 1-based in ring
+    # correct possible float error
+    iring[n] = ir; iphi[n] = ip; kshift[n] = 0; nr[n] = ir; face[n] = (ip-1)//ir
+    e = (pix >= ncap) & (pix < npix-ncap)
+    ip_ = pix[e] - ncap; tmp = ip_ // (4*nside)
+    ir = tmp + nside; ph = ip_ - tmp*4*nside + 1
+    ks = (ir + nside) & 1; nrr = np.full_like(ir, nside)
+    ire = ir - nside + 1; irm = nl2 + 2 - ire
+    ifm = (ph - ks//2 + nside - 1) // nside; ifp = (ph - irm//2 + nside - 1)//nside  # placeholder fixed below
+    ifm = (ph - (ks + ire)//2 + nside - 1) // nside  # not used
+    # use standard formulas
+    ifm = (ph - (ire - ks)//2*0 - 1)  # dummy
+    iring[e] = ir; iphi[e] = ph; kshift[e] = ks; nr[e] = nrr
+    ire_ = ir - nside + 1; irm_ = nl2 + 2 - ire_
+    ifm_ = (ph - ire_//2 + nside - 1) // nside
+    ifp_ = (ph - irm_//2 + nside - 1) // nside
+    face[e] = np.where(ifp_ == ifm_, (ifp_ | 4), np.where(ifp_ < ifm_, ifp_, ifm_ + 8))
+    s = pix >= npix - ncap
+    ip_ = npix - pix[s]
+    ir = (1 + np.floor(np.sqrt(2*ip_.astype(np.float64) - 1))).astype(np.int64) >> 1
+    ph = 4*ir + 1 - (ip_ - 2*ir*(ir-1))
+    iring[s] = 2*nl2 - ir; iphi[s] = ph; kshift[s] = 0; nr[s] = ir; face[s] = (ph-1)//ir + 8
+    irt = iring - _JRLL[face]*nside + 1
+    ipt = 2*iphi - _JPLL[face]*nr - kshift - 1
+    ipt = np.where(ipt >= nl2, ipt - 8*nside, ipt)
+    ix = (ipt - irt) >> 1; iy = (-ipt - irt) >> 1
+    return face*nside*nside + spread(ix) + 2*spread(iy)
+
+
+def telecharger_fichier(url, chemin):
+    """Téléchargement d'un gros fichier, reprise possible après coupure (en-tête Range). Renvoie False si absent (404)."""
+    if os.path.exists(chemin):
+        return True
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    part = chemin + '.part'
+    for k in range(6):
+        deja = os.path.getsize(part) if os.path.exists(part) else 0
+        req = urllib.request.Request(url, headers={'Range': f'bytes={deja}-'} if deja else {})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as rep, open(part, 'ab' if deja and rep.status == 206 else 'wb') as f:
+                total = int(rep.headers.get('Content-Length', 0)) + (deja if rep.status == 206 else 0)
+                t0, recu = time.time(), (deja if rep.status == 206 else 0)
+                while True:
+                    bloc = rep.read(1 << 22)
+                    if not bloc:
+                        break
+                    f.write(bloc)
+                    recu += len(bloc)
+                    if time.time() - t0 > 20:
+                        print(f'  {recu / 1e6:.0f} / {total / 1e6:.0f} Mo', flush=True)
+                        t0 = time.time()
+            os.replace(part, chemin)
+            return True
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return False
+            if k == 5:
+                raise
+        except Exception:
+            if k == 5:
+                raise
+        time.sleep(2 ** k)
+    return False
+
+
+def lire_table_healpix(chemin, nside_max):
+    """Carte HEALPix d'un fichier FITS (1re extension, table binaire). Renvoie la 1re colonne (l'intensité, I_STOKES chez
+    Planck) en ordre emboîté, ramenée à Nside <= nside_max par moyenne des pixels enfants (la somme du mesuré), avec
+    son repère et son unité. Aucune autre valeur n'est modifiée."""
+    with open(chemin, 'rb') as f:
+        def entete():
+            h = {}
+            while True:
+                bloc = f.read(2880)
+                fin = False
+                for j in range(0, 2880, 80):
+                    carte = bloc[j:j + 80].decode('ascii', 'replace')
+                    cle = carte[:8].strip()
+                    if cle == 'END':
+                        fin = True
+                        break
+                    if carte[8:10] == '= ':
+                        h.setdefault(cle, carte[10:].split('/')[0].strip().strip("'").strip())
+                if fin:
+                    return h
+        h0 = entete()
+        taille0 = abs(int(h0.get('BITPIX', 8))) // 8 * (int(h0.get('NAXIS1', 0)) * int(h0.get('NAXIS2', 1)) if int(h0.get('NAXIS', 0)) else 0)
+        f.seek((taille0 + 2879) // 2880 * 2880, 1)
+        h = entete()
+        debut = f.tell()
+    codes = {'E': '>f4', 'D': '>f8', 'J': '>i4', 'I': '>i2', 'K': '>i8', 'B': 'u1'}
+    champs = []
+    for c in range(1, int(h['TFIELDS']) + 1):
+        tf = h[f'TFORM{c}']
+        n = int(tf[:-1]) if len(tf) > 1 else 1
+        champs.append((f'c{c}', codes[tf[-1]], (n,)))
+    lignes = int(h['NAXIS2'])
+    table = np.memmap(chemin, dtype=np.dtype(champs), mode='r', offset=debut, shape=(lignes,))
+    v = np.asarray(table['c1'], dtype=np.float32).ravel()
+    nside = int(h['NSIDE'])
+    if v.size != 12 * nside * nside:
+        raise SystemExit(f'{chemin} : {v.size} pixels pour Nside {nside}')
+    v[(v < -1.6e30) | ~np.isfinite(v)] = np.nan      # valeur conventionnelle « pas de mesure » de HEALPix : -1,6375e30
+    if h.get('ORDERING', 'NESTED').upper().startswith('RING'):
+        e = np.empty_like(v)
+        for d in range(0, v.size, 1 << 24):
+            idx = np.arange(d, min(d + (1 << 24), v.size), dtype=np.int64)
+            e[ring_vers_emboite(nside, idx)] = v[idx]
+        v = e
+    while nside > nside_max:      # moyenne des 4 enfants (ordre emboîté) : un pixel vide reste vide si ses 4 enfants le sont
+        v = np.nanmean(v.reshape(-1, 4), axis=1).astype(np.float32)
+        nside //= 2
+    coord = h.get('COORDSYS', 'G').upper()
+    repere = 'galactic' if coord.startswith('G') else 'equatorial'
+    return v, nside, repere, h.get('TUNIT1', '')
+
+
+def carte_entiere(r, a):
+    """Essaie les fichiers proposés dans l'ordre et lit le premier présent sur le serveur."""
+    cache = os.path.join(a.sortie, 'cache_cartes')
+    for url in r['fichiers']:
+        chemin = os.path.join(cache, url.rsplit('/', 1)[1])
+        print(f'  essai {url}', flush=True)
+        if telecharger_fichier(url, chemin):
+            with open(chemin, 'rb') as f:
+                if f.read(6) != b'SIMPLE':      # page d'erreur du serveur au lieu d'un FITS : on la jette
+                    print('  pas un fichier FITS : ignoré', flush=True)
+                    f.close()
+                    os.replace(chemin, chemin + '.pas_fits')
+                    continue
+            v, nside, repere, unite = lire_table_healpix(chemin, a.nside_max)
+            print(f'  lu : Nside {nside}, repère {repere}, unité {unite!r}', flush=True)
+            return v, nside, repere, unite, url
+    raise SystemExit(f'{r["libelle"]} : aucun des fichiers proposés n\'est sur le serveur')
+
+
+def reference_planck(url, ref):
+    if 'R4.00' in url:
+        return 'Planck Collaboration 2020, A&A 643, A42 (PR4, traitement NPIPE) ; cartes HEALPix de la Planck Legacy Archive (ESA), copie IRSA'
+    return ref
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('sortie')
@@ -400,66 +577,91 @@ def main():
         for k, r in RELEVES.items():
             print(f'{k:12s} {r["libelle"]:28s} {r["hips"]}')
         return
-    r = RELEVES[a.nom]
-    p = proprietes(r['hips'])
-    adresse = p['hips_service_url'].rstrip('/')
-    w = int(p.get('hips_tile_width', 512))
-    ordre_max = int(p.get('hips_order', a.ordre))
-    ordre = a.ordre if a.ordre is not None else max(0, min(ordre_max, int(math.log2(a.nside_max // w)) if a.nside_max >= w else 0))
-    ordre = min(ordre, ordre_max)
-    repere = p.get('hips_frame', 'equatorial')
-    nside = w << ordre
-    ntuiles = 12 * 4 ** ordre
-    cache = a.cache or os.path.join(a.sortie, 'cache_hips', a.nom)
-    print(f'{r["libelle"]} : {r["hips"]}, serveur {adresse}, repère {repere}, tuiles {w} px, ordre {ordre} '
-          f'(maximum {ordre_max}), Nside {nside}, {ntuiles} tuiles')
+    # Relevé principal, puis ses copies publiées ailleurs (même relevé, même bande ; seuls l'unité ou la référence de
+    # la copie changent, écrites dans 'secours'). Ajouté le 12/11/2026 : le serveur du CDS ne servait plus aucune tuile.
+    p = None
+    for r in [RELEVES[a.nom]] + [dict(RELEVES[a.nom], **s) for s in RELEVES[a.nom].get('secours', [])]:
+        r.pop('secours', None)
+        try:
+            if r.get('fichiers'):      # carte HEALPix entière publiée par l'équipe du relevé (pas de tuiles)
+                p = {}
+                break
+            p = proprietes(r['hips'], r.get('adresse'))
+            break
+        except Exception as e:
+            print(f'  {e} ; copie suivante', flush=True)
+    if p is None:
+        raise SystemExit(f'{a.nom} : aucune copie du relevé ne répond')
+    if r.get('fichiers'):
+        carte, nside, repere, unite, url = carte_entiere(r, a)
+        r = dict(r, unite=unite or r['unite'], serveur=url, reference=reference_planck(url, r['reference']))
+        r.pop('fichiers', None)
+        ordre = ordre_max = w = absentes = None
+        adresse = url
+    else:
+        adresse = p['hips_service_url'].rstrip('/')
+        w = int(p.get('hips_tile_width', 512))
+        ordre_max = int(p.get('hips_order', a.ordre))
+        ordre = a.ordre if a.ordre is not None else max(0, min(ordre_max, int(math.log2(a.nside_max // w)) if a.nside_max >= w else 0))
+        ordre = min(ordre, ordre_max)
+        repere = p.get('hips_frame', 'equatorial')
+        nside = w << ordre
+        ntuiles = 12 * 4 ** ordre
+        # une copie de secours a son propre cache : ses tuiles ne doivent jamais se mêler à celles du relevé principal
+        sous = a.nom if r['hips'] == RELEVES[a.nom]['hips'] else a.nom + '__' + r['hips'].replace('/', '_')
+        cache = a.cache or os.path.join(a.sortie, 'cache_hips', sous)
+        print(f'{r["libelle"]} : {r["hips"]}, serveur {adresse}, repère {repere}, tuiles {w} px, ordre {ordre} '
+              f'(maximum {ordre_max}), Nside {nside}, {ntuiles} tuiles')
 
-    tables = orientations(w)
-    table = tables[0]
-    carte = np.full(12 * nside * nside, np.nan, dtype=np.float32)
-    absentes = 0
-    t0 = time.time()
-    with cf.ThreadPoolExecutor(a.simultanes) as ex:
-        futurs = {ex.submit(telecharger, adresse, ordre, n, cache): n for n in range(ntuiles)}
-        for k, fu in enumerate(cf.as_completed(futurs)):
-            n = futurs[fu]
-            octets = fu.result()
-            if not octets:
-                absentes += 1
-                continue
-            img = lire_fits(octets)
-            if img.shape != (w, w):
-                raise SystemExit(f'tuile {n} : {img.shape}, attendu {w} × {w}')
-            carte[n * w * w + table] = img.astype(np.float32)
-            if k % 50 == 0:
-                print(f'  {k + 1}/{ntuiles} tuiles, {time.time() - t0:.0f} s', flush=True)
-
-    if absentes == ntuiles:
-        raise SystemExit('toutes les tuiles sont absentes : serveur en panne ? (vider le cache avant de relancer)')
+        tables = orientations(w)
+        table = tables[0]
+        carte = np.full(12 * nside * nside, np.nan, dtype=np.float32)
+        absentes = 0
+        t0 = time.time()
+        with cf.ThreadPoolExecutor(a.simultanes) as ex:
+            futurs = {ex.submit(telecharger, adresse, ordre, n, cache): n for n in range(ntuiles)}
+            for k, fu in enumerate(cf.as_completed(futurs)):
+                n = futurs[fu]
+                octets = fu.result()
+                if not octets:
+                    absentes += 1
+                    continue
+                img = lire_fits(octets)
+                if img.shape != (w, w):
+                    raise SystemExit(f'tuile {n} : {img.shape}, attendu {w} × {w}')
+                carte[n * w * w + table] = img.astype(np.float32)
+                if k % 50 == 0:
+                    print(f'  {k + 1}/{ntuiles} tuiles, {time.time() - t0:.0f} s', flush=True)
+        if absentes == ntuiles:
+            raise SystemExit('toutes les tuiles sont absentes : serveur en panne ? (vider le cache avant de relancer)')
     mesure = np.isfinite(carte)
     couverture = float(mesure.mean())
     vals = carte[mesure]
     stats = dict(min=float(vals.min()), max=float(vals.max()),
                  p01=float(np.percentile(vals, 1)), p50=float(np.percentile(vals, 50)), p99=float(np.percentile(vals, 99)),
                  p999=float(np.percentile(vals, 99.9)))
-    # contrôle d'assemblage : le plan de la Galaxie doit ressortir mieux avec la convention de la norme qu'avec les sept
-    # autres orientations des tuiles (réécrites ici à partir de la carte, sans retélécharger).
     galactique = repere.startswith('gal')
-    contrastes, sauts = [], []
-    t0r = tables[0].ravel()
-    for o, t in enumerate(tables):
-        if o == 0:
-            c = carte
-        else:
-            c = np.empty_like(carte).reshape(ntuiles, w * w)
-            c[:, t.ravel()] = carte.reshape(ntuiles, w * w)[:, t0r]
-            c = c.ravel()
-        contrastes.append(contraste_plan(c, nside, galactique))
-        sauts.append(continuite(c, nside))
-    print('  contraste plan / hautes latitudes, orientations 0 à 7 : ' + ', '.join(f'{x:.3g}' for x in contrastes))
-    print('  saut moyen entre pixels voisins (log), orientations 0 à 7 : ' + ', '.join(f'{x:.4f}' for x in sauts))
-    if int(np.argmin(sauts)) != 0:
-        print(f'  ATTENTION : la pose {int(np.argmin(sauts))} est plus continue que la pose retenue (0) : tuiles mal posées')
+    if w is None:      # carte entière : pas de tuiles à poser, un seul contrôle (le plan doit ressortir)
+        contrastes, sauts = [contraste_plan(carte, nside, galactique)], [continuite(carte, nside)]
+        print(f'  contraste plan / hautes latitudes : {contrastes[0]:.3g} ; saut moyen entre voisins : {sauts[0]:.4f}')
+    else:
+        # contrôle d'assemblage : le plan de la Galaxie doit ressortir mieux avec la convention de la norme qu'avec les sept
+        # autres orientations des tuiles (réécrites ici à partir de la carte, sans retélécharger).
+        contrastes, sauts = [], []
+        t0r = tables[0].ravel()
+        for o, t in enumerate(tables):
+            if o == 0:
+                c = carte
+            else:
+                c = np.empty_like(carte).reshape(ntuiles, w * w)
+                c[:, t.ravel()] = carte.reshape(ntuiles, w * w)[:, t0r]
+                c = c.ravel()
+            contrastes.append(contraste_plan(c, nside, galactique))
+            sauts.append(continuite(c, nside))
+        print('  contraste plan / hautes latitudes, orientations 0 à 7 : ' + ', '.join(f'{x:.3g}' for x in contrastes))
+        print('  saut moyen entre pixels voisins (log), orientations 0 à 7 : ' + ', '.join(f'{x:.4f}' for x in sauts))
+        if int(np.argmin(sauts)) != 0:
+            print(f'  ATTENTION : la pose {int(np.argmin(sauts))} est plus continue que la pose retenue (0) : tuiles mal posées')
 
     meta = dict(r, nom=a.nom, repere=repere, nside=nside, ordre_hips=ordre, ordre_hips_max=ordre_max,
                 largeur_tuile=w, serveur=adresse, couverture_mesuree=couverture, tuiles_absentes=absentes,
