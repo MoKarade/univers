@@ -74,6 +74,12 @@ int main(int argc, char** argv) {
     verifie(std::fabs(rg[2].part - (58967.0 + 98278356.0) / 1811709771.0) < 1e-15, "Voie lactée avec Gaia : (58 967 + 98 278 356) / Gaia DR3");
     std::printf("Voie lactée avec Gaia : %s\n  %s\n  %s\n", rg[2].complet.c_str(), rg[2].precision.c_str(), rg[2].mesure.c_str());
     for (const Ligne& l : rg[2].lignes) std::printf("    - %s : %s [%s]\n", l.quoi.c_str(), l.valeur.c_str(), motNature(l.nature));
+    // Choix de Marc (12/11) : lueur modèle retirée. Gaia chargé sans Voie lactée : aucune ligne « supposé » ni « ajusté ».
+    sim.hasMilkyWay = false;
+    const auto rs = rapport(compter(sim, 5566702, nGaia));
+    bool sansModele = true;
+    for (const Ligne& l : rs[2].lignes) sansModele = sansModele && l.nature != Nature::Suppose && l.nature != Nature::Ajuste;
+    verifie(sansModele && rs[2].mesure.find("pas dessinée") != std::string::npos, "Gaia sans Voie lactée modèle : rien de supposé ni d'ajusté");
     sim.hasGaia = sim.hasMilkyWay = false;
     verifie(compter(sim, 5566702, nGaia).etoilesGaia == 0, "sans Gaia chargé : compte de gaia.bin ignoré");
 
