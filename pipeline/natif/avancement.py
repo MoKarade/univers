@@ -83,10 +83,33 @@ def convertir_fusion(d):
     if os.path.exists(cb + '.tmp'): os.replace(cb + '.tmp', cb)
 
 
+DRIVE = 'G:/My Drive/Univers/archives/physique'      # règle de Marc (12/11/2026) : le maximum sur le Drive
+
+
+def archiver(d, nom):
+    """Copie sur le Drive les paquets d'images complets (listés dans fusion.json), puis fusion.json lui-même : une copie
+    complète du calcul y est gardée. Les fichiers restent aussi sur le PC tant que l'appli les dessine. Une fois le
+    premier instantané écrit, le départ (déjà sur le Drive) quitte le PC."""
+    import json, shutil
+    js = os.path.join(d, 'fusion.json')
+    if not os.path.isdir(os.path.dirname(DRIVE)) or not os.path.exists(js): return
+    cible = os.path.join(DRIVE, nom); os.makedirs(cible, exist_ok=True)
+    try: fichiers = [f for f, _ in json.load(open(js, encoding='utf-8'))['fichiers']]
+    except Exception: return
+    for f in fichiers + ['composantes.bin', 'composantes.json', 'fusion.json']:
+        a, b = os.path.join(d, f), os.path.join(cible, f)
+        if os.path.exists(a) and (not os.path.exists(b) or os.path.getsize(b) != os.path.getsize(a) or f == 'fusion.json'):
+            shutil.copyfile(a, b + '.partiel'); os.replace(b + '.partiel', b)
+    if os.path.exists(os.path.join(d, 'etat.npz')) and os.path.exists(os.path.join(d, 'depart.npz')):
+        os.remove(os.path.join(d, 'depart.npz'))
+
+
 def calcul_particules(dossier, fichier, nom, total, detail):
     j = os.path.join(NATIF, dossier, 'journal.txt')
     if not os.path.exists(j): return 'terminé'
     convertir_fusion(os.path.join(NATIF, dossier))
+    try: archiver(os.path.join(NATIF, dossier), dossier)
+    except OSError as e: print('archive :', e, flush=True)
     lignes = open(j, encoding='utf-8', errors='replace').read().splitlines()
     t = 0.0
     for l in reversed(lignes):
