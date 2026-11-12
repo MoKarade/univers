@@ -112,6 +112,30 @@ def main():
         check(n_cf4 == 460, 'galaxies de la page avec une distance Cosmicflows-4 : %d (attendu 460)' % n_cf4)
         pg.evaluate("__U.select(null)")
 
+        # A2 : frontière de Laniakea (Dupuy et Courtois 2023), visible aux grandes échelles seulement
+        lk = pg.evaluate("DATA.LANIAKEA ? [DATA.LANIAKEA.n, DATA.LANIAKEA.r_eq_mpc_h] : null")
+        check(bool(lk) and lk[0] == 2898 and abs(lk[1] - 77) < 1, 'Laniakea : %s points de frontière, rayon équivalent (Mpc/h)' % lk)
+        # positions : attracteur publié [-62, -8, 39] Mpc/h (Dupuy et Courtois 2023) et centre du bassin [-28,4, -36, 94,4] Mpc/h,
+        # distances divisées par h = 0,674 : 109,9 et 155,6 Mpc
+        dd = pg.evaluate("[Math.hypot(...DATA.LANIAKEA.attracteur), Math.hypot(...DATA.LANIAKEA.centre)]")
+        check(abs(dd[0] - 109.9) < 0.6 and abs(dd[1] - 155.6) < 0.8, 'Laniakea : attracteur à %.1f Mpc, centre à %.1f Mpc (attendu 109,9 et 155,6)' % tuple(dd))
+        pg.evaluate("__U.select(null); __U.S.playing = false; __U.goTo(24.95)")
+        pg.wait_for_function("__U.S.logR > 24.9", timeout=180000)
+        f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 4', timeout=180000)
+        vis = pg.evaluate("[__U.Rr.lania.visible, [...document.querySelectorAll('.lb')].some(e => e.style.visibility === 'visible' && /Laniakea/.test(e.textContent))]")
+        if not vis[1]:
+            print('   étiquettes visibles :', pg.evaluate("[...document.querySelectorAll('.lb')].filter(e => e.style.visibility === 'visible').map(e => e.textContent).join(', ')"), '| centre :', pg.evaluate("__U.S.center && __U.S.center.name"), pg.evaluate("__U.S.logR"))
+        pg.screenshot(path='/tmp/lot_s_laniakea_%s.png' % MODE)
+        prov = pg.evaluate("document.getElementById('prov').textContent")
+        check(vis[0] and 'Laniakea' in prov, 'Laniakea visible à 10^24,95 m, expliquée sous le titre : « %s »' % prov)
+        # le nom flottant suit l'attracteur ; la règle commune des étiquettes le masque près des bords ou s'il en chevauche une autre
+        if not phone:
+            check(vis[1], 'nom « Laniakea » affiché sur ordinateur')
+        pg.evaluate("__U.goStop(__U.STOPS.find(s => /Système solaire/.test(s.name)), true)")
+        pg.wait_for_function("__U.S.logR < 14", timeout=180000)
+        f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 4', timeout=180000)
+        check(pg.evaluate("__U.Rr.lania.visible") is False, 'Laniakea masquée dans le système solaire')
+
         dims = pg.evaluate("""new Promise(r => { const i = new Image(); i.onload = () => r([i.naturalWidth, i.naturalHeight]); i.onerror = () => r(null); i.src = DATA.CMB; })""")
         check(dims == [2048, 1024], 'texture du fond diffus : %s (Planck 2048 × 1024 ; WMAP faisait 720 × 360)' % dims)
         chk = pg.evaluate('DATA.CMB_CHK || null')

@@ -553,6 +553,10 @@ void main(){ float e=aEl.x; float M=mod(aEl.y+aEl.z*uT,6.2831853); float E=M+e*s
   const fpos = k => new Float32Array(b64ToBytes(DATA[k]).buffer), mkLook = (n, s, a) => { const l = new Float32Array(n * 2); for (let i = 0; i < n; i++) { l[i * 2] = s; l[i * 2 + 1] = a; } return l; };
   R.EXO = { N: DATA.EXO_N, pos: fpos('EXO_POS') }; R.PSR = { N: DATA.PSR_N, pos: fpos('PSR_POS') };
   const exoU = dotsU([0.42, 1.0, 0.6]), exo = pts({ position: [R.EXO.pos, 3], aLook: [mkLook(R.EXO.N, 1.9, 0.85), 2] }, mk(SH.dots, exoU), 9);
+  /* Laniakea (A2) : cellules de bord du bassin d'attraction de la Voie lactée (Dupuy et Courtois 2023, champ de vitesses
+     Cosmicflows-4), en Mpc comobiles, écliptique J2000, comme les galaxies proches. Pipeline : pipeline/sources/build_laniakea.py */
+  const LK = DATA.LANIAKEA, lkPos = LK ? new Float32Array(b64ToBytes(LK.pos).buffer) : new Float32Array(0), lkU = dotsU([0.35, 0.85, 1.0]);
+  const lania = pts({ position: [lkPos, 3], aLook: [mkLook(lkPos.length / 3, 2.4, 0.8), 2] }, mk(SH.dots, lkU), 4); R.lania = lania;
   const psrU = dotsU([0.8, 0.62, 1.0]), psr = pts({ position: [R.PSR.pos, 3], aLook: [mkLook(R.PSR.N, 1.9, 0.85), 2] }, mk(SH.dots, psrU), 9);
   // trous noirs : stellaires dans la Voie lactée (années-lumière), supermassifs au centre d'autres galaxies (Mpc)
   const f32 = s => new Float32Array(b64ToBytes(s).buffer);
@@ -761,6 +765,9 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
     const oNear = sim ? 0 : fadeIn(lr, 22.3, 22.9) * fadeOut(lr, 24.7, 25.3) * smoothstep(0.3, 1.2, F.age);
     near.visible = oNear > 0.003;
     if (near.visible) { place(near, gc, unitC, F); nearU.uPx.value = px; nearU.uOpacity.value = oNear; nearU.uMinPx.value = minPx * 1.35; nearU.uMaxPx.value = maxPx; nearU.uFloor.value = 0.55; nearU.uBigPx.value = Math.min(maxPx, 0.1 * R.halfMin); nearU.uStarCap.value = 2.4 * dpr; }
+    const oLk = sim ? 0 : fadeIn(lr, 23.8, 24.2) * fadeOut(lr, 25.3, 25.8) * smoothstep(0.3, 1.2, F.age);
+    lania.visible = oLk > 0.003 && lkPos.length > 0;
+    if (lania.visible) { place(lania, gc, unitC, F); lkU.uOpacity.value = oLk; lkU.uDpr.value = dpr; }
     const oLm = fadeIn(lr, 22.6, 23.2) * fadeOut(lr, LOG.MPC + 2.9, LOG.MPC + 3.5) * smoothstep(0.3, 1.2, F.age);
     landmarks.visible = sim && oLm > 0.003;
     if (landmarks.visible) { place(landmarks, gc, unitC, F); lmU.uPx.value = px; lmU.uOpacity.value = oLm * 0.9; lmU.uMinPx.value = minPx * 1.7; lmU.uMaxPx.value = maxPx; lmU.uFloor.value = 0.5; lmU.uBigPx.value = Math.min(maxPx, 0.1 * R.halfMin); lmU.uStarCap.value = 2.4 * dpr; }
