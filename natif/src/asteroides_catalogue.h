@@ -62,7 +62,11 @@ struct Catalogue {
         double M = std::fmod(static_cast<double>(cols[7][k]) + static_cast<double>(cols[8][k]) * (jd - epochJd), 6.283185307179586);
         if (M < 0) M += 6.283185307179586;
         double E = M + e * std::sin(M) * (1.0 + e * std::cos(M));
-        for (int i = 0; i < 20; ++i) E -= (E - e * std::sin(E) - M) / (1.0 - e * std::cos(E));
+        for (int i = 0; i < 20; ++i) {      // s'arrête dès que c'est exact : 3 ou 4 tours en général (1,58 million d'orbites au clic)
+            const double dE = (E - e * std::sin(E) - M) / (1.0 - e * std::cos(E));
+            E -= dE;
+            if (std::fabs(dE) < 1e-13) break;
+        }
         const double c = std::cos(E) - e, s = std::sin(E);
         for (int a = 0; a < 3; ++a) out[a] = static_cast<double>(cols[a][k]) * c + static_cast<double>(cols[3 + a][k]) * s;
     }

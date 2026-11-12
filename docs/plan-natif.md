@@ -282,3 +282,10 @@ jamais un modèle. Fait :
   devient un anneau puis une tache, au lieu de s'éteindre (captures à 7, 25 et 100 fois la distance Terre-Soleil).
 À faire dans le même esprit : plus de détail de près (noms et fiches des astéroïdes, comètes, lunes d'Uranus), somme
 des sources Gaia à distance moins sûre (fil Gaia), texte qui dit à chaque échelle si l'on voit des objets ou leur somme.
+
+## Astéroïdes : toute la base du JPL (12 novembre 2026)
+
+- Constat (fil interface) : le sous-ensemble repris de la page commençait au numéro 719 ; Cérès, Pallas, Junon, Vesta manquaient.
+- Fait : `pipeline/natif/asteroides_jpl.py` télécharge la base complète du JPL (Small-Body Database) : 1 580 289 astéroïdes écrits sur 1 580 297 (8 écartés, orbite non elliptique), 63,2 Mo, même format.
+- Contrôle (`--controle`) : 10 corps comparés à JPL Horizons, tous sous 0,002 UA (dont Cérès, Pallas, Vesta, Hygie).
+- Affichage : les points se fondent en anneau dès 2,5 fois la distance Terre-Soleil (au lieu de 8), sinon la ceinture blanchissait. Clic : le calcul d'orbite s'arrête dès qu'il est exact.
