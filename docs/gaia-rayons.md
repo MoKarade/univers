@@ -45,6 +45,16 @@ plus larges que 15°. Référence sans rayons (mêmes étoiles, directions méla
    géométrie : la poussière caméra-étoile n'est pas ajoutée]. Même chose pour les cases de lumière additionnée (`gaia_agreger.py` :
    flux sans poussière des sources estimées, case par case).
 
-## Résultats
+## Résultats [Certain, captures du 12/11/2026 à 58 000 al, carte RTX 5080 partagée]
 
-Voir la section « Avant / après » (captures) ajoutée à la fin du travail.
+- +44,6 Ma : la bande diffuse (lumière additionnée et étoiles sans vitesse sûre) disparaît ; reste le disque des étoiles à orbite
+  fiable, cisaillé par la rotation différentielle (calculé, réel pour ces étoiles).
+- Aujourd'hui : rien ne change sans la poussière (contraste des rayons à l'écran 0,017 dex avant et après).
+- Poussière retirée (86,2 M étoiles estimées, 58,5 % de la lumière ; A_G médiane 0,39 mag) : **n'enlève pas les rayons** (à l'écran
+  0,017 -> 0,016 dex ; vue de dessus 2-4 kpc 0,046 -> 0,043, 1-2 kpc 0,025 -> 0,065), multiplie la lumière totale par 2,5, dont
+  10 % par 30 000 étoiles à A_G > 5 mag (facteur > 100), et ajoute des grains (7,0 % -> 10,8 % de la lumière dans des pixels isolés).
+  Les bornes publiées de A_G (demi-largeur médiane 0,02 mag) ne permettent pas de trier les estimations douteuses.
+  Conclusion : les rayons sont des étoiles manquantes (Gaia ne mesure pas la distance des étoiles trop faibles derrière la
+  poussière), pas des étoiles assombries. Les retirer demanderait d'ajouter des étoiles non mesurées : contraire à la règle de Marc.
+- Le code de la poussière reste (drapeau 4, bits 16-31 des cases) mais n'agit que si gaia.bin est converti avec `--poussiere` ;
+  le fichier livré ne l'est pas (choix soumis à Marc).
