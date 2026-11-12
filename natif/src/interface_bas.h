@@ -23,6 +23,24 @@ const char* grainLine(const Sim& sim) {
     return "Ici, chaque point lointain est une galaxie mesurée, une par une.";
 }
 
+// Les rayons autour du Soleil, vus de loin : le flou des distances de Gaia (texte du fil Gaia, 12/11/2026).
+// Une ligne courte ; le survol donne l'explication complète.
+void raysNote() {
+    ImGui::TextDisabled("Rayons autour du Soleil : flou des distances mesurées par Gaia, pas une vraie structure (survol : pourquoi).");
+    if (!ImGui::IsItemHovered()) return;
+    ImGui::BeginTooltip();
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
+    ImGui::TextUnformatted("Pourquoi des rayons autour du Soleil ?");
+    ImGui::Separator();
+    ImGui::TextWrapped("Gaia mesure très précisément la direction de chaque étoile, mais moins bien sa distance. Chaque étoile peut donc être "
+                       "un peu plus près ou plus loin que dessiné, sur la ligne qui la relie au Soleil. Vu de loin, ce flou dessine des rayons "
+                       "qui partent du Soleil. Ce ne sont pas de vraies structures : c'est la marge d'erreur des mesures (moins de 10 % pour "
+                       "les étoiles dessinées une à une, jusqu'à 100 % pour la lumière additionnée des autres).");
+    ImGui::TextDisabled("Source : Gaia DR3, parallaxes (Lindegren et al. 2021).");
+    ImGui::PopTextWrapPos();
+    ImGui::EndTooltip();
+}
+
 void whatYouSee(const Sim& sim) {
     if (const char* grain = grainLine(sim)) ImGui::TextUnformatted(grain);
     const double boost = sim.brightnessBoost();
@@ -40,11 +58,15 @@ void whatYouSee(const Sim& sim) {
         ImGui::TextDisabled("La Voie lactée : modèle ajusté sur des mesures ; supposés : partage de la lumière au prorata des masses,");
         ImGui::TextDisabled("lumière ajoutée par les bras, largeur de la barre longue.");
     } else if (sim.dist > 3000.0) {
-        if (sim.hasGaia && sim.gaiaCount)
-            ImGui::TextDisabled("Voie lactée : seules les étoiles mesurées par Gaia sont montrées (%s) ; sa lumière d'ensemble n'est pas dessinée,",
+        // gaia_agrege.bin (fil Gaia, docs/gaia-voie-lactee.md) : la lumière des autres sources Gaia, additionnée par case.
+        if (sim.hasGaia && sim.gaiaCount) {
+            ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une ; le reste des sources Gaia est additionné par pixel, sans modèle.",
                                 frInt(static_cast<double>(sim.gaiaCount)).c_str());
-        else ImGui::TextDisabled("Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
-        ImGui::TextDisabled("car elle demanderait un modèle.");
+            raysNote();
+        } else {
+            ImGui::TextDisabled("Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
+            ImGui::TextDisabled("car elle demanderait un modèle.");
+        }
     }
     if (sim.galaxyGain() > 0.005) {
         ImGui::TextDisabled("Chaque point lointain est une galaxie ou un quasar, placé d'après son décalage vers le rouge mesuré");
