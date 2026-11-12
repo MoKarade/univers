@@ -657,12 +657,23 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
   const sxU = { uColor: U(new THREE.Color(0.62, 0.68, 0.8)), uOpacity: U(0) }, sxL = new THREE.LineSegments(sxG, new THREE.ShaderMaterial(Object.assign({ vertexShader: 'void main(){ gl_Position=projectionMatrix*viewMatrix*vec4(position,1.0); gl_Position.z=0.0; }', fragmentShader: LINE_F, uniforms: sxU }, additive)));
   sxL.frustumCulled = false; sxL.renderOrder = 47; sxL.visible = false; scene.add(sxL);
   // --- fond de ciel : panorama réel de la Voie lactée (ESO/S. Brunier), vu depuis le voisinage du Soleil. Il donne la lueur diffuse que les étoiles du catalogue, une à une, ne rendent pas.
-  const skyU = { uMap: U(null), uGain: U(0), uM: U(new THREE.Matrix3()) }; let skyReady = false;
+  const skyU = { uMap: U(null), uGain: U(0), uDss: U(0), uM: U(new THREE.Matrix3()) }; let skyReady = false; R.skySrc = 'eso';
   { const e = 23.4392911 * DEG, c = Math.cos(e), s = Math.sin(e), G = [[-0.0548755604162154, -0.8734370902348850, -0.4838350155487132], [0.4941094278755837, -0.4448296299600112, 0.7469822444972189], [-0.8676661490190047, -0.1980763734312015, 0.4559837761750669]];
     const row = g => [g[0], g[1] * c + g[2] * s, -g[1] * s + g[2] * c], a = row(G[0]), b = row(G[1]), d = row(G[2]); skyU.uM.value.set(a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2]);      // galactique ← écliptique
-    if (DATA.SKY) new THREE.TextureLoader().load(DATA.SKY, t => { t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.wrapS = THREE.RepeatWrapping; skyU.uMap.value = t; skyReady = true; }); }
+    if (DATA.SKY) new THREE.TextureLoader().load(DATA.SKY, t => { t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.wrapS = THREE.RepeatWrapping; R.skyEso = t; if (R.skySrc === 'eso') skyU.uMap.value = t; skyReady = true; }); }
+  /* Lot S (A4) : vrai ciel, relevé photographique DSS2 en couleur (STScI/NASA ; couleurs et découpage HiPS : CDS ; copie ESA),
+     reprojeté par pipeline/sources/build_sky_dss.py et déposé à part de la page (limite de 16 Mo). Sur demande seulement (panneau
+     Affichage) : plus net que le panorama ESO (2,6′ par pixel au lieu de 10,5′), mais les étoiles brillantes y sont des taches
+     photographiques qui doublent celles du catalogue. 8192 × 4096 si la carte graphique l'accepte, sinon 4096 × 2048. */
+  const DSS = window.__SKY_DSS !== undefined ? window.__SKY_DSS : { 8192: '/_blob/e75c86b690b2e674ae95868aeb1ebbf6', 4096: '/_blob/ee8f98c718b4c30f157e7982266fe65a' };
+  R.skyDssAvail = !!DSS;
+  R.setSkyDss = (on, done) => { if (!on || !DSS) { if (R.skyEso) skyU.uMap.value = R.skyEso; skyU.uDss.value = 0; R.skySrc = 'eso'; if (done) done(true); return; }
+    if (R.skyDssTex) { skyU.uMap.value = R.skyDssTex; skyU.uDss.value = 1; R.skySrc = R.skyDssName; if (done) done(true); return; }
+    const big = renderer.capabilities.maxTextureSize >= 8192 && innerWidth >= 700;
+    new THREE.TextureLoader().load(big ? DSS[8192] : DSS[4096], t => { t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.wrapS = THREE.RepeatWrapping;
+      R.skyDssTex = t; R.skyDssName = 'dss' + (big ? 8192 : 4096); skyU.uMap.value = t; skyU.uDss.value = 1; R.skySrc = R.skyDssName; skyReady = true; if (done) done(true); }, undefined, () => { if (done) done(false); }); };
   const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), new THREE.ShaderMaterial(Object.assign({ vertexShader: 'varying vec3 vD; void main(){ vD=position; gl_Position=projectionMatrix*viewMatrix*vec4(cameraPosition+position*5.0,1.0); gl_Position.z=0.0; }',
-    fragmentShader: 'uniform sampler2D uMap; uniform float uGain; uniform mat3 uM; varying vec3 vD; void main(){ vec3 g=uM*normalize(vD); float l=atan(g.y,g.x), b=asin(clamp(g.z,-1.0,1.0)); vec3 c=texture2D(uMap,vec2(0.5-l/6.2831853,0.5+b/3.14159265)).rgb; c=pow(max(c-0.045,0.0),vec3(2.0)); c=mix(vec3(dot(c,vec3(0.3,0.5,0.2))),c,0.78); gl_FragColor=vec4(c*uGain,1.0); }', uniforms: skyU }, additive, { side: THREE.BackSide })));
+    fragmentShader: 'uniform sampler2D uMap; uniform float uGain,uDss; uniform mat3 uM; varying vec3 vD; void main(){ vec3 g=uM*normalize(vD); float l=atan(g.y,g.x), b=asin(clamp(g.z,-1.0,1.0)); vec3 c=texture2D(uMap,vec2(0.5-l/6.2831853,0.5+b/3.14159265)).rgb; c=mix(pow(max(c-0.045,0.0),vec3(2.0)),pow(max(c-0.06,0.0)*1.35,vec3(1.6)),uDss); c=mix(vec3(dot(c,vec3(0.3,0.5,0.2))),c,0.78); gl_FragColor=vec4(c*uGain,1.0); }', uniforms: skyU }, additive, { side: THREE.BackSide })));
   skyMesh.frustumCulled = false; skyMesh.renderOrder = -8; skyMesh.visible = false; scene.add(skyMesh);
   const mkRing = (color, dash, order) => { const u = { uRad: U(1), uColor: U(new THREE.Color(color[0], color[1], color[2])), uOpacity: U(1), uWidth: U(0.01), uDash: U(dash) }; const m = new THREE.Mesh(quad, mk(SH.ring, u)); m.frustumCulled = false; m.renderOrder = order; m.userData.u = u; scene.add(m); return m; };
   const rings = { hubble: mkRing([0.61, 0.77, 1.0], 0, 12), event: mkRing([0.95, 0.71, 0.42], 90, 12), particle: mkRing([0.9, 0.92, 0.96], 0, 12), here: mkRing([0.95, 0.71, 0.42], 0, 13), sel: mkRing([1.0, 1.0, 1.0], 0, 50) };

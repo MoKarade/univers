@@ -1045,6 +1045,9 @@
     $('t-go').addEventListener('click', go); $('t-date').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') go(); });
     $('t-prev').addEventListener('click', () => evStep(-1)); $('t-next').addEventListener('click', () => evStep(1)); }
   { const ck = $('c-sky'); if (ck) ck.addEventListener('change', e => { S.skyOn = e.target.checked; }); }
+  { const ck = $('c-dss'), msg = $('dss-msg'); if (ck) { if (!Rr.skyDssAvail) ck.disabled = true;
+    ck.addEventListener('change', e => { const on = e.target.checked; msg.textContent = on ? 'Chargement du relevé DSS…' : '';
+      Rr.setSkyDss(on, ok => { msg.textContent = on ? (ok ? 'Relevé DSS2 en couleur (STScI/NASA ; couleurs : CDS), ' + (Rr.skySrc === 'dss8192' ? '8192' : '4096') + ' pixels de large.' : 'Relevé DSS indisponible : panorama ESO conservé.') : ''; if (on && !ok) e.target.checked = false; }); }); } }
   /* ---- frise du temps : en haut, toute l'histoire d'un coup d'œil ; en dessous, une règle détaillée que l'on fait glisser ---- */
   const tapeEl = $('tape'), tcv = $('tape-cv'), tcx = tcv.getContext('2d');
   const ovF = t => Math.sign(t) * Math.log10(1 + Math.abs(t)), ovInv = f => Math.sign(f) * (Math.pow(10, Math.abs(f)) - 1);

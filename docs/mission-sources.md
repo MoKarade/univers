@@ -50,5 +50,12 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 - Après : fiches « Expansion » et « Énergie noire » : H0 de Planck 2018 (67,4 ± 0,5) et de SH0ES (73,0 ± 1,0) ; DESI DR2 et DES Y6 (w0 = −0,84, wa = −0,53, écart de 2,3 σ au modèle standard). Le calcul de la page ne change pas.
 - Fini quand : le critique de vérité confirme chaque valeur sur sa source.
 
+### S6 — Vrai ciel (A4, contournement)
+- Contournement de Strasbourg (en panne) et de la limite de la page : le relevé DSS2 en couleur est téléchargé depuis la copie de l'ESA (https://skies.esac.esa.int/DSSColor/, ordre 3, 768 tuiles, 34 Mo), reprojeté en une image galactique 8192 × 4096 (2,7 Mo) et 4096 × 2048 (0,7 Mo) par `pipeline/sources/build_sky_dss.py`, puis déposé à part de la page (fichiers joints de l'artefact).
+- Contrôle bloquant du script : la disposition des pixels dans les tuiles est établie sur les données (8 essais) ; les 16 étoiles les plus brillantes tombent sur des pixels brillants (224 à 254 sur 255), score 237 contre 45 pour la deuxième disposition.
+- Choix : en option (Affichage, case « Ciel du relevé DSS »), pas par défaut. Il est quatre fois plus net que le panorama ESO (2,6′ par pixel contre 10,5′), mais ses étoiles brillantes sont des taches photographiques qui doublent celles du catalogue.
+- Pas fait : le zoom continu de type HiPS. L'angle de vue de la page est fixe (40°) : au-delà de 2′ par pixel, l'écran n'en montrerait pas plus.
+- Fini quand : test `app/test/lot_s_ciel.py` (ESO au départ sans téléchargement, DSS 8192 sur ordinateur et 4096 sur téléphone après la case, retour à ESO) ; critiques PASSE.
+
 ### Ensuite (A4, A5, A7)
 Ciel réel en zoom continu (HiPS), recherche par nom (Sesame, SIMBAD), zones couvertes par chaque relevé (MOC). Attendent la mission 1 (Firebase) pour A4.
