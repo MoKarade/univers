@@ -87,11 +87,27 @@ def main():
         lieu = pg.evaluate("document.getElementById('place').textContent")
         check('Terre' in lieu, 'vue après le toucher : « %s »' % lieu)
 
-        # S3 : distances Cosmicflows-4 dans les fiches. NGC 4258 : 7,5 millions de parsecs, dont le maser (Tully et al. 2023).
-        txt = norm(pg.evaluate("""(() => { const i = DATA.NEAR_NAMES.split('|').indexOf('NGC4258'); if (i < 0) return null;
-            __U.select(__U.selNear(i)); const m = document.getElementById('card-more'); if (m && !m.hidden) m.click(); return document.getElementById('card').innerText; })()"""))
-        manque = [a for a in ('Distance mesurée', 'Cosmicflows-4, PGC 39600', 'maser', 'Céphéides', 'à 1 % près') if a not in txt]
-        check(not manque, 'fiche NGC 4258%s' % ((' : manque ' + str(manque) + ' dans « ' + txt.replace(chr(10), ' / ')[:300] + ' »') if manque else ''))
+        # S3 : distances Cosmicflows-4 dans les fiches (valeurs de Tully et al. 2023).
+        carte = """(o => { __U.select(o); const m = document.getElementById('card-more'); if (m && !m.hidden && /^Plus/.test(m.textContent)) m.click(); return document.getElementById('card').innerText; })"""
+        fiches = [('NGC 4258', "__U.selNear(DATA.NEAR_NAMES.split('|').indexOf('NGC4258'))",
+                   ['Mesure depuis la Terre', '24,6 millions', 'à 1 % près', 'maser', 'Céphéides', 'PGC 39600']),
+                  ('Andromède (M31)', None, ['Mesure depuis la Terre', 'Céphéides', 'PGC 2557'])]
+        for nom, js, attendus in fiches:
+            if js:
+                txt = norm(pg.evaluate(carte + '(' + js + ')'))
+            else:
+                pg.evaluate("__U.goName('Andromède')")
+                f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 3', timeout=180000)
+                txt = norm(pg.evaluate("(() => { const m = document.getElementById('card-more'); if (m && !m.hidden && /^Plus/.test(m.textContent)) m.click(); return document.getElementById('card').innerText; })()"))
+            manque = [a for a in attendus if a not in txt]
+            check(not manque, 'fiche %s%s' % (nom, (' : manque ' + str(manque) + ' dans « ' + txt.replace(chr(10), ' / ')[:300] + ' »') if manque else ''))
+        r = pg.evaluate("""(() => { const C = DATA.CF4_NEAR, a = [], z = [];
+            C.forEach((c, i) => (c ? a : z).push(i)); const pick = [];
+            for (let k = 0; k < 20; k++) pick.push(a[Math.floor((k * 7919 + 13) % a.length)]);
+            const t = i => { __U.select(__U.selNear(i)); return document.getElementById('card').innerText; };
+            return { avec: pick.filter(i => t(i).indexOf('Mesure depuis la Terre') >= 0).length, sans: t(z[0]).indexOf('Mesure depuis la Terre') < 0 && t(z[0]).indexOf('undefined') < 0 }; })()""")
+        check(r['avec'] == 20, '20 galaxies proches associées (choix fixe, réparti) : %d portent la mesure' % r['avec'])
+        check(r['sans'], 'galaxie sans mesure Cosmicflows-4 : fiche sans ligne vide')
         n_cf4 = pg.evaluate("DATA.CF4_NEAR.filter(Boolean).length + DATA.CF4_LOCAL.filter(Boolean).length")
         check(n_cf4 == 460, 'galaxies de la page avec une distance Cosmicflows-4 : %d (attendu 460)' % n_cf4)
         pg.evaluate("__U.select(null)")

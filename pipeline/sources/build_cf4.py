@@ -9,7 +9,7 @@ Pour chaque galaxie : numéro PGC, position, vitesse dans le référentiel du fo
 module de distance moyen et, méthode par méthode, le module publié et son incertitude.
 Une méthode sans valeur publiée est simplement absente.
 
-La table complète (3,6 Mo) ne tient pas dans la page (limite de 16 Mo). On n'embarque que les galaxies qui ont une
+La table complète (3,6 Mo) ne tient pas dans la page : celle-ci fait déjà 14,4 Mo (15,7 Mo avec la poussière) pour une limite de 16 Mo. On n'embarque que les galaxies qui ont une
 fiche dans la page : les galaxies proches (DATA.NEAR, catalogue de Karachentsev) et celles du Groupe local
 (DATA.LOCAL), associées par position sur le ciel à moins de ASSOC_ARCMIN minutes d'arc. La table complète est
 écrite hors dépôt (<dossier_raw>/cf4_complet.json) pour un chargement à part plus tard.
