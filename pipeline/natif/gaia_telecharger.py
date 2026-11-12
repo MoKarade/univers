@@ -30,7 +30,11 @@ import argparse, concurrent.futures as cf, os, sys, time, urllib.parse, urllib.r
 TAP = 'https://gea.esac.esa.int/tap-server/tap'
 JEUX = {'base': 'source_id, ra, dec, parallax, pmra, pmdec, radial_velocity, phot_g_mean_mag, bp_rp',
         'erreurs': 'source_id, parallax_error, pmra_error, pmdec_error, parallax_pmra_corr, parallax_pmdec_corr, pmra_pmdec_corr, radial_velocity_error',
-        'poussiere': 'source_id, ag_gspphot, ag_gspphot_lower, ag_gspphot_upper, ebpminrp_gspphot'}
+        'poussiere': 'source_id, ag_gspphot, ag_gspphot_lower, ag_gspphot_upper, ebpminrp_gspphot',
+        # « reste » : les 1,71 milliard d'AUTRES sources (parallaxe absente ou mesurée à moins de 10 sigma), une à une.
+        # Demande de Marc du 12/11/2026 (« toutes les données ») ; environ 120 Go en FITS, archivés sur son Drive.
+        'reste': 'source_id, ra, dec, parallax, parallax_error, pmra, pmdec, radial_velocity, phot_g_mean_mag, bp_rp'}
+FILTRE = 'parallax_over_error > 10'
 COLONNES = JEUX['base']
 HPX12 = 12 * 4 ** 12      # pixels HEALPix de niveau 12 sur tout le ciel
 MAXREC = 10_000_000      # sans ce paramètre, le service coupe à 50 000 lignes (constaté le 12 novembre 2026)
@@ -39,7 +43,7 @@ UNITE = 2 ** 35      # source_id = pixel HEALPix niveau 12 × 2^35 + numéro dan
 
 def requete(debut, fin):
     return (f'SELECT {COLONNES} FROM gaiadr3.gaia_source '
-            f'WHERE source_id >= {debut} AND source_id < {fin} AND parallax_over_error > 10')
+            f'WHERE source_id >= {debut} AND source_id < {fin} AND {FILTRE}')
 
 
 def http(url, data=None, timeout=120):
@@ -90,8 +94,10 @@ def main():
     ap.add_argument('dossier'); ap.add_argument('--parts', type=int, default=1024); ap.add_argument('--simultanes', type=int, default=4)
     ap.add_argument('--jeu', default='base', choices=sorted(JEUX))
     a = ap.parse_args()
-    global COLONNES
+    global COLONNES, FILTRE
     COLONNES = JEUX[a.jeu]
+    if a.jeu == 'reste':
+        FILTRE = '(parallax_over_error IS NULL OR parallax_over_error <= 10)'
     os.makedirs(a.dossier, exist_ok=True)
     t0, total, echecs = time.time(), 0, []
     with cf.ThreadPoolExecutor(a.simultanes) as ex:

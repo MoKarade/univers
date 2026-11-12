@@ -7,7 +7,13 @@ function Copier-SiChange([string]$Source, [string]$Destination) {
     $src = Get-Item $Source
     $dst = Get-Item $Destination -ErrorAction SilentlyContinue
     if ($dst -and $dst.Length -eq $src.Length -and $dst.LastWriteTimeUtc -ge $src.LastWriteTimeUtc) { return }
-    try { Copy-Item $src.FullName $Destination -Force }
+    # Lien dur plutôt que copie (même disque) : une seule fois la place sur le disque (Marc, 12/11/2026 : garder de la place).
+    $tmp = "$Destination.lien"
+    try {
+        if (Test-Path $tmp) { Remove-Item $tmp -Force }
+        try { New-Item -ItemType HardLink -Path $tmp -Target $src.FullName -ErrorAction Stop | Out-Null; Move-Item $tmp $Destination -Force }
+        catch { if (Test-Path $tmp) { Remove-Item $tmp -Force }; Copy-Item $src.FullName $Destination -Force }
+    }
     catch { "ATTENTION : $($src.Name) n'a pas pu être mis à jour (simulateur ouvert) : relancer l'installation après l'avoir fermé." }
 }
 
