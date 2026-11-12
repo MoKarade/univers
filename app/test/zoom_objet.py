@@ -101,13 +101,21 @@ def touch(pg, label, query, kind):
     return ok + ', ' + how
 
 
+SPOT = f"""[[0.3,0.5],[0.7,0.45],[0.62,0.3],[0.75,0.62],[0.55,0.7]].map(([x,y]) => [x * {W}, y * {H}]).find(([x,y]) => {{ const e = document.elementFromPoint(x, y); return e && e.id === 'gl'; }}) || null"""
+
+
 def zoom(pg, sens, kind):
     """Zoome de six puissances de dix (sens +1 : reculer, -1 : avancer), mesure à chaque image."""
     worst, rows = 0.0, []
     l0 = pg.evaluate('__U.S.logR')
+    # point de la molette : sur la scène elle-même (canevas #gl), hors du centre où le nom de l'objet intercepte la molette (voir R3),
+    # et hors de la fiche, qui sur ordinateur a son propre fond et défile à la molette (interface PC du 12/11/2026)
+    spot = pg.evaluate(SPOT)
+    if spot is None: return False, 9.9, pg.evaluate('__U.S.logR'), pg.evaluate('__U.S.logR'), 'aucun point libre de la scène pour la molette'
     for _ in range(int(DECADES / STEP)):
         before = pg.evaluate('__U.S.logR')
-        pg.mouse.move(W * 0.3, H * 0.5)      # hors du centre : le nom de l'objet, au centre, intercepte la molette (voir R3)
+        spot = pg.evaluate(SPOT) or spot      # la fiche ou un avis peuvent changer de taille en cours de route
+        pg.mouse.move(spot[0], spot[1])
         pg.mouse.wheel(0, sens * WHEEL)
         wait_frames(pg, 1)
         m = pg.evaluate(PROJ)
