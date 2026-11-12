@@ -196,6 +196,7 @@ struct Sim {
     // dates, aujourd'hui compris, la Galaxie entière du calcul (les mêmes points jusqu'à la fusion), dans les teintes des
     // étoiles, avec les étoiles mesurées par-dessus : plus de bascule entre l'ère des mesures et celle de la fusion.
     const std::vector<ArmTracer>* armTracers = nullptr;      // traceurs mesurés des bras spiraux (nul : fichier absent)
+    double armPatternKmsKpc = 28.2, armPatternErrorKmsKpc = 2.1;      // vitesse de rotation du dessin des bras (Dias et al. 2019)
     bool armTracersShown = false;                            // dessinés à cette image (près d'aujourd'hui, vus d'assez loin)
     bool wholeGalaxy = false;
     std::vector<TaskProgress> tasks;     // calculs de fond du PC (avancement.h), relus toutes les 2 secondes

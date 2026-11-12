@@ -500,8 +500,10 @@ int runWindow(const WindowOptions& opt) {
                                           fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
                                                                : "points du calcul fait à l'avance (un scénario) ; éclat d'affichage fixe, pas encore à l'échelle des étoiles mesurées"});
             if (sim.armTracers)
-                sim.calcStates.push_back({"Traceurs des bras spiraux", armTracers.count ? CalcMode::Measured : CalcMode::Hidden, 0,
-                                          "masers à parallaxe radio (Reid et al. 2019) et amas ouverts datés (Hunt & Reffert 2023) : positions mesurées, montrées autour d'aujourd'hui"});
+                sim.calcStates.push_back({"Traceurs des bras spiraux", !armTracers.count ? CalcMode::Hidden : std::fabs(sim.years - kStartYears) < 3.0e4 ? CalcMode::Measured : CalcMode::Approx, 0,
+                                          std::fabs(sim.years - kStartYears) < 3.0e4
+                                              ? "masers à parallaxe radio (Reid et al. 2019) et amas ouverts datés (Hunt & Reffert 2023) : positions mesurées"
+                                              : "dessin mesuré aujourd'hui, tourné d'un bloc à la vitesse mesurée des bras (28,2 ± 2,1 km/s par kpc, Dias et al. 2019) : approché, les bras se déforment aussi"});
             if (sim.cloneCount)
                 sim.calcStates.push_back({"Scénarios du Groupe local", clones.count ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           "10 000 routes possibles des galaxies voisines, calculées à l'avance d'après l'incertitude des mesures"});
@@ -530,7 +532,7 @@ int runWindow(const WindowOptions& opt) {
         fusionShare = (sim.wholeGalaxy ? 1.0 : 1.0 - sim.starShare()) * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0);
         fusionCloud.update(g, sim.replayGa(), fusionShare);
         if (milkyWayCentre >= 0) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
-        armTracers.update(cam, sim.years - kStartYears, sim.dist, pc.par[0]);
+        if (milkyWayCentre >= 0) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
         sim.armTracersShown = armTracers.count > 0;
         tasksTimer += dt;
         if (tasksTimer > 2.0) {      // calculs de fond du PC : relus toutes les 2 secondes

@@ -7,8 +7,13 @@
 //   - masers : rose (régions où naissent des étoiles massives : elles jalonnent les bras) ;
 //   - amas de moins de 100 millions d'années : bleu-blanc (trop jeunes pour avoir quitté leur bras) ;
 //   - amas plus vieux : gris, plus faibles (ils se sont déjà dispersés dans le disque).
-// Les couleurs sont un code de légende, pas une mesure ; la taille est fixe à l'écran. Montrés autour d'aujourd'hui
-// seulement (ce sont des positions mesurées, sans orbite calculée pour l'instant) et vus d'au moins 1 000 années-lumière.
+// Les couleurs sont un code de légende, pas une mesure ; la taille est fixe à l'écran ; vus d'au moins 1 000 al.
+// Dans le temps (choix de Marc, 12 novembre 2026 : « 1 et 2 ») : le dessin des bras est une onde qui tourne d'un bloc
+// autour du centre de la Galaxie, à la vitesse mesurée de 28,2 ± 2,1 km/s par kpc (Dias et al. 2019, MNRAS 486, 5726,
+// arXiv:1905.08133, d'après les amas jeunes de Gaia DR2). Les traceurs mesurés aujourd'hui tournent donc ensemble à
+// cette vitesse : c'est CALCULÉ (le dessin d'aujourd'hui, tourné), montré tel quel jusqu'à 200 millions d'années, puis
+// éteint progressivement jusqu'à 400 millions (au-delà, le dessin se déforme : c'est le calcul complet de la Galaxie,
+// fait par le fil physique, qui prend le relais).
 #pragma once
 #include <algorithm>
 #include <cmath>
@@ -26,6 +31,9 @@ struct ArmTracerPoints {
     float* cols[StarRenderer::kCols] = {};
     uint32_t capacity = 0, count = 0;
     std::vector<ArmTracer> tracers;
+    std::vector<phys::Vec3> galactic;      // places d'aujourd'hui par rapport au centre de la Galaxie (kpc)
+    static constexpr double kPatternKmsKpc = 28.2, kPatternErrorKmsKpc = 2.1;      // Dias et al. 2019
+    static constexpr double kFullYears = 2.0e8, kEndYears = 4.0e8;
     bool ready = false;
 
     bool create(const Gpu& g, const std::string& path) {
@@ -62,21 +70,37 @@ struct ArmTracerPoints {
             cols[1][i] = static_cast<float>(t.pos.y);
             cols[2][i] = static_cast<float>(t.pos.z);
         }
+        const phys::Vec3 s = phys::galaxie::soleilPos();
+        galactic.resize(capacity);
+        for (uint32_t i = 0; i < capacity; ++i) {
+            const phys::Vec3 g = orbite::versGalactique(tracers[i].pos);
+            galactic[i] = {g.x / orbite::kKpcLy + s.x, g.y / orbite::kKpcLy + s.y, g.z / orbite::kKpcLy + s.z};
+        }
         ready = true;
         return true;
     }
 
-    // Part montrée : pleine à moins de 30 000 ans d'aujourd'hui, nulle au-delà de 100 000 ans (positions mesurées).
-    static double shareAt(double yearsFromToday) { return std::clamp((1.0e5 - std::fabs(yearsFromToday)) / 7.0e4, 0.0, 1.0); }
+    // Part montrée : pleine jusqu'à 200 millions d'années d'aujourd'hui, nulle au-delà de 400 millions.
+    static double shareAt(double yearsFromToday) { return std::clamp((kEndYears - std::fabs(yearsFromToday)) / (kEndYears - kFullYears), 0.0, 1.0); }
 
-    void update(const Camera& cam, double yearsFromToday, double viewDistLy, float exposure) {
+    // centre : place à l'écran du centre de la Galaxie à cette date (années-lumière).
+    void update(const Camera& cam, Vec3 centre, double yearsFromToday, double viewDistLy, float exposure) {
         count = 0;
         if (!ready) return;
         const double share = shareAt(yearsFromToday) * std::clamp(std::log10(std::max(viewDistLy, 1.0)) - 3.0, 0.0, 1.0);
         if (share <= 0) return;
+        // Rotation d'un bloc autour de l'axe de la Galaxie, dans le sens de la rotation des étoiles (angle décroissant dans
+        // ce repère, comme le Soleil).
+        const double angle = -kPatternKmsKpc * phys::galaxie::kKmsKpcToRadGa * yearsFromToday / 1.0e9, ca = std::cos(angle), sa = std::sin(angle);
         for (uint32_t i = 0; i < capacity; ++i) {
             const ArmTracer& t = tracers[i];
-            const Vec3 d = t.pos - cam.pos;
+            const phys::Vec3& g0 = galactic[i];
+            const Vec3 e = orbite::versEcliptique({(g0.x * ca - g0.y * sa) * orbite::kKpcLy, (g0.x * sa + g0.y * ca) * orbite::kKpcLy, g0.z * orbite::kKpcLy});
+            const Vec3 w{centre.x + e.x, centre.y + e.y, centre.z + e.z};
+            cols[0][i] = static_cast<float>(w.x);
+            cols[1][i] = static_cast<float>(w.y);
+            cols[2][i] = static_cast<float>(w.z);
+            const Vec3 d = w - cam.pos;
             const double dist = std::max(std::sqrt(dot(d, d)), 1e-9);
             const double flux = (t.maser ? 8.0 : t.ageMyr < 100.0 ? 0.6 : 0.03) * share;      // éclat d'affichage, pas une mesure
             cols[3][i] = static_cast<float>(-2.5 * std::log10(flux / exposure) - 5.0 * std::log10(dist / 3.2615638) + 5.0);
