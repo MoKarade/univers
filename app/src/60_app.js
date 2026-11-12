@@ -1290,7 +1290,7 @@
      déplacement. Une galaxie que la page a déjà (galaxies proches, Groupe local, hôtes de trous noirs supermassifs) renvoie à sa fiche de la page. */
   const NGC = { list: null, p: null }, NGC_ZMIN = 0.01, NGC_EPS = 23.4392911 * DEG;
   const NGCT = { G: 'galaxie', GPair: 'paire de galaxies', GTrpl: 'triplet de galaxies', GGroup: 'groupe de galaxies', OCl: 'amas ouvert', GCl: 'amas globulaire', 'Cl+N': 'amas et nébuleuse', PN: 'nébuleuse planétaire', HII: 'région HII', EmN: 'nébuleuse en émission', RfN: 'nébuleuse par réflexion', Neb: 'nébuleuse', SNR: 'reste de supernova', Nova: 'nova', '*': 'étoile', '**': 'étoile double', '*Ass': 'association d’étoiles', Other: 'autre objet' };
-  function loadNgc() { if (!NGC.p) { const src = window.__NGC !== undefined ? window.__NGC : '/_blob/ca16cb082058bf133c8537e125faf6a8';
+  function loadNgc() { if (!NGC.p) { const src = window.__NGC !== undefined ? window.__NGC : '/_blob/d108b6f5ff5be725f09a03babd3a5205';
       NGC.p = src ? fetch(src).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { NGC.list = j.o; if (FIDX) addNgc(FIDX); return true; }).catch(() => { NGC.p = null; return false; })      /* un échec sera retenté au prochain clic */ : Promise.resolve(false); }
     return NGC.p; }
   function addNgc(X) { NGC.list.forEach((o, i) => { const ns = o[0].split(' · '), kind = (NGCT[o[1]] || 'objet') + (o[8] ? ' · fiche de la page' : ' · catalogue NGC/IC'), go = () => ngcGo(i);

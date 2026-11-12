@@ -33,6 +33,7 @@ CKMS = 299792.458
 A_GAL = [[-0.0548755604162154, -0.8734370902348850, -0.4838350155487132], [0.4941094278755837, -0.4448296299600112, 0.7469822444972189], [-0.8676661490190047, -0.1980763734312015, 0.4559837761750669]]
 
 ECARTES = {'Dup', 'NonEx'}
+ECART_MAX = 5.0       # minutes d'arc entre l'objet OpenNGC et la galaxie de la page reliée par son nom
 
 
 def sexa(s, heures):
@@ -91,7 +92,9 @@ def main(raw):
         out.append([' · '.join(noms), r['Type'], ra, dec, nombre(r.get('B-Mag')), nombre(r.get('MajAx')), z, r.get('Const') or None, None])
     galaxies = {'G', 'GPair', 'GTrpl', 'GGroup'}
     # 1) par nom : désignations NGC, IC, M, UGC normalisées (« NGC0253 », « NGC 253 » -> « NGC253 »)
-    cle = lambda t: [re.sub(r'^(NGC|IC|M|UGC)0*', r'\1', x.replace(' ', '').upper()) for x in re.findall(r'(?:NGC|IC|UGC|M)\s*\d+[A-Z]?', t)]
+    # désignation entière seulement : pas de lettre ou chiffre avant, ni lettre, chiffre ou tiret après
+    # (« AM0106-382 » ne donne pas M106, « NGC2903-HI-1 » ni « NGC3521sat » ne donnent NGC 2903 ou NGC 3521)
+    cle = lambda t: [re.sub(r'^(NGC|IC|M|UGC)0*', r'\1', x.replace(' ', '').upper()) for x in re.findall(r'(?<![A-Za-z0-9])(?:NGC|IC|UGC|M) ?\d+[A-Z]?(?![A-Za-z0-9-])', t)]
     index = {}
     for k, o in enumerate(out):
         if o[1] in galaxies:
@@ -111,6 +114,21 @@ def main(raw):
                     out[k][8] = [tag, i]
                     pris[tag].add(i)
                     break
+    # contrôle de position des liens par nom : moins de ECART_MAX minutes d'arc, sinon le lien est retiré
+    near_d, _, local_d, _ = build_cf4.galaxies_de_la_page()
+    import base64, struct
+    bd = base64.b64decode(lit('data5.js', 'BHM')['dir'])
+    bhm_d = [build_cf4.ecl_vers_eq(*struct.unpack_from('<3f', bd, i * 12)) for i in range(len(noms_bhm))]
+    dirs = {'n': near_d, 'l': local_d, 'b': bhm_d}
+    retires = []
+    for o in out:
+        if o[8]:
+            p = dirs[o[8][0]][o[8][1]]
+            if p is None or build_cf4.sep_arcmin((o[2], o[3]), p) > ECART_MAX:
+                retires.append((o[0].split(' · ')[0], o[8], None if p is None else round(build_cf4.sep_arcmin((o[2], o[3]), p), 1)))
+                pris[o[8][0]].discard(o[8][1])
+                o[8] = None
+    print('liens par nom retirés (écart > %g minutes) : %s' % (ECART_MAX, retires))
     par_nom = sum(1 for o in out if o[8])
     # 2) par position (moins de 1,5'), pour les galaxies de la page pas encore reliées
     near, _, local, _ = build_cf4.galaxies_de_la_page()
@@ -124,7 +142,7 @@ def main(raw):
     print('OpenNGC : %d lignes lues, %d gardées, %d écartées (doublons, inexistants, sans position) ; %d avec z ; %d Messier'
           % (len(lignes), len(out), ecartes, sum(1 for o in out if o[6] is not None), sum(1 for o in out if ' · M ' in o[0] + ' ')))
     m = {o[0].split(' · ')[0]: o for o in out}
-    for nom, attendu in (('NGC 5194', 'n'), ('NGC 4486', 'b'), ('NGC 4594', 'n'), ('NGC 224', 'l')):
+    for nom, attendu in (('NGC 5194', 'n'), ('NGC 4486', 'b'), ('NGC 4594', 'n'), ('NGC 224', 'l'), ('NGC 4258', 'n'), ('NGC 2903', 'n'), ('NGC 3521', 'n')):
         o = m_lien = {x[0].split(' · ')[0]: x for x in out}.get(nom)
         print('  lien %-9s %s' % (nom, o[8] if o else 'absent'))
         if not o or not o[8] or o[8][0] != attendu:
