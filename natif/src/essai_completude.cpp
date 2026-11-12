@@ -30,6 +30,8 @@ int main(int argc, char** argv) {
     verifie(pourcent(0.0782) == "7,8 %", "pourcent : une décimale");
     verifie(pourcent(0.0034) == "0,34 %", "pourcent : petite part");
     verifie(pourcent(2.8e-6) == "0,00028 %", "pourcent : très petite part, sans exposant");
+    verifie(pourcent(1580289.0 / 1580368.0) == "99,995 %", "pourcent : presque complet n'est jamais écrit 100 %");
+    verifie(pourcent(1.0) == "100 %", "pourcent : complet");
     verifie(echellePour(45.0 * kAuInLy) == 0 && echellePour(30) == 1 && echellePour(300) == 2 && echellePour(5e6) == 3 && echellePour(5e9) == 4,
             "echellePour : les cinq échelles de l'interface (touches 1 à 5)");
     verifie(lunesConnues() == 461, "lunes connues : 460 (JPL) + la Lune");
@@ -54,7 +56,12 @@ int main(int argc, char** argv) {
     sim.probes = &probes;
     sim.stars = &stars;
     sim.spk = &spk;
-    sim.asteroidCount = 123530;      // en-tête de asteroides.bin (lu par asteroides.h dans l'appli)
+    {      // en-tête de asteroides.bin, lu comme asteroides.h dans l'appli
+        std::ifstream af(dir + "/asteroides.bin", std::ios::binary);
+        char h[16] = {};
+        af.read(h, 16);
+        if (af && std::memcmp(h, "UNIVAST1", 8) == 0) std::memcpy(&sim.asteroidCount, h + 8, 8);
+    }
     sim.loadBodies(dir + "/etoiles_noms.tsv", dir + "/galaxies_noms.tsv", dir + "/planetes.tsv", dir + "/lunes.tsv");
 
     const Comptes c = compter(sim, 5566702);      // en-tête de galaxies.bin (lu par galaxies.h dans l'appli)
@@ -87,6 +94,13 @@ int main(int argc, char** argv) {
                 c.sondes, c.planetes, lunesPresentes(c), (unsigned long long)c.etoiles, (unsigned long long)c.etoiles10pc,
                 (unsigned long long)c.doublons10pc, (unsigned long long)c.principalSansVitesseRadiale, c.galaxiesGroupeLocal);
     verifie(c.planetes == 9, "8 planètes et Pluton");
+    verifie(c.asteroides == 1580289, "1 580 289 astéroïdes : toute la base du JPL (asteroides_jpl.py, 8 écartés)");
+    {
+        const auto rs = rapport(c);
+        bool phrase = false;
+        for (const std::string& m : rs[0].manques) phrase = phrase || m.find("astéroïdes de la base du JPL absents") != std::string::npos;
+        verifie(phrase && rs[0].manques[1].find("79 ") == 0, "astéroïdes absents : 1 580 368 - 1 580 289 = 79");
+    }
     verifie(c.sondes == 5, "5 sondes : Pioneer 10 et 11, Voyager 1 et 2, New Horizons");
     verifie(c.lunes[3] == 1 && c.lunes[4] == 2 && c.lunes[5] == 4 && c.lunes[6] == 7 && c.lunes[7] == 0 && c.lunes[8] == 1 && c.lunes[9] == 1,
             "lunes par système : Terre 1, Mars 2, Jupiter 4, Saturne 7, Uranus 0 (fichier absent), Neptune 1, Pluton 1");
