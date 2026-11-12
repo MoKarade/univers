@@ -14,6 +14,7 @@
 #include "clones.h"
 #include "fenetre.h"
 #include "orbites_gpu.h"
+#include "fusion_nuage.h"
 #include "fusion_points.h"
 #include "gaia.h"
 #include "galaxies.h"
@@ -182,8 +183,10 @@ int runWindow(const WindowOptions& opt) {
     // Calcul complet de la rencontre avec Andromède (dossier fusion/ à côté des données) : facultatif.
     phys::fusion::Rejeu replay;
     // Calcul de la fusion : celui à 3 millions de particules (dossier fusion-3m) s'il est là, sinon celui à 300 000.
-    const std::string fusionDir = dataDir + (std::filesystem::exists(dataDir + "/fusion-3m/fusion_centres.bin") ? "/fusion-3m" : "/fusion");
-    const bool hasReplay = replay.charger(fusionDir + "/fusion_centres.bin", fusionDir);
+    // Dans l'ordre : le calcul à un million d'étoiles affichées (fusion-toutes), celui à 3 millions de particules, le premier.
+    const std::string fusionDir = dataDir + (std::filesystem::exists(dataDir + "/fusion-toutes/fusion_centres.bin") ? "/fusion-toutes"
+                                             : std::filesystem::exists(dataDir + "/fusion-3m/fusion_centres.bin") ? "/fusion-3m" : "/fusion");
+    const bool hasReplay = replay.charger(fusionDir + "/fusion_centres.bin", "");      // centres et traceurs ; les étoiles : fusion_nuage.h
     sim.linkReplay(hasReplay ? &replay : nullptr, fusionDir + "/fusion_noms.tsv");
     if (opt.hasYears) sim.years = opt.years;
     sim.refreshEphemeris();
@@ -285,7 +288,10 @@ int runWindow(const WindowOptions& opt) {
     const auto rapportCompletude = completude::rapport(completude::compter(sim, galaxies.count, gaia.count, gaia.cellCount ? dataDir + "/gaia_agrege.bin" : "", gaiaOk ? dataDir + "/gaia.bin" : "", dataDir));
     sim.completeness = &rapportCompletude;
     FusionPoints fusionPoints;
-    fusionPoints.create(g, hasReplay ? static_cast<uint32_t>(replay.nombreEtoiles()) : 0);
+    fusionPoints.create(g, 0);      // remplacé par fusionCloud (les images du calcul ne sont plus chargées en mémoire)
+    FusionCloud fusionCloud;
+    if (hasReplay) fusionCloud.create(g, fusionDir, HdrTarget::kFormat);
+    double fusionShare = 0;
     ClonePoints clones;      // nuage des 10 000 scénarios du Groupe local (précalculés par le fil physique)
     if (clones.create(g, dataDir + "/clones_groupe_local.bin")) {
         sim.cloneCount = clones.n;
@@ -488,7 +494,8 @@ int runWindow(const WindowOptions& opt) {
                                       sim.deepTime() ? "rejeu du calcul de la rencontre avec Andromède (fait à l'avance sur la carte graphique)" : "positions mesurées"});
             if (sim.replay)
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
-                                          "points du calcul fait à l'avance : un scénario, pas des étoiles mesurées"});
+                                          fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
+                                                               : "points du calcul fait à l'avance (un scénario) ; éclat d'affichage fixe, pas encore à l'échelle des étoiles mesurées"});
             if (sim.cloneCount)
                 sim.calcStates.push_back({"Scénarios du Groupe local", clones.count ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           "10 000 routes possibles des galaxies voisines, calculées à l'avance d'après l'incertitude des mesures"});
@@ -512,6 +519,10 @@ int runWindow(const WindowOptions& opt) {
         }
         sim.skyLegend = sim.skyBand >= 0 ? sky.legend(std::sqrt(dot(cam.pos, cam.pos))) : std::vector<std::string>{};
         fusionPoints.update(sim, cam, pc.par[0]);
+        // Étoiles du calcul de la fusion : la part que les étoiles mesurées leur laissent (Sim::starShare), éteinte quand on
+        // regarde de trop près (moins de 3 000 années-lumière : un point du calcul n'est pas une étoile).
+        fusionShare = (sim.wholeGalaxy ? 1.0 : 1.0 - sim.starShare()) * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0);
+        fusionCloud.update(g, sim.replayGa(), fusionShare);
         if (milkyWayCentre >= 0) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
         tasksTimer += dt;
         if (tasksTimer > 2.0) {      // calculs de fond du PC : relus toutes les 2 secondes
@@ -565,6 +576,8 @@ int runWindow(const WindowOptions& opt) {
             orbiting.par[0] *= static_cast<float>(sim.starShare());
             orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years));      // années depuis J2000, date des positions
         }
+        if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0)
+            fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height);
         if (!skyOnly && (fusionPoints.count || clones.count)) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
             still.par[2] = 0;
@@ -665,6 +678,7 @@ int runWindow(const WindowOptions& opt) {
     gaia.release(g);
     milkyWay.release(g);
     fusionPoints.release(g);
+    fusionCloud.release(g);
     clones.release(g);
     asteroids.release(g);
     galaxies.release(g);
