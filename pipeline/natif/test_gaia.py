@@ -9,7 +9,7 @@
    (lue dans les fichiers téléchargés, pas recopiée).
 4. Voie lactée : en-tête lisible, poussière au Soleil entre 0,1 et 10 mag/kpc, aucune valeur négative ou non finie.
 
-Usage : python test_gaia.py <dossier des parts> <gaia.bin> [voie_lactee.bin]
+Usage : python test_gaia.py <dossier des parts> <gaia.bin> [voie_lactee.bin] [gaia_agrege.bin]
 """
 import sys as _sys
 _sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
@@ -110,6 +110,17 @@ def voie(chemin):
     verifie(0.1 < a < 10, f'poussière dans la case du Soleil : {a:.2f} mag/kpc')
 
 
+def agrege(chemin):
+    h = np.fromfile(chemin, np.uint8, 64)
+    verifie(bytes(h[:8]) == b'UNIVGAG1', 'signature UNIVGAG1')
+    nc, ns = int(h[8:16].view('<u8')[0]), int(h[16:20].view('<u4')[0])
+    t = np.fromfile(chemin, np.dtype([('p', '<f4', 3), ('m', '<f4'), ('r', '<f4'), ('e', '<f4'), ('c', '<u4'), ('n', '<u4')]), nc + ns, offset=64)
+    sources = int(t['n'].sum(dtype=np.int64))
+    # DR3 : 1 811 709 771 sources ; ici toutes celles qui ont une magnitude G, moins les 98 346 986 dessinées une à une
+    verifie(1.70e9 < sources < 1.72e9, f'{sources} sources additionnées ({nc} cases 3D, {ns} pixels de ciel seul)')
+    verifie(np.all(np.isfinite(t['m'])) and np.all(t['e'][:nc] <= 1.0), 'magnitudes finies ; erreur de distance des cases 3D ≤ 100 %')
+
+
 def main():
     parts, gaia_bin = sys.argv[1], sys.argv[2]
     n, fe, rec = lire(gaia_bin)
@@ -117,6 +128,7 @@ def main():
     retrouve(parts, rec, n)
     connues(parts, rec)
     if len(sys.argv) > 3: voie(sys.argv[3])
+    if len(sys.argv) > 4: agrege(sys.argv[4])
     if ECHECS: sys.exit(f'{len(ECHECS)} échec(s)')
     print('tout passe')
 

@@ -73,3 +73,24 @@ C'est un **modèle ajusté par d'autres sur des mesures**, à présenter comme t
   les masses donnent sans l'avoir imposé) ; poussière en sech² avec évasement.
 - Mesuré par le script : extinction moyenne dans le plan jusqu'à 1,25 kpc = 1,49 mag (carte d'Edenhofer) ; d'où
   1,18 mag/kpc au Soleil pour le modèle de poussière.
+
+## Toutes les autres sources Gaia, additionnées (12 novembre 2026, demande de Marc : « on généralise au fur et à mesure »)
+
+De près, chaque étoile mesurée ; en s'éloignant, des sommes de ce qui est mesuré, sans modèle.
+
+- `pipeline/natif/gaia_agreger.py` : sur le serveur de l'ESA, la lumière G de toutes les sources qui ne sont pas dans
+  `gaia.bin` est additionnée par case (pixel HEALPix de niveau 7, 0,21 deg² × tranche de parallaxe d'un dixième de
+  décade), avec la couleur moyenne et l'erreur moyenne de distance de la case. Rien n'est téléchargé source par source :
+  390 Mo en 12 minutes.
+- `pipeline/natif/gaia_agrege_convertir.py` -> `gaia_agrege.bin` (122 Mo) : 3 623 419 cases placées à leur distance
+  (erreur moyenne de distance ≤ 100 %), 68,7 % de cette lumière ; le reste (pas de parallaxe positive, ou erreur > 100 %),
+  31,3 %, n'a pas de distance : il est montré comme ciel vu du Soleil seulement (à moins de 100 al du Soleil).
+- Bilan [Certain] : 98 346 986 étoiles une à une + 1 707 918 961 sources additionnées = toutes les sources de Gaia DR3
+  qui ont une magnitude G (1 811 709 771 sources au total, dont environ 5,4 millions sans magnitude G).
+- Dessin (`gaia.h`, `shaders/gaia_agrege.vert`) : chaque case est répartie en 8 points sur son épaisseur en distance
+  (sans cela, des coquilles concentriques autour du Soleil) et étalée sur sa taille à l'écran. Le modèle de la Voie lactée
+  retire maintenant aussi cette lumière (`voie_lactee.py … gaia_agrege.bin`).
+- Cadence (carte partagée avec le calcul de la fusion) : 94 images/s du Soleil vers le centre galactique avec la
+  Voie lactée, 71 images/s vu de 25 000 al.
+- Ce qui se voit de loin est la Galaxie telle que Gaia la mesure : plus de lumière vers le centre galactique, et une forme
+  allongée vers le Soleil due à l'incertitude des distances.

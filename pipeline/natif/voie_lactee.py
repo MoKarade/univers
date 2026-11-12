@@ -16,7 +16,8 @@ Lumière (bande V, en luminosités solaires par pc³) :
 - bras spiraux : tracés mesurés de Reid et al. 2019 (ApJ 885, 131, table 2 : spirales logarithmiques par parallaxes de
   masers), sur l'étendue d'azimut mesurée seulement, largeur de la table. Ce que les bras ajoutent en lumière n'est pas mesuré
   ici : le disque mince y est doublé [Supposition, dite à l'écran] ;
-- les étoiles déjà dessinées une à une (Gaia DR3 et catalogue principal) sont retirées case par case : la grille ne garde que
+- les étoiles déjà dessinées une à une (Gaia DR3 et catalogue principal) et la lumière additionnée des autres sources
+  Gaia placées à leur distance (gaia_agrege.bin) sont retirées case par case : la grille ne garde que
   la lumière qui manque (jamais négative).
 Le bulbe et la barre (qui tournent) ne sont pas dans la grille : le shader les calcule avec l'angle du moment
 (constantes écrites dans l'en-tête).
@@ -28,7 +29,7 @@ Poussière (extinction visuelle A_V par pc) :
   h_d = 134,4 pc + 14,8 pc/kpc au-delà de 4,4 kpc, creux central sous 0,5 R0), dont l'amplitude est fixée par la carte
   mesurée : même extinction moyenne dans le plan jusqu'à 1,25 kpc, sur toutes les longitudes.
 
-Usage : python voie_lactee.py <gaia.bin> <etoiles.bin> <dossier de sortie>
+Usage : python voie_lactee.py <gaia.bin> <etoiles.bin> <dossier de sortie> [gaia_agrege.bin]
 Format voie_lactee.bin (petit-boutiste) : en-tête de 1024 octets (« UNIVMW01 » puis valeurs f32 décrites dans ENTETE),
 puis la grande grille NX×NY×NZ de paires f16 (lumière manquante, poussière), x le plus rapide, puis la grille locale de
 poussière 160×160×52 en f16 (A_V par pc).
@@ -110,7 +111,7 @@ def poussiere_locale(D):
     return np.where(q > 0, 10 ** (D['lo'] + (q - 1) / 254 * D['span']), 0.0)      # A_V par pc
 
 
-def lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z):
+def lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z, agrege=None):
     """Lumière V des étoiles dessinées une à une, rangée dans la grande grille (L_sol/pc³). Magnitude G de Gaia prise pour V
     [Probable : écart de quelques dixièmes selon la couleur], poussière comprise (magnitudes telles que mesurées)."""
     grille = np.zeros((NZ, NY, NX))
@@ -131,6 +132,11 @@ def lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z):
     mm = np.memmap(etoiles_bin, '<f4', 'r', 64, (col // 4 * 4,))
     c = [np.array(mm[k * col // 4:k * col // 4 + n0], np.float64) for k in range(4)]
     ranger(np.stack(c[:3], 1), c[3])
+    if agrege and os.path.exists(agrege):      # lumière additionnée des sources Gaia à distance moins sûre (gaia_agrege.bin)
+        h = np.fromfile(agrege, np.uint8, 64)
+        nc = int(h[8:16].view('<u8')[0])
+        cases = np.fromfile(agrege, np.dtype([('p', '<f4', 3), ('m', '<f4'), ('r', '<f4'), ('e', '<f4'), ('c', '<u4'), ('n', '<u4')]), nc, offset=64)
+        ranger(cases['p'].astype(np.float64), cases['m'].astype(np.float64))
     return grille / (100.0 * 100.0 * 50.0), n
 
 
@@ -146,6 +152,7 @@ def lire_gaia(gaia_bin, ranger):
 
 def main():
     gaia_bin, etoiles_bin, sortie = sys.argv[1:4]
+    agrege = sys.argv[4] if len(sys.argv) > 4 else None
     t0 = time.time()
     D = data_keys(['M_GAL2ECL', 'SGRA_GAL', 'DUST'])
     gal2ecl = np.array(D['M_GAL2ECL']); ecl2gal = gal2ecl.T
@@ -183,7 +190,7 @@ def main():
     pous[dans] = loc[kl[dans], jl[dans], il[dans]]
     print(f'grilles prêtes ({time.time() - t0:.0f} s)')
 
-    cat, ngaia = lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z)
+    cat, ngaia = lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z, agrege)
     manque = np.maximum(lum - cat, 0.0)
     ks, js, is_ = (int(np.floor((sun[a] + h) / (2 * h) * nn)) for a, h, nn in ((2, HZ, NZ), (1, HX, NY), (0, HX, NX)))
     print(f'case du Soleil : modèle {lum[ks, js, is_]:.4f} L_sol/pc³, étoiles cataloguées {cat[ks, js, is_]:.4f} ; '
