@@ -734,13 +734,16 @@
      n'a pas de position : il ne devient pas un centre. Fermer la fiche (select(null)) rend le centre en douceur (S.ck, 0,9 s). */
   function centerOn(o) { if (!o || o.isEvent) return; const p = o.get(); if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) return; zoffReset(); S.center = o; renderCard(); }
   function select(o) { S.sel = o; if (!o) S.center = null; if (o && o.exoI !== undefined) setExoSystem(o.exoI, o.exoC ? o.get : null); Rr.setSelOrbit(o && o.orbit ? o.orbit : null); renderCard(); }
+  /* G1 : le Soleil tourne autour du centre de masse du système solaire, tiré par les planètes (21_nbody.js). */
+  function baryRow() { if (!sol.precise) return []; const b = sunBaryOffset(sol), km = vlen(b) * AU / 1e3;
+    return [['Centre de masse du système solaire', 'à ' + nf(Math.round(km / 1000) * 1000, 0) + NBSP + 'km du centre du Soleil (' + sig(km / (695700 * F.sun.R), 2) + NBSP + 'fois son rayon). Calculé : chaque planète tire le Soleil, qui tourne autour de ce point, surtout à cause de Jupiter et Saturne (masses : éphéméride JPL DE440)']]; }
   function renderCard() {
     const sel = S.sel, body = !sel && (S.focus !== 'sun' || S.logR < 10.7) ? BODY[S.focus] : null, card = $('card'), mic = !sel && microOn() && S.logR < 3.2 ? microLevel(S.logR) : null;
     if (!sel && !body) { if (!card.hidden) card.hidden = true; return; }
     let rows;
     if (sel) { $('card-title').textContent = sel.name; $('card-sub').textContent = sel.sub; rows = sel.rows(); }
     else if (mic && mic.rows) { $('card-title').textContent = mic.name; $('card-sub').textContent = mic.sub; rows = typeof mic.rows === 'function' ? mic.rows() : mic.rows; }
-    else { const s = F.sun; $('card-sub').textContent = body.info; rows = body.key === 'sun' ? [['État à cette date', s.phase], ['Rayon', sig(s.R, 3) + NBSP + 'fois l’actuel'], ['Éclat', sig(s.L, 3) + NBSP + 'fois l’actuel'], ['Température', nf(Math.round(s.T / 10) * 10, 0) + NBSP + 'K'], ['Masse', sig(s.M, 3) + NBSP + 'fois l’actuelle']].concat(Math.abs(S.ty) < 1e6 ? sunFacts() : [])
+    else { const s = F.sun; $('card-sub').textContent = body.info; rows = body.key === 'sun' ? [['État à cette date', s.phase], ['Rayon', sig(s.R, 3) + NBSP + 'fois l’actuel'], ['Éclat', sig(s.L, 3) + NBSP + 'fois l’actuel'], ['Température', nf(Math.round(s.T / 10) * 10, 0) + NBSP + 'K'], ['Masse', sig(s.M, 3) + NBSP + 'fois l’actuelle']].concat(baryRow(), Math.abs(S.ty) < 1e6 ? sunFacts() : [])
       : body.key === 'moon' ? [['Distance à la Terre', nf(Math.round(vlen(sol.moonGeo) * AU / 1e5) * 100, 0) + NBSP + 'km'], ['Orbite', 'de 363 300 à 405 500 km en moyenne'], ['Excentricité', '0,055'], ['Un tour de la Terre', '27,3 jours'], ['Vitesse sur l’orbite', '1,02 km/s en moyenne']].concat(factRows('moon'), [['Retour de la même phase', 'tous les 29,5 jours'], ['S’éloigne de la Terre de', '3,8 cm par an']]) : planetRows(body.key).concat(factRows(body.key), F.eng[body.key] ? [['État à cette date', 'engloutie par le Soleil']] : []); }
     const keep = innerWidth < 600 ? 4 : 7, many = rows.length > keep + 1, shown = many && !S.more ? rows.slice(0, keep) : rows, dl = $('card-dl'), top = dl.scrollTop; $('card-more').hidden = !many; if (many) $('card-more').textContent = S.more ? 'Moins de détails' : 'Plus de détails (' + (rows.length - keep) + ')';
     $('card-title').hidden = !sel && !(mic && mic.rows); dl.innerHTML = shown.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join(''); dl.scrollTop = top;
