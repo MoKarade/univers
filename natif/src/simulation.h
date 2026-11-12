@@ -460,6 +460,7 @@ struct Sim {
         double arrive = 50.0;                                                 // étoile : on garde ou on se rapproche à 50 années-lumière
         if (b.kind == Kind::Sun) arrive = 45.0 * kAuInLy;
         if (b.kind == Kind::Planet) arrive = 6.0 * b.radiusKm / kLyInKm;      // planète ou lune : elle remplit un bon tiers de l'écran
+        if (b.kind == Kind::Probe) arrive = 3.0e6 / kLyInKm;                  // sonde (un point) : on voit son voisinage, à 3 millions de km
         double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
         return d;
