@@ -19,5 +19,11 @@ setTimeout(() => {
     if (g === 'mw' || g === 'm31') ok(d < 3, `${g} : centre médian de ses étoiles à ${d.toFixed(2)} kpc du centre du calcul à 10 Ga`);
     else console.log(`info  ${g} : ${Math.round(100 * near / n)} % de ses étoiles à moins de 10 kpc du centre calculé à 10 Ga (le reste est arraché ; médiane à ${d.toFixed(0)} kpc) ; à 10 Ga, le Triangle et le Grand Nuage sont en grande partie dispersés dans le calcul`); o += n; }
   const out = new Float32Array(I.NS * 3); ok(fusFill(out, F.tEnd - 1e-6) === false, 'image manquante (499) : pas d’interpolation inventée, la page attend et le dit');
+  /* Suite après 10 Ga : un appel à tailAdvance respecte son budget de temps (l'image ne gèle pas), sur les 30 000 étoiles de la dernière image */
+  { global.performance = global.performance || require('perf_hooks').performance; const T = dynTables(), n = I.NS, D = { n, t: 10, x: new Float64Array(n * 3), v: new Float64Array(n * 3), out: new Float32Array(n * 3) };
+    for (let j = 0; j < n * 3; j++) D.x[j] = a[j] * I.Q;
+    for (let i = 0; i < n; i++) { const j = i * 3, R = Math.max(Math.hypot(D.x[j], D.x[j + 1]), 0.3), vc = vCirc(R, true) * KMS_KPC_GYR * 1.5; D.v[j] = vc * D.x[j + 1] / R; D.v[j + 1] = -vc * D.x[j] / R; }
+    let worst = 0; for (let k = 0; k < 5; k++) { const t0 = performance.now(); tailAdvance(D, 12, 14, T); worst = Math.max(worst, performance.now() - t0); }
+    ok(worst < 40, `tailAdvance : appel le plus long ${worst.toFixed(1)} ms pour un budget de 14 ms (tranches de 5 Ma)`); }
   process.exit(fail ? 1 : 0);
 }, 50);

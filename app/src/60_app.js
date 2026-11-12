@@ -77,6 +77,7 @@
     for (let j = 0; j < NS * 3; j++) { D.x[j + 3] = m[j] * q; D.v[j + 3] = (a[j] - b[j]) * q / dtg; }      /* vitesse centrée sur l'image 499 */
     for (let j = 0; j < n * 3; j++) D.out[j] = D.x[j];
     return D; }
+  const fusAuto = () => tier === 2 || TL.on;      /* 80 Mo d'images : automatique sur ordinateur, à la demande sur téléphone (panneau Affichage) */
   const fusOk = () => !!FUSC && S.m31V === M31_MEAS[0][1] && Math.abs(S.vt - vtOf(M31_MEAS[0][1])) < 0.5 && ['H0', 'Om', 'OL', 'w'].every(k => S.par[k] === PLANCK[k]);
   if (FUS_URL) fetch(FUS_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { fusLoad(j); orbitDirty = true; }).catch(e => console.warn('Calcul complet de la fusion non chargé :', e.message));      /* sans le fichier : la page garde ses propres orbites */
   const LMIN = 6.6, LMAX = 26.95, SPEED_MAX_LOG = 17.2, LMICRO = -20.0;      /* R13 : le zoom s'arrête à 10⁻²⁰ m, le plus fin jamais sondé (ordre de grandeur, LHC) ; accessible seulement en plongeant vers la Terre */
@@ -1283,7 +1284,7 @@
   const provText = lr => S.center && S.center.isGal && S.cpos && vlen(S.cpos) > 1.5 * Math.pow(10, S.logR) ? 'Galaxie reconstruite en volume d’après sa photo réelle : forme et bras réels, épaisseur et côté proche supposés.' : farCentered() ? 'Vue centrée sur cet objet, loin du Soleil. Positions réelles.' : lr < 14.7 ? (S.opts.realSize ? 'Positions et tailles réelles.' : 'Positions réelles. Astres grossis pour rester visibles.')
     : lr < 16.9 ? 'Réservoir de comètes supposé : il n’a jamais été observé directement.'
     : lr < 19.4 ? nf(starTotal(), 0) + ' étoiles à leur position mesurée.'
-    : lr < 21.75 ? (F.dyn && F.dyn.rep ? 'Étoiles du calcul complet de la fusion (300 000 particules qui s’attirent toutes), une image tous les 20 millions d’années. Scénario.' : F.dyn && F.dyn.tail ? 'Après 10 milliards d’années : les étoiles du calcul complet continuent dans la galaxie résultante (calcul simplifié de la page).' : 'Aspect généré, forme guidée par les mesures. Soleil et amas d’étoiles à leur vraie place.')
+    : lr < 21.75 ? (F.dyn && F.dyn.rep ? 'Étoiles du calcul complet de la fusion (300 000 particules qui s’attirent toutes), une image tous les 20 millions d’années ; le Triangle et le Grand Nuage y sont dispersés. Scénario.' : F.dyn && F.dyn.tail ? 'Après 10 milliards d’années : les étoiles du calcul complet continuent dans une galaxie résultante simplifiée (les deux halos de la page) ; ce changement de modèle la resserre d’environ 20 %.' : 'Aspect généré, forme guidée par les mesures. Soleil et amas d’étoiles à leur vraie place.')
     : lr < 23.6 ? (S.opts.realSize || Rr.galExag < 1.05 ? 'Galaxies à leur position mesurée. Leur aspect est généré.' : 'Galaxies à leur position mesurée, grossies pour rester visibles. Leur aspect est généré.')
     : S.opts.simWeb ? 'Toile simulée. Les amas nommés sont à leur vraie place.'
     : lr < LOG.MPC + 3.3 ? 'Galaxies réellement observées. Les zones vides ne sont pas encore cartographiées.' + (Rr.lania && Rr.lania.visible ? ' Points bleus : frontière de Laniakea, notre superamas (Cosmicflows-4).' : '')
@@ -1539,10 +1540,12 @@
     { andromedaAt(LMCO, tG, MAG.r); const sh = mulM(M, [MAG.r[0] - MAG.r0[0], MAG.r[1] - MAG.r0[1], MAG.r[2] - MAG.r0[2]]); F.lgShift2 = sh; F.lmcGone = LMCO.tMerge ? smoothstep(LMCO.tMerge, LMCO.tMerge + 0.25, tG) : 0;
       for (const c of MAG.c) { c.c[0] = c.m0[0] + sh[0]; c.c[1] = c.m0[1] + sh[1]; c.c[2] = c.m0[2] + sh[2]; c.gone = F.lmcGone > 0.6; } }
     sunGalAt(Rr.K, F.tEff, sunGal);
+    if (S.tOn !== null && tG >= S.tOn - 0.5 && tG < S.tOn && S.orbit.fus && fusAuto()) { fusiStart(); if (FUSI) fusWant(S.tOn, fusFetch); }      /* R10 : images préparées avant la rencontre */
+    F.hideId = -9;
     if (S.tOn !== null && tG >= S.tOn) {            // rencontre rapprochée : les étoiles des deux galaxies sont simulées une à une
       if (!G.m31dyn) G.m31dyn = Q.dyn31 + 70 > G.m31.N ? genDiskGalaxy(23, Q.dyn31 + 70, 24) : G.m31;
-      if (S.orbit.fus) fusiStart();
-      const rep = S.orbit.fus && FUSI;
+      if (S.orbit.fus && fusAuto()) { fusiStart(); if (FUSI) fusWant(Math.min(tG, FUSC.tEnd), fusFetch); }
+      const rep = S.orbit.fus && FUSI && (fusReady(Math.min(tG, FUSC.tEnd)) === 1 || (S.rep && F.dyn === S.rep) || (S.dyn && S.dyn.tail));      /* rejeu dès que les images sont là ; en attendant, la simulation de la page */
       if (rep) {      /* R10 : les étoiles du calcul complet, image par image ; le Soleil garde son calcul (une particule tirée par les deux galaxies) */
         if (!S.rep) S.rep = repInit();
         if (!S.repSun) S.repSun = dynInit(G.gal, Q.gal, G.m31dyn, S.orbit, S.tOn, sunGalAt(Rr.K, S.tOn, [0, 0, 0]), Rr.m31Rot, 1, 0, G.m31.N - 70);
@@ -1550,7 +1553,7 @@
       }
       if (rep && tG <= FUSC.tEnd) {
         if (S.dyn || F.dyn !== S.rep) { S.dyn = null; Rr.setDyn(S.rep); }
-        fusWant(tG, fusFetch); S.repOk = fusFill(S.rep.out, tG);
+        fusWant(tG, fusFetch); S.repOk = fusFill(S.rep.out, tG); F.hideId = FUS_M33 + 1; F.lmcGone = 1; for (const c of MAG.c) c.gone = true;
         sunGal[0] = S.repSun.x[0]; sunGal[1] = S.repSun.x[1]; sunGal[2] = S.repSun.x[2]; F.dyn = S.rep; F.mergeK = 1; S.dynT = undefined;
       } else if (rep && (!S.dyn || !S.dyn.tail)) {      /* après 10 Ga : la suite part des deux dernières images ; tant qu'elles ne sont pas là, on attend et on le dit */
         fusWant(FUSC.tEnd - FUSI.dt, fusFetch); fusWant(FUSC.tEnd, fusFetch); const D = repTail();

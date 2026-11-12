@@ -63,11 +63,11 @@ ${dustGlsl()}void main(){ vec4 mv=modelViewMatrix*vec4(position+aVel*uVt,1.0); g
     f: `varying vec3 vColor; varying float vA; varying float vCore;
 void main(){ vec2 p=gl_PointCoord*2.0-1.0; float d2=dot(p,p); if(d2>1.0) discard; float core=exp(-d2*15.0); float halo=exp(-d2*3.5)*0.16-0.005; vec2 q=abs(p); float spike=(exp(-q.y*26.0)*exp(-q.x*3.2)+exp(-q.x*26.0)*exp(-q.y*3.2))*0.22*vCore*vCore*(1.0-d2);
   gl_FragColor=vec4(mix(vColor,vec3(1.0),core*0.28)*vA*(core*(1.0+3.0*vCore)+max(halo,0.0)*(0.5+vCore)+spike),1.0); }` },
-  galaxy: { v: `attribute vec2 aOm; attribute vec3 aCol; attribute vec2 aLook; attribute vec3 aCen; attribute float aGrp; attribute float aId; uniform vec3 uSh[104]; uniform vec3 uAx[104]; uniform vec3 uShift,uShift2,uHide; uniform float uG2,uHideK; uniform float uT1,uT2,uPx,uOpacity,uMinPx,uMaxPx,uFloor,uBigPx,uExag,uStarCap,uInside; varying vec3 vColor; varying float vA;
+  galaxy: { v: `attribute vec2 aOm; attribute vec3 aCol; attribute vec2 aLook; attribute vec3 aCen; attribute float aGrp; attribute float aId; uniform vec3 uSh[104]; uniform vec3 uAx[104]; uniform vec3 uShift,uShift2,uHide; uniform float uG2,uHideK,uHideId; uniform float uT1,uT2,uPx,uOpacity,uMinPx,uMaxPx,uFloor,uBigPx,uExag,uStarCap,uInside; varying vec3 vColor; varying float vA;
 void main(){ float ang=-(aOm.x*uT1+aOm.y*uT2); float c=cos(ang),s=sin(ang); vec3 ax=uAx[int(aId+0.5)]; vec3 p; if(dot(ax,ax)>0.5){ vec3 d=position-aCen; p=aCen+d*c+cross(ax,d)*s+ax*dot(ax,d)*(1.0-c); } else { p=vec3(c*position.x-s*position.y,s*position.x+c*position.y,position.z); } p=aCen+(p-aCen)*uExag+step(0.5,aGrp)*step(aGrp,1.5)*uShift+step(1.5,aGrp)*uShift2+uSh[int(aId+0.5)];
   vec4 mv=modelViewMatrix*vec4(p,1.0); gl_Position=projectionMatrix*mv; gl_Position.z=0.0; float sc=length(modelViewMatrix[0].xyz);
   float px=aLook.x*uExag*sc*uPx/max(-mv.z,1e-9); float e=min(1.0,(px*px)/(uMinPx*uMinPx)); float gt=step(0.3,aLook.x); float big=mix(1.0,1.0-smoothstep(uBigPx*0.4,uBigPx*0.95,px),gt); float cap=max(mix(uStarCap*(0.7+aLook.x*8.0),uMaxPx,gt),uMinPx);
-  vA=aLook.y*uOpacity*max(e,uFloor)*big*mix(pow(min(1.0,cap/max(px,1e-6)),1.2),1.0,gt); vColor=mix(aCol,vec3(0.95,0.92,0.86)*dot(aCol,vec3(0.3333)),uInside); gl_PointSize=clamp(px,uMinPx,cap)*2.0; vA*=mix(1.0,uG2,step(1.5,aGrp)); vA*=1.0-uHideK*(1.0-step(0.5,distance(aCen,uHide))); }`, f: FRAG_SOFT },
+  vA=aLook.y*uOpacity*max(e,uFloor)*big*mix(pow(min(1.0,cap/max(px,1e-6)),1.2),1.0,gt); vColor=mix(aCol,vec3(0.95,0.92,0.86)*dot(aCol,vec3(0.3333)),uInside); gl_PointSize=clamp(px,uMinPx,cap)*2.0; vA*=mix(1.0,uG2,step(1.5,aGrp)); vA*=1.0-uHideK*(1.0-step(0.5,distance(aCen,uHide))); vA*=step(0.5,abs(aId-uHideId)); }`, f: FRAG_SOFT },
   web: { v: `attribute vec3 aPsi; attribute vec3 aEig; attribute vec4 aRnd; uniform float uD,uPx,uOpacity,uHorizon,uAge,uMinPx,uMaxPx,uSw,uSf,uRW,uCR; varying vec3 vColor; varying float vA; varying vec3 vShape;
 float Sof(float r){ return uSw*(1.0-smoothstep(0.6*uRW,uRW,r))+uSf; }
 void main(){ vec3 p=position+uD*aPsi; vec3 j=abs(vec3(1.0)+uD*aEig); float dens=1.0/max(j.x*j.y*j.z,0.012); float r=length(position);
@@ -377,7 +377,7 @@ function createRenderer(canvas, Q, generated) {
   const lm = DATA.FAR.filter(f => f.k !== 'void');
   const lmPos = new Float32Array(lm.length * 3), lmCol = new Float32Array(lm.length * 3), lmLook = new Float32Array(lm.length * 2), lmOm = new Float32Array(lm.length * 2);
   lm.forEach((f, i) => { lmPos.set(f.pos, i * 3); lmCol.set(f.k === 'cluster' ? [1.0, 0.82, 0.55] : [0.8, 0.86, 1.0], i * 3); lmLook.set([f.k === 'cluster' ? clamp(f.sg * 0.1, 0.7, 2.2) : 0.06, f.k === 'cluster' ? 0.26 : 0.8], i * 2); });
-  const galU = () => ({ uT1: U(0), uT2: U(0), uPx: U(1), uOpacity: U(1), uMinPx: U(1), uMaxPx: U(64), uFloor: U(0), uBigPx: U(64), uExag: U(1), uStarCap: U(2.4), uInside: U(0), uShift: U(new THREE.Vector3()), uShift2: U(new THREE.Vector3()), uG2: U(1), uHide: U(new THREE.Vector3(1e9, 1e9, 1e9)), uHideK: U(0) });
+  const galU = () => ({ uT1: U(0), uT2: U(0), uPx: U(1), uOpacity: U(1), uMinPx: U(1), uMaxPx: U(64), uFloor: U(0), uBigPx: U(64), uExag: U(1), uStarCap: U(2.4), uInside: U(0), uShift: U(new THREE.Vector3()), uShift2: U(new THREE.Vector3()), uG2: U(1), uHideId: U(-9), uHide: U(new THREE.Vector3(1e9, 1e9, 1e9)), uHideK: U(0) });
   const lmU = galU();
   const landmarks = pts({ position: [lmPos, 3], aOm: [lmOm, 2], aCol: [lmCol, 3], aLook: [lmLook, 2] }, mk(SH.galaxy, lmU), 3);
   // galaxies proches à distance mesurée (Karachentsev 2013), en Mpc comobiles
@@ -809,7 +809,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
         for (const h of cores) { const m = h[0], c = h[1]; m.visible = oD > 0.004; if (!m.visible) continue; place(m, c ? [gc[0] + c[0] * KPC, gc[1] + c[1] * KPC, gc[2] + c[2] * KPC] : gc, 1, F); m.scale.setScalar(1); m.userData.u.uRad.value = Math.min(26 * KPC * F.s, 300); m.userData.u.uOpacity.value = oD * 0.22; }
         if (dyn.visible) { dynU.uExag.value = 1; dynU.uInside.value = mwU.uInside.value; dyn.geometry.attributes.position.needsUpdate = true; } }
       if (F.lgSh) { const a = lgU.uSh.value, q = F.lgSh; for (let i = 0; i < a.length; i++) a[i].set(q[i * 3], q[i * 3 + 1], q[i * 3 + 2]); }
-      lgU.uShift.value.set(F.lgShift[0], F.lgShift[1], F.lgShift[2]); lgU.uShift2.value.set(F.lgShift2[0], F.lgShift2[1], F.lgShift2[2]); lgU.uG2.value = 1 - F.lmcGone; }
+      lgU.uShift.value.set(F.lgShift[0], F.lgShift[1], F.lgShift[2]); lgU.uShift2.value.set(F.lgShift2[0], F.lgShift2[1], F.lgShift2[2]); lgU.uG2.value = 1 - F.lmcGone; lgU.uHideId.value = F.hideId !== undefined ? F.hideId : -9; }
     setGal(localGroup, lgU, gc, KPC, born * lerp(0.4, 1, smoothstep(19.5, 21.3, lr)) * small * fadeOut(lr, 23.5, 24.2), lerp(0.25, 0.012, smoothstep(20.5, 22.3, lr)), 1.1);
     { const oH = born * fadeIn(lr, 20.1, 20.7) * fadeOut(lr, 23.0, 23.7) * F.dmMix;
       for (const h of halos) { const m = h[0], c = h[1]; m.visible = oH > 0.004; if (!m.visible) continue; place(m, c ? [gc[0] + c[0] * KPC, gc[1] + c[1] * KPC, gc[2] + c[2] * KPC] : gc, 1, F); m.scale.setScalar(1); m.userData.u.uRad.value = Math.min(260 * KPC * F.s, 300); m.userData.u.uOpacity.value = oH * 0.05; } }

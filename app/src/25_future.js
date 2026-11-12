@@ -214,12 +214,12 @@ function fusFill(out, t, off) {
 }
 /** Après la dernière image (10 Ga) : chaque étoile continue dans la galaxie résultante, immobile et sphérique (les deux
     halos de la page confondus, cœur de 0,3 kpc à densité constante). Pas propre à chaque étoile (2 % de son temps de
-    traversée, sans descendre sous 2 Ma) ; le cœur à densité constante évite le coup de fouet d'un centre ponctuel, qui faisait gonfler la galaxie.
-    Avance d'au plus 0,2 Ga ou de ms millisecondes par appel ; renvoie true quand tTarget est atteint. */
+    traversée, sans descendre sous 0,5 Ma) ; le cœur à densité constante évite le coup de fouet d'un centre ponctuel, qui faisait gonfler la galaxie.
+    Avance par tranches de 5 Ma tant que ms millisecondes ne sont pas écoulées ; renvoie true quand tTarget est atteint. */
 function tailAdvance(D, tTarget, ms, T) {
   const t0p = performance.now(), ta = T.a, tb = T.b, nt = T.n - 2, x = D.x, v = D.v, ga = r => { const rr = Math.max(r, 0.3) * 10, q = Math.min(rr | 0, nt), f = Math.min(rr, nt) - q; return (ta[q] + (ta[q + 1] - ta[q]) * f) + (tb[q] + (tb[q + 1] - tb[q]) * f); };
   while (Math.abs(tTarget - D.t) > 1e-9 && performance.now() - t0p < ms) {
-    const H = clamp(tTarget - D.t, -0.2, 0.2);
+    const H = clamp(tTarget - D.t, -0.005, 0.005);      /* tranches de 5 Ma : l'heure est vérifiée souvent, l'image ne gèle pas */
     for (let j = 0; j < D.n * 3; j += 3) {
       let left = H;
       while (Math.abs(left) > 1e-12) {
