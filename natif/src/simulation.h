@@ -166,6 +166,10 @@ struct Sim {
     double yaw = -1.2, pitch = 0.55;     // direction d'où l'on regarde l'astre suivi (radians)
     double dist = 45.0 * kAuInLy;        // distance de la caméra à l'astre suivi (années-lumière) : au départ, tout le système solaire
     bool touched = false;                // quelqu'un a pris la main : fin du lent tour d'horizon
+    // Lumière choisie pour le ciel : -1 = visible (étoiles et galaxies mesurées) ; sinon rang dans skyBandLabels (cartes du
+    // ciel mesurées dans une autre lumière, fenetre.cpp). skyLegend : texte de la carte montrée, à afficher en permanence.
+    int skyBand = -1;
+    std::vector<std::string> skyBandLabels, skyLegend;
     long orbitLagSteps = 0;              // pas d'orbite (1 million d'années) que la carte graphique doit encore calculer
     double asteroidEpochJd = 0;          // date des orbites des astéroïdes (0 : pas d'astéroïdes)
     uint64_t asteroidCount = 0;
