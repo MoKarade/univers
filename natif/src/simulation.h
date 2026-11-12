@@ -1,6 +1,7 @@
 // Appli PC « Univers » : l'état du simulateur (temps, astres, objet suivi, caméra), sans rien qui dépende de l'affichage.
 #pragma once
 #include "commun.h"
+#include "completude.h"
 #include "cosmologie.h"
 #include "ephemeride.h"
 #include "galaxie_orbites.h"
@@ -311,6 +312,8 @@ struct Sim {
     // complet de la rencontre avec Andromède (phys::fusion::Rejeu). Le repère reste celui d'aujourd'hui, attaché au centre
     // de la Voie lactée : l'origine est l'endroit où se trouve le Soleil aujourd'hui par rapport à ce centre.
     const phys::fusion::Rejeu* replay = nullptr;
+    // Indicateur de complétude et de précision par échelle (completude.h), calculé une fois au chargement ; nul avant.
+    const std::array<completude::Echelle, 5>* completeness = nullptr;
     const std::vector<sondes::Probe>* probes = nullptr;      // trajectoires réelles des sondes (JPL Horizons) ; à poser avant loadBodies
     std::vector<int> replayRef;          // par astre : -1 aucun ; 100 + g : centre de la galaxie g du calcul ; k >= 0 : traceur k ; -2 : centre de la Voie lactée
     std::vector<Vec3> galPos;            // position de chaque galaxie à la date courante
