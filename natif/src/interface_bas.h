@@ -60,8 +60,13 @@ void whatYouSee(const Sim& sim) {
     } else if (sim.dist > 3000.0) {
         // gaia_agrege.bin (fil Gaia, docs/gaia-voie-lactee.md) : la lumière des autres sources Gaia, additionnée par case.
         if (sim.hasGaia && sim.gaiaCount) {
-            ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une ; le reste des sources Gaia est additionné par pixel, sans modèle.",
-                                frInt(static_cast<double>(sim.gaiaCount)).c_str());
+            if (sim.hasGaiaAggregate) {
+                ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une ; le reste des sources Gaia est additionné par pixel, sans modèle.",
+                                    frInt(static_cast<double>(sim.gaiaCount)).c_str());
+            } else {
+                ImGui::TextDisabled("Voie lactée : seules les %s étoiles mesurées par Gaia sont montrées ; la lumière des autres sources Gaia n'est pas chargée.",
+                                    frInt(static_cast<double>(sim.gaiaCount)).c_str());
+            }
             raysNote();
         } else {
             ImGui::TextDisabled("Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
