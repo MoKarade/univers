@@ -24,7 +24,13 @@ constexpr SphereMap kSphereMaps[] = {
     {eph::kSun, "8k_sun.jpg"},         {eph::kMercury, "8k_mercury.jpg"},     {eph::kVenus, "4k_venus_atmosphere.jpg"}, {eph::kEarth, "8k_earth_daymap.jpg"},
     {eph::kMoon, "8k_moon.jpg"},       {eph::kMarsBary, "8k_mars.jpg"},       {eph::kJupiterBary, "8k_jupiter.jpg"},    {eph::kSaturnBary, "8k_saturn.jpg"},
     {eph::kUranusBary, "2k_uranus.jpg"}, {eph::kNeptuneBary, "2k_neptune.jpg"},
+    {-1, "8k_saturn_ring_alpha.png"},      // anneaux de Saturne (couleur et opacité selon la distance au centre) : aucun astre à lui seul
 };
+constexpr int kRingMap = 10;
+// Étendue de l'image des anneaux, en km du centre de Saturne : 72 650 à 140 150. [Calé ici sur deux repères lus dans
+// l'image : la division de Cassini (vers 119 900 km) et le bord extérieur de l'anneau A (136 775 km) ; la source ne
+// documente pas cette étendue : À vérifier.]
+constexpr double kRingInnerKm = 72650.0, kRingOuterKm = 140150.0;
 constexpr int kSphereMapCount = static_cast<int>(sizeof(kSphereMaps) / sizeof(kSphereMaps[0]));
 
 struct SpherePush {
@@ -43,12 +49,13 @@ public:
         sci.maxAnisotropy = 8.0f;
         sci.maxLod = VK_LOD_CLAMP_NONE;
         check(vkCreateSampler(g.dev, &sci, nullptr, &sampler_), "échantillonneur des cartes");
-        const VkDescriptorSetLayoutBinding bind{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+        const VkDescriptorSetLayoutBinding bind[2] = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                                      {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        dl.bindingCount = 1;
-        dl.pBindings = &bind;
+        dl.bindingCount = 2;
+        dl.pBindings = bind;
         check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &setLayout_), "agencement des cartes");
-        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kSphereMapCount};
+        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * kSphereMapCount};
         VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         dp.maxSets = kSphereMapCount;
         dp.poolSizeCount = 1;
@@ -213,14 +220,25 @@ public:
         da.descriptorSetCount = 1;
         da.pSetLayouts = &setLayout_;
         check(vkAllocateDescriptorSets(g.dev, &da, &t.set), "ressources de la carte");
-        const VkDescriptorImageInfo info{sampler_, t.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        VkWriteDescriptorSet wr{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        wr.dstSet = t.set;
-        wr.descriptorCount = 1;
-        wr.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        wr.pImageInfo = &info;
-        vkUpdateDescriptorSets(g.dev, 1, &wr, 0, nullptr);
         t.ready = true;
+        // Chaque carte prête : sa propre image aux deux emplacements, sauf Saturne qui reçoit l'image de ses anneaux
+        // dès qu'elle est prête elle aussi.
+        for (int k = 0; k < kSphereMapCount; ++k) {
+            const Texture& own = textures_[k];
+            if (!own.ready) continue;
+            const bool ringed = kSphereMaps[k].naif == eph::kSaturnBary && textures_[kRingMap].ready;
+            const VkDescriptorImageInfo info[2] = {{sampler_, own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                                   {sampler_, ringed ? textures_[kRingMap].view : own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+            VkWriteDescriptorSet wr[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+            for (uint32_t j = 0; j < 2; ++j) {
+                wr[j].dstSet = own.set;
+                wr[j].dstBinding = j;
+                wr[j].descriptorCount = 1;
+                wr[j].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                wr[j].pImageInfo = &info[j];
+            }
+            vkUpdateDescriptorSets(g.dev, 2, wr, 0, nullptr);
+        }
     }
 
     bool allLoaded() const {
@@ -250,6 +268,7 @@ public:
             if (z <= 0 || rho >= 0.95 || rho / pixel < 1.5) continue;
             ori::Mat3 m;
             if (!ori::eclipticToBody(naif, days, m)) continue;
+            const bool ringed = naif == eph::kSaturnBary && textures_[kRingMap].ready;
             Draw d{};
             d.map = map;
             d.dist = dist;
@@ -260,8 +279,8 @@ public:
                               {static_cast<float>(cam.up.x), static_cast<float>(cam.up.y), static_cast<float>(cam.up.z), static_cast<float>(cam.tanHalf)},
                               {static_cast<float>(cam.fwd.x), static_cast<float>(cam.fwd.y), static_cast<float>(cam.fwd.z), static_cast<float>(pixel)},
                               {0, 0, 0, b.kind == Kind::Sun ? -kSunGain : kSurfaceGain},
-                              {static_cast<float>(m.m[0][0]), static_cast<float>(m.m[0][1]), static_cast<float>(m.m[0][2]), 0},
-                              {static_cast<float>(m.m[1][0]), static_cast<float>(m.m[1][1]), static_cast<float>(m.m[1][2]), 0},
+                              {static_cast<float>(m.m[0][0]), static_cast<float>(m.m[0][1]), static_cast<float>(m.m[0][2]), ringed ? static_cast<float>(kRingInnerKm / b.radiusKm) : 0.0f},
+                              {static_cast<float>(m.m[1][0]), static_cast<float>(m.m[1][1]), static_cast<float>(m.m[1][2]), ringed ? static_cast<float>(kRingOuterKm / b.radiusKm) : 0.0f},
                               {static_cast<float>(m.m[2][0]), static_cast<float>(m.m[2][1]), static_cast<float>(m.m[2][2]), 0}};
             if (b.kind != Kind::Sun) {
                 const Vec3 toSun = unit(Vec3{-p.x, -p.y, -p.z});
@@ -271,7 +290,7 @@ public:
             }
             // Rectangle de l'écran qui contient le disque.
             const double cx = (dot(c, cam.right) / (z * cam.tanHalf * cam.aspect) * 0.5 + 0.5) * width, cy = (-dot(c, cam.up) / (z * cam.tanHalf) * 0.5 + 0.5) * height;
-            const double rpx = rho / pixel * 1.6 + 3;      // marge : la perspective agrandit le disque loin du centre de l'image
+            const double rpx = rho / pixel * 1.6 * (ringed ? kRingOuterKm / b.radiusKm : 1.0) + 3;      // marge : la perspective agrandit le disque loin du centre de l'image
             const double x0 = std::clamp(cx - rpx, 0.0, static_cast<double>(width)), x1 = std::clamp(cx + rpx, 0.0, static_cast<double>(width));
             const double y0 = std::clamp(cy - rpx, 0.0, static_cast<double>(height)), y1 = std::clamp(cy + rpx, 0.0, static_cast<double>(height));
             if (x1 - x0 < 1 || y1 - y0 < 1) continue;
