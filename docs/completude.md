@@ -39,7 +39,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 | Échelle | Présent | Précision | Mesuré ou calculé |
 |---|---|---|---|
 | Système solaire | 99,7 % (9 planètes et Pluton, 16 lunes sur 461, 1 580 289 astéroïdes sur 1 580 368, 0 comète, 5 sondes sur 5) | planètes < 1 mm, Lune 282 m, Triton 255 km, sondes 0,7 km au plus, astéroïdes < 300 000 km (10 corps dont Cérès et Vesta) | éphémérides de la NASA ; astéroïdes calculés ici |
-| Étoiles voisines | 87 % (470 sur 540) | arrondi du fichier : pas de 198 UA à 10 pc | positions mesurées ; 41 149 étoiles sans vitesse radiale |
+| Étoiles voisines | avec gaia.bin : 86 % (467 sur 540 : 150 Gaia + 317 du catalogue principal) | Gaia : distance à mieux que 10 % ; catalogue principal : pas de 198 UA | positions mesurées ; vitesse radiale mesurée pour 77 des 150 étoiles Gaia |
 | Voie lactée | avec gaia.bin et gaia_agrege.bin : 99,6 % des sources de Gaia DR3 (98 278 356 vues une à une, 1 707 918 961 additionnées par case, non vues une à une ; 920 197 143 de celles-ci placées à leur distance) | une à une : distance à mieux que 10 % ; additionnées : 31 % de leur lumière sans distance mesurée | étoiles et sommes mesurées ; aucun modèle de la galaxie (choix de Marc, 12/11) |
 | Groupe local | 62 % (70 sur 113) | erreur par galaxie non gardée | mesuré aujourd'hui ; calculé dans le temps profond |
 | Univers lointain | 5 566 702 objets ; 0,00028 à 0,0028 % de l'estimation | décalage arrondi à 9,5 km/s × (1 + z) | distance 100 % calculée |
@@ -48,7 +48,7 @@ mesure ; elle est écrite « estimation publiée, non mesurée ».
 
 Système solaire
 - 445 lunes : absentes des fichiers légers du NAIF ; les 5 grandes lunes d'Uranus sont dans un fichier de 5,6 Go.
-- Les 4 088 comètes du JPL ; 79 astéroïdes (8 à orbite non elliptique, les autres découverts depuis le téléchargement).
+- 2 310 comètes (2 244 sur une orbite ouverte, 39 disparues, 27 sans orbite à jour) ; 79 astéroïdes (8 à orbite non elliptique, les autres découverts depuis le téléchargement).
 - Les autres sondes (en orbite autour des planètes, en route).
 - Attraction des planètes sur les astéroïdes (écart actuel jusqu'à 300 000 km).
 - Triton : mesurer l'écart avec un fichier plus récent.

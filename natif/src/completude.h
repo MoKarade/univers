@@ -49,6 +49,8 @@ constexpr int kLunesConnues[10] = {0, 0, 0, 1, 2, 115, 293, 29, 16, 5};
 constexpr int kPlanetesConnues = 9;                       // 8 planètes et Pluton (UAI)
 constexpr double kAsteroidesConnus = 1580368;              // JPL SBDB, requête sb-kind=a du 12/11/2026 à 18 h 25 UTC (grandit chaque jour)
 constexpr double kCometesConnues = 4088;                   // JPL SBDB, requête sb-kind=c du 12/11/2026
+// Comètes de la base du JPL écartées par pipeline/natif/cometes_horizons.py (docs/plan-natif.md, 12/11/2026).
+constexpr int kCometesDisparues = 39, kCometesOrbiteOuverte = 2244, kCometesSansOrbiteAJour = 27;
 constexpr int kSondesSortie = 5;                           // NASA : Pioneer 10 et 11, Voyager 1 et 2, New Horizons (sortie du système solaire)
 constexpr double kObjets10pc = 540;                        // Reylé et al. 2021, A&A 650 A201 : étoiles, naines brunes, exoplanètes
 constexpr double kSourcesGaiaDr3 = 1811709771;             // ESA, Gaia DR3 (cosmos.esa.int/web/gaia/dr3)
@@ -81,6 +83,9 @@ struct Comptes {
     uint64_t additionneesPlacees = 0;  // sources additionnées dans une case placée à sa distance (compté dans le fichier)
     double lumiereSansDistance = 0;    // part de la lumière additionnée sans distance mesurée (en-tête du fichier)
     uint64_t etoiles10pc = 0;
+    uint64_t etoiles10pcCatalogue[3] = {};      // par catalogue d'etoiles.bin
+    bool voisinageGaia = false;        // gaia.bin lu près du Soleil (ce que l'appli dessine quand Gaia est chargé)
+    uint64_t gaia10pc = 0, gaia10pcVitesseRadiale = 0;      // étoiles de gaia.bin à moins de 10 pc, dont vitesse radiale mesurée
     uint64_t doublons10pc = 0;         // paires de deux catalogues différents à moins de kDoublonLy
     uint64_t principalSansVitesseRadiale = 0;      // composante radiale nulle (< 0,2 km/s) : vitesse radiale non mesurée
     int galaxiesGroupeLocal = 0;       // galaxies nommées à moins de 1 Mpc du Soleil
@@ -129,6 +134,7 @@ inline Comptes compterEtoiles(Comptes c, const float* x, const float* y, const f
         }
     }
     c.etoiles10pc = proches.size();
+    for (uint64_t i : proches) ++c.etoiles10pcCatalogue[i < parCatalogue[0] ? 0 : i < parCatalogue[0] + parCatalogue[1] ? 1 : 2];
     const auto catalogue = [&](uint64_t i) { return i < parCatalogue[0] ? 0 : i < parCatalogue[0] + parCatalogue[1] ? 1 : 2; };
     for (size_t a = 0; a < proches.size(); ++a)
         for (size_t b = a + 1; b < proches.size(); ++b) {
@@ -172,14 +178,65 @@ inline Comptes lireAgrege(Comptes c, const std::string& chemin) {
     return c;
 }
 
+// gaia.bin (pipeline/natif/gaia_convertir.py) : en-tête de 4096 octets (« UNIVGAI1 », n (u64), feuilles (u32)), feuilles de
+// 48 octets (min x,y,z f32, nombre u32, max x,y,z f32, réservé u32, première étoile u64, réservé u64), puis étoiles de 16
+// octets (x, y, z f32 en al, magnitude f16, couleur u8, drapeaux u8 : 1 = vitesse radiale mesurée). Seules les feuilles qui
+// touchent la sphère de 10 pc sont lues (8 feuilles, 55 000 étoiles, mesuré le 12/11/2026).
+inline Comptes lireGaiaVoisinage(Comptes c, const std::string& chemin) {
+    std::ifstream f(chemin, std::ios::binary);
+    char h[4096] = {};
+    f.read(h, sizeof(h));
+    if (!f || std::memcmp(h, "UNIVGAI1", 8) != 0) return c;
+    uint32_t feuilles = 0;
+    std::memcpy(&feuilles, h + 16, 4);
+    std::vector<char> lv(static_cast<size_t>(feuilles) * 48);
+    if (!f.read(lv.data(), static_cast<std::streamsize>(lv.size()))) return c;
+    const uint64_t debutEtoiles = 4096 + (uint64_t(feuilles) * 48 + 63) / 64 * 64;
+    const double r2 = kRayonVoisinageLy * kRayonVoisinageLy;
+    uint64_t n10 = 0, vr10 = 0;
+    std::vector<char> e;
+    for (uint32_t k = 0; k < feuilles; ++k) {
+        const char* q = lv.data() + size_t(k) * 48;
+        float mn[3], mx[3];
+        uint32_t n = 0;
+        uint64_t premiere = 0;
+        std::memcpy(mn, q, 12);
+        std::memcpy(&n, q + 12, 4);
+        std::memcpy(mx, q + 16, 12);
+        std::memcpy(&premiere, q + 32, 8);
+        double d2 = 0;
+        for (int a = 0; a < 3; ++a) {
+            const double v = std::clamp(0.0, double(mn[a]), double(mx[a]));
+            d2 += v * v;
+        }
+        if (d2 >= r2 || n == 0) continue;
+        e.resize(size_t(n) * 16);
+        f.seekg(static_cast<std::streamoff>(debutEtoiles + premiere * 16));
+        if (!f.read(e.data(), static_cast<std::streamsize>(e.size()))) return c;
+        for (uint32_t i = 0; i < n; ++i) {
+            float p[3];
+            std::memcpy(p, e.data() + size_t(i) * 16, 12);
+            if (double(p[0]) * p[0] + double(p[1]) * p[1] + double(p[2]) * p[2] >= r2) continue;
+            ++n10;
+            if (e[size_t(i) * 16 + 15] & 1) ++vr10;
+        }
+    }
+    c.voisinageGaia = true;
+    c.gaia10pc = n10;
+    c.gaia10pcVitesseRadiale = vr10;
+    return c;
+}
+
 // etoilesGaia : nombre d'étoiles de gaia.bin (GaiaRenderer::count) ; pris seulement si sim.hasGaia.
+// fichierGaia : chemin de gaia.bin quand gaia.h l'a chargé ; vide sinon (le voisinage est alors compté dans etoiles.bin).
 // fichierAgrege : chemin de gaia_agrege.bin quand gaia.h l'a chargé (GaiaRenderer::cellCount > 0) ; vide sinon.
 template <class SimT>
-Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia = 0, const std::string& fichierAgrege = "") {
+Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia = 0, const std::string& fichierAgrege = "", const std::string& fichierGaia = "") {
     Comptes c;
     c.etoilesGaia = sim.hasGaia ? etoilesGaia : 0;
     c.voieLactee = sim.hasMilkyWay;
     if (sim.hasGaia && !fichierAgrege.empty()) c = lireAgrege(c, fichierAgrege);
+    if (sim.hasGaia && !fichierGaia.empty()) c = lireGaiaVoisinage(c, fichierGaia);
     c.asteroides = sim.asteroidCount;
     if (sim.asteroidCat) {      // les comètes, quand le catalogue en contient, ne sont pas des astéroïdes
         uint64_t k = 0;
@@ -282,6 +339,8 @@ inline Echelle systemeSolaire(const Comptes& c) {
         {"Écart des planètes et du Soleil", "< 1 mm ; Terre 3,5 m ; Lune 282 m", Nature::Mesure, "essai_ephem contre JPL Horizons, 112 valeurs de 1650 à 2026"},
         {"Écart des lunes", "14 lunes < 1 mm ; Triton 255 km", Nature::Mesure, "essai_ephem contre JPL Horizons"},
         {"Écart des sondes", "0,7 km au plus (survols compris)", Nature::Mesure, "essai_sondes contre JPL Horizons, 8 dates"},
+        {"Écart des comètes", "moins de 150 000 km (0,001 UA) pour 8 comètes 157 jours après ; Halley 16 000 km", Nature::Mesure,
+         "contrôle de cometes_horizons.py contre JPL Horizons"},
         {"Écart des astéroïdes", "moins de 300 000 km (0,002 UA) pour 10 corps dont Cérès et Vesta ; 25 000 à 93 000 km pour 3 autres après 154 jours",
          Nature::Mesure, "asteroides_jpl.py --controle et asteroides.py --controle, contre JPL Horizons"},
         {"Planètes et lunes, 1550 à 2650", "positions lues dans les fichiers de la NASA, ajustés aux mesures", Nature::Calcule, "DE440, jup365, sat441…"},
@@ -291,7 +350,8 @@ inline Echelle systemeSolaire(const Comptes& c) {
     const double asteroidesAbsents = kAsteroidesConnus - double(c.asteroides);
     e.manques = {
         entier(lunesConnues() - lunesPresentesConnues(c)) + " lunes connues sans trajectoire publiée par la NASA (fichiers du NAIF)",
-        "Les " + entier(kCometesConnues) + " comètes du JPL",
+        entier(kCometesConnues - double(c.cometes)) + " comètes : " + entier(kCometesOrbiteOuverte) + " passées une seule fois sur une orbite ouverte, " +
+            entier(kCometesDisparues) + " disparues, " + entier(kCometesSansOrbiteAJour) + " sans orbite à jour",
         "Les autres sondes (en orbite autour des planètes, en route) : pas encore chargées",
         "Orbites des astéroïdes : ajouter l'attraction des planètes (écart actuel jusqu'à 300 000 km)",
         "Mesurer l'écart de Triton avec un fichier plus récent (255 km aujourd'hui)",
@@ -302,7 +362,39 @@ inline Echelle systemeSolaire(const Comptes& c) {
     return e;
 }
 
+// Avec gaia.bin : ce qui est dessiné, c'est le catalogue principal (dont Gaia a retiré ses copies : même direction à 40″,
+// magnitude à 2 près) et les étoiles de gaia.bin. Sans lui : etoiles.bin, doublons entre catalogues repérés à 0,02 al.
+inline Echelle voisinageGaia(const Comptes& c) {
+    Echelle e;
+    e.nom = "Étoiles voisines (10 parsecs)";
+    const uint64_t principal = c.etoiles10pcCatalogue[0];
+    const double present = double(principal + c.gaia10pc);
+    e.part = present / kObjets10pc;
+    e.complet = pourcent(e.part) + " des objets connus à moins de 10 pc (" + entier(present) + " sur " + entier(kObjets10pc) + ")";
+    e.precision = "Gaia : distance à mieux que 10 % ; catalogue principal : place arrondie par pas de " +
+                  entier(kPasLongitudeArcsec / 206264.806 * kRayonVoisinageLy * 63241.077) + " UA";
+    const uint64_t sansVr = c.gaia10pc - c.gaia10pcVitesseRadiale;
+    e.mesure = "positions mesurées ; vitesse radiale mesurée pour " + entier(double(c.gaia10pcVitesseRadiale)) + " des " +
+               entier(double(c.gaia10pc)) + " étoiles Gaia";
+    e.lignes = {
+        {"Étoiles Gaia à moins de 10 pc", entier(double(c.gaia10pc)), Nature::Mesure, "gaia.bin (compté au chargement)"},
+        {"Étoiles du catalogue principal à moins de 10 pc", entier(double(principal)), Nature::Mesure, "etoiles.bin (HYG ; copies Gaia retirées)"},
+        {"Objets connus à moins de 10 pc", entier(kObjets10pc) + " étoiles, naines brunes et exoplanètes", Nature::Mesure, "Reylé et al. 2021, A&A 650, A201"},
+        {"Vitesse radiale mesurée (Gaia)", sur(double(c.gaia10pcVitesseRadiale), double(c.gaia10pc)), Nature::Mesure, "drapeau de gaia.bin"},
+        {"Vitesse radiale absente (mise à zéro)", entier(double(sansVr)) + " étoiles Gaia ; catalogue principal : voir la Voie lactée", Nature::Inconnu,
+         "drapeau de gaia.bin"},
+        {"Arrondi du fichier, catalogue principal", "direction 19,8″ × 9,9″, distance 0,019 %", Nature::Calcule, "entiers de 16 bits (pipeline/natif/etoiles.py)"},
+    };
+    e.manques = {
+        entier(kObjets10pc - present) + " objets du recensement de Reylé et al. (surtout naines brunes et exoplanètes, trop faibles pour Gaia)",
+        "Vitesse radiale des " + entier(double(sansVr)) + " étoiles Gaia proches qui n'en ont pas (catalogues au sol)",
+        "Garder la direction complète du catalogue principal dans le fichier (arrondi à 20″)",
+    };
+    return e;
+}
+
 inline Echelle voisinage(const Comptes& c) {
+    if (c.voisinageGaia) return voisinageGaia(c);
     Echelle e;
     e.nom = "Étoiles voisines (10 parsecs)";
     const double uniques = double(c.etoiles10pc) - double(c.doublons10pc);

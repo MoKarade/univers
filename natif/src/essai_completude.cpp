@@ -96,6 +96,15 @@ int main(int argc, char** argv) {
     sim.hasGaia = true;
     sim.hasMilkyWay = false;
     const Comptes ca = compter(sim, 5566702, nGaia, dir + "/gaia_agrege.bin");
+    // Voisinage lu dans gaia.bin (feuilles près du Soleil). Attendu (numpy, 12/11) : 150 étoiles Gaia à moins de 10 pc, dont 77
+    // avec vitesse radiale mesurée ; 317 étoiles du catalogue principal (etoiles.bin).
+    const Comptes cv = compter(sim, 5566702, nGaia, "", dir + "/gaia.bin");
+    verifie(cv.voisinageGaia && cv.gaia10pc == 150 && cv.gaia10pcVitesseRadiale == 77, "gaia.bin : 150 étoiles à moins de 10 pc, 77 avec vitesse radiale (numpy)");
+    verifie(cv.etoiles10pcCatalogue[0] == 317, "catalogue principal : 317 étoiles à moins de 10 pc (numpy)");
+    const auto rv = rapport(cv);
+    verifie(std::fabs(rv[1].part - 467.0 / 540.0) < 1e-12, "voisinage avec Gaia : (317 + 150) / 540");
+    std::printf("Voisinage avec Gaia : %s\n  %s\n  %s\n", rv[1].complet.c_str(), rv[1].precision.c_str(), rv[1].mesure.c_str());
+    verifie(!compter(sim, 5566702, nGaia, "", dir + "/absent.bin").voisinageGaia, "gaia.bin absent : voisinage compté dans etoiles.bin");
     verifie(ca.agrege && ca.additionneesPlacees == 920197143, "gaia_agrege.bin : 920 197 143 sources placées (numpy : 920 197 143)");
     verifie(std::fabs(ca.lumiereSansDistance - (1 - 0.6870550175944111)) < 1e-9, "lumière sans distance : 31,3 % (numpy)");
     const auto ra = rapport(ca);
@@ -115,6 +124,13 @@ int main(int argc, char** argv) {
         bool phrase = false;
         for (const std::string& m : rs[0].manques) phrase = phrase || m.find("astéroïdes de la base du JPL absents") != std::string::npos;
         verifie(phrase && rs[0].manques[1].find("79 ") == 0, "astéroïdes absents : 1 580 368 - 1 580 289 = 79");
+    }
+    verifie(c.cometes == 1778 && c.asteroides == 1580289, "1 778 comètes (docs/plan-natif.md) et 1 580 289 astéroïdes, séparés");
+    {
+        const auto rs = rapport(c);
+        bool raisons = false;
+        for (const std::string& m : rs[0].manques) raisons = raisons || m.find("2 310 comètes : 2 244") == 0;
+        verifie(raisons, "comètes absentes : 2 310 = 2 244 orbites ouvertes + 39 disparues + 27 sans orbite à jour");
     }
     verifie(c.sondes == 5, "5 sondes : Pioneer 10 et 11, Voyager 1 et 2, New Horizons");
     // Attendu : lunes.tsv relu en Python (colonne « planète »), 12/11 19 h UTC : 437 lunes, plus la Lune.
