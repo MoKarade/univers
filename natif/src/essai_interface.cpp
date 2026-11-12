@@ -1,0 +1,37 @@
+// Contrôle des outils de texte de l'interface (recherche sans accents, dates tapées). Aucune carte graphique.
+#include <cstdio>
+
+#include "interface_outils.h"
+
+namespace {
+int failures = 0;
+void expect(bool ok, const char* what) {
+    std::printf("%s  %s\n", ok ? "ok   " : "ECHEC", what);
+    if (!ok) ++failures;
+}
+bool near(double a, double b) { return a - b < 1e-9 && b - a < 1e-9; }
+}  // namespace
+
+int main() {
+    using namespace ui_outils;
+    expect(fold("Vénus") == "venus", "Vénus -> venus");
+    expect(fold("ÉTOILE polaire") == "etoile polaire", "majuscule accentuée");
+    expect(fold("Alnilam, dans la ceinture d\xE2\x80\x99Orion") == "alnilam, dans la ceinture d'orion", "apostrophe typographique");
+    expect(matchRank("Saturne", "sat") == 0, "début du nom");
+    expect(matchRank("Andromède (M31)", "m31") == 1, "début d'un mot");
+    expect(matchRank("Bételgeuse", "geuse") == 2, "au milieu");
+    expect(matchRank("Mars", "venus") == -1, "pas de correspondance");
+    double y = 0;
+    // J2000,0 = 1er janvier 2000 à 12 h TU : le 1er janvier 2000 à 0 h est un demi-jour avant.
+    expect(parseDate("1/1/2000", y) && near(y, -0.5 / 365.25), "1/1/2000");
+    expect(parseDate("2000-01-01", y) && near(y, -0.5 / 365.25), "2000-01-01");
+    // 21 juillet 1969 à 0 h TU = jour julien 2440423,5 (USNO).
+    expect(parseDate("21/07/1969", y) && near(y, (2440423.5 - 2451545.0) / 365.25), "21/07/1969");
+    expect(parseDate("1969", y) && near(y, (2440222.5 - 2451545.0) / 365.25), "1969 -> 1er janvier 1969");
+    expect(parseDate("250000", y) && near(y, 248000.0), "250000 -> année seule");
+    expect(parseDate("\xE2\x88\x92" "10000", y) && near(y, -12000.0), "signe moins typographique");
+    expect(!parseDate("demain", y), "texte refusé");
+    expect(!parseDate("32/01/2000", y), "jour impossible refusé");
+    std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
+    return failures ? 1 : 0;
+}

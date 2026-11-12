@@ -85,3 +85,8 @@ target_link_options(essai_orientation PRIVATE -static)
 add_executable(essai_cosmologie src/essai_cosmologie.cpp)
 target_compile_options(essai_cosmologie PRIVATE -Wall -Wextra)
 target_link_options(essai_cosmologie PRIVATE -static)
+
+# Contrôle des outils de texte de l'interface (recherche, dates tapées).
+add_executable(essai_interface src/essai_interface.cpp)
+target_compile_options(essai_interface PRIVATE -Wall -Wextra)
+target_link_options(essai_interface PRIVATE -static)

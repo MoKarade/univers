@@ -265,10 +265,89 @@ struct Sim {
         return absMag + 5.0 * std::log10(dist / 3.2615638) - 5.0;
     }
 
+    // ------------------------------------------------------------ caméra, vols et gestes (interface)
+    // Vol vers un astre : le point visé glisse de l'ancien astre au nouveau pendant que la distance recule puis
+    // avance (en échelle logarithmique), pour que l'on voie toujours d'où l'on part et où l'on va.
+    static constexpr double kFlySeconds = 1.8;
+    bool flying = false;
+    double flyT = 0;                 // avancement du vol, de 0 à 1
+    Vec3 flyFrom{0, 0, 0};           // point visé au départ du vol
+    double flyFromDist = 1, flyToDist = 1, flyPeakDist = 1;
+    struct View {
+        int focus;
+        double dist, yaw, pitch;
+    };
+    std::vector<View> history;      // vues précédentes, pour « Retour »
+
+    static double ease(double s) { return s * s * s * (s * (s * 6.0 - 15.0) + 10.0); }      // départ et arrivée en douceur
+    // Point visé à l'instant présent (pendant un vol : entre l'ancien astre et le nouveau).
+    Vec3 target() const {
+        const Vec3 to = position(focus);
+        if (!flying) return to;
+        const double e = ease(flyT);
+        return {flyFrom.x + (to.x - flyFrom.x) * e, flyFrom.y + (to.y - flyFrom.y) * e, flyFrom.z + (to.z - flyFrom.z) * e};
+    }
     Camera camera(double aspect) const {
-        const Vec3 target = position(focus);
+        const Vec3 t = target();
         const Vec3 dir{std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch)};
-        return lookAt({target.x + dist * dir.x, target.y + dist * dir.y, target.z + dist * dir.z}, target, 60.0, aspect);
+        return lookAt({t.x + dist * dir.x, t.y + dist * dir.y, t.z + dist * dir.z}, t, 60.0, aspect);
+    }
+    // Distance d'arrivée près d'un astre : de quoi le voir dans son voisinage.
+    double arriveDist(int i, double from) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        double arrive = 50.0;                                                 // étoile : on garde ou on se rapproche à 50 années-lumière
+        if (b.kind == Kind::Sun) arrive = 45.0 * kAuInLy;
+        if (b.kind == Kind::Planet) arrive = 6.0 * b.radiusKm / kLyInKm;      // planète ou lune : elle remplit un bon tiers de l'écran
+        double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
+        if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
+        return d;
+    }
+    void remember() {
+        if (!history.empty() && history.back().focus == focus && std::fabs(std::log(history.back().dist / dist)) < 0.05) return;
+        history.push_back({focus, dist, yaw, pitch});
+        if (history.size() > 40) history.erase(history.begin());
+    }
+    // Vol fluide vers l'astre i, arrivée à la distance `toDist` (0 : distance d'arrivée habituelle).
+    void flyTo(int i, double toDist = 0) {
+        if (i < 0 || i >= static_cast<int>(bodies.size()) || !visible(i)) return;
+        remember();
+        flyFrom = target();
+        flyFromDist = dist;
+        focus = i;
+        flyToDist = toDist > 0 ? std::clamp(toDist, minDist(i), kMaxDist) : arriveDist(i, dist);
+        const Vec3 gap = position(i) - flyFrom;
+        const double sep = std::sqrt(dot(gap, gap));
+        // Au milieu du vol, on recule assez pour voir les deux astres à la fois.
+        flyPeakDist = std::max({flyFromDist, flyToDist, 0.9 * sep});
+        flyT = 0;
+        flying = true;
+        touched = true;
+    }
+    void back() {
+        if (history.empty()) return;
+        const View v = history.back();
+        history.pop_back();
+        if (!visible(v.focus)) return;
+        flyFrom = target();
+        flyFromDist = dist;
+        focus = v.focus;
+        flyToDist = v.dist;
+        const Vec3 gap = position(v.focus) - flyFrom;
+        flyPeakDist = std::max({flyFromDist, flyToDist, 0.9 * std::sqrt(dot(gap, gap))});
+        flyT = 0;
+        flying = true;
+        touched = true;
+    }
+    void stepFlight(double dt) {
+        if (!flying) return;
+        flyT = std::min(1.0, flyT + dt / kFlySeconds);
+        // Distance : courbe de Bézier en logarithme, départ -> sommet -> arrivée.
+        const double s = ease(flyT), a = std::log(flyFromDist), m = std::log(flyPeakDist), b = std::log(flyToDist);
+        dist = std::exp((1 - s) * (1 - s) * a + 2 * s * (1 - s) * m + s * s * b);
+        if (flyT >= 1.0) {
+            flying = false;
+            dist = flyToDist;
+        }
     }
 
     // Les étoiles pâlissent en 1/d² : loin de tout, on multiplie leur éclat pour qu'elles restent visibles, et on le dit.
@@ -295,28 +374,35 @@ struct Sim {
         years = std::clamp(years, kStartYears - kLinearLimitYears, kStartYears + kLinearLimitYears);
         if (!touched) yaw += 0.035 * dt;      // lent tour d'horizon, 2 degrés par seconde
         refreshEphemeris();
-        if (!visible(focus)) focus = 0;       // l'astre suivi n'a plus de position connue : retour au Soleil
+        stepFlight(dt);
+        if (!visible(focus)) {                // l'astre suivi n'a plus de position connue : retour au Soleil
+            focus = 0;
+            flying = false;
+        }
     }
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
         if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return 1.0e3;
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }
     static constexpr double kMaxDist = 9.0e10;      // un peu plus que la distance des objets les plus lointains (z = 7)
-    void zoom(double notches) { dist = std::clamp(dist * std::pow(0.8, notches), minDist(focus), kMaxDist); }
+    void zoom(double notches) {
+        if (notches == 0) return;
+        if (flying) {      // molette pendant un vol : on corrige la distance d'arrivée, sans casser le vol
+            flyToDist = std::clamp(flyToDist * std::pow(0.8, notches), minDist(focus), kMaxDist);
+            return;
+        }
+        dist = std::clamp(dist * std::pow(0.8, notches), minDist(focus), kMaxDist);
+    }
     void orbit(double dx, double dy) {
         yaw -= dx * 0.005;
         pitch = std::clamp(pitch + dy * 0.005, -1.55, 1.55);
     }
+    // Suivre l'astre i tout de suite, sans vol (départ du programme, contrôles).
     void follow(int i) {
         if (!visible(i)) return;
-        const Body& b = bodies[static_cast<size_t>(i)];
+        flying = false;
+        dist = arriveDist(i, dist);
         focus = i;
-        // Distance d'arrivée : de quoi voir l'astre dans son voisinage.
-        double arrive = 50.0;                                                       // étoile : on garde ou on se rapproche à 50 années-lumière
-        if (b.kind == Kind::Sun) arrive = 45.0 * kAuInLy;
-        if (b.kind == Kind::Planet) arrive = 6.0 * b.radiusKm / kLyInKm;      // planète ou lune : elle remplit un bon tiers de l'écran
-        dist = std::clamp(std::min(dist, arrive), minDist(i), kMaxDist);
-        if (b.kind == Kind::Galaxy) dist = std::max(dist, 3.0e5);      // une galaxie se regarde de loin
     }
 };
 
