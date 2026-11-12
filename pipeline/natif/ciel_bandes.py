@@ -101,13 +101,15 @@ RELEVES = {
         mesure='Brillance du ciel à 90 µm (poussière tiède chauffée par les étoiles)', unite='MJy/sr',
         resolution_arcmin=1.3, longueur_onde='90 µm',
         reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier)',
-        couverture_publiee='98 % du ciel', echelle='log'),
+        couverture_publiee='98 % du ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/AKARI/WideS', reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     'akari140': dict(
         hips='CDS/P/AKARI/FIS/WideL', bande='infrarouge', libelle='Infrarouge lointain 140 µm (AKARI)',
         mesure='Brillance du ciel à 140 µm (poussière froide)', unite='MJy/sr',
         resolution_arcmin=1.5, longueur_onde='140 µm',
         reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier)',
-        couverture_publiee='98 % du ciel', echelle='log'),
+        couverture_publiee='98 % du ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/AKARI/WideL', reference='Doi et al. 2015, PASJ 67, 50 (AKARI FIS, relevé du ciel entier) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     # --- Infrarouge moyen et proche : WISE (NASA) et 2MASS. Valeurs en unités brutes du détecteur (DN), comme publiées.
     'wise12': dict(
         hips='CDS/P/allWISE/W3', bande='infrarouge', libelle='Infrarouge moyen 12 µm (WISE)',
@@ -159,7 +161,8 @@ RELEVES = {
         mesure='Photons X comptés (gaz à un million de degrés, restes de supernovas, amas de galaxies)',
         unite='coups (unité du relevé)', resolution_arcmin=1.8, longueur_onde='0,5 à 12 nm',
         reference='Voges et al. 1999, A&A 349, 389 (ROSAT All-Sky Survey, MPE)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/RASS', unite='coups/s', reference='Voges et al. 1999, A&A 349, 389 (ROSAT All-Sky Survey, MPE) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     'erosita': dict(
         hips='erosita/dr1/rate/024', bande='X', libelle='Rayons X 0,2 à 2,3 keV (eROSITA DR1)',
         mesure='Taux de photons X comptés', unite='coups/s par pixel',
@@ -171,26 +174,30 @@ RELEVES = {
         mesure='Photons X durs comptés (trous noirs et étoiles à neutrons qui avalent de la matière)',
         unite='unité du relevé (non précisée par la fiche)', resolution_arcmin=12.0, longueur_onde='0,04 à 0,07 nm',
         reference='Krivonos et al. 2012, A&A 545, A27 (INTEGRAL/IBIS, plan galactique, IKI)',
-        couverture_publiee='bande autour du plan de la Galaxie (31 % du ciel)', echelle='lin'),
+        couverture_publiee='bande autour du plan de la Galaxie (31 % du ciel)', echelle='lin',
+        secours=[dict(hips='ov-gso/P/INTEGRAL/17-35keV', unite='mCrab', reference='Krivonos et al. 2012, A&A 545, A27 (INTEGRAL/IBIS, plan galactique, IKI) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     # --- Rayons gamma : Fermi-LAT (NASA), cartes de SkyView (HEASARC).
     'fermi1': dict(
         hips='CDS/P/Fermi/3', bande='gamma', libelle='Gamma 300 MeV à 1 GeV (Fermi-LAT)',
         mesure='Photons gamma comptés (300 MeV à 1 GeV)', unite='coups (unité du relevé)',
         resolution_arcmin=60.0, longueur_onde='moins de 1e-6 nm',
         reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/Fermi/Band3', unite='coups/s/cm²/sr', resolution_arcmin=60.0, reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     'fermi2': dict(
         hips='CDS/P/Fermi/4', bande='gamma', libelle='Gamma 1 à 3 GeV (Fermi-LAT)',
         mesure='Photons gamma comptés (1 à 3 GeV)', unite='coups (unité du relevé)',
         resolution_arcmin=30.0, longueur_onde='moins de 1e-6 nm',
         reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/Fermi/Band4', unite='coups/s/cm²/sr', resolution_arcmin=24.0, reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
     'fermi3': dict(
         hips='CDS/P/Fermi/5', bande='gamma', libelle='Gamma 3 à 300 GeV (Fermi-LAT)',
         mesure='Photons gamma comptés (3 à 300 GeV)', unite='coups (unité du relevé)',
         resolution_arcmin=10.0, longueur_onde='moins de 1e-6 nm',
         reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; cartes SkyView (HEASARC, NASA)',
-        couverture_publiee='tout le ciel', echelle='log'),
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(hips='ov-gso/P/Fermi/Band5', unite='coups/s/cm²/sr', resolution_arcmin=12.0, reference='Atwood et al. 2009, ApJ 697, 1071 (Fermi-LAT) ; carte HEALPix de D. Paradis (IRAP/CADE, Toulouse)')]),
 }
 
 
@@ -400,8 +407,18 @@ def main():
         for k, r in RELEVES.items():
             print(f'{k:12s} {r["libelle"]:28s} {r["hips"]}')
         return
-    r = RELEVES[a.nom]
-    p = proprietes(r['hips'])
+    # Relevé principal, puis ses copies publiées ailleurs (même relevé, même bande ; seuls l'unité ou la référence de
+    # la copie changent, écrites dans 'secours'). Ajouté le 12/11/2026 : le serveur du CDS ne servait plus aucune tuile.
+    p = None
+    for r in [RELEVES[a.nom]] + [dict(RELEVES[a.nom], **s) for s in RELEVES[a.nom].get('secours', [])]:
+        r.pop('secours', None)
+        try:
+            p = proprietes(r['hips'])
+            break
+        except SystemExit as e:
+            print(f'  {e} ; copie suivante', flush=True)
+    if p is None:
+        raise SystemExit(f'{a.nom} : aucune copie du relevé ne répond')
     adresse = p['hips_service_url'].rstrip('/')
     w = int(p.get('hips_tile_width', 512))
     ordre_max = int(p.get('hips_order', a.ordre))
@@ -410,7 +427,9 @@ def main():
     repere = p.get('hips_frame', 'equatorial')
     nside = w << ordre
     ntuiles = 12 * 4 ** ordre
-    cache = a.cache or os.path.join(a.sortie, 'cache_hips', a.nom)
+    # une copie de secours a son propre cache : ses tuiles ne doivent jamais se mêler à celles du relevé principal
+    sous = a.nom if r['hips'] == RELEVES[a.nom]['hips'] else a.nom + '__' + r['hips'].replace('/', '_')
+    cache = a.cache or os.path.join(a.sortie, 'cache_hips', sous)
     print(f'{r["libelle"]} : {r["hips"]}, serveur {adresse}, repère {repere}, tuiles {w} px, ordre {ordre} '
           f'(maximum {ordre_max}), Nside {nside}, {ntuiles} tuiles')
 
