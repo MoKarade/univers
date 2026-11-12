@@ -15,16 +15,17 @@ const ORB_KV = 1.0227121650456;  /* km/s -> kpc/Ga */
 
 /* Barre centrale de la Voie lactée (lot G) : potentiel tournant de Dehnen (2000, AJ 119, 800), quadrupolaire :
    Φ_b = A cos 2(φ − φ_b(t)) U(R), U = (R/R_b)³ − 2 sous R_b, −(R_b/R)³ au-delà ; A = α v0² (R0/R_b)³ / 3.
-   Mesuré : vitesse de rotation de la barre 39 ± 3,5 km/s/kpc (Portail et al. 2017 ; Sanders et al. 2019 : 41 ± 3) ;
+   Mesuré : vitesse de rotation de la barre 39 ± 3,5 km/s/kpc (Portail et al. 2017 ; mesures récentes de 33, Clarke et Gerhard 2022, à 41, Sanders et al. 2019) ;
+   demi-longueur 5,0 ± 0,2 kpc (Wegg et al. 2015) ;
    angle de la barre, 28° devant la direction du centre, côté proche aux longitudes positives (Wegg et Gerhard 2013).
-   Modèle (évolution supposée) : longueur R_b = 0,8 × rayon de corotation, force α = 0,01 (valeur de Dehnen, qui
+   Modèle (évolution supposée) : force α = 0,01 (valeur de Dehnen, qui
    reproduit le courant d'étoiles d'Hercule près du Soleil). Sans bras spiraux (leur vitesse de rotation n'est pas établie). */
-const BAR_OMEGA = 39 * 1.0227121650456, BAR_PHI0 = (180 - 28) * Math.PI / 180, BAR_ALPHA = 0.01;
+const BAR_ALPHA = 0.01, BAR_RB = 5.0;      /* longueur : demi-longueur mesurée 5,0 ± 0,2 kpc (Wegg et al. 2015) ; vitesse et angle : GAL.OMEGA_BAR et GAL.BAR_ANGLE, les mêmes que la barre dessinée */
 /** Potentiel de la barre seule, (km/s)², pour les contrôles (intégrale de Jacobi). */
 function barPhi(P, x, y, t) { const R = Math.hypot(x, y), q = R / P.Rb, U = R < P.Rb ? q * q * q - 2 : -1 / (q * q * q); return P.Ab * Math.cos(2 * (Math.atan2(y, x) - (P.Pb - P.Ob * t))) * U; }
 /** Paramètres du potentiel, copiés de GAL pour le Worker (qui ne voit pas le reste de la page). */
-const orbParams = () => { const v0 = 230, Rb = 0.8 * v0 / 39; return { G: G_KPC, Mb: GAL.Mb, ab: GAL.ab, Md: GAL.Md, ad: GAL.ad, bd: GAL.bd, rs: GAL.rs, GMs: GAL.GMs,
-  Rb, Ab: BAR_ALPHA * v0 * v0 * Math.pow(GAL.R0 / Rb, 3) / 3, Ob: BAR_OMEGA, Pb: BAR_PHI0 }; };
+const orbParams = () => { const v0 = 230, Rb = BAR_RB; return { G: G_KPC, Mb: GAL.Mb, ab: GAL.ab, Md: GAL.Md, ad: GAL.ad, bd: GAL.bd, rs: GAL.rs, GMs: GAL.GMs,
+  Rb, Ab: BAR_ALPHA * v0 * v0 * Math.pow(GAL.R0 / Rb, 3) / 3, Ob: GAL.OMEGA_BAR * 1.0227121650456, Pb: Math.PI - GAL.BAR_ANGLE }; };
 
 /** Accélération (km/s)²/kpc au point (x, y, z) kpc, écrite dans a[0..2]. */
 function orbAcc(P, x, y, z, a, t) {

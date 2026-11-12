@@ -83,4 +83,8 @@ console.log(fails ? `\n${fails} échec(s)` : '\norbites calculées : tout est ve
 { const X = Float64Array.from([-4.5, 0.3, 0.05]), V = Float64Array.from([20, 180, 5]), J = (t) => { const Lz = X[0] * V[1] - X[1] * V[0]; return orbEnergy(P, X[0], X[1], X[2], V[0], V[1], V[2]) + barPhi(P, X[0], X[1], t) - (-P.Ob / 1.0227121650456) * Lz; };
   const j0 = J(0); let worst = 0, t = 0; for (let s = 0; s < 2000; s++) { orbSteps(P, X, V, 1, ORB_DT / 4, 1, null, t); t += ORB_DT / 4; worst = Math.max(worst, Math.abs(J(t) / j0 - 1)); }
   check(worst < 2e-3, `barre : intégrale de Jacobi conservée à ${worst.toExponential(1)} près sur 500 Ma (orbite à 4,5 kpc)`); }
+/* Orientation : à t = 0 la barre est au plus profond à φ = 180° − 28° (bout proche aux longitudes positives) et tourne dans le sens du Soleil */
+{ let best = 0, lo = Infinity; for (let d = 0; d < 360; d += 0.5) { const f = d * Math.PI / 180, v = barPhi(P, 3 * Math.cos(f), 3 * Math.sin(f), 0); if (v < lo) { lo = v; best = d; } }
+  const LzSun = sunGal0[0] * SUN_UVW[1] - sunGal0[1] * SUN_UVW[0], d2 = Math.min(Math.abs(best - 152), Math.abs(best - 332));
+  check(d2 < 1 && LzSun < 0 && P.Ob > 0, `barre : potentiel le plus bas à ${best}° (attendu 152° ou 332°), rotation dans le sens du disque`); }
 process.exit(fails ? 1 : 0);
