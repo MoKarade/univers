@@ -50,5 +50,12 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 - Après : fiches « Expansion » et « Énergie noire » : H0 de Planck 2018 (67,4 ± 0,5) et de SH0ES (73,0 ± 1,0) ; DESI DR2 et DES Y6 (w0 = −0,84, wa = −0,53, écart de 2,3 σ au modèle standard). Le calcul de la page ne change pas.
 - Fini quand : le critique de vérité confirme chaque valeur sur sa source.
 
+### S7 — Recherche par nom (A5, contournement)
+- Pourquoi un contournement : la page en ligne ne peut appeler aucun serveur extérieur (SIMBAD en direct impossible), et le CDS était en panne.
+- Après : « Aller à » trouve aussi les 13 372 objets du catalogue ouvert OpenNGC (NGC, IC, Messier, noms usuels anglais ; « M104 » comme « M 104 »). Fiche : distance, z, position, constellation, magnitude, taille, source. Une galaxie de z ≥ 0,003 est placée à la distance tirée de z, comme les galaxies des relevés ; sinon la fiche s'ouvre sans déplacement, distance « inconnue ici ».
+- Données : `pipeline/sources/build_openngc.py` → `openngc.json` (808 ko), déposé à part de la page (fichier joint de l'artefact), chargé à l'ouverture de « Aller à ». Contrôle bloquant : positions de NGC 224, NGC 4594 et NGC 1976.
+- Fini quand : test `app/test/lot_s_ngc.py` (M104 trouvée, fiche et distance c·z/H0 à 3 % près, départ de la vue ; M42 sans déplacement ; sans le fichier, la recherche locale marche) sur ordinateur et téléphone ; critiques PASSE.
+- Écarté : le vrai ciel DSS (A4). Contourné (copie de l'ESA, branche `sources-ciel`), mais mesuré à l'écran il n'ajoute presque rien aux millions d'étoiles Gaia de la page ; non publié.
+
 ### Ensuite (A4, A5, A7)
 Ciel réel en zoom continu (HiPS), recherche par nom (Sesame, SIMBAD), zones couvertes par chaque relevé (MOC). Attendent la mission 1 (Firebase) pour A4.

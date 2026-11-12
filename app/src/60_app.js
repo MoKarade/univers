@@ -1283,6 +1283,32 @@
   /* ---- recherche par nom : un index construit à la première utilisation ---- */
   let FIDX = null; const fold = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9+*]+/g, ' ').trim();
   function jump(o, lr) { pushHist(); select(o); flyTo(o, o.lr || lr); openPanel(null); }
+  /* A5 (contournement) : catalogue ouvert NGC/IC (OpenNGC, Mattia Verga, CC BY-SA 4.0 ; pipeline/sources/build_openngc.py),
+     déposé à part de la page et chargé à l'ouverture de « Aller à ». La recherche SIMBAD en direct est impossible : la page
+     ne peut appeler aucun serveur extérieur. Une galaxie dont le décalage vers le rouge dépasse NGC_ZMIN est placée à la distance
+     tirée de z, exactement comme les galaxies des relevés ; sinon sa fiche s'ouvre sans déplacement (distance inconnue ici). */
+  const NGC = { list: null, p: null }, NGC_ZMIN = 0.003, NGC_EPS = 23.4392911 * DEG;
+  const NGCT = { G: 'galaxie', GPair: 'paire de galaxies', GTrpl: 'triplet de galaxies', GGroup: 'groupe de galaxies', OCl: 'amas ouvert', GCl: 'amas globulaire', 'Cl+N': 'amas et nébuleuse', PN: 'nébuleuse planétaire', HII: 'région HII', EmN: 'nébuleuse en émission', RfN: 'nébuleuse par réflexion', Neb: 'nébuleuse', SNR: 'reste de supernova', Nova: 'nova', '*': 'étoile', '**': 'étoile double', '*Ass': 'association d’étoiles', Other: 'autre objet' };
+  function loadNgc() { if (!NGC.p) { const src = window.__NGC !== undefined ? window.__NGC : '/_blob/ecf4e67795abfe9d1c78c5cf332bb214';
+      NGC.p = src ? fetch(src).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { NGC.list = j.o; if (FIDX) addNgc(FIDX); return true; }).catch(() => false) : Promise.resolve(false); }
+    return NGC.p; }
+  function addNgc(X) { NGC.list.forEach((o, i) => { const ns = o[0].split(' · '), kind = (NGCT[o[1]] || 'objet') + ' · catalogue NGC/IC', go = () => ngcGo(i);
+    ns.forEach((n, k) => { const lab = k ? n + ' (' + ns[0] + ')' : ns.slice(0, 2).join(' · '); X.push([fold(n), lab, kind, go]); if (/^(NGC|IC|M) \d/.test(n)) X.push([fold(n).replace(/ /g, ''), lab, kind, go]); }); }); }      /* « M31 » et « M 31 » */
+  let ngcLut = null, ngcLutC = null;
+  function ngcDistMpc(z) { if (ngcLutC !== S.cosmo) { ngcLut = surveyLut(S.cosmo); ngcLutC = S.cosmo; } const K = ngcLut.length - 1, lz = Math.log(1 + DATA.SURV_ZMAX);
+    const x = clamp(Math.log(1 + z) / lz, 0, 1) * K, k = Math.min(x | 0, K - 1); return ngcLut[k] + (ngcLut[k + 1] - ngcLut[k]) * (x - k); }
+  function selNgc(i) { const o = NGC.list[i], ra = o[2] * DEG, de = o[3] * DEG, ce = Math.cos(NGC_EPS), se = Math.sin(NGC_EPS);
+    const ex = Math.cos(de) * Math.cos(ra), ey = Math.cos(de) * Math.sin(ra), ez = Math.sin(de), dir = [ex, ce * ey + se * ez, -se * ey + ce * ez];
+    const z = o[6], placed = z !== null && z >= NGC_ZMIN && z <= DATA.SURV_ZMAX, ns = o[0].split(' · ');
+    const get = placed ? () => add3(F.gcRel, dir, ngcDistMpc(z) * MPC * F.cos.a) : () => [NaN, NaN, NaN];
+    const sz = placed && o[5] ? ngcDistMpc(z) * MPC * o[5] / 60 * DEG : null;
+    return { name: ns[0], sub: (NGCT[o[1]] || 'objet') + (ns.length > 1 ? ' · ' + ns.slice(1).join(' · ') : ''), get, placed, lr: placed ? clamp(Math.log10(Math.max(sz || 0, 3e4 * LY) * 6), 21.3, 25.6) : null,
+      rows: () => { const r = [['Distance', placed ? fmtDist(vlen(add3(get(), F.gcRel, -1))) + ' (calculée d’après z, comme les galaxies des relevés)' : z !== null && z < NGC_ZMIN ? 'non tirée de z : si près, le mouvement propre domine le décalage · inconnue ici' : 'non donnée par ce catalogue · inconnue ici']];
+        if (z !== null) r.push(['Décalage vers le rouge', 'z = ' + sig(z, 3)]); if (sz) r.push(['Taille réelle', fmtDist(sz, 2) + ' (calculée)']);
+        r.push(['Position sur le ciel', 'ascension droite ' + nf(o[2], 2) + '°, déclinaison ' + (o[3] < 0 ? '−' : '+') + nf(Math.abs(o[3]), 2) + '° (J2000)']);
+        if (o[7]) r.push(['Constellation', o[7]]); if (o[4] !== null) r.push(['Magnitude B', nf(o[4], 1)]); if (o[5]) r.push(['Taille apparente', sig(o[5], 2) + NBSP + 'minutes d’arc']);
+        r.push(['Source', 'OpenNGC (Mattia Verga), CC BY-SA 4.0']); return r; } }; }
+  function ngcGo(i) { const o = selNgc(i); if (o.placed) jump(o, o.lr); else { pushHist(); select(o); openPanel(null); } }
   function findIndex() { if (FIDX) return FIDX; const X = [], add = (name, kind, go) => { if (name) X.push([fold(name), name, kind, go]); }, lrOf = o => clamp(Math.log10(Math.hypot(o.orbit.P[0], o.orbit.P[1], o.orbit.P[2]) * AU * 2.4), 11.2, 14.6);
     for (const k in BODY) add(BODY[k].name, k === 'sun' ? 'étoile' : k === 'moon' ? 'lune de la Terre' : 'planète', () => { select(null); focusBody(k); openPanel(null); });
     KO.forEach((m, k) => m.kind !== 'exo' && add(m.kind === 'sstar' ? 'Étoile ' + m.n : m.n, m.kind === 'moon' ? 'lune de ' + PLN[m.p] : m.kind === 'sstar' ? 'près du trou noir central' : 'sonde spatiale', () => jump(selMoon(k), m.kind === 'probe' ? 13.5 : clamp(Math.log10(m.aAU * AU * 2.4), 6.6, 15.6))));
@@ -1295,6 +1321,7 @@
     DATA.BHS.names.forEach((n, i) => add(n, 'trou noir', () => jump(selBHS(i), 18.9))); DATA.BHM.names.forEach((n, i) => add(n, 'trou noir supermassif', () => jump(selBHM(i), 23.3))); add('Sagittarius A*', 'trou noir central', () => jump(selSgrA(), 19.9));
     NM.clu.forEach((n, i) => add(n, 'amas d’étoiles', () => jump(selCluster(i), 18.9)));
     for (const c of G.lg.centers) add(c.g.n, 'galaxie du Groupe local', () => jump(selLG(c), 21.6)); NM.near.forEach((n, i) => add(n, 'galaxie proche', () => jump(selNear(i), 22.6)));
+    if (NGC.list) addNgc(X);
     return (FIDX = X); }
   const QUICK = [['Échelles', STOPS.map((st, k) => [st.name, 's' + k])], ['Système solaire', ['Soleil', 'Mercure', 'Vénus', 'Terre', 'Lune', 'Mars', 'Jupiter', 'Saturne', 'Uranus', 'Neptune', 'Pluton', 'Cérès', '1P/Halley', 'Voyager 1'].map(n => [n, n])],
     ['Étoiles', ['Alpha du Centaure', 'Sirius', 'Véga', 'Bételgeuse', 'TRAPPIST-1'].map(n => [n, n])], ['Galaxie et au-delà', ['Sagittarius A*', 'Étoile S2', 'Cygnus X-1', 'Grand Nuage de Magellan', 'Andromède', 'M87'].map(n => [n, n])]];
@@ -1305,7 +1332,7 @@
     a.sort((x, y) => X[x][0].length - X[y][0].length); const res = a.concat(b).slice(0, 12); box.innerHTML = res.length ? res.map(i => '<button type="button" data-i="' + i + '">' + X[i][1].replace(/</g, '&lt;') + '<small>' + X[i][2] + '</small></button>').join('') : '<p class="hint">Rien trouvé à ce nom.</p>'; return res; }
   $('find-q').addEventListener('input', e => findRun(e.target.value));
   $('find-res').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const g = b.dataset.g; if (g && /^s\d$/.test(g)) { pushHist(); select(null); const st = STOPS[+g[1]]; goTo(st.logR, { az: st.az, el: st.el, focus: st.focus || 'sun', speed: st.speed, noHist: true }); openPanel(null); } else if (g) goName(g); else FIDX[+b.dataset.i][3](); });
-  $('b-find').addEventListener('click', () => { loadAstNames(); findRun($('find-q').value); if (matchMedia('(pointer:fine)').matches) setTimeout(() => { if (!$('p-find').hidden) $('find-q').focus(); }, 60); });
+  $('b-find').addEventListener('click', () => { loadAstNames(); loadNgc().then(ok => { if (ok && !$('p-find').hidden) findRun($('find-q').value); }); findRun($('find-q').value); if (matchMedia('(pointer:fine)').matches) setTimeout(() => { if (!$('p-find').hidden) $('find-q').focus(); }, 60); });
   /* ---- données en flux : étoiles et galaxies supplémentaires, téléchargées par morceaux après le démarrage ----
      Le fichier arrive en continu ; chaque morceau est décodé puis affiché aussitôt, quelques millisecondes par image au plus.
      Les étoiles sont rangées de la plus brillante à la plus faible : si l'appareil peine, on n'affiche que le début de la liste. */
