@@ -1,7 +1,7 @@
 // Contrôle de completude.h sur les vraies données de l'appli, chargées comme le fait la fenêtre (fenetre.cpp).
 // Valeurs attendues relevées indépendamment avec numpy et Python sur les mêmes fichiers (12/11/2026) :
 // 481 points d'étoiles à moins de 10 pc, dont 11 paires de deux catalogues à moins de 0,02 al ; 41 149 étoiles du
-// catalogue principal sans vitesse radiale ; 70 galaxies nommées à moins de 1 Mpc du Soleil ; 20 lunes dans lunes.tsv,
+// catalogue principal sans vitesse radiale (avant etoiles_sans_vr.txt) ; galaxies du Groupe local : completude_groupe_local.h ;
 // dont 15 avec un fichier de la NASA installé (pas Uranus), plus la Lune.
 // Usage : essai_completude <dossier des données de l'appli, par ex. C:\dev\Univers-PC>
 #include <cstdio>
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
     }
     sim.loadBodies(dir + "/etoiles_noms.tsv", dir + "/galaxies_noms.tsv", dir + "/planetes.tsv", dir + "/lunes.tsv");
 
-    const Comptes c = compter(sim, 5566702);      // en-tête de galaxies.bin (lu par galaxies.h dans l'appli)
+    const Comptes c = compter(sim, 5566702, 0, "", "", dir);      // 5566702 : en-tête de galaxies.bin ; dir : etoiles_sans_vr.txt
 
     // Avec Gaia et la Voie lactée chargés (gaia.bin : en-tête lu ici comme le fait gaia.h).
     uint64_t nGaia = 0;
@@ -140,9 +140,16 @@ int main(int argc, char** argv) {
     verifie(lunesPresentesConnues(c) == 1 + 2 + 115 + 290 + 15 + 9 + 5, "lunes comptées au plus jusqu'au nombre reconnu (Jupiter : 116 chargées, 115 reconnues)");
     verifie(c.etoiles == 6153611, "6 153 611 étoiles");
     verifie(c.etoiles10pc == 481, "481 points à moins de 10 pc (numpy : 481)");
-    verifie(c.doublons10pc == 11, "11 paires de deux catalogues à moins de 0,02 al (numpy : 11)");
-    verifie(c.principalSansVitesseRadiale == 41149, "41 149 étoiles du catalogue principal sans vitesse radiale (numpy : 41 149)");
-    verifie(c.galaxiesGroupeLocal == 70, "70 galaxies nommées à moins de 1 Mpc du Soleil (Python : 70)");
+    // Catalogue principal à pleine précision (2e57b01) : 12 paires (numpy) ; avant, arrondi par la page : 11.
+    verifie(c.doublons10pc == (c.sansVitesseRadialeLu ? 12u : 11u), "paires de deux catalogues à moins de 0,02 al (numpy : 12, ou 11 avec l'ancien fichier)");
+    {      // nombre exact écrit par pipeline/natif/etoiles_hyg.py, s'il est là ; sinon l'ancien repérage (numpy : 41 149)
+        std::ifstream vf(dir + "/etoiles_sans_vr.txt");
+        unsigned long long attendu = 0;
+        if (vf >> attendu) verifie(c.sansVitesseRadialeLu && c.principalSansVitesseRadiale == attendu, "sans vitesse radiale : nombre lu dans etoiles_sans_vr.txt");
+        else verifie(!c.sansVitesseRadialeLu && c.principalSansVitesseRadiale == 41149, "sans vitesse radiale : 41 149 repérées (fichier absent, numpy : 41 149)");
+    }
+    verifie(c.galaxiesGroupeLocal == completude::groupe_local::kNommeesAuRecoupement,
+            "galaxies nommées à moins de 1 Mpc : autant qu'au recoupement avec la LVDB (sinon relancer completude_groupe_local.py)");
 
     const auto r = rapport(c);
     for (const Echelle& e : r) {
@@ -151,10 +158,11 @@ int main(int argc, char** argv) {
         for (const std::string& m : e.manques) std::printf("    manque : %s\n", m.c_str());
     }
     std::printf("\n");
-    verifie(std::fabs(r[1].part - 470.0 / 540.0) < 1e-12, "voisinage : (481 - 11) / 540");
+    verifie(std::fabs(r[1].part - (481.0 - double(c.doublons10pc)) / 540.0) < 1e-12, "voisinage : (481 - paires en double) / 540");
     verifie(std::fabs(r[2].part - 6153611.0 / 1811709771.0) < 1e-15, "Voie lactée : part de Gaia DR3");
-    verifie(std::fabs(r[3].part - 69.0 / 113.0) < 1e-12, "Groupe local : 69 / 113 retrouvées par recoupement (Canis Major n'est pas dans la LVDB)");
-    verifie(r[3].manques[0].find("44 galaxies naines") == 0 && r[3].manques[0].find("Draco II") != std::string::npos,
-            "Groupe local : les 44 manquantes nommées, Draco II la plus proche");
+    verifie(std::fabs(r[3].part - double(completude::groupe_local::kAppariees) / 113.0) < 1e-12, "Groupe local : galaxies retrouvées par recoupement / 113");
+    verifie(completude::groupe_local::kManquantesN > 0 ? r[3].manques[0].find(completude::groupe_local::kManquantes[0].nom) != std::string::npos
+                                                       : r[3].manques[0].find("galaxies naines") == std::string::npos,
+            "Groupe local : les manquantes sont nommées, et aucune ligne vide quand il n'en manque aucune");
     return gEchecs ? 1 : 0;
 }
