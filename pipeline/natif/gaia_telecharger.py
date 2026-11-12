@@ -16,6 +16,10 @@ Jeu « erreurs » (--jeu erreurs, plan-precalcul.md § 1) : mêmes étoiles, mê
 pmra_error, pmdec_error (mas, mas/an), parallax_pmra_corr, parallax_pmdec_corr, pmra_pmdec_corr (corrélations des
 mesures), radial_velocity_error (km/s) : les incertitudes publiées par Gaia, pour les clones d'incertitude.
 
+Jeu « poussière » (--jeu poussiere, docs/gaia-rayons.md) : mêmes étoiles, source_id, ag_gspphot (absorption dans la
+bande G, avec ses bornes à 16 et 84 %) et ebpminrp_gspphot (rougissement BP-RP), estimés par Gaia DR3 (GSP-Phot,
+Andrae et al. 2023) à partir du spectre BP/RP mesuré de chaque étoile et de sa parallaxe. Environ 1,5 Go.
+
 Usage : python gaia_telecharger.py <dossier> [--parts 256] [--simultanes 4] [--jeu base|erreurs]
 Taille attendue : environ 6 Go (base), environ 4 Go (erreurs).
 """
@@ -25,7 +29,8 @@ import argparse, concurrent.futures as cf, os, sys, time, urllib.parse, urllib.r
 
 TAP = 'https://gea.esac.esa.int/tap-server/tap'
 JEUX = {'base': 'source_id, ra, dec, parallax, pmra, pmdec, radial_velocity, phot_g_mean_mag, bp_rp',
-        'erreurs': 'source_id, parallax_error, pmra_error, pmdec_error, parallax_pmra_corr, parallax_pmdec_corr, pmra_pmdec_corr, radial_velocity_error'}
+        'erreurs': 'source_id, parallax_error, pmra_error, pmdec_error, parallax_pmra_corr, parallax_pmdec_corr, pmra_pmdec_corr, radial_velocity_error',
+        'poussiere': 'source_id, ag_gspphot, ag_gspphot_lower, ag_gspphot_upper, ebpminrp_gspphot'}
 COLONNES = JEUX['base']
 HPX12 = 12 * 4 ** 12      # pixels HEALPix de niveau 12 sur tout le ciel
 MAXREC = 10_000_000      # sans ce paramètre, le service coupe à 50 000 lignes (constaté le 12 novembre 2026)

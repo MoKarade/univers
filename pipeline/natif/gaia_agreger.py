@@ -10,6 +10,7 @@ par case :
 - distance : tranche de parallaxe, pb = floor(10 log10(parallaxe en mas)) (un dixième de décade), seulement pour les
   sources dont la parallaxe vaut plus de 5 fois son erreur (distance à mieux que 20 %) ;
   toutes les autres (parallaxe moins sûre, négative ou absente) : distance inconnue, « ciel seul », par pixel.
+Par case aussi : flux sans poussière des sources dont Gaia estime la poussière (ag_gspphot), et leur flux mesuré.
 Par case : nombre de sources, somme des flux 10^(-0,4 G), somme des flux × BP-RP et des flux dont BP-RP existe (couleur
 moyenne pondérée), somme des flux × erreur relative de parallaxe (incertitude moyenne de la distance de la case).
 
@@ -33,7 +34,11 @@ K = '4.740470446'      # km/s pour 1 mas/an et 1 mas de parallaxe
 VA, VD = f'{K}*pmra/parallax', f'{K}*pmdec/parallax'      # vitesses sur le ciel (est, nord), mesurées
 VITESSES = (f'SUM({VA}) AS sva, SUM({VA}*{VA}) AS sva2, SUM({VD}) AS svd, SUM({VD}*{VD}) AS svd2, '
             f'SUM(radial_velocity) AS srv, COUNT(radial_velocity) AS nrv, SUM(radial_velocity*radial_velocity) AS srv2')
-AGREGATS = (f'COUNT(*) AS n, SUM({F}) AS f, SUM({F}*bp_rp) AS fc, SUM({F}*(bp_rp*0+1)) AS fcn')
+# Poussière (docs/gaia-rayons.md) : flux sans la poussière Soleil-source, là où Gaia l'estime (ag_gspphot, GSP-Phot,
+# Andrae et al. 2023), et flux mesuré de ces mêmes sources : l'absorption moyenne de la case en découle.
+FD = 'POWER(10, -0.4*(phot_g_mean_mag - ag_gspphot))'
+AGREGATS = (f'COUNT(*) AS n, SUM({F}) AS f, SUM({F}*bp_rp) AS fc, SUM({F}*(bp_rp*0+1)) AS fcn, '
+            f'SUM({FD}) AS fd, SUM({F}*(ag_gspphot*0+1)) AS fdn')
 
 
 def requetes(debut, fin):

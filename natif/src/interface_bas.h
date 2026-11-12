@@ -23,20 +23,24 @@ const char* grainLine(const Sim& sim) {
     return "Ici, chaque point lointain est une galaxie mesurée, une par une.";
 }
 
-// Les rayons autour du Soleil, vus de loin : le flou des distances de Gaia (texte du fil Gaia, 12/11/2026).
-// Une ligne courte ; le survol donne l'explication complète.
-void raysNote() {
-    ImGui::TextDisabled("Rayons autour du Soleil : flou des distances mesurées par Gaia, pas une vraie structure (survol : pourquoi).");
+// Les rayons autour du Soleil, vus de loin (fil Gaia, mesure du 12/11/2026, docs/gaia-rayons.md) : ce sont surtout les
+// ombres de la poussière proche et les limites de Gaia, pas le flou des distances. Une ligne courte ; le survol explique.
+void raysNote(const Sim& sim) {
+    ImGui::TextDisabled("Rayons autour du Soleil : là où Gaia voit loin ou non (poussière, couverture), pas une vraie structure (survol : pourquoi).");
     if (!ImGui::IsItemHovered()) return;
     ImGui::BeginTooltip();
     ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
     ImGui::TextUnformatted("Pourquoi des rayons autour du Soleil ?");
     ImGui::Separator();
-    ImGui::TextWrapped("%s", "Gaia mesure très précisément la direction de chaque étoile, mais moins bien sa distance. Chaque étoile peut donc être "
-                       "un peu plus près ou plus loin que dessiné, sur la ligne qui la relie au Soleil. Vu de loin, ce flou dessine des rayons "
-                       "qui partent du Soleil. Ce ne sont pas de vraies structures : c'est la marge d'erreur des mesures (moins de 10 % pour "
-                       "les étoiles dessinées une à une, jusqu'à 100 % pour la lumière additionnée des autres).");
-    ImGui::TextDisabled("Source : Gaia DR3, parallaxes (Lindegren et al. 2021).");
+    ImGui::TextWrapped("%s", "On ne voit ici que les étoiles que Gaia a mesurées depuis la Terre. Derrière un nuage de poussière proche, les "
+                       "étoiles lointaines sont trop faibles pour que Gaia mesure leur distance : il en manque, dans un cône qui part du "
+                       "Soleil. Ailleurs, Gaia voit plus loin. Vu de loin, ces cônes pleins et vides dessinent des rayons. Ce n'est pas "
+                       "le flou des distances : avec un tri plus strict, les rayons restent les mêmes (mesuré).");
+    if (sim.gaiaDustCount)
+        ImGui::TextWrapped("La poussière entre chaque étoile et le Soleil, estimée par Gaia pour %s étoiles, est retirée de leur éclat vu de "
+                           "loin : celles qui sont derrière un nuage reprennent leur éclat. Les étoiles que Gaia n'a pas vues ne sont pas ajoutées.",
+                           frInt(static_cast<double>(sim.gaiaDustCount)).c_str());
+    ImGui::TextDisabled("Sources : Gaia DR3 (Gaia Collaboration 2023) ; poussière GSP-Phot (Andrae et al. 2023).");
     ImGui::PopTextWrapPos();
     ImGui::EndTooltip();
 }
@@ -63,8 +67,15 @@ void whatYouSee(const Sim& sim) {
         // gaia_agrege.bin (fil Gaia, docs/gaia-voie-lactee.md) : la lumière des autres sources Gaia, additionnée par case.
         if (sim.hasGaia && sim.gaiaCount) {
             if (sim.hasGaiaAggregate && std::fabs(sim.years - kStartYears) >= 1.0) {      // la lumière additionnée suit aussi les orbites (9f77e33)
-                ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une, sur leur orbite ;", frInt(static_cast<double>(sim.gaiaCount)).c_str());
-                ImGui::TextDisabled("le reste des sources Gaia, additionné par cases, avance à la vitesse moyenne de chaque case.");
+                // Orbite fiable (fil Gaia, docs/gaia-rayons.md) : seules ces étoiles avancent ; les autres s'effacent en quelques Ma.
+                if (sim.gaiaReliableCount) {
+                    ImGui::TextDisabled("Voie lactée : %s étoiles Gaia à orbite fiable (vitesse mesurée, %s de la lumière), sur leur orbite ;",
+                                        frInt(static_cast<double>(sim.gaiaReliableCount)).c_str(), (frNum(100.0 * sim.gaiaReliableLight, 2) + " %").c_str());
+                    ImGui::TextDisabled("les autres sources Gaia, sans vitesse sûre, ne sont montrées qu'autour d'aujourd'hui : elles s'effacent en quelques millions d'années.");
+                } else {
+                    ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une, sur leur orbite ;", frInt(static_cast<double>(sim.gaiaCount)).c_str());
+                    ImGui::TextDisabled("le reste des sources Gaia, additionné par cases, avance à la vitesse moyenne de chaque case.");
+                }
             } else if (sim.hasGaiaAggregate) {
                 ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une ; le reste des sources Gaia est additionné par pixel, sans modèle.",
                                     frInt(static_cast<double>(sim.gaiaCount)).c_str());
@@ -72,9 +83,8 @@ void whatYouSee(const Sim& sim) {
                 ImGui::TextDisabled("Voie lactée : seules les %s étoiles mesurées par Gaia sont montrées ; la lumière des autres sources Gaia n'est pas chargée.",
                                     frInt(static_cast<double>(sim.gaiaCount)).c_str());
             }
-            // Rayons : vus par capture seulement avec la lumière additionnée (erreur de distance jusqu'à 100 %) ; avec les seules
-            // étoiles une à une (erreur < 10 %), aucun rayon visible à 60 000 al (comparaison du 12/11/2026).
-            if (sim.hasGaiaAggregate && !sim.deepTime()) raysNote();
+            // Rayons : visibles avec les seules étoiles une à une aussi (captures du 12/11/2026, docs/gaia-rayons.md).
+            if (!sim.deepTime()) raysNote(sim);
         } else {
             ImGui::TextDisabled("Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
             ImGui::TextDisabled("car elle demanderait un modèle.");
