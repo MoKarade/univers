@@ -61,6 +61,15 @@ void dateJumpPopup(Sim& sim, UiState& ui) {
     ImGui::EndPopup();
 }
 
+// (b) Scénarios du Groupe local (clones.h, fil physique) : part qui fusionne et date (16e, 50e, 84e centiles).
+void cloneNote(const Sim& sim) {
+    if (!sim.cloneCount || sim.cloneMergeProbability <= 0) return;
+    ImGui::TextDisabled("Sur %s scénarios tirés de l'incertitude des mesures : %s %% de chances que la Voie lactée et Andromède fusionnent, "
+                        "entre %s et %s milliards d'années (valeur centrale %s) [calculé].",
+                        frInt(static_cast<double>(sim.cloneCount)).c_str(), frInt(100.0 * sim.cloneMergeProbability).c_str(),
+                        frNum(sim.cloneMergeGa[0], 2).c_str(), frNum(sim.cloneMergeGa[2], 2).c_str(), frNum(sim.cloneMergeGa[1], 2).c_str());
+}
+
 // Loin d'aujourd'hui : ce qui est montré, et d'où cela vient (fil natif, 87c910e : orbites des étoiles jusqu'à 1 milliard
 // d'années, puis fondu vers le calcul de la fusion entre 800 millions et 1 milliard d'années, Sim::starShare).
 // Hors d'aujourd'hui, ce qui est supposé dans le mouvement des étoiles Gaia (texte du fil Gaia, PR #77).
@@ -70,8 +79,15 @@ void gaiaMotionNote(const Sim& sim) {
         ImGui::TextDisabled("%s millions d'étoiles Gaia n'ont pas de vitesse mesurée le long de la ligne de visée : pour leur mouvement dans le temps, "
                             "elle est comptée nulle (supposition). Leur position d'aujourd'hui reste mesurée.",
                             frInt((static_cast<double>(sim.gaiaCount) - completude::kGaiaVitessesRadiales) / 1.0e6).c_str());
-    if (sim.hasGaiaAggregate && sim.deepTime())
-        ImGui::TextDisabled("Lumière additionnée des autres sources Gaia : sans vitesses mesurées, montrée seulement au présent (à 3 millions d'années près).");
+    if (sim.hasGaiaAggregate) {
+        ImGui::TextDisabled("Lumière additionnée des autres sources Gaia : chaque case avance à la vitesse moyenne mesurée de ses étoiles, "
+                            "sur son orbite calculée autour de la Galaxie.");
+        if (sim.gaiaCellDispersionKms > 0)
+            ImGui::TextDisabled("Dans une case, les étoiles ne vont pas toutes à cette vitesse : elles s'en écartent d'environ %s km/s (valeur typique mesurée). "
+                                "Avec le temps, une vraie case s'étalerait ; ici elle reste groupée.",
+                                frInt(sim.gaiaCellDispersionKms).c_str());
+        ImGui::TextDisabled("La part sans distance mesurée (vue seulement comme un ciel) n'est montrée qu'au présent.");
+    }
 }
 
 void deepTimeNote(const Sim& sim) {
@@ -95,6 +111,7 @@ void deepTimeNote(const Sim& sim) {
             ImGui::TextDisabled("Dans ce calcul, la Voie lactée et Andromède fusionnent dans %s milliards d'années (énergie conservée à %s %% près).",
                                 frNum(sim.replay->fusionGa(), 3).c_str(), frNum(100.0 * sim.replay->deriveEnergie(), 2).c_str());
         else ImGui::TextDisabled("Ce calcul n'est pas chargé.");
+        cloneNote(sim);
     }
 }
 
@@ -157,8 +174,13 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");
     // Ce qui ne vaut qu'à une autre date qu'aujourd'hui : rangé sous un titre qui se déplie (la barre restait sinon
     // haute de sept paragraphes en temps profond). Seul ce qui est en cours reste toujours visible.
-    if (sim.orbitLagSteps > 0)
+    if (sim.timeHeld) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.43f, 1.0f));
+        ImGui::TextUnformatted(("Calcul exact en cours : date demandée " + frDate(sim.yearsGoal) + " ; la date montrée avance au rythme du calcul.").c_str());
+        ImGui::PopStyleColor();
+    } else if (sim.orbitLagSteps > 0) {
         ImGui::TextDisabled("Calcul exact des orbites en cours : encore %s millions d'années à parcourir.", frInt(static_cast<double>(sim.orbitLagSteps)).c_str());
+    }
     if (ui.openNotes) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
     if (std::fabs(sim.years - kStartYears) >= 1.0 && ImGui::CollapsingHeader("Ce qui est mesuré, calculé ou supposé à cette date")) {
         if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim))
