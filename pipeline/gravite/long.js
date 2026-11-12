@@ -6,7 +6,9 @@
      <sortie>.bin  : points de reprise tous les 10 000 ans, Float64 : jd, puis Q (N×3) et V (N×3) ;
                      la page repart du plus proche et intègre le reste (≤ 5 000 ans, < 1 s).
      <sortie>.json : éléments héliocentriques tous les 1 000 ans (a en UA, e, i en degrés) de chaque corps,
-                     pour les contrôles (comparaison à Laskar et al. 2004) et l'affichage des orbites.
+                     pour les contrôles (comparaison à Laskar et al. 2004).
+     <sortie>.el   : Float32, tous les 1 000 ans, pour chaque corps : a (UA), e, i, Ω, ϖ, λ (radians, écliptique J2000),
+                     λ = longitude moyenne ; sert à l'affichage des orbites dans la page (build_long.js).
    Durée : environ 3 minutes par million d'années sur le PC de Marc [mesuré : 18 ms par siècle]. */
 const fs = require('fs'), vm = require('vm'), path = require('path'), app = path.join(__dirname, '..', '..', 'app');
 const rd = f => fs.readFileSync(path.join(app, f), 'utf8');
@@ -16,7 +18,7 @@ const dir = +process.argv[2] >= 0 ? 1 : -1, myr = +process.argv[3], out = proces
 if (!(myr > 0) || !out) { console.error('usage : long.js <+1|-1> <Ma> <sortie>'); process.exit(2); }
 const YR = 365.25, S = nbFromData(), N = S.N, dt = dir * S.dt, CK = 10000, EL = 1000;
 const stepsPerEl = Math.round(EL * YR / S.dt), nEl = Math.round(myr * 1e6 / EL), perCk = CK / EL;
-const ck = [], el = { names: S.names, dtYears: dir * EL, dtDays: dir * stepsPerEl * S.dt, jd0: S.jd, a: [], e: [], i: [] };
+const ck = [], elb = [], el = { names: S.names, dtYears: dir * EL, dtDays: dir * stepsPerEl * S.dt, jd0: S.jd, a: [], e: [], i: [] };
 
 /* Éléments héliocentriques osculateurs (vitesse héliocentrique = vitesse barycentrique − vitesse du Soleil). */
 function elements() {
@@ -27,13 +29,18 @@ function elements() {
     const rn = Math.hypot(...r), v2 = v[0] ** 2 + v[1] ** 2 + v[2] ** 2, rv = r[0] * v[0] + r[1] * v[1] + r[2] * v[2];
     const h = [r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]], hn = Math.hypot(...h);
     const ev = r.map((x, c) => ((v2 - mu / rn) * x - rv * v[c]) / mu);
-    A.push(+(1 / (2 / rn - v2 / mu)).toPrecision(9)); E.push(+Math.hypot(...ev).toPrecision(7)); I.push(+(Math.acos(h[2] / hn) * 180 / Math.PI).toPrecision(7));
+    const a = 1 / (2 / rn - v2 / mu), e = Math.hypot(...ev), inc = Math.acos(h[2] / hn), Om = Math.atan2(h[0], -h[1]);
+    A.push(+a.toPrecision(9)); E.push(+e.toPrecision(7)); I.push(+(inc * 180 / Math.PI).toPrecision(7));
+    /* longitude du périhélie ϖ = Ω + ω et longitude moyenne λ = ϖ + M */
+    const nx = Math.cos(Om), ny = Math.sin(Om), w = Math.atan2((ev[2]) / Math.sin(inc || 1e-12), ev[0] * nx + ev[1] * ny), om = inc > 1e-9 ? Om + w : Math.atan2(ev[1], ev[0]);
+    const cE = (1 - rn / a) / e, sE = rv / (e * Math.sqrt(mu * a)), Ea = Math.atan2(sE, cE), M = Ea - e * Math.sin(Ea);
+    elb.push(a, e, inc, Om, om, om + M);
   }
   el.a.push(A); el.e.push(E); el.i.push(I);
 }
 const t0 = Date.now(), save = () => {
   const buf = new Float64Array(ck.length * (1 + 6 * N)); ck.forEach((c, j) => buf.set(c, j * (1 + 6 * N)));
-  fs.writeFileSync(out + '.bin', Buffer.from(buf.buffer)); fs.writeFileSync(out + '.json', JSON.stringify(el));
+  fs.writeFileSync(out + '.bin', Buffer.from(buf.buffer)); fs.writeFileSync(out + '.json', JSON.stringify(el)); fs.writeFileSync(out + '.el', Buffer.from(Float32Array.from(elb).buffer));
 };
 const snap = () => { const c = new Float64Array(1 + 6 * N); c[0] = S.jd; c.set(S.Q, 1); c.set(S.V, 1 + 3 * N); ck.push(c); };
 snap(); elements();
