@@ -418,7 +418,7 @@
   $('card-back').addEventListener('click', () => { select(null); goStop(STOPS[1]); });
   $('card-close').addEventListener('click', () => select(null));
   $('card-center').addEventListener('click', () => goThere(S.sel));      /* « Y aller » : l'objet est déjà le centre, le bouton règle l'échelle */
-  /* Interface épurée : sur téléphone, la barre du bas ne montre que pause, date et « Plus » ; « Plus » déplie la frise, la vitesse et les réglages. */
+  /* Interface épurée : sur téléphone, la barre du bas ne montre que pause, date et « Menu » ; « Menu » déplie la frise, la vitesse et les réglages. */
   const PHONE = matchMedia('(max-width:620px), (max-height:520px)');
   function setMore(o) { $('time').classList.toggle('open', o); $('b-more').setAttribute('aria-expanded', o); }
   $('b-more').addEventListener('click', () => setMore(!$('time').classList.contains('open')));

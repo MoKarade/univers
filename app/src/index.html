@@ -203,7 +203,8 @@ body:has(.panel:not([hidden])) #card, body:has(.panel:not([hidden])) #notice{dis
   body:has(#time.open) #notice, body:has(#time.open) #nav, body:has(#time.open) #scale{display:none}
   #date{cursor:pointer}
   #card{color:var(--ink); text-shadow:none} #card p, #card dt, #card dd.src{color:var(--ink-dim)} #card dt.grp{color:var(--ink)}
-  #hint{top:calc(var(--top-h, 160px) + 8px); bottom:auto}
+  #hint{bottom:calc(var(--bar-h) + var(--card-h, 0px) + 74px + env(safe-area-inset-bottom,0px)); width:max-content; max-width:calc(100% - 24px)}
+  .g-btns{display:grid; grid-template-columns:1fr 1fr; gap:6px}
   body:has(#hint:not([hidden])) #rail{visibility:hidden}
 }
 @media (max-height:520px) and (min-width:621px){
@@ -233,7 +234,7 @@ body:has(.panel:not([hidden])) #card, body:has(.panel:not([hidden])) #notice{dis
 </header>
 <nav id="rail" aria-label="Échelles"><div class="track"></div><div id="ticks"></div><div id="thumb"></div><div class="hit" id="rail-hit"></div></nav>
 <nav id="nav" aria-label="Déplacements"><button class="btn ic nb" id="n-back" aria-label="Revenir à la vue précédente" title="Vue précédente" disabled>←</button><button class="btn ic nb" id="n-home" aria-label="Revenir au système solaire" title="Système solaire">⌂</button><button class="btn ic nb" id="n-out" aria-label="Reculer d’un cran" title="Reculer d’un cran">−</button><button class="btn ic nb" id="n-in" aria-label="Avancer d’un cran" title="Avancer d’un cran">+</button></nav>
-<div id="hint" hidden>Glisser pour tourner. Pincer ou molette pour changer d’échelle. Toucher un objet ou son nom pour ouvrir sa fiche, deux fois pour y aller. En bas à droite : retour et système solaire. « Plus » : frise du temps, vitesse et réglages.</div>
+<div id="hint" hidden>Glisser : tourner. Pincer : zoomer. Toucher un astre : sa fiche.<br>« Menu » en bas : frise du temps, vitesse et réglages.</div>
 <div id="fps" hidden aria-live="off"></div>
 <div id="scale"><div id="scale-bar"></div><div id="scale-len"></div><div id="scale-light"></div></div>
 <button type="button" id="evt" hidden></button>
@@ -255,7 +256,7 @@ body:has(.panel:not([hidden])) #card, body:has(.panel:not([hidden])) #notice{dis
     <button class="btn" id="b-cosmo" aria-expanded="false" aria-controls="p-cosmo">Cosmologie</button>
     <button class="btn" id="b-view" aria-expanded="false" aria-controls="p-view">Affichage</button>
   </div>
-  <div class="g-more"><button class="btn" id="b-more" aria-expanded="false" aria-controls="time">Plus</button></div>
+  <div class="g-more"><button class="btn" id="b-more" aria-expanded="false" aria-controls="time">Menu</button></div>
 </footer>
 <aside class="panel" id="p-chrono" hidden aria-label="Chronologie">
   <div class="ph"><h2>Chronologie</h2><button class="btn ic x" data-close aria-label="Fermer">×</button></div>
