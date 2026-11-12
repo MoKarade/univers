@@ -335,6 +335,9 @@ void drawOrbits(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
         const Body& b = sim.bodies[static_cast<size_t>(i)];
         if (b.kind != Kind::Planet || !sim.visible(i) || !ui.orbits.tracks[static_cast<size_t>(i)].valid) continue;
+        // Lunes de moins de 100 km de rayon, ou au rayon non mesuré (des centaines depuis le fichier complet du JPL) : leur
+        // orbite n'est tracée que si on les suit, sinon les traits cachent la planète.
+        if (b.parent > 0 && b.naif != eph::kMoon && b.radiusKm < 100 && i != sim.focus) continue;
         const Vec3 parent = b.parent > 0 ? sim.position(b.parent) : Vec3{0, 0, 0};
         const auto& pts = ui.orbits.tracks[static_cast<size_t>(i)].pts;
         // Taille apparente de l'orbite : ni un point, ni un trait qui traverse tout l'écran.

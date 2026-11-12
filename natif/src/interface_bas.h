@@ -32,7 +32,7 @@ void raysNote() {
     ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
     ImGui::TextUnformatted("Pourquoi des rayons autour du Soleil ?");
     ImGui::Separator();
-    ImGui::TextWrapped("Gaia mesure très précisément la direction de chaque étoile, mais moins bien sa distance. Chaque étoile peut donc être "
+    ImGui::TextWrapped("%s", "Gaia mesure très précisément la direction de chaque étoile, mais moins bien sa distance. Chaque étoile peut donc être "
                        "un peu plus près ou plus loin que dessiné, sur la ligne qui la relie au Soleil. Vu de loin, ce flou dessine des rayons "
                        "qui partent du Soleil. Ce ne sont pas de vraies structures : c'est la marge d'erreur des mesures (moins de 10 % pour "
                        "les étoiles dessinées une à une, jusqu'à 100 % pour la lumière additionnée des autres).");
