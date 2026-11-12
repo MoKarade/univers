@@ -121,3 +121,9 @@ add_executable(essai_orbite src/essai_orbite.cpp)
 target_link_libraries(essai_orbite PRIVATE volk univers_physique)
 target_compile_options(essai_orbite PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(essai_orbite PRIVATE -static)
+
+# Précision mesurée des épicycles contre l'intégration exacte, sur les étoiles d'etoiles.bin.
+add_executable(essai_epicycles src/essai_epicycles.cpp)
+target_link_libraries(essai_epicycles PRIVATE volk univers_physique)
+target_compile_options(essai_epicycles PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_epicycles PRIVATE -static)
