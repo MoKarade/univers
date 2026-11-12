@@ -3,11 +3,15 @@
 //
 //   essai_gaia <gaia.bin> <etoiles.bin> <image.ppm> [--camera x,y,z] [--vers x,y,z] [--images n] [--flux-min f]
 //              [--champ degres] [--taille LxH] [--expo e] [--date annees depuis J2000] [--voie-lactee voie_lactee.bin]
+//              [--orbites-exactes] : calcule les orbites exactes jusqu'à la date (temps par pas mesuré), puis compare
+//              20 000 étoiles au calcul en double précision de la bibliothèque de physique
 // gaia.bin peut valoir « - » : sans étoiles Gaia (catalogue de la page complet).
 // Positions en années-lumière, repère écliptique J2000 centré sur le Soleil.
 #include "commun.h"
 #include "gaia.h"
 #include "voie_lactee.h"
+
+#include <algorithm>
 
 namespace {
 Vec3 parseVec(const char* s) {
@@ -26,8 +30,10 @@ int main(int argc, char** argv) {
     uint32_t width = 1920, height = 1080;
     bool toSet = false;
     std::string mwPath;
-    for (int i = 4; i + 1 < argc; i += 2) {
+    bool exact = false;
+    for (int i = 4; i < argc; i += 2) {
         const std::string k = argv[i];
+        if (k == "--orbites-exactes") { exact = true; --i; continue; }
         const char* v = i + 1 < argc ? argv[i + 1] : "";
         if (k == "--camera") eye = parseVec(v);
         else if (k == "--vers") { to = parseVec(v); toSet = true; }
@@ -66,6 +72,44 @@ int main(int argc, char** argv) {
     const Camera cam = lookAt(eye, to, fov, static_cast<double>(width) / height);
     const PushConstants pc = pushConstants(cam, exposure, height, years);
 
+    if (exact && withGaia) {
+        const auto t1 = std::chrono::steady_clock::now();
+        while (!gaia.orbits().initialReady()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::printf("orbites exactes : etats de depart de %u etoiles en %.1f s\n", gaia.orbits().count,
+                    std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count());
+        VkCommandBuffer c0 = beginOnce(g);
+        gaia.advance(g, c0, 16.0, 0);      // envoi des états de départ
+        endOnce(g, c0);
+        const auto t2 = std::chrono::steady_clock::now();
+        long steps = 0;
+        while (true) {
+            VkCommandBuffer c = beginOnce(g);
+            gaia.advance(g, c, years, 50);
+            endOnce(g, c);
+            steps = gaia.orbits().stepAt;
+            if (gaia.orbitLagSteps() == 0) break;
+        }
+        const double dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t2).count();
+        std::printf("orbites exactes : %ld pas d'un million d'annees en %.2f s (%.2f ms par pas)\n", steps, dt, steps ? 1000.0 * dt / steps : 0.0);
+        // Contrôle : 20 000 étoiles contre la bibliothèque de physique en double précision.
+        const uint32_t nc = 20000;
+        const auto got = gaia.orbits().readBack(g, nc);
+        const auto& ini = gaia.orbits().initial();
+        std::vector<phys::Vec3> p0(nc), v0(nc);
+        for (uint32_t k = 0; k < nc; ++k) {
+            p0[k] = {ini[k * 8], ini[k * 8 + 1], ini[k * 8 + 2]};
+            v0[k] = {ini[k * 8 + 4], ini[k * 8 + 5], ini[k * 8 + 6]};
+        }
+        phys::galaxie::Orbites ref(p0, v0);
+        ref.avance(static_cast<double>(steps) * 1.0e-3);
+        std::vector<double> err(nc);
+        for (uint32_t k = 0; k < nc; ++k) {
+            const phys::Vec3 r = ref.position(k);
+            err[k] = 1000.0 * std::sqrt(std::pow(got[k * 8] - r.x, 2) + std::pow(got[k * 8 + 1] - r.y, 2) + std::pow(got[k * 8 + 2] - r.z, 2));
+        }
+        std::sort(err.begin(), err.end());
+        std::printf("controle des orbites Gaia apres %ld Ma : ecart median %.4f pc, 99e centile %.4f pc, max %.4f pc\n", steps, err[nc / 2], err[nc * 99 / 100], err[nc - 1]);
+    }
     auto draw = [&](bool copy) {
         VkCommandBuffer cmd = beginOnce(g);
         transition(cmd, target.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
