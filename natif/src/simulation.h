@@ -352,7 +352,7 @@ struct Sim {
 
     // Les étoiles pâlissent en 1/d² : loin de tout, on multiplie leur éclat pour qu'elles restent visibles, et on le dit.
     double brightnessBoost() const {
-        const double k = std::clamp(dist / 30.0, 1.0, 70.0);      // plafonné : au-delà de 2 000 années-lumière, les étoiles mesurées se fondent en un point
+        const double k = std::clamp(dist / 30.0, 1.0, 10.0);      // plafonné à 100 fois : au-delà de 300 années-lumière le nuage d'étoiles se resserre à l'écran et l'éclat par pixel reste constant (mesuré : saturation en blanc au-delà)
         return k * k;
     }
     // Astéroïdes : montrés à l'échelle du système solaire (plein éclat jusqu'à 60 fois la distance Terre-Soleil, éteints
