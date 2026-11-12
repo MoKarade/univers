@@ -67,7 +67,9 @@ void whatYouSee(const Sim& sim) {
                 ImGui::TextDisabled("Voie lactée : seules les %s étoiles mesurées par Gaia sont montrées ; la lumière des autres sources Gaia n'est pas chargée.",
                                     frInt(static_cast<double>(sim.gaiaCount)).c_str());
             }
-            raysNote();
+            // Rayons : vus par capture seulement avec la lumière additionnée (erreur de distance jusqu'à 100 %) ; avec les seules
+            // étoiles une à une (erreur < 10 %), aucun rayon visible à 60 000 al (comparaison du 12/11/2026).
+            if (sim.hasGaiaAggregate) raysNote();
         } else {
             ImGui::TextDisabled("Voie lactée : seules ses étoiles mesurées près du Soleil sont montrées ; sa lumière d'ensemble n'est pas dessinée,");
             ImGui::TextDisabled("car elle demanderait un modèle.");
