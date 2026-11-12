@@ -268,6 +268,7 @@ int runWindow(const WindowOptions& opt) {
     sim.skyBandInfos = &skyBands;
     int skyLoaded = -1;
     if (opt.skyBand >= 0) sim.skyBand = opt.skyBand;
+    if (opt.wholeGalaxy) sim.wholeGalaxy = true;
     OrbitGpu orbits;      // orbite exacte de chaque étoile, calculée sur la carte graphique
     orbits.create(g, stars, sr, HdrTarget::kFormat);
     PlanetPoints planets;
@@ -645,6 +646,8 @@ int runWindow(const WindowOptions& opt) {
             const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             std::printf("clic sur un asteroide : %.1f ms pour %llu orbites (trouve : %d)\n", ms, static_cast<unsigned long long>(sim.asteroidCat->n), k);
         }
+        std::printf("premier passage d'Andromede : %.3f milliards d'annees ; etoiles mesurees montrees jusqu'a %.3f (fondu depuis %.3f) ; part des etoiles mesurees a cette date : %.2f\n",
+                    sim.firstPassageGa, sim.starEraEndYears / 1.0e9, sim.starEraFadeYears / 1.0e9, sim.starShare());
         std::printf("fenetre cachee %ux%u : %d images en %.3f s, soit %.1f images par seconde ; astre suivi : %s ; date : %s ; ephemerides : %s\nPASSE\n",
                     sc.extent.width, sc.extent.height, frame, total, frame / total, sim.bodies[static_cast<size_t>(sim.focus)].name.c_str(),
                     frDate(sim.years).c_str(), !hasSpk ? spkError.c_str() : sim.ephemValid ? "lues" : "hors plage");

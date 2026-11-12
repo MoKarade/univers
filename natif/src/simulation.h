@@ -183,6 +183,10 @@ struct Sim {
     int skyBand = -1;
     std::vector<std::string> skyBandLabels, skyLegend;
     const std::vector<SkyBandInfo>* skyBandInfos = nullptr;      // fiches des cartes (famille, échelle, unité), pour l'interface
+    // Proposition faite à Marc le 12 novembre 2026 (en attente de sa réponse, donc coupé par défaut) : montrer à toutes les
+    // dates, aujourd'hui compris, la Galaxie entière du calcul (les mêmes points jusqu'à la fusion), dans les teintes des
+    // étoiles, avec les étoiles mesurées par-dessus : plus de bascule entre l'ère des mesures et celle de la fusion.
+    bool wholeGalaxy = false;
     std::vector<TaskProgress> tasks;     // calculs de fond du PC (avancement.h), relus toutes les 2 secondes
     // Scénarios du Groupe local (clones.h) : nombre, part qui finit par une fusion Voie lactée-Andromède, et date de cette
     // fusion (16e, 50e, 84e centile, en milliards d'années) ; 0 scénario : fichier absent.
@@ -194,6 +198,13 @@ struct Sim {
     const char* planetMethod = "";       // hors des éphémérides de la NASA : « suivi pas à pas » ou « table précalculée »
     // Le temps ne dépasse jamais le calcul exact des orbites : quand la date demandée (yearsGoal) n'est pas encore
     // calculée, la date montrée (years) avance aussi vite que la carte graphique calcule, et timeHeld vaut vrai.
+    // Fin de l'ère des étoiles mesurées, dans l'avenir (années après aujourd'hui). Décision de Marc (12 novembre 2026) :
+    // un passage « bien fait », où les données se marient par les vraies équations. Chaque étoile mesurée suit son orbite
+    // exacte dans la Galaxie tant que la Galaxie est seule : jusqu'au premier passage d'Andromède, lu dans le calcul de la
+    // fusion (premier minimum de la distance entre les deux centres). Dans les 300 millions d'années qui précèdent, les
+    // étoiles mesurées cèdent la place aux points du calcul (firstPassageGa : 0 si le calcul de la fusion manque ; la
+    // limite reste alors à 1 milliard d'années).
+    double starEraEndYears = kOrbitLimitYears, starEraFadeYears = kOrbitFadeYears, firstPassageGa = 0;
     bool timeHeld = false;
     double yearsGoal = 0;
     double lastAdvance = 0;              // années ajoutées par le dernier advance() (le temps qui défile)
@@ -496,7 +507,9 @@ struct Sim {
     // Part des étoiles mesurées encore montrée (1 jusqu'à 800 millions d'années, 0 à 1 milliard) ; le calcul de la fusion
     // prend la part restante.
     double starShare() const {
-        return std::clamp((kOrbitLimitYears - std::fabs(years - kStartYears)) / (kOrbitLimitYears - kOrbitFadeYears), 0.0, 1.0);
+        const double t = years - kStartYears;
+        if (t < 0) return std::clamp((kOrbitLimitYears + t) / (kOrbitLimitYears - kOrbitFadeYears), 0.0, 1.0);      // passé : jusqu'à -1 milliard d'années
+        return std::clamp((starEraEndYears - t) / (starEraEndYears - starEraFadeYears), 0.0, 1.0);
     }
     // Déplacement de ce qui est fixe par rapport au centre de la Galaxie : le Soleil tourne, le monde reste centré sur lui.
     Vec3 sunShift() const {
@@ -520,6 +533,24 @@ struct Sim {
     // Relie les galaxies nommées au calcul de la fusion (noms des traceurs : fusion_noms.tsv, dans l'ordre du calcul).
     void linkReplay(const phys::fusion::Rejeu* r, const std::string& namesPath) {
         replay = r;
+        if (r) {      // premier passage d'Andromède : premier minimum de la distance des centres
+            double prev = 1e300, before = 1e300;
+            for (double t = 0; t <= r->finGa(); t += 0.005) {
+                phys::Vec3 g;
+                if (!r->centre(phys::fusion::kAndromede, t, g)) break;
+                const double d = std::sqrt(g.x * g.x + g.y * g.y + g.z * g.z);
+                if (prev < before && prev < d && prev < 400.0) {      // le pas d'avant était un minimum
+                    firstPassageGa = t - 0.005;
+                    break;
+                }
+                before = prev;
+                prev = d;
+            }
+            if (firstPassageGa > 1.0) {
+                starEraEndYears = firstPassageGa * 1.0e9;
+                starEraFadeYears = starEraEndYears - 3.0e8;
+            }
+        }
         replayRef.assign(bodies.size(), -1);
         std::vector<std::string> names;
         std::ifstream f(namesPath);
@@ -570,8 +601,8 @@ struct Sim {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
-        if (b.kind == Kind::Sun) return std::fabs(years - kStartYears) < kOrbitLimitYears;      // suivi sur son orbite autour de la Galaxie, comme les étoiles
-        return std::fabs(years - kStartYears) < kOrbitLimitYears;      // étoile : suivie sur son orbite calculée
+        if (b.kind == Kind::Sun) return starShare() > 0;      // suivi sur son orbite autour de la Galaxie, comme les étoiles
+        return starShare() > 0;      // étoile : suivie sur son orbite calculée, tant que cette orbite a un sens
     }
 
     // Position à la date courante (années-lumière, repère écliptique centré sur le Soleil).

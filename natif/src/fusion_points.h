@@ -14,6 +14,7 @@ struct FusionPoints {
     std::vector<phys::Vec3> scratch;
     std::vector<Vec3> world;      // positions du simulateur (années-lumière), recalculées quand la date change
     double worldAtGa = -1;
+    bool tinted = false;      // les points portent la teinte d'étoile (Galaxie entière) plutôt que le blanc
 
     void create(const Gpu& g, uint32_t n) {
         capacity = n;
@@ -35,7 +36,15 @@ struct FusionPoints {
     // exposure : celle du dessin des étoiles pour cette image (éclat multiplié compris).
     void update(const Sim& sim, const Camera& cam, float exposure) {
         count = 0;
-        const double share = 1.0 - sim.starShare();      // les étoiles mesurées occupent le reste (Sim::starShare)
+        // Galaxie entière demandée : les points du calcul sont montrés à toute date, à plein éclat, dans une teinte d'étoile
+        // (jaune-blanc, comme la lumière moyenne d'un disque) ; sinon ils ne prennent que la part laissée par les étoiles
+        // mesurées (Sim::starShare) et restent blancs.
+        const double share = sim.wholeGalaxy ? 1.0 : 1.0 - sim.starShare();
+        if (capacity && tinted != sim.wholeGalaxy) {
+            const std::array<uint8_t, 4> tint = sim.wholeGalaxy ? colorOfBv(0.75) : std::array<uint8_t, 4>{255, 255, 255, 255};
+            for (uint32_t i = 0; i < capacity; ++i) std::memcpy(&cols[4][i], tint.data(), 4);
+            tinted = sim.wholeGalaxy;
+        }
         if (!capacity || !sim.replay || share <= 0) return;
         const Vec3 shift = sim.sunShift();
         const double tGa = sim.replayGa();
