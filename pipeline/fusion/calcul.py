@@ -18,7 +18,8 @@ Usage : python calcul.py <de_Ga> <a_Ga> [N_total] [--gpu]
 --theta=0.5 : angle d'ouverture de l'arbre (0,7 par défaut ; 0,5 : erreur médiane de force 0,03 % au lieu de 0,1 %).
 --sortie=<dossier> : dossier des sorties (par défaut pipeline/fusion/sortie).
 --toutes : garde à chaque image TOUTES les étoiles (disque et bulbe, environ 1 million sur 3 millions de particules) au lieu de
-           l'échantillon de 30 000 du départ ; environ 6 Mo par image. --echantillon=N avec --toutes : N étoiles tirées au hasard.
+           l'échantillon de 30 000 du départ ; environ 6 Mo par image. --echantillon=N avec --toutes : N étoiles tirées au hasard. --matiere-noire avec --toutes : garde aussi
+           les particules du halo de matière noire (composante 0), invisibles mais calculées.
 """
 import os, sys, json, time, math
 import numpy as np
@@ -209,7 +210,7 @@ def main():
         else:
             p, gid, show, meta = construire(int(args[2]) if len(args) > 2 else 300000)
         if '--toutes' in sys.argv:      # toutes les étoiles, dans l'ordre des galaxies (le tirage du départ est remplacé)
-            etoiles = (p['kind'] > 0) & (p['kind'] < 9)
+            etoiles = (p['kind'] < 9) if '--matiere-noire' in sys.argv else (p['kind'] > 0) & (p['kind'] < 9)      # avec le halo (matière noire)
             par = [np.where((gid == k) & etoiles)[0] for k in range(len(meta['galaxies']))]
             for a in sys.argv:      # --echantillon=N : N étoiles tirées au hasard (graine fixe), au prorata de chaque galaxie
                 if a.startswith('--echantillon='):
@@ -218,7 +219,7 @@ def main():
                     par = [np.sort(rng.choice(x, size=min(len(x), round(n_tot * len(x) / tous)), replace=False)) if len(x) else x for x in par]
             show = np.concatenate(par)
             meta['affichees'] = [int(len(x)) for x in par]
-            meta['composantes'] = 'kind de chaque étoile affichée : composantes.bin (int8, 1 disque, 2 bulbe)'
+            meta['composantes'] = 'kind de chaque particule gardée : composantes.bin (int8, 0 halo de matière noire, 1 disque, 2 bulbe)'
             p['kind'][show].astype(np.int8).tofile(os.path.join(OUT, 'composantes.bin'))
         meta.update(t=[], centres=[], traceurs_pos=[], energie=[], e0=None, fusion_ga=None, fichiers=[])
         t = 0.0; debut = True
