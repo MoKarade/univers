@@ -97,3 +97,8 @@ target_compile_options(essai_interface PRIVATE -Wall -Wextra)
 target_link_options(essai_interface PRIVATE -static)
 
 add_subdirectory(physique)
+
+# Contrôle des trajectoires des sondes contre JPL Horizons.
+add_executable(essai_sondes src/essai_sondes.cpp)
+target_compile_options(essai_sondes PRIVATE -Wall -Wextra)
+target_link_options(essai_sondes PRIVATE -static)
