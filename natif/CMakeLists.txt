@@ -134,3 +134,11 @@ target_link_libraries(essai_ciel PRIVATE volk)
 target_compile_options(essai_ciel PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(essai_ciel PRIVATE -static)
 add_dependencies(essai_ciel shaders)
+
+# Précalcul sur la carte graphique sans fenêtre, avec shaders/orbites_pas.comp (plan-precalcul.md § 1) : contrôle du shader
+# contre la bibliothèque en double, et écart des clones d'incertitude de chaque étoile.
+add_executable(precalcul_clones src/precalcul_clones.cpp)
+target_link_libraries(precalcul_clones PRIVATE volk univers_physique)
+target_compile_options(precalcul_clones PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(precalcul_clones PRIVATE -static)
+add_dependencies(precalcul_clones shaders)
