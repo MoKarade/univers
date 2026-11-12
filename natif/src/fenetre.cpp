@@ -200,6 +200,9 @@ int runWindow(const WindowOptions& opt) {
     GalaxyFile galaxyFile;
     GalaxyRenderer galaxies;
     if (openGalaxies(dataDir + "/galaxies.bin", galaxyFile)) galaxies.create(g, galaxyFile, HdrTarget::kFormat);
+    // Complétude par échelle : comptée une fois sur les données réellement chargées, lue ensuite par l'interface.
+    const auto rapportCompletude = completude::rapport(completude::compter(sim, galaxies.count));
+    sim.completeness = &rapportCompletude;
     AsteroidRenderer asteroids;
     asteroids.create(g, dataDir + "/asteroides.bin", HdrTarget::kFormat);
     sim.asteroidEpochJd = asteroids.ready ? asteroids.epochJd : 0;
