@@ -87,3 +87,20 @@ Ordre : A1, N0, N1, puis A2 à A5 et N2 en alternance selon les mesures.
 Outils portables dans `C:\dev\outils-natif`, aucun droit d'administrateur, aucun geste de Marc (`natif/README.md`).
 `natif/src/essai_vulkan.cpp` fabriqué et lancé : PASSE, sans fenêtre. La carte offre tout ce que le cahier des
 charges demande à Vulkan [Certain : lu par le programme].
+
+## N1 : état (12 novembre 2026)
+
+- `pipeline/natif/etoiles.py` : les 6 153 611 étoiles de la page (58 967 + 200 000 + 5 894 644 en flux) dans
+  `etoiles.bin`, colonnes alignées sur 64 octets, 196,9 Mo. Les fichiers en flux sont ceux publiés avec la page.
+  `pipeline/natif/test_etoiles.py` : Sirius, Véga, Rigel, Bételgeuse, Arcturus à moins de 0,002° de leurs
+  coordonnées Hipparcos ; 33 distances conformes à la page [Certain].
+- `natif/src/univers.cpp` : fichier projeté en mémoire, cinq colonnes envoyées telles quelles à la carte, points
+  additionnés en grande dynamique, image hors écran. Vue du Soleil vers Orion, 1920 × 1080 :
+  **524 images par seconde** pour les 6,15 millions d'étoiles (mesuré pendant que la carte calculait aussi la
+  fusion) ; lumière mesurée dans l'image à 1 % de la valeur attendue pour 5 étoiles ; constellation reconnue à
+  l'œil sur la capture [Certain].
+- Couleur : Planck + observateur CIE par l'ajustement de Wyman et al. 2013, température par Ballesteros 2012.
+  [À faire : reprendre les tables CIE de la page (S1) pour une couleur identique.]
+- Pas fait : la fenêtre et la caméra libre, le mouvement propre (vitesses déjà dans le fichier), la poussière,
+  les étoiles frôleuses éteintes en double (`isPasser`).
+- Durée mesurée : N0 et N1 hors écran, de la décision de Marc à ce point, environ 35 minutes de travail.
