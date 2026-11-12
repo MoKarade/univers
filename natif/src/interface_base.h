@@ -173,6 +173,7 @@ struct UiState {
     bool completeness = false;      // détail de la complétude ouvert
     std::string astQuery;           // recherche d'astéroïdes : dernier texte cherché (123 530 noms : on ne refait pas à chaque image)
     std::vector<int> astFound;
+    ui_outils::NameIndex astIndex;  // construit à la première recherche
     ImVec2 goToAnchor{0, 0};
     float searchRight = 0, timeW = 0, timeBottom = 0;
     float completenessBottom = 0, completenessW = 0;      // place prise par la ligne de complétude      // place prise par la recherche et la barre du temps (image précédente)        // le menu « Aller à » s'ouvre sous son bouton          // contrôle : le menu « Aller à » reste ouvert pour la capture

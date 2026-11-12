@@ -35,7 +35,8 @@ void addAsteroidResults(const Sim& sim, UiState& ui, std::vector<int>& found) {
     const std::string q = ui.search;
     if (q != ui.astQuery) {
         ui.astQuery = q;
-        ui.astFound = sim.asteroidCat->search(q, 6);
+        if (!ui.astIndex.built) ui.astIndex.build(sim.asteroidCat->names);
+        ui.astFound = ui.astIndex.find(q, 6);
     }
     for (const int k : ui.astFound) found.push_back(-(k + 2));
 }

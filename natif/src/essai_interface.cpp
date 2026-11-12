@@ -1,5 +1,6 @@
 // Contrôle des outils de texte de l'interface (recherche sans accents, dates tapées). Aucune carte graphique.
 #include <cstdio>
+#include <vector>
 
 #include "interface_outils.h"
 
@@ -32,6 +33,14 @@ int main() {
     expect(parseDate("\xE2\x88\x92" "10000", y) && near(y, -12000.0), "signe moins typographique");
     expect(!parseDate("demain", y), "texte refusé");
     expect(!parseDate("32/01/2000", y), "jour impossible refusé");
+    NameIndex idx;
+    idx.build({"Ceres~1", "Pallas~2", "Vesta~4", "Rosavestal~34366", "~2000 CM104", "Éros~433", "Tatata~7"});
+    const std::vector<int> v = idx.find("vesta", 6);
+    expect(v.size() == 2 && v[0] == 2 && v[1] == 3, "index : vesta -> Vesta puis Rosavestal");
+    expect(idx.find("eros", 6) == std::vector<int>{5}, "index : sans accents");
+    expect(idx.find("2000 cm", 6) == std::vector<int>{4}, "index : désignation");
+    expect(idx.find("tat", 6) == std::vector<int>{6}, "index : un nom ne compte qu'une fois");
+    expect(idx.find("s\nr", 6).empty() && idx.find("c", 6).empty(), "index : retour à la ligne ou 1 caractère refusés");
     std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
     return failures ? 1 : 0;
 }
