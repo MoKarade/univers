@@ -186,6 +186,7 @@ struct UiState {
     float searchRight = 0, timeW = 0, timeBottom = 0;
     float completenessBottom = 0, completenessW = 0;      // place prise par la ligne de complétude      // place prise par la recherche et la barre du temps (image précédente)        // le menu « Aller à » s'ouvre sous son bouton          // contrôle : le menu « Aller à » reste ouvert pour la capture
     int cardClosedFor = -1;         // fiche fermée pour cet astre
+    int armSel = -1;                // traceur de bras spiral choisi au clic (-1 : aucun)
     int tour = -1;                  // étape de la visite guidée (-1 : pas de visite)
     double tourClock = 0;
 };

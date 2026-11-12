@@ -46,6 +46,7 @@ void addAsteroidResults(const Sim& sim, UiState& ui, std::vector<int>& found) {
 }
 
 void lightButton(Sim& sim, UiState& ui);      // interface_lumiere.h
+void faceOnButton(Sim& sim, UiState& ui);     // interface_bras.h
 
 // Aller à un résultat : un astre de la liste, ou un astéroïde du catalogue (désigné d'abord).
 void goToResult(Sim& sim, UiState& ui, int r);
@@ -251,6 +252,7 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toutes les commandes (F1)");
     ui.searchRight = ImGui::GetItemRectMax().x;
     lightButton(sim, ui);
+    faceOnButton(sim, ui);
     drawGoToMenu(sim, ui);
     drawSearchResults(sim, ui, active, entered);
     ImGui::End();

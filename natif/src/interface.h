@@ -3,7 +3,7 @@
 //   interface_base.h (style, état, échelle, orbites et noms, clavier), interface_recherche.h (recherche, « Aller à »),
 //   interface_temps.h (barre du temps, fiche), interface_bas.h (bas de l'écran, accueil, visite, aide, complétude).
 #pragma once
-#include "interface_methode.h"
+#include "interface_bras.h"
 
 namespace {
 
@@ -23,6 +23,8 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     const bool dragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f);
     const int hovered = io.WantCaptureMouse || dragging ? -1 : pickBody(sim, ui, cam, w, h, io.MousePos);
     drawLabels(sim, ui, cam, w, h, hovered);
+    drawArmLabels(sim, ui, cam, w, h);
+    clickArmTracer(sim, ui, cam, w, h, hovered);
     clickAsteroid(sim, ui, cam, w, h, hovered);
     if (hovered >= 0) {
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -39,6 +41,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     drawCompleteness(sim, ui, w, fixed);
     drawHow(sim, ui, w, fixed);
     drawCard(sim, ui, cam, w, fixed);
+    drawArmCard(sim, ui, cam, w, h, fixed);
     drawStatus(sim, ui, h, fixed);
     drawCosmology(sim, ui, w, h, fixed);
     drawWelcome(sim, ui, w, h, fixed);
