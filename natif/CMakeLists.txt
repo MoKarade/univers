@@ -63,3 +63,8 @@ foreach(T univers UniversPC)
 endforeach()
 target_link_options(univers PRIVATE -static)
 target_link_options(UniversPC PRIVATE -static -mwindows)
+
+# Contrôle du lecteur d'éphémérides NASA contre JPL Horizons (aucune carte graphique nécessaire).
+add_executable(essai_ephem src/essai_ephem.cpp)
+target_compile_options(essai_ephem PRIVATE -Wall -Wextra)
+target_link_options(essai_ephem PRIVATE -static)
