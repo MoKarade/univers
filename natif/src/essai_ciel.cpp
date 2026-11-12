@@ -111,6 +111,13 @@ int main(int argc, char** argv) {
     const Vec3 ngp = galToEcl(0, 90);
     cam.right = unit(cross(cam.fwd, ngp));
     cam.up = cross(cam.right, cam.fwd);
+    {      // tuiles fines (s'il y en a) : toutes celles de la vue, avant de dessiner
+        auto t1 = std::chrono::steady_clock::now();
+        sky.requestTiles(cam, width, height, true);
+        std::printf("tuiles fines lues en %.2f s\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count());
+        for (const auto& s : sky.legend(std::sqrt(eye.x * eye.x + eye.y * eye.y + eye.z * eye.z)))
+            if (s.rfind("Tuiles fines", 0) == 0) std::printf("  | %s\n", s.c_str());
+    }
     VkCommandBuffer cmd = beginOnce(g);
     transition(cmd, target.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);

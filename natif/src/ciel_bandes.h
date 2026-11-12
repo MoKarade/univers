@@ -13,6 +13,7 @@
 // flottants 32 bits dans l'ordre HEALPix emboîté (NaN = pas de mesure).
 #pragma once
 #include "commun.h"
+#include "ciel_tuiles.h"
 #include <filesystem>
 #include <limits>
 
@@ -24,6 +25,7 @@ struct SkyBandUbo {      // std140 : tout en vec4
     float grid[4];       // Nside, nombre de niveaux de la pyramide, angle d'un pixel de l'écran au centre (rad), échelle des points
     float eqRight[4], eqUp[4], eqFwd[4];      // vecteurs de la caméra en équatorial ICRS (catalogues de sources), unitaires
     float proj[4];       // 1 / (tan(champ/2) × rapport largeur/hauteur), 1 / tan(champ/2), rien, 1
+    float fine[4];       // tuiles fines (ciel_tuiles.h) : ordre le plus grossier, le plus fin, log2(largeur), 1 si présentes
 };
 
 // Catalogue de sources de la bande (sources_<bande>.bin, pipeline/natif/sources_bandes.py) : directions mesurées.
@@ -139,6 +141,7 @@ public:
     }
 
     bool create(const Gpu& g, VkFormat hdrFormat) {
+        gpu_ = &g;
         for (auto& u : ubo_) u = createBuffer(g, sizeof(SkyBandUbo), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         for (int i = 0; i < kRing; ++i) check(vkMapMemory(g.dev, ubo_[i].mem, 0, sizeof(SkyBandUbo), 0, &mapped_[i]), "ciel par bande");
         dummy_ = createBuffer(g, 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -204,6 +207,9 @@ public:
         destroy(g, staging);
         info = in;
         loadSources(g, path);
+        tiles_.close(g);
+        const std::string tdir = tileDir(path, in.key);
+        if (!tdir.empty()) tiles_.open(g, tdir, in.nside);
         writeSets(g, total * 4);
         loaded = true;
         return true;
@@ -288,12 +294,30 @@ public:
         return true;
     }
 
+    // Dossier des tuiles fines d'une bande : « tuiles/<nom> » à côté de la carte, ou dans le dossier nommé par le fichier
+    // « tuiles_dossier.txt » à côté de la carte (les tuiles font des centaines de Go : elles restent où elles ont été faites).
+    static std::string tileDir(const std::string& mapPath, const std::string& key) {
+        if (key.empty()) return {};
+        const std::filesystem::path dir = std::filesystem::path(mapPath).parent_path();
+        std::error_code ec;
+        if (std::filesystem::is_directory(dir / "tuiles" / key, ec)) return (dir / "tuiles" / key).string();
+        std::ifstream f(dir / "tuiles_dossier.txt");
+        std::string root;
+        if (f && std::getline(f, root)) {
+            while (!root.empty() && (root.back() == '\r' || root.back() == ' ')) root.pop_back();
+            if (!root.empty() && std::filesystem::is_directory(std::filesystem::path(root) / key, ec)) return (std::filesystem::path(root) / key).string();
+        }
+        return {};
+    }
+
     void writeSets(const Gpu& g, VkDeviceSize mapBytes) {
         for (int i = 0; i < kRing; ++i) {
-            const VkDescriptorBufferInfo bi[3] = {{ubo_[i].buf, 0, sizeof(SkyBandUbo)}, {map_.buf, 0, mapBytes},
-                                                  srcCount_ ? VkDescriptorBufferInfo{src_.buf, 0, srcCount_ * 32ull} : VkDescriptorBufferInfo{dummy_.buf, 0, 32}};
-            VkWriteDescriptorSet w[3];
-            for (uint32_t b = 0; b < 3; ++b) {
+            const VkDescriptorBufferInfo bi[5] = {{ubo_[i].buf, 0, sizeof(SkyBandUbo)}, {map_.buf, 0, mapBytes},
+                                                  srcCount_ ? VkDescriptorBufferInfo{src_.buf, 0, srcCount_ * 32ull} : VkDescriptorBufferInfo{dummy_.buf, 0, 32},
+                                                  tiles_.active ? tiles_.pageInfo() : VkDescriptorBufferInfo{dummy_.buf, 0, 32},
+                                                  tiles_.active ? tiles_.poolInfo() : VkDescriptorBufferInfo{dummy_.buf, 0, 32}};
+            VkWriteDescriptorSet w[5];
+            for (uint32_t b = 0; b < 5; ++b) {
                 w[b] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
                 w[b].dstSet = sets_[i];
                 w[b].dstBinding = b;
@@ -301,7 +325,7 @@ public:
                 w[b].descriptorType = b == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 w[b].pBufferInfo = &bi[b];
             }
-            vkUpdateDescriptorSets(g.dev, 3, w, 0, nullptr);
+            vkUpdateDescriptorSets(g.dev, 5, w, 0, nullptr);
         }
     }
 
@@ -334,6 +358,17 @@ public:
         std::snprintf(b, sizeof b, "Finesse : %.3g minute(s) d'arc (relevé) ; carte chargée : %.2g. Couverture mesurée : %.1f %% du ciel.",
                       info.resolutionArcmin, info.mapResolutionArcmin, info.coverage * 100.0);
         l.push_back(b);
+        if (tiles_.active) {      // ce qui est réellement montré au centre de l'écran, pas ce qui pourrait l'être
+            const double finest = 206264.806 * std::sqrt(kPi / 3.0) / (static_cast<double>(tiles_.width) * (1u << tiles_.orderMax));
+            if (tiles_.shownOrder) {
+                const double shown = 206264.806 * std::sqrt(kPi / 3.0) / (static_cast<double>(tiles_.width) * (1u << tiles_.shownOrder));
+                std::snprintf(b, sizeof b, "Tuiles fines : pixel de %.2g″ au centre (le plus fin : %.2g″)%s.", shown, finest,
+                              tiles_.pending() ? ", lecture en cours" : "");
+            } else {
+                std::snprintf(b, sizeof b, "Tuiles fines disponibles jusqu'à %.2g″ par pixel : resserrer le champ pour les voir.", finest);
+            }
+            l.push_back(b);
+        }
         std::snprintf(b, sizeof b, "Fausses couleurs, échelle %s de %.3g à %.3g %s. Hachures : pas de mesure.",
                       info.scaleKind == "log" ? "logarithmique" : "linéaire", info.lo, info.hi, info.unit.c_str());
         l.push_back(b);
@@ -407,6 +442,13 @@ public:
         u.proj[1] = static_cast<float>(1.0 / cam.tanHalf);
         u.proj[3] = 1.0f;      // grandeurs déjà rapportées à la médiane de leur catalogue (loadSources)
         u.grid[3] = static_cast<float>(height / 1080.0);
+        if (tiles_.active) {      // tuiles fines : celles de l'écran sont demandées, celles qui sont lues sont envoyées
+            requestTiles(cam, width, height, false);
+            u.fine[0] = static_cast<float>(tiles_.orderMin);
+            u.fine[1] = static_cast<float>(tiles_.orderMax);
+            u.fine[2] = static_cast<float>(tiles_.logWidth);
+            u.fine[3] = 1.0f;
+        }
         std::memcpy(mapped_[ring_], &u, sizeof(u));
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
@@ -422,9 +464,40 @@ public:
         ring_ = (ring_ + 1) % kRing;
     }
 
+    // Tuiles fines de cette vue : demandées (et envoyées si déjà lues) ; wait : attendre qu'elles soient toutes là
+    // (essais hors écran). Les directions sont échantillonnées tous les 1/32 de largeur : une tuile au niveau voulu
+    // couvre au moins « largeur » pixels de l'écran (512), aucune ne passe entre deux échantillons.
+    void requestTiles(const Camera& cam, uint32_t width, uint32_t height, bool wait) {
+        if (!tiles_.active || !gpu_) return;
+        const Vec3 r = toSurvey(cam.right), up = toSurvey(cam.up), fw = toSurvey(cam.fwd);
+        const double tx = cam.tanHalf * cam.aspect, ty = cam.tanHalf;
+        std::vector<Vec3> dirs;
+        const int nx = 32, ny = std::max(2, static_cast<int>(32.0 * height / std::max<uint32_t>(width, 1)));
+        for (int j = 0; j <= ny; ++j)
+            for (int i = 0; i <= nx; ++i) {
+                const double x = -1.0 + 2.0 * i / nx, y = -1.0 + 2.0 * j / ny;
+                dirs.push_back(Vec3{fw.x + x * r.x * tx - y * up.x * ty, fw.y + x * r.y * tx - y * up.y * ty, fw.z + x * r.z * tx - y * up.z * ty});
+            }
+        if (wait) tiles_.finish(*gpu_, dirs, fw, 2.0 * cam.tanHalf / height);
+        else tiles_.update(*gpu_, dirs, fw, 2.0 * cam.tanHalf / height);
+    }
+
+    // Repère de l'appli (écliptique J2000) vers celui du relevé (équatorial ICRS ou galactique).
+    Vec3 toSurvey(Vec3 v) const {
+        const double eps = 84381.406 / 3600.0 * kPi / 180.0, ce = std::cos(eps), se = std::sin(eps);
+        const Vec3 e{v.x, ce * v.y - se * v.z, se * v.y + ce * v.z};
+        if (!info.galactic) return e;
+        static const double G[3][3] = {{-0.0548755604162154, -0.8734370902348850, -0.4838350155487132},
+                                       {+0.4941094278755837, -0.4448296299600112, +0.7469822444972189},
+                                       {-0.8676661490190047, -0.1980763734312015, +0.4559837761750669}};
+        return Vec3{G[0][0] * e.x + G[0][1] * e.y + G[0][2] * e.z, G[1][0] * e.x + G[1][1] * e.y + G[1][2] * e.z,
+                    G[2][0] * e.x + G[2][1] * e.y + G[2][2] * e.z};
+    }
+
     void release(const Gpu& g) {
         if (!ready) return;
         vkDeviceWaitIdle(g.dev);
+        tiles_.close(g);
         if (loaded) destroy(g, map_);
         if (srcCount_) destroy(g, src_);
         destroy(g, dummy_);
@@ -446,6 +519,8 @@ public:
 
 private:
     static constexpr int kRing = 4;
+    const Gpu* gpu_ = nullptr;
+    SkyTileStream tiles_;
     uint32_t levels_ = 1;
     uint32_t srcCount_ = 0;
     Buffer map_{}, src_{}, dummy_{};
@@ -462,14 +537,16 @@ private:
     VkShaderModule vs_{}, fs_{};
 
     void createPipeline(const Gpu& g, VkFormat fmt) {
-        const VkDescriptorSetLayoutBinding binds[3] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        const VkDescriptorSetLayoutBinding binds[5] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                                        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-                                                       {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}};
+                                                       {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr},
+                                                       {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                                       {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        dl.bindingCount = 3;
+        dl.bindingCount = 5;
         dl.pBindings = binds;
         check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &setLayout_), "agencement du ciel par bande");
-        const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kRing}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 * kRing}};
+        const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kRing}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4 * kRing}};
         VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         dp.maxSets = kRing;
         dp.poolSizeCount = 2;
