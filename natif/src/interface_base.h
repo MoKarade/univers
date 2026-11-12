@@ -118,12 +118,16 @@ struct OrbitCache {
             const Body& b = sim.bodies[i];
             if (b.kind != Kind::Planet) continue;
             Track& t = tracks[i];
-            if (std::fabs(sim.years - t.atYears) < b.periodYears / 240.0) continue;      // encore bon à l'écran
-            t.atYears = sim.years;
+            // Tracé centré sur la date arrondie à une grille fixe (1/240 de tour) : il ne dépend que de la date montrée, pas du
+            // chemin suivi pour y arriver (avant : centré sur la dernière date recalculée, d'où un léger retard après un défilement).
+            const double step = b.periodYears / 240.0;
+            const double at0 = step > 0 ? std::round(sim.years / step) * step : sim.years;
+            if (t.atYears == at0) continue;
+            t.atYears = at0;
             t.pts.resize(kPoints + 1);
             t.valid = true;
             for (int k = 0; k <= kPoints && t.valid; ++k) {
-                const double at = sim.years + (static_cast<double>(k) / kPoints - 0.5) * b.periodYears;
+                const double at = at0 + (static_cast<double>(k) / kPoints - 0.5) * b.periodYears;
                 Vec3 p, parent{0, 0, 0};
                 t.valid = sim.planetAt(b.posNaif, at, p) && (b.parent <= 0 || sim.planetAt(sim.bodies[static_cast<size_t>(b.parent)].posNaif, at, parent));
                 t.pts[static_cast<size_t>(k)] = p - parent;
@@ -173,6 +177,7 @@ struct UiState {
     bool completeness = false;      // détail de la complétude ouvert
     bool openNotes = false;
     bool howOpen = false;           // tableau « Comment c'est obtenu » ouvert
+    bool tasksOpen = false;         // détail des calculs de fond ouvert
     float timeRight = 0, howW = 0;  // bord droit de la barre du temps, largeur de la ligne « Comment c'est obtenu »         // contrôle : « Ce qui est mesuré, calculé ou supposé » déplié
     std::string astQuery;           // recherche d'astéroïdes : dernier texte cherché (123 530 noms : on ne refait pas à chaque image)
     std::vector<int> astFound;
@@ -299,6 +304,7 @@ void firstFrame(Sim& sim, UiState& ui) {
     if (e == "completude") ui.completeness = true;
     if (e == "notes") ui.openNotes = true;
     if (e == "methode") ui.howOpen = true;
+    if (e == "calculs") ui.tasksOpen = true;
     if (e == "menu") ui.keepGoTo = true;
     if (e.rfind("recherche:", 0) == 0) std::snprintf(ui.search, sizeof(ui.search), "%s", e.substr(10).c_str());
     if (e.rfind("visite:", 0) == 0) {

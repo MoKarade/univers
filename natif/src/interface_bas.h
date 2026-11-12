@@ -60,9 +60,9 @@ void whatYouSee(const Sim& sim) {
     } else if (sim.dist > 3000.0) {
         // gaia_agrege.bin (fil Gaia, docs/gaia-voie-lactee.md) : la lumière des autres sources Gaia, additionnée par case.
         if (sim.hasGaia && sim.gaiaCount) {
-            if (sim.hasGaiaAggregate && sim.deepTime()) {      // lumière additionnée : montrée seulement au présent (fil Gaia)
+            if (sim.hasGaiaAggregate && std::fabs(sim.years - kStartYears) >= 1.0) {      // la lumière additionnée suit aussi les orbites (9f77e33)
                 ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une, sur leur orbite ;", frInt(static_cast<double>(sim.gaiaCount)).c_str());
-                ImGui::TextDisabled("la lumière additionnée des autres sources Gaia n'est montrée qu'au présent.");
+                ImGui::TextDisabled("le reste des sources Gaia, additionné par cases, avance à la vitesse moyenne de chaque case.");
             } else if (sim.hasGaiaAggregate) {
                 ImGui::TextDisabled("Voie lactée : %s étoiles mesurées par Gaia, une par une ; le reste des sources Gaia est additionné par pixel, sans modèle.",
                                     frInt(static_cast<double>(sim.gaiaCount)).c_str());
@@ -104,8 +104,12 @@ void drawCosmology(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFla
     float h0 = static_cast<float>(c.h0), om = static_cast<float>(c.om), ode = static_cast<float>(c.ode), w0 = static_cast<float>(c.w0), wa = static_cast<float>(c.wa);
     ImGui::SetNextWindowPos({w - px(ui, 16), h - px(ui, 16)}, 0, {1, 1});
     ImGui::Begin("cosmologie", nullptr, fixed);
-    ImGui::TextUnformatted("L'univers en expansion");
-    ImGui::Separator();
+    const double ok = c.omegaK();
+    if (!ImGui::CollapsingHeader("L'univers en expansion : réglages")) {
+        ImGui::TextDisabled("Âge de l'univers : %s milliards d'années (calculé).", frNum(cosmo::ageGyr(c), 4).c_str());
+        ImGui::End();
+        return;
+    }
     ImGui::PushItemWidth(px(ui, 240));
     bool changed = false;
     changed |= ImGui::SliderFloat("Vitesse d'expansion (km/s par Mpc)", &h0, 60.0f, 80.0f, "%.1f");
@@ -121,7 +125,6 @@ void drawCosmology(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFla
         c.h0 = h0; c.om = om; c.ode = ode; c.w0 = w0; c.wa = wa;
         sim.cosmologyDirty = true;
     }
-    const double ok = c.omegaK();
     ImGui::TextDisabled("Âge de l'univers : %s milliards d'années (calculé).", frNum(cosmo::ageGyr(c), 4).c_str());
     ImGui::TextDisabled("Forme de l'espace : %s (calculé).", std::fabs(ok) < 0.005 ? "plat" : ok > 0 ? "ouvert (courbure négative)" : "fermé (courbure positive)");
     ImGui::TextDisabled("Bouge un curseur : toutes les galaxies se replacent aussitôt.");
