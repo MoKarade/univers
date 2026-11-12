@@ -10,7 +10,9 @@ Par objet : [noms affichés, type, AD (degrés), Déc (degrés), magnitude B, gr
   de la page (Yahil et al. 1977, pipeline/build_data2.py, lg_frame), pour tomber au même endroit qu'eux.
 - lien : ['n', i] ou ['l', i] quand l'objet est une galaxie que la page a déjà, à distance mesurée (DATA.NEAR, Karachentsev ;
   DATA.LOCAL, Groupe local), associée par position (moins de 1,5 minute d'arc, comme pour Cosmicflows-4). La page ouvre
-  alors sa fiche à elle au lieu d'en créer une seconde.
+  alors sa fiche à elle au lieu d'en créer une seconde. ['b', i] : hôte d'un trou noir supermassif de la page (DATA.BHM),
+  dont la distance est mesurée. Liaison d'abord par nom (« NGC5194 » = « NGC 5194 », « Sombrero (M104) » = « M 104 »),
+  puis par position pour le reste.
 - Objets « Dup » (doublons d'un autre numéro) et « NonEx » (inexistants) écartés.
 - Noms : « NGC 1300 », « IC 434 », « M 104 », puis les noms usuels du catalogue (en anglais).
 - Une valeur absente reste absente (null).
@@ -87,19 +89,46 @@ def main(raw):
         z = nombre(r.get('Redshift'))
         z = None if z is None else round(z_groupe_local(ra, dec, z), 6)
         out.append([' · '.join(noms), r['Type'], ra, dec, nombre(r.get('B-Mag')), nombre(r.get('MajAx')), z, r.get('Const') or None, None])
-    # liens vers les galaxies que la page a déjà (position à moins de 1,5')
+    galaxies = {'G', 'GPair', 'GTrpl', 'GGroup'}
+    # 1) par nom : désignations NGC, IC, M, UGC normalisées (« NGC0253 », « NGC 253 » -> « NGC253 »)
+    cle = lambda t: [re.sub(r'^(NGC|IC|M|UGC)0*', r'\1', x.replace(' ', '').upper()) for x in re.findall(r'(?:NGC|IC|UGC|M)\s*\d+[A-Z]?', t)]
+    index = {}
+    for k, o in enumerate(out):
+        if o[1] in galaxies:
+            for c in cle(o[0]):
+                index.setdefault(c, k)
+    gen = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen')
+    lit = lambda f, n: json.JSONDecoder().raw_decode((t := open(os.path.join(gen, f), encoding='utf-8').read())[t.index('"%s":' % n) + len(n) + 3:])[0]
+    noms_near = lit('data3.js', 'NEAR_NAMES').split('|')
+    noms_bhm = lit('data5.js', 'BHM')['names']
+    noms_local = [o['n'] for o in lit('data2.js', 'LOCAL')]
+    pris = {'n': set(), 'l': set(), 'b': set()}
+    for tag, noms in (('l', noms_local), ('n', noms_near), ('b', noms_bhm)):
+        for i, n in enumerate(noms):
+            for c in cle(n):
+                k = index.get(c)
+                if k is not None and out[k][8] is None:
+                    out[k][8] = [tag, i]
+                    pris[tag].add(i)
+                    break
+    par_nom = sum(1 for o in out if o[8])
+    # 2) par position (moins de 1,5'), pour les galaxies de la page pas encore reliées
     near, _, local, _ = build_cf4.galaxies_de_la_page()
     gal = [[0, o[2], o[3]] for o in out]
-    galaxies = {'G', 'GPair', 'GTrpl', 'GGroup'}
     for tag, dirs in (('n', near), ('l', local)):
         for i, k in enumerate(build_cf4.associer(dirs, gal)):
-            if k is not None and out[k][1] in galaxies and out[k][8] is None:
+            if k is not None and i not in pris[tag] and out[k][1] in galaxies and out[k][8] is None:
                 out[k][8] = [tag, i]
-    print('liens vers les galaxies de la page : %d proches, %d du Groupe local'
-          % (sum(1 for o in out if o[8] and o[8][0] == 'n'), sum(1 for o in out if o[8] and o[8][0] == 'l')))
+    print('liens vers la page : %d par nom, %d en tout (%d proches, %d Groupe local, %d hôtes de trous noirs)'
+          % (par_nom, sum(1 for o in out if o[8]), *[sum(1 for o in out if o[8] and o[8][0] == t) for t in 'nlb']))
     print('OpenNGC : %d lignes lues, %d gardées, %d écartées (doublons, inexistants, sans position) ; %d avec z ; %d Messier'
           % (len(lignes), len(out), ecartes, sum(1 for o in out if o[6] is not None), sum(1 for o in out if ' · M ' in o[0] + ' ')))
     m = {o[0].split(' · ')[0]: o for o in out}
+    for nom, attendu in (('NGC 5194', 'n'), ('NGC 4486', 'b'), ('NGC 4594', 'n'), ('NGC 224', 'l')):
+        o = m_lien = {x[0].split(' · ')[0]: x for x in out}.get(nom)
+        print('  lien %-9s %s' % (nom, o[8] if o else 'absent'))
+        if not o or not o[8] or o[8][0] != attendu:
+            raise SystemExit('lien attendu manquant : rien écrit')
     for nom, ra, dec in (('NGC 224', 10.68, 41.27), ('NGC 4594', 189.998, -11.62), ('NGC 1976', 83.82, -5.39)):
         o = m.get(nom)
         ok = o and abs(o[2] - ra) < 0.05 and abs(o[3] - dec) < 0.05

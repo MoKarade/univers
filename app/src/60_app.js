@@ -1287,10 +1287,10 @@
      déposé à part de la page et chargé à l'ouverture de « Aller à ». La recherche SIMBAD en direct est impossible : la page
      ne peut appeler aucun serveur extérieur. Une galaxie dont le décalage vers le rouge dépasse NGC_ZMIN est placée à la distance
      tirée de z (repère du Groupe local), comme les galaxies des relevés ; plus près, la vitesse propre domine z et la fiche s'ouvre sans
-     déplacement. Une galaxie que la page a déjà (galaxies proches, Groupe local) renvoie à sa fiche de la page. */
+     déplacement. Une galaxie que la page a déjà (galaxies proches, Groupe local, hôtes de trous noirs supermassifs) renvoie à sa fiche de la page. */
   const NGC = { list: null, p: null }, NGC_ZMIN = 0.01, NGC_EPS = 23.4392911 * DEG;
   const NGCT = { G: 'galaxie', GPair: 'paire de galaxies', GTrpl: 'triplet de galaxies', GGroup: 'groupe de galaxies', OCl: 'amas ouvert', GCl: 'amas globulaire', 'Cl+N': 'amas et nébuleuse', PN: 'nébuleuse planétaire', HII: 'région HII', EmN: 'nébuleuse en émission', RfN: 'nébuleuse par réflexion', Neb: 'nébuleuse', SNR: 'reste de supernova', Nova: 'nova', '*': 'étoile', '**': 'étoile double', '*Ass': 'association d’étoiles', Other: 'autre objet' };
-  function loadNgc() { if (!NGC.p) { const src = window.__NGC !== undefined ? window.__NGC : '/_blob/5374a6789a402a38161dcd9850fe0c94';
+  function loadNgc() { if (!NGC.p) { const src = window.__NGC !== undefined ? window.__NGC : '/_blob/ca16cb082058bf133c8537e125faf6a8';
       NGC.p = src ? fetch(src).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { NGC.list = j.o; if (FIDX) addNgc(FIDX); return true; }).catch(() => { NGC.p = null; return false; })      /* un échec sera retenté au prochain clic */ : Promise.resolve(false); }
     return NGC.p; }
   function addNgc(X) { NGC.list.forEach((o, i) => { const ns = o[0].split(' · '), kind = (NGCT[o[1]] || 'objet') + (o[8] ? ' · fiche de la page' : ' · catalogue NGC/IC'), go = () => ngcGo(i);
@@ -1311,6 +1311,7 @@
         r.push(['Source', 'OpenNGC (Mattia Verga), CC BY-SA 4.0']); return r; } }; }
   function ngcGo(i) { const L = NGC.list[i][8];
     if (L && L[0] === 'n' && NM.near[L[1]] !== undefined) { jump(selNear(L[1]), 22.6); return; }
+    if (L && L[0] === 'b' && DATA.BHM.names[L[1]] !== undefined) { jump(selBHM(L[1]), 23.3); return; }      /* hôte d'un trou noir supermassif : distance mesurée */
     if (L && L[0] === 'l') { const c = G.lg.centers.find(c => c.g.n === DATA.LOCAL[L[1]].n); if (c) { jump(selLG(c), 21.6); return; } }
     const o = selNgc(i); if (o.placed) jump(o, o.lr); else { pushHist(); select(o); openPanel(null); } }
   function findIndex() { if (FIDX) return FIDX; const X = [], add = (name, kind, go) => { if (name) X.push([fold(name), name, kind, go]); }, lrOf = o => clamp(Math.log10(Math.hypot(o.orbit.P[0], o.orbit.P[1], o.orbit.P[2]) * AU * 2.4), 11.2, 14.6);

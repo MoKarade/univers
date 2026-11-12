@@ -2,7 +2,7 @@
 """Test à l'écran « recherche NGC/IC » (lot S, A5 par contournement : catalogue OpenNGC déposé à part de la page).
 
 - en ouvrant « Aller à », le catalogue se charge ; « NGC4594 » (la Sombrero, déjà dans la page) renvoie à sa fiche de la page ;
-- NGC 4889 (amas de Coma) est placée dans la bonne direction et à la même distance que le point de relevé voisin, la vue y va,
+- NGC 4874 (amas de Coma) est placée dans la bonne direction et à la même distance que le point de relevé voisin, la vue y va,
   et la vue cône de lumière change sa distance et son libellé comme pour les relevés ;
 - « M42 » (nébuleuse d'Orion, sans décalage vers le rouge) ouvre sa fiche sans déplacement, distance « inconnue ici » ;
 - sans le fichier, la recherche des noms de la page marche encore et la page n'a pas d'erreur.
@@ -73,18 +73,37 @@ def main():
         sub = pg.evaluate("document.getElementById('card-sub').textContent")
         check('Galaxie proche' in sub, 'fiche ouverte : « %s »' % sub)
 
-        # 2) NGC 4889 (amas de Coma, z ≈ 0,02, absente des galaxies proches) : placée comme les relevés.
+        # 1 bis) liaisons par nom : M51 -> galaxie proche (position du catalogue de Karachentsev à 2,4' : sans le nom, pas de lien),
+        #        M87 -> hôte de trou noir supermassif (distance mesurée) ; NGC 7742 (z = 0,0063, sans lien) -> fiche sans déplacement
+        for q, motif, attendu in (('M51', 'NGC 5194', 'Galaxie proche'), ('M87', 'NGC 4486', 'Trou noir')):
+            pg.evaluate("__U.select(null); document.getElementById('b-find').click()")
+            chercher(pg, q)
+            pg.evaluate("m => [...document.querySelectorAll('#find-res button')].find(b => b.textContent.includes(m) && /fiche de la page/.test(b.textContent)).click()", motif)
+            pg.wait_for_function("!document.getElementById('card').hidden", timeout=60000)
+            sub = pg.evaluate("document.getElementById('card-sub').textContent")
+            check(attendu in sub, '« %s » ouvre la fiche de la page : « %s »' % (q, sub))
+        pg.evaluate("__U.select(null); __U.goStop(__U.STOPS.find(s => /Système solaire/.test(s.name)), true); document.getElementById('b-find').click()")
+        pg.wait_for_function("__U.S.logR < 14 && !__U.S.anim", timeout=120000)
+        lr1 = pg.evaluate('__U.S.logR')
+        chercher(pg, 'NGC 7742')
+        pg.evaluate("[...document.querySelectorAll('#find-res button')].find(b => /^NGC 7742/.test(b.textContent)).click()")
+        pg.wait_for_function("!document.getElementById('card').hidden", timeout=60000)
+        f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 6', timeout=180000)
+        txt = pg.evaluate("document.getElementById('card').innerText")
+        check('trop proche pour la tirer de z' in txt and abs(pg.evaluate('__U.S.logR') - lr1) < 0.01, 'NGC 7742 (z entre 0,003 et 0,01, sans lien) : « inconnue ici », sans déplacement')
+
+        # 2) NGC 4874 (amas de Coma, z ≈ 0,02, absente des galaxies proches) : placée comme les relevés.
         #    Contrôle indépendant : le point 2MRS le plus proche dans cette direction est à la même distance (3 %).
         pg.evaluate("__U.select(null); document.getElementById('b-find').click()")
-        chercher(pg, 'NGC 4889')
-        pg.evaluate("[...document.querySelectorAll('#find-res button')].find(b => /^NGC 4889/.test(b.textContent) && /catalogue NGC/.test(b.textContent)).click()")
+        chercher(pg, 'NGC 4874')
+        pg.evaluate("[...document.querySelectorAll('#find-res button')].find(b => /^NGC 4874/.test(b.textContent) && /catalogue NGC/.test(b.textContent)).click()")
         pg.wait_for_function("!document.getElementById('card').hidden", timeout=60000)
         r = pg.evaluate("""(() => { const o = __U.S.sel, F = __U.F, P = __U.Rr.pick, v = o.get().map((x, k) => (x - F.gcRel[k]) / 3.0856775814913673e22 / F.cos.a), d = Math.hypot(...v), u = v.map(x => x / d);
             let best = null; for (let i = 0; i < P.svN; i++) { const c = u[0] * P.svDir[i * 3] + u[1] * P.svDir[i * 3 + 1] + u[2] * P.svDir[i * 3 + 2]; if (!best || c > best.c) best = { c, d: P.svDist[i] }; }
-            const e = 23.4392911 * Math.PI / 180, ra = 195.03387 * Math.PI / 180, de = 27.977 * Math.PI / 180, ex = Math.cos(de) * Math.cos(ra), ey = Math.cos(de) * Math.sin(ra), ez = Math.sin(de);
+            const e = 23.4392911 * Math.PI / 180, ra = 194.89879 * Math.PI / 180, de = 27.95928 * Math.PI / 180, ex = Math.cos(de) * Math.cos(ra), ey = Math.cos(de) * Math.sin(ra), ez = Math.sin(de);
             const w = [ex, Math.cos(e) * ey + Math.sin(e) * ez, -Math.sin(e) * ey + Math.cos(e) * ez];
             return { d, dir: Math.acos(Math.min(1, u[0] * w[0] + u[1] * w[1] + u[2] * w[2])) * 180 / Math.PI, voisin: Math.acos(Math.min(1, best.c)) * 180 / Math.PI, dv: best.d, lr: o.lr }; })()""")
-        check(r['dir'] < 0.01, 'direction de NGC 4889 : écart %.4f° (attendu < 0,01°)' % r['dir'])
+        check(r['dir'] < 0.01, 'direction de NGC 4874 : écart %.4f° (attendu < 0,01°)' % r['dir'])
         check(r['voisin'] < 0.2 and abs(r['d'] / r['dv'] - 1) < 0.03, 'même distance que le point de relevé voisin (%.2f° d’écart) : %.1f contre %.1f Mpc' % (r['voisin'], r['d'], r['dv']))
         pg.wait_for_function(f"Math.abs(__U.S.logR - {r['lr']}) < 0.15", timeout=120000)
         pg.wait_for_function("!__U.S.anim", timeout=120000)      # fin du vol
@@ -95,8 +114,8 @@ def main():
             const X = (p[0] - F.tg[0]) * F.s, Y = (p[1] - F.tg[1]) * F.s, Z = (p[2] - F.tg[2]) * F.s, w = e[3] * X + e[7] * Y + e[11] * Z + e[15];
             if (w <= 0) return null; const sx = ((e[0] * X + e[4] * Y + e[8] * Z + e[12]) / w * 0.5 + 0.5) * R.cssW, sy = (0.5 - (e[1] * X + e[5] * Y + e[9] * Z + e[13]) / w * 0.5) * R.cssH;
             return { off: Math.hypot(sx - R.cssW / 2, sy - R.cssH / 2) / (R.cssW / 2), centre: U.S.center ? U.S.center.name : null }; })()""")
-        check(cen and cen['off'] < 0.1 and cen['centre'] == 'NGC 4889', 'arrivée : NGC 4889 au centre (écart %.3f de la demi-largeur), centre = %s' % ((cen or {}).get('off', 9), (cen or {}).get('centre')))
-        pg.screenshot(path='/tmp/lot_s_ngc_%s_ngc4889.png' % MODE)
+        check(cen and cen['off'] < 0.1 and cen['centre'] == 'NGC 4874', 'arrivée : NGC 4874 au centre (écart %.3f de la demi-largeur), centre = %s' % ((cen or {}).get('off', 9), (cen or {}).get('centre')))
+        pg.screenshot(path='/tmp/lot_s_ngc_%s_ngc4874.png' % MODE)
         lab0 = pg.evaluate("document.getElementById('card').innerText")
         pg.evaluate("__U.S.opts.lightcone = true")
         f0 = pg.evaluate('__U.frame()'); pg.wait_for_function(f'__U.frame() > {f0} + 6', timeout=180000)
