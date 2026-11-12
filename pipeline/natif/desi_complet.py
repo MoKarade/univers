@@ -12,8 +12,9 @@ Usage : python desi_complet.py <dossier de sortie>
 import os
 import sys
 import time
-
-import requests
+import urllib.error
+import urllib.parse
+import urllib.request
 
 TAP = 'https://datalab.noirlab.edu/tap/sync'
 UA = {'User-Agent': 'UniversPC/1.0 (visualisation personnelle)'}
@@ -31,15 +32,12 @@ def tranche(sortie: str, k: int) -> None:
     for essai in range(6):
         t = time.time()
         try:
-            r = requests.post(TAP, data={'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': 'csv', 'MAXREC': '100000000',
-                                         'QUERY': q}, headers=UA, timeout=(30, 3600), stream=True)
-            if r.status_code != 200:
-                print(f'tranche {k} essai {essai} : HTTP {r.status_code} {r.text[:120]!r}', flush=True)
-                time.sleep(30 * (essai + 1))
-                continue
+            corps = urllib.parse.urlencode({'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': 'csv', 'MAXREC': '100000000',
+                                            'QUERY': q}).encode()
             n = 0
-            with open(out + '.part', 'wb') as f:
-                for c in r.iter_content(1 << 20):
+            with urllib.request.urlopen(urllib.request.Request(TAP, data=corps, headers=UA), timeout=3600) as r, \
+                    open(out + '.part', 'wb') as f:
+                while c := r.read(1 << 20):
                     f.write(c)
                     n += len(c)
             with open(out + '.part', 'rb') as f:
