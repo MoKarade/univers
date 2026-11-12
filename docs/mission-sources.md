@@ -50,5 +50,12 @@ Les scripts de données sont dans `pipeline/sources/`. Les fichiers bruts (2 Go 
 - Après : fiches « Expansion » et « Énergie noire » : H0 de Planck 2018 (67,4 ± 0,5) et de SH0ES (73,0 ± 1,0) ; DESI DR2 et DES Y6 (w0 = −0,84, wa = −0,53, écart de 2,3 σ au modèle standard). Le calcul de la page ne change pas.
 - Fini quand : le critique de vérité confirme chaque valeur sur sa source.
 
+### S7 — Recherche par nom (A5, contournement)
+- Pourquoi un contournement : la page en ligne ne peut appeler aucun serveur extérieur (SIMBAD en direct impossible), et le CDS était en panne.
+- Après : « Aller à » trouve aussi les 13 372 objets du catalogue ouvert OpenNGC (NGC, IC, Messier, noms usuels anglais ; « M104 » comme « M 104 »). Fiche : distance, z, position, constellation, magnitude, taille, source. Une galaxie que la page a déjà renvoie à sa fiche : 396 liens (184 galaxies proches, 25 du Groupe local, 187 hôtes de trous noirs supermassifs), d'abord par nom (désignation NGC, IC, M ou UGC entière, contrôlée à moins de 5′ de la position), puis par position à moins de 1,5′. Sinon, une galaxie de z ≥ 0,01 (z ramené au repère du Groupe local comme les relevés) est placée à la distance tirée de z, vue cône de lumière comprise ; plus près, la vitesse propre domine et la fiche s'ouvre sans déplacement, distance « inconnue ici ».
+- Données : `pipeline/sources/build_openngc.py` → `openngc.json` (881 ko), déposé à part de la page (fichier joint de l'artefact), chargé à l'ouverture de « Aller à ». Contrôle bloquant : positions de NGC 224, NGC 4594 et NGC 1976.
+- Fini quand : test `app/test/lot_s_ngc.py` (NGC 4594 renvoie à sa fiche de la page ; M51 et M87 renvoient à leur fiche de la page ; NGC 7742 (z = 0,0063) reste sans déplacement ; NGC 4874 dans la bonne direction, à la même distance que le point de relevé voisin, au centre à l'arrivée, distance et libellé changés en vue cône de lumière ; M42 sans déplacement ; sans le fichier, la recherche locale marche) sur ordinateur et téléphone ; critiques PASSE.
+- Écarté : le vrai ciel DSS (A4). Contourné (copie de l'ESA, branche `sources-ciel`), mais mesuré à l'écran il n'ajoute presque rien aux millions d'étoiles Gaia de la page ; non publié.
+
 ### Ensuite (A4, A5, A7)
 Ciel réel en zoom continu (HiPS), recherche par nom (Sesame, SIMBAD), zones couvertes par chaque relevé (MOC). Attendent la mission 1 (Firebase) pour A4.
