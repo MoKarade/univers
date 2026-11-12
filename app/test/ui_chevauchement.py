@@ -15,7 +15,7 @@ Définition de « fini » validée par Marc, vérifiée ici sur cinq écrans : t
   4. Chaque commande existante est atteinte en au plus deux touchers depuis le repos : visible et réellement
      touchable (le point au centre est bien la commande) directement, ou après un vrai toucher sur un ouvreur.
      Exceptions écrites, sur téléphone : − et + (le pincement et la barre des échelles font la même chose) ;
-     les réglages à l'intérieur des panneaux Affichage et Cosmologie (trois touchers : « Plus », le panneau,
+     les réglages à l'intérieur des panneaux Affichage et Cosmologie (trois touchers : « Menu », le panneau,
      le réglage). Elles sont comptées et affichées.
   5. Téléphone : un toucher sur la barre des échelles rend ses arrêts touchables.
   6. Rien de caché sans défilement : boutons de la fiche entiers, liste de la fiche d'au moins deux lignes.
@@ -87,7 +87,7 @@ SITUATIONS = [
     ('fiche Sirius + message', "__U.goName('Sirius')", False),
     ('message déplié', "document.getElementById('notice').classList.add('open')", False),
     ('fiche « Tout voir »', "document.getElementById('card-more').click()", False),
-    ('tiroir « Plus » ouvert + fiche', "document.getElementById('card-more').click(); document.getElementById('b-more').click()", False),
+    ('tiroir « Menu » ouvert + fiche', "document.getElementById('card-more').click(); document.getElementById('b-more').click()", False),
     ('chronologie', "__U.select(null); __U.openPanel('chrono')", False),
     ('affichage', "__U.openPanel('view')", False),
     ('Voie lactée', "__U.openPanel(null); __U.select(null); if (document.getElementById('time').classList.contains('open')) document.getElementById('b-more').click(); __U.goStop(__U.STOPS[4], true)", True),
@@ -201,7 +201,7 @@ def reach(pg, mode, touch):
             if not pg.evaluate(f'({REACH_JS})("{o}")'): continue
             tap(pg, touch, o)
             if pg.evaluate(f'({REACH_JS})("{c}")'): ok = True; break
-        if not ok and touch and c in REGLAGES:      # exception écrite : « Plus », puis le panneau, puis le réglage
+        if not ok and touch and c in REGLAGES:      # exception écrite : « Menu », puis le panneau, puis le réglage
             for o in OUVREURS[2:]:
                 rest(pg); tap(pg, touch, 'b-more')
                 if not pg.evaluate(f'({REACH_JS})("{o}")'): continue
