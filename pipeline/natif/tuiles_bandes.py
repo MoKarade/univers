@@ -40,6 +40,10 @@ F16_MAX = 65504.0
 G = 3                # 4^3 = 64 tuiles par paquet
 K_FIN = 6            # ordre le plus fin (pixel de 6,4″ pour 512 px)
 K_BAS = 4            # ordre le plus grossier en tuiles (l'ordre 3 est la carte entière)
+K_ZONE = 8           # finesse maximale publiée (pixel de 1,6″ pour 512 px), seulement sur quelques zones
+# Zones à finesse maximale (validées par Marc le 12/11/2026) : centre en équatorial J2000 (degrés) et rayon du disque.
+ZONES = {'M31': (10.6847, 41.2690, 1.6), 'M101': (210.8023, 54.3489, 0.5),
+         'Orion': (84.0, -3.5, 3.0), 'centre galactique': (266.4168, -29.0078, 1.0)}
 
 
 def choisir_source(nom):
@@ -168,9 +172,30 @@ def lire_fiche(sortie, nom, r):
         return json.loads(f.read(lj))
 
 
-def morceau(ex, adresse, w, table, facteur, premier, nombre, brut):
-    """Télécharge les tuiles d'ordre K_FIN [premier, premier + nombre) ; renvoie (blocs, absentes, dépassements)."""
-    futurs = {ex.submit(telecharger, adresse, K_FIN, n, brut): n for n in range(premier, premier + nombre)}
+def tuiles_disque(ra, de, rayon, nside, pas=0.02):
+    """Pixels emboîtés (Nside donné) qui touchent un disque : le disque est échantillonné tous les `pas` degrés
+    (environ un dixième de tuile d'ordre 8), chaque point converti par ang2pix_nest de ciel_bandes (même calcul que
+    healpy, vérifié). healpy n'existe pas sous Windows : c'est l'équivalent de query_disc(inclusive=True) à
+    l'échantillonnage près."""
+    n = int(math.ceil(rayon / pas))
+    u = np.arange(-n, n + 1) * math.radians(pas)
+    X, Y = np.meshgrid(u, u)
+    m = X ** 2 + Y ** 2 <= math.radians(rayon) ** 2
+    x, y = X[m], Y[m]
+    a0, d0 = math.radians(ra), math.radians(de)
+    rho = np.hypot(x, y)
+    c = np.arctan(rho)
+    sur = np.where(rho > 0, rho, 1.0)
+    dec = np.arcsin(np.cos(c) * math.sin(d0) + np.where(rho > 0, y * np.sin(c) * math.cos(d0) / sur, 0.0))
+    asc = a0 + np.arctan2(x * np.sin(c), rho * math.cos(d0) * np.cos(c) - y * math.sin(d0) * np.sin(c))
+    return set(np.asarray(cb.ang2pix_nest(nside, np.pi / 2 - dec, np.mod(asc, 2 * np.pi))).tolist())
+
+
+def morceau(ex, adresse, w, table, facteur, premier, nombre, brut, ordre=K_FIN, liste=None):
+    """Télécharge les tuiles [premier, premier + nombre) de l'ordre donné (ou celles de `liste`) ; renvoie (blocs,
+    absentes, dépassements)."""
+    ns = liste if liste is not None else range(premier, premier + nombre)
+    futurs = {ex.submit(telecharger, adresse, ordre, n, brut): n for n in ns}
     blocs, echecs, absentes, depass = {}, [], 0, 0
     for fu in cf.as_completed(futurs):
         n = futurs[fu]
@@ -208,7 +233,10 @@ def main():
     ap.add_argument('--simultanes', type=int, default=12)
     ap.add_argument('--avancement', help="fichier d'avancement lu par l'appli")
     ap.add_argument('--rang', default='1/1', help="place de ce relevé dans le lot, « i/n »")
+    ap.add_argument('--zones', action='store_true', help="ajoute les ordres 7 et 8 sur les seules zones de ZONES")
     a = ap.parse_args()
+    if a.zones:
+        return main_zones(a)
 
     r, p = choisir_source(a.nom)
     adresse = p['hips_service_url'].rstrip('/')
@@ -281,6 +309,61 @@ def main():
           f'{absentes} absentes à l\'ordre {K_FIN}, {depass} valeurs au-delà de float16', flush=True)
     av.ecrire(100 * i_r, 'terminé' if i_r == n_r else 'en cours',
               f'{r["libelle"]} fait : {comptes[str(K_FIN)]} tuiles, {taille / 1e9:.1f} Go (relevé {i_r} sur {n_r})', True)
+
+
+def main_zones(a):
+    """Ordres 7 et 8 sur les zones de ZONES : l'ordre 8 tel que publié, l'ordre 7 recalculé (moyenne des 4 enfants).
+    Index clairsemés (0 hors des zones) ; la fiche existante (ordres 4 à 6) est complétée, pas remplacée."""
+    r, p = choisir_source(a.nom)
+    adresse = p['hips_service_url'].rstrip('/')
+    w = int(p.get('hips_tile_width', 512))
+    if int(p.get('hips_order', 0)) < K_ZONE:
+        raise SystemExit(f"{a.nom} : publié jusqu’à l’ordre {p.get('hips_order')} seulement")
+    if not p.get('hips_frame', 'equatorial').startswith('equ'):
+        raise SystemExit(f"{a.nom} : repère {p.get('hips_frame')} ; les zones sont données en équatorial")
+    dossier_idx = os.path.join(a.index, a.nom)
+    dossier_paq = os.path.join(a.paquets or os.path.join(a.sortie, 'tuiles_paquets'), a.nom)
+    fiche_p = os.path.join(dossier_idx, 'fiche.json')
+    if not os.path.exists(fiche_p):
+        raise SystemExit(f'{fiche_p} absent : faire d’abord les ordres {K_BAS} à {K_FIN}')
+    with open(fiche_p, encoding='utf-8') as f:
+        fiche = json.load(f)
+    facteur = float(fiche['facteur_float16'])      # le même facteur que les ordres 4 à 6
+    table = cb.orientations(w)[0].ravel()
+    t8 = set()
+    for nom_z, (ra, de, ray) in ZONES.items():
+        z = tuiles_disque(ra, de, ray, 1 << K_ZONE)
+        print(f'  zone {nom_z} : {len(z)} tuiles d’ordre {K_ZONE}', flush=True)
+        t8 |= z
+    t8 = sorted(t8)
+    print(f"{r['libelle']} : {len(t8)} tuiles d’ordre {K_ZONE} à télécharger, facteur float16 {facteur:g}", flush=True)
+    t0 = time.time()
+    with cf.ThreadPoolExecutor(a.simultanes) as ex:
+        blocs8, absentes, depass = morceau(ex, adresse, w, table, facteur, 0, 0, a.brut, ordre=K_ZONE, liste=t8)
+    idx8 = np.zeros(12 * 4 ** K_ZONE, dtype=np.uint32)
+    ecrire_paquets(dossier_paq, K_ZONE, blocs8, idx8)
+    blocs7 = {}
+    for n in sorted({t >> 2 for t in t8}):
+        b = moyenne_enfants(blocs8, n, w)
+        if b is not None:
+            blocs7[n] = b
+    idx7 = np.zeros(12 * 4 ** (K_ZONE - 1), dtype=np.uint32)
+    ecrire_paquets(dossier_paq, K_ZONE - 1, blocs7, idx7)
+    ecrire_idx(os.path.join(dossier_idx, f'ordre_{K_ZONE - 1}.idx'), K_ZONE - 1, w, idx7)
+    ecrire_idx(os.path.join(dossier_idx, f'ordre_{K_ZONE}.idx'), K_ZONE, w, idx8)
+    comptes = dict(fiche.get('tuiles_presentes', {}), **{str(K_ZONE - 1): len(blocs7), str(K_ZONE): len(blocs8)})
+    fiche = dict(fiche, ordre_max=K_ZONE, ordres=list(range(K_BAS, K_ZONE + 1)), tuiles_presentes=comptes,
+                 zones_fines={k: dict(ra=v[0], dec=v[1], rayon_deg=v[2]) for k, v in ZONES.items()},
+                 zones_tuiles_absentes=absentes, depassements=int(fiche.get('depassements', 0)) + depass,
+                 note_zones=f'ordres {K_ZONE - 1} et {K_ZONE} seulement sur les zones (index clairsemés, 0 ailleurs)')
+    with open(fiche_p + '.part', 'w', encoding='utf-8') as f:
+        json.dump(fiche, f, ensure_ascii=False, indent=1)
+    os.replace(fiche_p + '.part', fiche_p)
+    taille = sum(os.path.getsize(os.path.join(dossier_paq, f'ordre_{k}', x)) for k in (K_ZONE - 1, K_ZONE)
+                 for x in os.listdir(os.path.join(dossier_paq, f'ordre_{k}')))
+    print(f'Écrit zones : ordre {K_ZONE} {len(blocs8)} tuiles ({absentes} absentes), ordre {K_ZONE - 1} {len(blocs7)} '
+          f'tuiles, {taille / 1e9:.2f} Go de paquets, {depass} valeurs au-delà de float16, {time.time() - t0:.0f} s',
+          flush=True)
 
 
 if __name__ == '__main__':
