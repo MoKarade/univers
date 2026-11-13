@@ -12,7 +12,8 @@ struct Rec { float ux, uy, uz, z, d, diam, ba, pa, T, r, gr; uint f; };
 layout(std430, set = 0, binding = 0) readonly buffer Recs { Rec rec[]; };
 layout(std430, set = 0, binding = 1) readonly buffer Pos { vec4 rel[]; };      /* position par rapport à la caméra (al), distance au Soleil (al) */
 layout(std430, set = 0, binding = 2) readonly buffer Nb { uint npart[]; };      /* particules de la galaxie à cette image */
-layout(push_constant) uniform Pc { mat4 viewProj; vec4 par; vec4 par2; } pc;      /* par : exposition, hauteur (px), pixels par radian, mode */
+layout(push_constant) uniform Pc { mat4 viewProj; vec4 par; vec4 par2; } pc;      /* par : exposition, hauteur (px), pixels par radian, mode ;
+   par2 : vieillissement (lumière disque, lumière bulbe/elliptique, température disque, température bulbe/elliptique) */
 layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
 const float EPS = 0.40909280;      /* obliquité J2000 (rad) */
@@ -52,7 +53,11 @@ void main() {
     if (T > 90.0) { float u = U(seed ^ 77u); T = u < 0.2 ? -5.0 : (u < 0.3 ? -2.0 : (u < 0.9 ? 1.0 + 7.0 * U(seed ^ 78u) : 10.0)); }
     float Tc = R.gr < 90.0 ? tempGR(R.gr) : (T < -1.0 ? 4300.0 : (T < 6.0 ? 5200.0 : 7500.0));
 
-    vec3 p = P.xyz, col = couleurT(Tc);
+    /* vieillissement de la lumière (modèle MIST v1.2 de la Voie lactée appliqué par analogie : elliptiques et lenticulaires
+       comme le bulbe, le reste comme le disque mince) [supposé] */
+    bool vieille = T < -1.0;
+    vec3 p = P.xyz, col = couleurT(Tc * (vieille ? pc.par2.w : pc.par2.z));
+    F *= vieille ? pc.par2.y : pc.par2.x;
     float part = 1.0 - s;
     if (particules) {
         uint n = max(npart[g], 1u);
@@ -90,6 +95,7 @@ void main() {
                 float cz = 2.0 * U(q ^ 5u) - 1.0, ph = 6.2831853 * U(q ^ 6u);
                 o = rr * (sqrt(1.0 - cz * cz) * cos(ph) * e1 + sqrt(1.0 - cz * cz) * sin(ph) * e2 + 0.7 * cz * nrm);
                 tcomp = Tc - 600.0;
+                F *= pc.par2.y / (vieille ? pc.par2.y : pc.par2.x);      /* bulbe : vieillit comme le bulbe */
             } else if (T > 9.5) {             /* irrégulière : grumeaux */
                 uint c = h(q ^ 7u) % 7u;
                 float cr = hd * 1.5 * sqrt(U(seed ^ (c * 31u + 1u))), cph = 6.2831853 * U(seed ^ (c * 31u + 2u));
@@ -110,7 +116,7 @@ void main() {
             }
         }
         p += o;
-        col = couleurT(tcomp);
+        col = couleurT(tcomp * (vieille ? pc.par2.w : pc.par2.z));
     }
     float d = max(length(p), 1.0);
     float flux = F * part * (P.w / d) * (P.w / d);

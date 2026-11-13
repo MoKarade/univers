@@ -18,7 +18,9 @@ public:
     bool ready = false;
     uint32_t count = 0, shown = 0;      // galaxies, galaxies montrées en particules à la dernière image
     uint64_t particles = 0;
-    double maxSurface = 0;      // brillance de surface moyenne la plus forte des galaxies résolues (flux par pixel, exposition 1)
+    double maxSurface = 0;
+    float ageing[4] = {1, 1, 1, 1};      // vieillissement : lumière disque (comp. 1), bulbe et elliptiques (comp. 2), puis températures
+      // brillance de surface moyenne la plus forte des galaxies résolues (flux par pixel, exposition 1)
 
     bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
         std::ifstream f(path, std::ios::binary | std::ios::ate);
@@ -108,6 +110,7 @@ public:
         p.par[0] = exposure;
         p.par[1] = static_cast<float>(height);
         p.par[2] = static_cast<float>(pxPerRad_);
+        for (int k = 0; k < 4; ++k) p.par2[k] = ageing[k];
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
         vkCmdSetViewport(cmd, 0, 1, &vp);

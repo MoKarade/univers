@@ -185,7 +185,8 @@ def main():
     os.makedirs(sortie, exist_ok=True)
     np.savez_compressed(os.path.join(sortie, 'etoiles_visibles_voie_lactee.npz'), pos=pos, vel=vel, lum=lum.astype(np.float32),
                         teff=teff.astype(np.float32), comp=comp, graine=graine, meta=json.dumps(meta, ensure_ascii=False))
-    ecrire_gaia(os.path.join(sortie, 'vl_etoiles.bin'), pos, vel, lum_vue, teff, sun, gal2ecl, gaia_bin.split(',')[0])
+    # 4e entier de la vitesse : composante (16 x composante), lue par gaia.vert pour le vieillissement de la lumière
+    ecrire_gaia(os.path.join(sortie, 'vl_etoiles.bin'), pos, vel, lum_vue, teff, sun, gal2ecl, gaia_bin.split(',')[0], aux=16 * comp.astype(np.int16))
     print(f'-> {sortie} ({time.time() - t0:.0f} s)')
 
 

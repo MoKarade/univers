@@ -71,6 +71,8 @@ void whatYouSee(const Sim& sim) {
         ImGui::TextDisabled("Œil nu, pose réglée à %s IL.", frNum(sim.exposureEv, 0).c_str());
     if (sim.dist > 3.0e6)
         ImGui::TextDisabled("Galaxies lointaines (points) : direction et décalage vers le rouge mesurés ; éclat et taille SUPPOSÉS (fonction de luminosité, Blanton 2003).");
+    if (sim.ageingShown)
+        ImGui::TextDisabled("Lumière des étoiles du modèle vieillie à cette date : modèle (MIST v1.2, Kroupa, histoires de formation supposées, naines blanches non comptées).");
     if (sim.galaxyShapesShown)
         ImGui::TextDisabled("%u galaxies faites de particules : taille, forme, orientation et éclat MESURÉS (SGA-2020, HyperLEDA) ; bras, côté proche, type manquant : modèle.", sim.galaxyShapesShown);
     if (sim.starShare() <= 0) return;

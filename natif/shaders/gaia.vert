@@ -10,7 +10,7 @@ layout(std430, set = 0, binding = 2) readonly buffer Col { vec4 colorOf[]; };   
 struct Etat { vec4 p; vec4 v; };
 layout(std430, set = 0, binding = 3) readonly buffer Orb { Etat orb[]; };        /* orbites exactes (gaia_orbites.h, orbites_pas.comp), le Soleil en dernier */
 layout(set = 0, binding = 4) uniform sampler3D dust;      /* poussière 3D (voie_lactee.bin, canal g : A_V par pc), seulement si GF_POUSSIERE */
-struct GalVoisine { vec4 c0; vec4 ct; vec4 axe; vec4 rr; };      /* gaia.h, setGalaxies : centre à t = 0, centre à la date, axe + vitesse, rayon */
+struct GalVoisine { vec4 c0; vec4 ct; vec4 axe; vec4 rr; };      /* gaia.h : cases 0-5 setGalaxies (centre à t = 0, à la date, axe + vitesse, rayon) ; 6-7 setAgeing */
 layout(std430, set = 0, binding = 5) readonly buffer Voisines { GalVoisine voisines[]; };
 layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; uint sun; float frac; float exact; uint cellBase; } pc;   /* par : exposition, hauteur en pixels, temps en al par (km/s), temps en Ga */
 layout(location = 0) out vec3 vCol;
@@ -28,6 +28,15 @@ const float GV_PART[16] = float[](0.201985, 0.124336, 0.093612, 0.076538, 0.0654
 const float GV_RAYON = 60.0, GV_LOIN = 20000.0, GV_PRES = 2000.0;
 uint gvHash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
 float gvUnif(uint x) { return (float(gvHash(x)) + 0.5) / 4294967296.0; }
+/* case 6 ou 7 de la table (gaia.h, setAgeing) : 16 facteurs, un par composante */
+float gvCase(GalVoisine G, uint k) { vec4 v = k < 4u ? G.c0 : (k < 8u ? G.ct : (k < 12u ? G.axe : G.rr)); return v[k & 3u]; }
+vec3 gvCorpsNoir(float T) {      /* couleur relative d'un corps noir (approximation de Tanner Helland) */
+    float t = clamp(T, 1000.0, 40000.0) / 100.0;
+    float r = t <= 66.0 ? 1.0 : clamp(1.2929 * pow(t - 60.0, -0.1332), 0.0, 1.0);
+    float g = t <= 66.0 ? clamp(0.3901 * log(t) - 0.6318, 0.01, 1.0) : clamp(1.1298 * pow(t - 60.0, -0.0755), 0.01, 1.0);
+    float b = t >= 66.0 ? 1.0 : (t <= 19.0 ? 0.01 : clamp(0.5432 * log(t - 10.0) - 1.1962, 0.01, 1.0));
+    return vec3(r, g, b);
+}
 void main() {
     uvec4 r = star[gl_VertexIndex];
     vec3 pos = uintBitsToFloat(r.xyz), move = vec3(0.0);
@@ -39,7 +48,7 @@ void main() {
     /* orbite pas fiable (drapeau 2 absent) : montrée seulement autour d'aujourd'hui (gaia_fiable.glsl) */
     float garde = (flags & 34u) != 0u ? 1.0 : gfEffacement(pc.par.w);      /* 2 : orbite fiable ; 32 : galaxie voisine */
     if (garde < 1.0e-4) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
-    uvec2 q = (pc.par.z != 0.0 || (flags & 36u) != 0u) ? vel[gl_VertexIndex] : uvec2(0u);
+    uvec2 q = (pc.par.z != 0.0 || (flags & 52u) != 0u) ? vel[gl_VertexIndex] : uvec2(0u);      /* 16 : composante du modèle (vieillissement) */
     vec3 voisineBase = vec3(0.0);
     bool voisine = (flags & 32u) != 0u;
     if (voisine) {
@@ -47,7 +56,7 @@ void main() {
            référence (centres_reference.h) ; l'étoile tourne autour de ce centre, sur un cercle, à la vitesse de rotation
            mesurée de sa galaxie au rayon où elle est (rotation solide au centre, plate au-delà) [modèle : pas d'agitation,
            pas de marées]. Rang de la galaxie : 4e entier de la vitesse. */
-        GalVoisine G = voisines[uint(int(q.y) >> 16)];
+        GalVoisine G = voisines[uint(int(q.y) >> 16) & 15u];
         vec3 rel = pos - G.c0.xyz, a = G.axe.xyz;
         float along = dot(rel, a);
         float Rkpc = length(rel - along * a) / OG_KPC_LY;
@@ -75,6 +84,7 @@ void main() {
             Etat a = orb[gl_VertexIndex], s = orb[pc.sun];
             vec3 xa = a.p.xyz + h * a.v.xyz + 0.5 * h * h * accGal(a.p.xyz, tEtat);
             vec3 xs = s.p.xyz + h * s.v.xyz + 0.5 * h * h * accGal(s.p.xyz, tEtat);
+            if ((flags & 16u) != 0u && voisines[5].c0.w > 0.5) xs = voisines[5].c0.xyz;      /* étoile du modèle : Soleil de l'appli (gaia.h, setSunGalacto) */
             move = mix(v * pc.par.z, OG_M * (xa - xs) * OG_KPC_LY - pos, w);
         } else move = ogDeplacement(pos, v, pc.par.z, pc.par.w);      /* épicycles, le temps que le calcul exact rattrape */
     }
@@ -98,12 +108,22 @@ void main() {
     /* éclat rééquilibré vu de loin (gaia_fiable.glsl) : HYPOTHÈSE, décalage en millièmes de magnitude */
     if ((flags & 4u) != 0u && (pc.cellBase & GF_MODE_RENDU) != 0u) m += gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, pos) * 0.001 * float(int(q.y) >> 16);
     float flux = pc.par.x * pow(10.0, -0.4 * m) * garde * part;
+    /* vieillissement de la lumière (étoiles du MODÈLE) : facteurs par composante à la date montrée, 1 aujourd'hui
+       (MIST v1.2, Kroupa, histoires de formation supposées, naines blanches non comptées ; gaia.h, setAgeing) */
+    float fT = 1.0;
+    if ((flags & 16u) != 0u) {
+        uint comp = (uint(int(q.y) >> 16) >> 4) & 15u;
+        flux *= gvCase(voisines[6], comp);
+        fT = gvCase(voisines[7], comp);
+    }
     float size = clamp(1.5 + 1.2 * log2(1.0 + flux), 1.5, 14.0) * pc.par.y / 1080.0;
     /* étoile du MODÈLE : tache bornée à 2,5 pixels (lumière inchangée : elle est divisée par la surface de la tache). Un
        traceur porte la lumière de nombreuses étoiles : vu de loin avec l'éclat multiplié, il ne doit pas devenir une grosse
        tache qu'aucune étoile réelle ne ferait. */
     if ((flags & 16u) != 0u) size = min(size, 2.5 * pc.par.y / 1080.0);
-    vCol = colorOf[pas].rgb * min(flux, 3.0e4) / (size * size);
+    vec3 teinte = colorOf[pas].rgb;
+    if (fT > 0.0 && abs(fT - 1.0) > 1e-4) teinte *= gvCorpsNoir(5800.0 * fT) / gvCorpsNoir(5800.0);      /* teinte décalée comme la température */
+    vCol = teinte * min(flux, 3.0e4) / (size * size);
     /* étoile du MODÈLE (drapeau 16) : poussière entre la caméra et l'étoile, dans la carte 3D (repère galactocentrique,
        ±16 kpc, ±2 kpc ; hors de la carte : rien). Rougissement : A_R = 0,75 A_V, A_B = 1,32 A_V (loi de Cardelli et al.
        1989, R_V = 3,1, aux longueurs d'onde moyennes des trois couleurs de l'écran) [approché]. */

@@ -60,6 +60,7 @@ Get-ChildItem "$Donnees\tuiles" -Directory -ErrorAction SilentlyContinue | ForEa
     Get-ChildItem $_.FullName -Filter *.idx -File | ForEach-Object { Copier-SiChange $_.FullName "$Cible\tuiles\$($_.Directory.Name)\$($_.Name)" }
 }
 # Centres de référence des galaxies du Groupe local (pipeline/natif/centres_bin.py), s'ils ont été préparés.
+if (Test-Path "$Donnees\vieillissement.tsv") { Copier-SiChange "$Donnees\vieillissement.tsv" "$Cible\vieillissement.tsv" }
 if (Test-Path "$Donnees\centres_reference.bin") { Copier-SiChange "$Donnees\centres_reference.bin" "$Cible\centres_reference.bin" }
 # Étoiles visibles du modèle de la Voie lactée (pipeline/natif/etoiles_visibles.py), si elles ont été préparées.
 if (Test-Path "$Donnees\etoiles-visibles\voisines_etoiles.bin") { Copier-SiChange "$Donnees\etoiles-visibles\voisines_etoiles.bin" "$Cible\voisines_etoiles.bin" }

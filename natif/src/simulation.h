@@ -223,6 +223,7 @@ struct Sim {
     // Exposition (Marc, 13/11/2026) : « photo » (meilleur rendu) = exposition automatique sur la galaxie la plus brillante
     // à l'écran + étirement asinh ; « œil nu » = éclat physique, compression de Reinhard. exposureEv : réglage à la main
     // (crans de 1 IL = ×2). photoGain : gain calculé à cette image.
+    bool ageingShown = false;      // vieillissement de la lumière du modèle appliqué à cette date (vieillissement.h)
     bool photoExposure = true;
     double exposureEv = 0, photoGain = 1;
     uint32_t galaxyShapeCount = 0, galaxyShapesShown = 0;      // galaxies de forme mesurée (galaxies_formes.h), montrées en particules
@@ -558,6 +559,9 @@ struct Sim {
         return std::clamp((starEraEndYears - t) / (starEraEndYears - starEraFadeYears), 0.0, 1.0);
     }
     // Déplacement de ce qui est fixe par rapport au centre de la Galaxie : le Soleil tourne, le monde reste centré sur lui.
+    // Place du Soleil (galactocentrique, kpc) à la date montrée, par le calcul de l'appli (origine du monde affiché).
+    phys::Vec3 sunGalacto() const { ensureExact(); return exact.position(0, years); }
+
     Vec3 sunShift() const {
         ensureExact();
         const phys::Vec3 s = exact.position(0, years), s0 = phys::galaxie::soleilPos();

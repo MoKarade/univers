@@ -154,7 +154,7 @@ def main():
         np.savez_compressed(os.path.join(sortie, f'etoiles_visibles_{nom}.npz'), pos=pos, vel=vel, lum=lum, teff=teff.astype(np.float32),
                             comp=comp, graine=graine, meta=json.dumps(meta, ensure_ascii=False))
         sens = "s'éloigne" if v_cote > 0 else "s'approche"
-        tous.append((pos, vel, lum, teff))
+        tous.append((pos, vel, lum, teff, comp))
         print(f"{nom} : {n} traceurs, centre {np.round(c_pos, 1)} kpc, vitesse {np.round(c_vel, 1)} km/s ({source_ens}) ; "
               f"axe {np.round(spin_g, 3)} (accord avec le plan de la photo {accord:.3f}) ; côté de l'angle de position : {v_cote:+.0f} km/s ({sens})")
 
@@ -167,8 +167,9 @@ def main():
         D = v.data_keys(['M_GAL2ECL', 'SGRA_GAL'])
         gal2ecl = np.array(D['M_GAL2ECL'])
         sgra = np.array(D['SGRA_GAL']) / np.linalg.norm(D['SGRA_GAL']); sun = -v.R0 * sgra
-        P, V, L, T = (np.concatenate([t[k] for t in tous]) for k in range(4))
-        rang = np.concatenate([np.full(len(t[0]), k, np.int16) for k, t in enumerate(tous)])      # 0 Andromède, 1 Triangle, 2 Grand, 3 Petit Nuage
+        P, V, L, T, C = (np.concatenate([t[k] for t in tous]) for k in range(5))
+        # rang de la galaxie (0 Andromède, 1 Triangle, 2 Grand, 3 Petit Nuage) + 16 x composante (vieillissement de la lumière)
+        rang = np.concatenate([np.full(len(t[0]), k, np.int16) for k, t in enumerate(tous)]) + 16 * C.astype(np.int16)
         ecrire_gaia(os.path.join(sortie, 'voisines_etoiles.bin'), P, V, L, T, sun, gal2ecl, sys.argv[4], drapeaux=1 | 2 | 16 | 32, aux=rang)
 
 
