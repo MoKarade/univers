@@ -91,7 +91,7 @@ def bande(chemin: str, pa: float, incl: float, centre=None, masques=(), rayon: f
     # bruit du fond (hors galaxie) : retiré une fois et demie, pour que le ciel vide ne s'additionne pas en voile
     dehors = fenetre(d.shape[0], pa, incl, 1.15 * rayon / 0.75) <= 0
     bruit = 1.4826 * np.median(np.abs(d[dehors] - np.median(d[dehors]))) if dehors.any() else 0.0
-    return np.clip(d - 1.5 * bruit, 0, None)
+    return d, bruit      # le bruit est retiré ensuite, le même pour les trois couleurs (sinon le voile prend une teinte)
 
 
 def fenetre(n: int, pa: float, incl: float, echelle: float = 1.0, rayon: float = 0.75) -> np.ndarray:
@@ -122,7 +122,9 @@ def main() -> None:
             continue
         try:
             ry = RAYON.get(nom, 0.75)
-            bandes = [bande(c, pa, incl, (ra, dec, champ), PREMIER_PLAN.get(nom, ()), ry) for c in chemins]
+            lues = [bande(c, pa, incl, (ra, dec, champ), PREMIER_PLAN.get(nom, ()), ry) for c in chemins]
+            plancher = 1.5 * max(b for _, b in lues)
+            bandes = [np.clip(d - plancher, 0, None) for d, _ in lues]
         except (OSError, ValueError, TypeError) as e:
             print(f'{nom} : image illisible ({e}), passée')
             continue
