@@ -149,3 +149,9 @@ target_include_directories(essai_temps_rapide PRIVATE ${stb_SOURCE_DIR})
 target_link_libraries(essai_temps_rapide PRIVATE volk imgui univers_physique)
 target_compile_options(essai_temps_rapide PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(essai_temps_rapide PRIVATE -static)
+
+# Essai d'ensemble : continuité des astres nommés sur toute la plage de dates (sans fenêtre).
+add_executable(essai_continuite src/essai_continuite.cpp src/stb_impl.cpp)
+target_include_directories(essai_continuite PRIVATE ${stb_SOURCE_DIR})
+target_link_libraries(essai_continuite PRIVATE volk imgui univers_physique)
+target_compile_options(essai_continuite PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
