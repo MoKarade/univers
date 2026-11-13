@@ -18,6 +18,16 @@ void drawFieldChip(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFla
         ImGui::TextUnformatted(("Champ de vision : " + deg + "°").c_str());
         ImGui::SameLine();
         if (ImGui::SmallButton("60°")) sim.fovDeg = Sim::kFovMax;
+        ImGui::TextDisabled("%s", ("Éclat ×" + frInt(sim.fieldGain()) + " : pose plus longue, comme à la lunette (affichage seulement)").c_str());
+        if (sim.gaiaSkyActive) {
+            const std::string lim = sim.gaiaSkyLimit > 50 ? "toutes" : "jusqu'à la magnitude " + frNum(sim.gaiaSkyLimit, 2);
+            ImGui::TextDisabled("%s", ("Gaia une à une : " + frInt(sim.gaiaSkyStars) + " sources sans distance mesurée (" + lim + "), direction mesurée").c_str());
+            if (sim.gaiaSkyPending > 0) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.43f, 1.0f));
+                ImGui::Text("Chargement depuis le Drive : %u morceaux du ciel…", sim.gaiaSkyPending);
+                ImGui::PopStyleColor();
+            }
+        }
     } else {
         ImGui::TextDisabled("Ctrl + molette : grossir la carte");
     }

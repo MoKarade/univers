@@ -135,6 +135,10 @@ public:
     double rebalancedShift = 0;      // part de la lumière déplacée par ce rééquilibrage
     // Vue choisie par Marc (Sim::bestLook) : false = 100 % mesuré (aucune correction) ; true = rééquilibrage appliqué.
     bool improved = false;
+    // Vue « à la lunette » (gaia_ciel.h) : les sources sans distance sont dessinées une à une ; leur lumière additionnée
+    // par case (« ciel seul ») est alors retirée pour ne pas la compter deux fois.
+    bool hideSkyOnly = false;
+    VkBuffer colorBuffer() const { return colors_.buf; }
     bool starReliable(uint64_t i) const { return i < file_.n && (file_.stars[i * 16 + 15] & GaiaFiable::kOrbiteFiable); }
     // Part de la lumière de la feuille i portée par des étoiles à orbite fiable (0 à 1).
     float leafReliableShare(uint32_t i) const { return i < leafShare_.size() ? leafShare_[i] : 0.0f; }
@@ -227,7 +231,7 @@ public:
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &aggSet_, 0, nullptr);
             vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
             if (cellCount && GaiaFiable::effacement(since) > 1e-4) vkCmdDraw(cmd, cellCount, kCellSpread, 0, 0);      // kCellSpread points par case (gaia_agrege.vert) ; effacées loin d'aujourd'hui (gaia_fiable.glsl)
-            if (skyCount && std::fabs(since) < kAggregateYears && std::sqrt(dot(cam.pos, cam.pos)) < kSkyOnlyRadiusLy) {
+            if (skyCount && !hideSkyOnly && std::fabs(since) < kAggregateYears && std::sqrt(dot(cam.pos, cam.pos)) < kSkyOnlyRadiusLy) {
                 pa.base.camLo[3] = 1.0f;
                 vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
                 vkCmdDraw(cmd, skyCount, 1, cellCount, 0);

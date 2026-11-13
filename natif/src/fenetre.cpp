@@ -17,6 +17,7 @@
 #include "fusion_nuage.h"
 #include "fusion_points.h"
 #include "gaia.h"
+#include "gaia_ciel.h"
 #include "galaxies.h"
 #include "interface.h"
 #include "points_planetes.h"
@@ -255,6 +256,8 @@ int runWindow(const WindowOptions& opt) {
     // là, le dessin d'origine ne garde que le catalogue principal (Gaia en a retiré les doublons).
     GaiaRenderer gaia;
     const bool gaiaOk = gaia.create(g, dataDir + "/gaia.bin", HdrTarget::kFormat);
+    GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
+    if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
     // Décision de Marc (12 novembre 2026, « je veux full ce qu'il y a réellement ») : la lueur d'ensemble de la Voie lactée
     // est un modèle ajusté sur des mesures, avec trois points supposés (docs/gaia-voie-lactee.md) ; elle n'est donc PAS
     // montrée. Seules les étoiles mesurées le sont. Le code du fil Gaia reste en place (kShowModelledMilkyWay).
@@ -532,7 +535,7 @@ int runWindow(const WindowOptions& opt) {
             sim.calcStates.push_back({"Galaxies lointaines", CalcMode::Measured, 0, "positions mesurées ; expansion de l'univers calculée"});
         }
         const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
-        const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost()), sc.extent.height, sim.years);
+        const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain()), sc.extent.height, sim.years);
 
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
@@ -607,7 +610,14 @@ int runWindow(const WindowOptions& opt) {
             // étoiles dessinées (fil Gaia) ; le facteur revient à 1 entre 3 000 et 30 000 années-lumière (Sim::brightnessBoost).
             milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
             gaia.improved = sim.bestLook;
+            gaiaSky.update(cam, sim.fovDeg, !sim.deepTime());
+            gaia.hideSkyOnly = gaiaSky.active && gaiaSky.shownStars > 0;
+            sim.gaiaSkyActive = gaiaSky.active;
+            sim.gaiaSkyStars = gaiaSky.shownStars;
+            sim.gaiaSkyPending = gaiaSky.pendingTiles;
+            sim.gaiaSkyLimit = gaiaSky.gLimit;
             gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
+            gaiaSky.draw(cmd, cam, sc.extent.height, pc.par[0]);
         }
         if (!skyOnly && sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
             PushConstants orbiting = pc;
@@ -716,6 +726,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     planets.release(g);
+    gaiaSky.destroy(g);
     gaia.release(g);
     milkyWay.release(g);
     fusionPoints.release(g);

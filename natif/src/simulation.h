@@ -195,6 +195,10 @@ struct Sim {
     // Choix de Marc (12/11/2026) : « 100 % mesuré » (par défaut) ou « meilleur rendu ». En meilleur rendu, des corrections
     // NON mesurées peuvent s'appliquer (ex. éclat Gaia rééquilibré par direction) ; chacune le dit à l'écran.
     bool bestLook = false;
+    // Sources Gaia sans distance, une à une à la lunette (gaia_ciel.h) : état pour l'écran.
+    bool gaiaSkyActive = false;
+    uint32_t gaiaSkyStars = 0, gaiaSkyPending = 0;
+    float gaiaSkyLimit = 0;
     std::vector<std::string> skyBandLabels, skyLegend;
     const std::vector<SkyBandInfo>* skyBandInfos = nullptr;      // fiches des cartes (famille, échelle, unité), pour l'interface
     // Proposition faite à Marc le 12 novembre 2026 (en attente de sa réponse, donc coupé par défaut) : montrer à toutes les
@@ -821,6 +825,10 @@ struct Sim {
     // ciel lointain), comme une lunette ; la molette seule rapproche la caméra.
     static constexpr double kFovMax = 60.0, kFovMin = 0.5;
     double fovDeg = kFovMax;
+    // Grossir, c'est aussi poser plus longtemps, comme à la lunette : l'éclat de tout ce qui est dessiné est multiplié par
+    // le carré du grossissement (au plus 10 000, soit 10 magnitudes de plus). Réglage d'affichage, dit à l'écran ; les
+    // mesures ne changent pas.
+    double fieldGain() const { return std::min(std::pow(kFovMax / fovDeg, 2.0), 1.0e4); }
     void zoomField(double notches) {
         if (notches != 0) fovDeg = std::clamp(fovDeg * std::pow(0.8, notches), kFovMin, kFovMax);
     }
