@@ -48,6 +48,7 @@ void addAsteroidResults(const Sim& sim, UiState& ui, std::vector<int>& found) {
 void lightButton(Sim& sim, UiState& ui);      // interface_lumiere.h
 void faceOnButton(Sim& sim, UiState& ui);     // interface_bras.h
 void viewModeButton(Sim& sim);                // interface_bras.h
+void faceOnGalaxy(Sim& sim, UiState& ui);     // interface_bras.h
 
 // Aller à un résultat : un astre de la liste, ou un astéroïde du catalogue (désigné d'abord).
 void goToResult(Sim& sim, UiState& ui, int r);
@@ -247,16 +248,37 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     if (ImGui::IsItemEdited()) ui.searchSel = 0;
     if (!active && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ui.search[0] = 0;
     ImGui::SameLine();
-    if (ImGui::Button("Aller à…")) ui.openGoTo = true;
+    // Interface minimaliste (Marc, 13/11/2026) : un seul « Menu » pour tout ce qui n'est pas la recherche.
+    if (ImGui::Button("Menu")) ImGui::OpenPopup("menu");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Menu : aller à, lumière, vue, aide…");
     ui.goToAnchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + px(ui, 6)};
-    ImGui::SameLine();
-    if (ImGui::Button(" ? ")) ui.help = !ui.help;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toutes les commandes (F1)");
     ui.searchRight = ImGui::GetItemRectMax().x;
-    lightButton(sim, ui);
-    faceOnButton(sim, ui);
-    ImGui::SameLine();
-    viewModeButton(sim);
+    if (sim.bestLook) {      // le mode qui permet des hypothèses reste toujours annoncé
+        ImGui::SameLine();
+        viewModeButton(sim);
+    } else if (!ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F4, false)) {
+        sim.bestLook = true;
+    }
+    if (sim.skyBand >= 0) lightButton(sim, ui);      // une carte « Lumière » choisie : son nom reste à l'écran
+    ui.searchRight = ImGui::GetItemRectMax().x;
+    ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
+    if (ImGui::BeginPopup("menu")) {
+        if (ImGui::MenuItem("Aller à…")) ui.openGoTo = true;
+        if (!sim.skyBandLabels.empty() && ImGui::BeginMenu("Lumière")) {
+            if (ImGui::MenuItem("Visible (étoiles mesurées)", nullptr, sim.skyBand < 0)) sim.skyBand = -1;
+            ImGui::Separator();
+            for (int k = 0; k < static_cast<int>(sim.skyBandLabels.size()); ++k)
+                if (ImGui::MenuItem(sim.skyBandLabels[static_cast<size_t>(k)].c_str(), nullptr, sim.skyBand == k)) sim.skyBand = k;
+            ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem("Galaxie de face")) faceOnGalaxy(sim, ui);
+        if (ImGui::MenuItem("Vue : meilleur rendu", "F4", sim.bestLook)) sim.bestLook = !sim.bestLook;
+        if (ui.gwCount > 0 && ImGui::MenuItem("Ondes gravitationnelles détectées")) ui.gwOpen = true;
+        ImGui::Separator();
+        if (ImGui::MenuItem("Détails à l'écran", nullptr, ui.details)) ui.details = !ui.details;
+        if (ImGui::MenuItem("Aide", "F1", ui.help)) ui.help = !ui.help;
+        ImGui::EndPopup();
+    }
     drawGoToMenu(sim, ui);
     drawSearchResults(sim, ui, active, entered);
     ImGui::End();

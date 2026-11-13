@@ -150,44 +150,48 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     ImGui::Begin("temps", nullptr, fixed);
     ImGui::PushFont(ui.big);
     const std::string date = frDate(sim.years, kRates[sim.rate].yearsPerSecond < 0.02);
-    const float rowW = px(ui, 600);
+    const float rowW = ui.details ? px(ui, 600) : std::max(px(ui, 360), ImGui::CalcTextSize(frDate(sim.years, kRates[sim.rate].yearsPerSecond < 0.02).c_str()).x * 1.25f);
     ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - ImGui::CalcTextSize(date.c_str()).x) * 0.5f + px(ui, 14)));
     ImGui::TextUnformatted(date.c_str());
     ImGui::PopFont();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic : aller à une date");
     if (ImGui::IsItemClicked()) ImGui::OpenPopup("date");
     const std::string rel = relativeToToday(sim.years) + (sim.paused ? "   •   temps arrêté" : sim.backward ? "   •   le temps recule" : "");
-    ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - ImGui::CalcTextSize(rel.c_str()).x) * 0.5f + px(ui, 14)));
-    ImGui::TextDisabled("%s", rel.c_str());
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nClic : aller à une date", rel.c_str());
+    if (ui.details) {
+        ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - ImGui::CalcTextSize(rel.c_str()).x) * 0.5f + px(ui, 14)));
+        ImGui::TextDisabled("%s", rel.c_str());
+    }
 
+    // Interface minimaliste (Marc, 13/11/2026) : lecture, vitesse et « … » (sens, plus lent, plus rapide, maintenant, date).
+    ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - px(ui, 330)) * 0.5f + px(ui, 14)));
     if (playButton(ui, sim.paused)) sim.paused = !sim.paused;
     ImGui::SameLine();
-    if (ImGui::Button(sim.backward ? "← Recule" : "Avance →")) sim.backward = !sim.backward;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Changer le sens du temps");
-    ImGui::SameLine();
-    ImGui::BeginDisabled(sim.rate == 0);
-    if (ImGui::Button(" − ")) sim.rate = std::max(sim.rate - 1, 0);
-    ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Plus lent (Page suivante)");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(px(ui, 270));
+    ImGui::SetNextItemWidth(px(ui, 240));
     if (ImGui::BeginCombo("##vitesse", kRates[sim.rate].label)) {
         for (int i = 0; i < kRateCount; ++i)
             if (ImGui::Selectable(kRates[i].label, i == sim.rate)) sim.rate = i;
         ImGui::EndCombo();
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Vitesse du temps (Page précédente : plus vite, Page suivante : plus lent)");
     ImGui::SameLine();
-    ImGui::BeginDisabled(sim.rate == kRateCount - 1);
-    if (ImGui::Button(" + ")) sim.rate = std::min(sim.rate + 1, kRateCount - 1);
-    ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Plus rapide (Page précédente)");
-    ImGui::SameLine();
-    if (ImGui::Button("Maintenant")) {
-        sim.years = kStartYears;
-        sim.backward = false;
+    if (ImGui::Button(" … ")) ImGui::OpenPopup("temps-plus");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sens du temps, maintenant, aller à une date");
+    if (ImGui::BeginPopup("temps-plus")) {
+        if (ImGui::MenuItem(sim.backward ? "Faire avancer le temps" : "Faire reculer le temps")) sim.backward = !sim.backward;
+        if (ImGui::MenuItem("Plus lent", "Page suivante", false, sim.rate > 0)) sim.rate = std::max(sim.rate - 1, 0);
+        if (ImGui::MenuItem("Plus rapide", "Page précédente", false, sim.rate < kRateCount - 1)) sim.rate = std::min(sim.rate + 1, kRateCount - 1);
+        if (ImGui::MenuItem("Maintenant")) {
+            sim.years = kStartYears;
+            sim.backward = false;
+        }
+        if (ImGui::MenuItem("Aller à une date…")) ui.openDate = true;
+        ImGui::EndPopup();
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Date…")) ImGui::OpenPopup("date");
+    if (ui.openDate) {
+        ImGui::OpenPopup("date");
+        ui.openDate = false;
+    }
     dateJumpPopup(sim, ui);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);      // les remarques passent à la ligne : la barre garde sa largeur
     if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");

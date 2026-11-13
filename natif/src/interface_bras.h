@@ -135,17 +135,24 @@ void drawArmCard(const Sim& sim, UiState& ui, const Camera& cam, float w, float 
 }
 
 // Bouton « Galaxie de face » de la barre du haut : le centre de la Voie lactée vu du pôle nord de la Galaxie.
+// Vue de la Voie lactée d'en haut, depuis le pôle nord de la Galaxie (bouton ou menu « ≡ »).
+void faceOnGalaxy(Sim& sim, UiState& ui) {
+    int centre = -1;
+    for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
+        if (sim.bodies[static_cast<size_t>(i)].name == "Centre de la Voie lactée") centre = i;
+    if (centre < 0) return;
+    goToBody(sim, ui, centre, 110000.0);
+    sim.yaw = 180.0 * kPi / 180.0;      // pôle nord de la Galaxie : longitude écliptique 180,0°, latitude 29,8°
+    sim.pitch = 29.8 * kPi / 180.0;
+    sim.touched = true;
+}
+
 void faceOnButton(Sim& sim, UiState& ui) {
     int centre = -1;
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
         if (sim.bodies[static_cast<size_t>(i)].name == "Centre de la Voie lactée") centre = i;
     if (centre < 0 || !sim.visible(centre)) return;
-    if (ImGui::Button("Galaxie de face")) {      // sur une deuxième ligne : la première touche déjà la barre du temps
-        goToBody(sim, ui, centre, 110000.0);
-        sim.yaw = 180.0 * kPi / 180.0;      // pôle nord de la Galaxie : longitude écliptique 180,0°, latitude 29,8°
-        sim.pitch = 29.8 * kPi / 180.0;
-        sim.touched = true;
-    }
+    if (ImGui::Button("Galaxie de face")) faceOnGalaxy(sim, ui);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Voir la Voie lactée d'en haut, avec ses bras mesurés");
 }
 

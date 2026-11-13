@@ -111,6 +111,11 @@ void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fix
     const std::string where = sim.flying ? "En route vers « " + fb.name + " »…" : "Tu regardes « " + fb.name + " » depuis " + frDistance(sim.dist) + ".";
     ImGui::TextUnformatted(where.c_str());
     if (const int k = eclipseNow(sim.years); k >= 0) ImGui::TextDisabled("%s, de Soleil : %s.", kEclipses[k].label, kEclipseStatus);
+    if (!ui.details) {      // interface minimaliste : seules les hypothèses du « meilleur rendu » restent toujours écrites
+        if (sim.bestLook && !sim.deepTime()) raysNote(sim);
+        ImGui::End();
+        return;
+    }
     whatYouSee(sim);
     armLegend(sim);
     ImGui::TextDisabled("Clic sur un astre : y aller   •   Molette : zoomer   •   Glisser : tourner   •   Tape un nom : chercher   •   F1 : aide");
@@ -266,7 +271,8 @@ void drawCompleteness(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fix
     const bool roomOnTop = ui.searchRight + ui.timeW + ui.completenessW + px(ui, 48) <= w;
     ImGui::SetNextWindowPos({w - px(ui, 16), roomOnTop ? px(ui, 16) : ui.timeBottom + px(ui, 12)}, 0, {1, 0});
     ImGui::Begin("completude-ligne", nullptr, fixed);
-    const std::string line = completude::ligneCourte(e);
+    std::string line = completude::ligneCourte(e);
+    if (!ui.details && line.find('%') != std::string::npos) line = line.substr(0, line.find('%') + 1) + " de ce qui est connu";      // minimaliste : le chiffre, le détail au clic
     if (ImGui::Selectable(line.c_str(), ui.completeness)) ui.completeness = !ui.completeness;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic : ce qui est montré ici, comparé à ce qui est connu");
     ui.completenessBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();

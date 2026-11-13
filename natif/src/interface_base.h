@@ -190,6 +190,8 @@ struct UiState {
     int tour = -1;                  // étape de la visite guidée (-1 : pas de visite)
     int gwCount = 0;                // ondes gravitationnelles chargées (interface_ondes.h)
     bool gwOpen = false;            // leur fenêtre est ouverte
+    bool details = false;           // interface minimaliste (Marc, 13/11/2026) : textes détaillés à l'écran seulement sur demande
+    bool openDate = false;          // « Aller à une date… » choisi dans le menu « … » de la barre du temps
     double tourClock = 0;
 };
 
@@ -309,6 +311,8 @@ void firstFrame(Sim& sim, UiState& ui) {
     if (e == "methode") ui.howOpen = true;
     if (e == "calculs") ui.tasksOpen = true;
     if (e == "menu") ui.keepGoTo = true;
+    if (e == "details") ui.details = true;
+    if (e != "fiche") ui.cardClosedFor = sim.focus;      // minimaliste : la fiche s'ouvre au clic sur un astre, pas au départ
     if (e.rfind("recherche:", 0) == 0) std::snprintf(ui.search, sizeof(ui.search), "%s", e.substr(10).c_str());
     if (e.rfind("visite:", 0) == 0) {
         startTour(sim, ui, std::atoi(e.substr(7).c_str()));
@@ -405,11 +409,12 @@ int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, floa
     return best;
 }
 
-bool labelWanted(const Sim& sim, const Camera& cam, int i, float w, float h, double px0, double py0, double boostMag) {
+bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, float w, float h, double px0, double py0, double boostMag) {
     const Body& b = sim.bodies[static_cast<size_t>(i)];
     if (i == sim.focus) return discRadiusPx(sim, cam, i, h) <= 14;      // vu de près : la fiche porte déjà son nom
     if (b.kind == Kind::Star && (sim.dist < 0.02 || sim.dist > 3000.0 || sim.apparentMag(i, cam.pos) - boostMag > 4.5)) return false;
     if (b.kind == Kind::Planet && sim.dist > 0.05) return false;
+    if (b.kind == Kind::Planet && b.parent > 0 && b.naif != eph::kMoon && b.radiusKm < 100 && !ui.details) return false;      // minimaliste : petites lunes nommées au survol
     if (b.kind == Kind::Probe) return sim.dist < 0.3;
     if (b.kind == Kind::Asteroid) return sim.dist < 0.05;
     if (b.kind == Kind::Galaxy && b.priority >= 9) {      // Cosmicflows-4 (55 637) : seulement quand on est tout près
@@ -445,7 +450,7 @@ void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, f
         const bool isFocus = i == sim.focus, isHover = i == hovered;
         const ImVec2 p{static_cast<float>(x), static_cast<float>(y)};
         if (isHover) dl->AddCircle(p, std::max(11.0f * ui.s, static_cast<float>(std::min(discRadiusPx(sim, cam, i, h), 3000.0)) + 6.0f * ui.s), kAccent, 48, 1.5f * ui.s);
-        if (!isHover && !labelWanted(sim, cam, i, w, h, x, y, boostMag)) continue;
+        if (!isHover && !labelWanted(sim, ui, cam, i, w, h, x, y, boostMag)) continue;
         const char* name = b.name.c_str();
         const ImVec2 size = ImGui::CalcTextSize(name);
         const ImVec2 at{p.x + 10 * ui.s, p.y - size.y * 0.5f};

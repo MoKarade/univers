@@ -109,12 +109,13 @@ void tasksTable(const Sim& sim) {
 
 void drawHow(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     if (sim.calcStates.empty() && sim.tasks.empty()) return;
+    if (!ui.details && runningTasks(sim) == 0 && !ui.howOpen && !ui.tasksOpen) return;      // minimaliste : rien à montrer
     // Sous la complétude ; si elle mordrait sur la barre du temps, sous celle-ci.
     float y = ui.completenessBottom + px(ui, 8);
     if (w - px(ui, 16) - ui.howW < ui.timeRight + px(ui, 8)) y = std::max(y, ui.timeBottom + px(ui, 8));
     ImGui::SetNextWindowPos({w - px(ui, 16), y}, 0, {1, 0});
     ImGui::Begin("methode-ligne", nullptr, fixed);
-    if (!sim.calcStates.empty()) {
+    if (!sim.calcStates.empty() && ui.details) {      // minimaliste : « comment c'est obtenu » seulement avec les détails
         bool warn = false;
         const std::string line = howSummary(sim, warn) + " (clic : détail)";
         if (warn) ImGui::PushStyleColor(ImGuiCol_Text, howColor(CalcMode::Approx));
@@ -127,11 +128,13 @@ void drawHow(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
         const TaskProgress* slow = nullptr;
         for (const TaskProgress& t : sim.tasks)
             if (!t.finished && (!slow || t.percent < slow->percent)) slow = &t;
-        const std::string line = "Calculs de fond en cours : " + std::to_string(running) + " (clic : où ça en est)";
+        const std::string line = ui.details ? "Calculs de fond en cours : " + std::to_string(running) + " (clic : où ça en est)"
+                                            : "Calculs en cours : " + std::to_string(running);
         if (ImGui::Selectable(line.c_str(), ui.tasksOpen)) ui.tasksOpen = !ui.tasksOpen;
         if (slow && slow->total > 0) {
             const std::string over = slow->name + " : " + frInt(slow->percent) + " %";
-            ImGui::ProgressBar(static_cast<float>(slow->percent / 100.0), {-1, ImGui::GetFontSize() * 0.9f}, over.c_str());
+            ImGui::ProgressBar(static_cast<float>(slow->percent / 100.0), {ui.details ? -1.0f : px(ui, 140), ImGui::GetFontSize() * 0.9f}, ui.details ? over.c_str() : "");
+            if (!ui.details && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", over.c_str());
         }
     }
     ui.completenessBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();      // la fiche se place en dessous
