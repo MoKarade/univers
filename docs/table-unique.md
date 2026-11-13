@@ -30,7 +30,7 @@ Régénérer : `python pipeline/constantes/construire.py && python pipeline/cons
 | Masse de la Voie lactée | **1,343 × 10¹² M☉** ± 0,30 (modèle de McMillan intégré, halo coupé à 250 kpc) | largeur : McMillan 2017 (1,30 ± 0,30) [Certain pour le calcul] |
 | Masse du Triangle | **4,08 × 10¹¹ M☉** ± 1,0 (Corbelli 2014) | [Probable] |
 | Grand Nuage | **1,38 × 10¹¹ M☉ après coupure** (Erkal 2019) | le modèle de `modeles_v2.py` n’en gardait que 0,97 après sa coupure à 100 kpc : la table règle le Hernquist (2,29 × 10¹¹, 25,8 kpc avant coupure) pour respecter à la fois la masse totale et 1,7 × 10¹⁰ M☉ dans 8,7 kpc [Certain pour le calcul] ; **tir de stabilité à refaire** |
-| Petit Nuage | 3 ± 1 × 10⁹ M☉, **adopté, pas mesuré** ; mouvement propre et vitesse : Kallivayalil 2013 ; distance : Graczyk 2020 | aucune masse totale trouvée [Supposition] |
+| Petit Nuage | 3 ± 1 × 10⁹ M☉, **masse totale adoptée, pas mesurée** ; modèle réglé ici (halo de Hernquist 3,09 × 10⁹ et 1,73 kpc coupé à 10 kpc, soit 2,13 × 10⁹ ; étoiles 3,1 × 10⁸ ; gaz 5,6 × 10⁸) sur la matière noire dans 4 kpc (1 à 1,5 × 10⁹, Di Teodoro et al. 2019) ; mouvement propre et vitesse : Kallivayalil 2013 ; distance : Graczyk 2020 | masses internes : [Probable] ; total et formes : [Supposition] ; vitesse circulaire du modèle ~50 km/s contre ~55 mesurés à 2,8 kpc |
 | Vitesses d’ensemble | **calculées depuis les observables de la table**, pas `conditions.json` | `conditions.json` est périmé : M31 à 783 kpc, Triangle à 809 kpc, Triangle à 72 km/s de la table, Grand Nuage à 20 km/s (grand livre § 2) [Certain] |
 | Axes de rotation | calculés (inclinaison, angle de position, sens, côté proche ou bout en approche) | Triangle et Grand Nuage : identiques à ceux du fil Voie lactée ; Andromède : 3° d’écart (77° contre son inclinaison) ; Andromède : côté proche retrouvé au nord-ouest à partir du sens et du côté en approche, comme attendu [Certain] |
 
@@ -73,7 +73,7 @@ d’autres. Le film N-corps la remplacera.
 ## 4. Ce qui n’est pas fait, et par qui
 
 - **Brancher la table dans l’appli** (`galaxie_orbites.h` : kV0 230 → 232,8, vitesse du Soleil) : change toutes les orbites d’étoiles de ~1 %.
-  À faire par le fil qui possède ces fichiers, avec un contrôle visuel.
+  Pris par le fil Voie lactée (PR 96), avec les shaders et un contrôle visuel.
 - **Remplir `GALAXIES` de `modeles_v2.py` depuis la table** (`constantes.modele_pour_modeles_v2(cle)`) : fil des galaxies de départ,
   avec un nouveau tir du Grand Nuage.
 - **Brancher `centres_reference.npz` dans l’appli** : fil Voie lactée (PR 96), qui déplace chaque galaxie en bloc en attendant le film.

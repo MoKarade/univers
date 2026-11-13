@@ -72,6 +72,10 @@ Table : centre et largeur de la loi de masse de l’ensemble Monte-Carlo, égal 
 | Grand Nuage de Magellan | halo | 1.352e+11 |
 | Grand Nuage de Magellan | disque | 2.7e+09 |
 | Grand Nuage de Magellan | total | 1.379e+11 |
+| Petit Nuage de Magellan | halo | 2.13e+09 |
+| Petit Nuage de Magellan | disque | 3.1e+08 |
+| Petit Nuage de Magellan | gaz | 5.6e+08 |
+| Petit Nuage de Magellan | total | 3e+09 |
 
 ## 5. Points à trancher signalés par ce livre
 
@@ -79,4 +83,4 @@ Table : centre et largeur de la loi de masse de l’ensemble Monte-Carlo, égal 
 - **v0** : l’appli tourne avec 230 km/s, la table et le modèle de McMillan avec 232,8. Brancher `constantes_univers.h` dans `galaxie_orbites.h` change toutes les orbites d’étoiles de ~1 % : c’est un changement visible, à faire par le fil qui possède ce fichier.
 - **Distance d’Andromède** : 761 kpc (table) contre 783 kpc (ancien calcul). La table suit Li et al. 2021 (Céphéides), comme Sawala 2025.
 - **Triangle** : 859 kpc (table, Sawala 2025) contre 809 (ancien calcul) et 840 (Corbelli 2014, utilisé par le modèle de masse).
-- **Petit Nuage** : masse adoptée (3 ± 1 × 10⁹ M☉), pas mesurée. À relire : une masse dynamique publiée.
+- **Petit Nuage** : masse totale adoptée (3 ± 1 × 10⁹ M☉), pas mesurée ; le modèle (halo, étoiles, gaz) est réglé ici sur la matière noire dans 4 kpc de Di Teodoro et al. 2019.

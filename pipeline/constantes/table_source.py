@@ -148,18 +148,29 @@ GALAXIES = {
     ),
     'petit_nuage': dict(
         nom='Petit Nuage de Magellan',
-        modele=None,
-        loi_masse=dict(centre=3.0e9, sigma=1.0e9,
-                       src='ADOPTÉ, pas mesuré : aucune masse totale relue (Bekki et Stanimirović 2009 : matière noire 7,5 × 10⁷ dans ~3 kpc '
-                           'pour M/L = 3,8, davantage si M/L < 1 ; Di Teodoro et al. 2019 : pas de masse dans la partie lue). '
-                           'Valeur d’usage des études d’orbites [Supposition]'),
+        modele=dict(
+            halo=dict(hernquist=3.09e9, a=1.73, coupure=10.0),
+            bulbe=None,
+            disques=[dict(kind=1, masse=3.1e8, rd=1.0, hz=0.8, q_min=2.5),
+                     dict(kind=3, masse=5.6e8, rd=2.0, hz=0.3, q_min=1.5)],
+            src='MODÈLE réglé ici, pas un modèle publié. Contraintes lues : matière noire dans 4 kpc 1 à 1,5 × 10⁹ M☉ (Di Teodoro et al. 2019, '
+                'résumé : halo dominant toujours requis) → 1,5 × 10⁹ retenu ; vitesse circulaire ~55 km/s à 2,8 kpc (même source ; le modèle donne '
+                '~50 km/s, calcul sphérique approché) ; masse dynamique 2,4 × 10⁹ M☉ dans ~3 kpc (Stanimirović et al. 2004, qui concluaient sans '
+                'matière noire : avis contraire) ; gaz : HI 4,2 × 10⁸ M☉ (Stanimirović et al. 2004, table 1) × 1,33 pour l’hélium ; étoiles : '
+                'L_V 3,1 × 10⁸ L☉ et M/L ≈ 1 (même source). Masse totale gardée à 3 × 10⁹ (valeur adoptée), d’où 2,13 × 10⁹ de halo après la '
+                'coupure à 10 kpc (rayon de marée face au Grand Nuage, ordre de grandeur) [Supposition]. Longueurs, épaisseurs et agitation '
+                'minimale : choisies, non relues (disque stellaire épais et chaud : le Petit Nuage est très perturbé) [Supposition]',
+        ),
+        loi_masse=dict(centre=None, sigma=1.0e9,
+                       src='centre = masse du modèle (3,0 × 10⁹ M☉), ADOPTÉE et non mesurée : aucune masse totale publiée relue ; seules les masses '
+                           'dans 3 à 4 kpc le sont (voir le modèle). Largeur adoptée [Supposition]'),
         observe=dict(ra=13.1866, dec=-72.8286, dmod=18.977, dmod_err=0.032, pmra=772.0, pmra_err=63.0, pmdec=-1117.0, pmdec_err=61.0,
                      vr=145.6, vr_err=0.6,
                      src='mouvement propre et vitesse radiale : Kallivayalil et al. 2013 (0,772 ; −1,117 mas/an ; 145,6 km/s), comme le Grand Nuage '
                          'et le fil Voie lactée (Zivick et al. 2018 : 0,82 ; −1,21, compatible) ; distance : Graczyk et al. 2020 ; direction : '
                          'centre optique (Sesame) [Probable]'),
         disque=None,
-        statut='adopté',
+        statut='adopté (modèle réglé sur des masses internes mesurées)',
     ),
 }
 
