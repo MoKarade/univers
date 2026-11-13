@@ -38,3 +38,9 @@ target_link_options(chaos_systeme_solaire PRIVATE -static)
 add_executable(essai_champ_bfe essais/essai_champ_bfe.cpp)
 target_compile_options(essai_champ_bfe PRIVATE -Wall -Wextra)
 target_link_options(essai_champ_bfe PRIVATE -static)
+
+# Essai : lecteur du film version 2 du Groupe local (étoiles visibles emportées par le calcul unique).
+add_executable(essai_film essais/essai_film.cpp)
+target_link_libraries(essai_film PRIVATE univers_physique)
+target_compile_options(essai_film PRIVATE -Wall -Wextra)
+target_link_options(essai_film PRIVATE -static)
