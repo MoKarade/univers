@@ -57,8 +57,8 @@ def horizon():
     return etat
 
 
-def chaos():
-    j = os.path.join(NATIF, 'chaos_futur.log')
+def chaos(sens='futur'):
+    j = os.path.join(NATIF, f'chaos_{sens}.log')
     lignes = open(j, encoding='utf-8', errors='replace').read().splitlines() if os.path.exists(j) else []
     ma = 0.0
     for l in reversed(lignes):
@@ -66,9 +66,10 @@ def chaos():
         if m: ma = float(m.group(1)); break
     fini = any(l.startswith('fini') for l in lignes)
     etat = 'terminé' if fini else 'en cours' if actif(j, 900) else 'en pause'
-    ecrire('chaos_systeme_solaire', nom='Chaos du système solaire (32 copies écartées de 15 m)', fait=60 if fini else ma, total=60,
+    ecrire('chaos_systeme_solaire' + ('' if sens == 'futur' else '_passe'),
+           nom='Chaos du système solaire' + ('' if sens == 'futur' else ', vers le passé') + ' (32 copies écartées de 15 m)', fait=60 if fini else ma, total=60,
            unite='millions d’années', debut=iso(os.path.getctime(j)) if os.path.exists(j) else '', maj=iso(time.time()), etat=etat,
-           detail='Jusqu’où la Terre reste prévisible dans le futur')
+           detail='Jusqu’où la Terre reste prévisible dans le ' + sens)
     return etat
 
 
@@ -169,7 +170,7 @@ def voie_lactee():
 
 def main():
     while True:
-        etats = [telechargement(), horizon(), chaos(), fusion(), voie_lactee()]
+        etats = [telechargement(), horizon(), chaos(), chaos('passe'), fusion(), voie_lactee()]
         if all(e in ('terminé', 'échec') for e in etats): break
         time.sleep(20)
 
