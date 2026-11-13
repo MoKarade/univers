@@ -103,7 +103,7 @@ def fenetre(n: int, pa: float, incl: float, echelle: float = 1.0, rayon: float =
     v = x * math.cos(a) - y * math.sin(a)
     q = max(math.cos(math.radians(incl)), 0.35)
     r = np.hypot(u, v / q) / echelle
-    t = np.clip((r - rayon) / (0.27 * rayon), 0, 1)
+    t = np.clip((r - 0.7 * rayon) / (0.6 * rayon), 0, 1)      # fondu large : aucun bord visible
     w = 1 - t * t * (3 - 2 * t)
     return np.where(np.hypot(x, y) < 0.97, w, 0.0)
 
@@ -123,7 +123,7 @@ def main() -> None:
         try:
             ry = RAYON.get(nom, 0.75)
             lues = [bande(c, pa, incl, (ra, dec, champ), PREMIER_PLAN.get(nom, ()), ry) for c in chemins]
-            plancher = 1.5 * max(b for _, b in lues)
+            plancher = (3.0 if nom in MELLINGER else 1.5) * max(b for _, b in lues)      # Mellinger : ciel plus bruité (étoiles de la Voie lactée)
             bandes = [np.clip(d - plancher, 0, None) for d, _ in lues]
         except (OSError, ValueError, TypeError) as e:
             print(f'{nom} : image illisible ({e}), passée')

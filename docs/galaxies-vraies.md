@@ -45,3 +45,10 @@ Limites [À vérifier / modèle] :
 ## Nuage des scénarios d'orbite
 
 Caché par défaut ; Menu, « Incertitude : routes possibles des galaxies ». Option de contrôle `--incertitude`.
+
+## À remplacer (Marc, 13/11/2026, 13 h 11)
+
+« La Voie lactée c'est une image, pas ce que je veux » : la lueur vue de dessus (grille de lumière) doit être remplacée
+par une Voie lactée faite d'étoiles en 3D (Gaia là où il mesure, étoiles tirées d'un modèle de population publié au-delà,
+niveaux de détail sur la carte graphique). Travail suivant, sur sa propre branche. Les photos des galaxies voisines
+restent.
