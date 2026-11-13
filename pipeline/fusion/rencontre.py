@@ -243,8 +243,69 @@ def main():
         if mode == 'passe':
             np.savez(os.path.join(sortie, 'aujourdhui.npz'), t=0.0, **S.etat())
             print('instantané d\'aujourd\'hui écrit')
+    elif mode == 'futur':
+        futur(args[1], float(args[2]), opts, cible)
     else:
-        raise SystemExit('mode inconnu : ' + mode + ' (le mode « futur » arrive avec le film, film_v2.py)')
+        raise SystemExit('mode inconnu : ' + mode)
+
+
+def futur(sortie, t_fin, opts, cible):
+    """D'aujourd'hui à t_fin, avec les étoiles visibles comme traceurs sans masse ; écrit le film (version 2).
+
+    Film (dossier <sortie>/film) : film.json (dates des images, centre et vitesse de chaque galaxie relatifs à la Voie
+    lactée, énergie, nombre de traceurs par galaxie, décalage appliqué à t = 0) et une image par date, img_NNNNN.f16 :
+    pour chaque traceur, dans l'ordre des fichiers fournis (galaxie après galaxie), sa position RELATIVE AU CENTRE DE SA
+    GALAXIE D'ORIGINE, trois nombres à virgule sur 16 bits, en kpc (précision relative 5e-4 : 4 pc à 8 kpc)."""
+    reprise = os.path.join(sortie, 'film', 'reprise.npz')
+    film = os.path.join(sortie, 'film'); os.makedirs(film, exist_ok=True)
+    releve_ma = float(opts.get('releve-ma', 10.0))
+    if os.path.exists(reprise) and os.path.exists(os.path.join(film, 'film.json')):      # reprise après un arrêt
+        with np.load(reprise) as z:
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}; t0 = float(z['t'])
+        meta = json.load(open(os.path.join(film, 'film.json'), encoding='utf-8'))
+        journal = json.load(open(os.path.join(film, 'journal.json'), encoding='utf-8'))
+        k = min(len(journal['t']), len(meta['t']))      # on repart du dernier instantané : les images d'après sont refaites
+        while k and journal['t'][k - 1] > t0 + 1e-9: k -= 1
+        for cle in ('t', 'centres', 'vitesses', 'energie'): journal[cle] = journal[cle][:k]
+        meta['t'] = meta['t'][:k]
+    else:
+        with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
+        t0, journal = 0.0, None
+        S0 = Calcul(p, theta=float(opts.get('theta', 0.7)))
+        cp_, cv = S0.centres(); del S0
+        meta = dict(version=2, unites="kpc, Ga ; positions relatives au centre de la galaxie d'origine, float16", galaxies=ORDRE, t=[], traceurs=[0] * len(ORDRE),
+                    pas_image_ma=releve_ma, decalage_a_t0={})
+        if 'traceurs' in opts:      # étoiles visibles (docs/contrat-etoiles-visibles.md), posées sur le centre que le calcul donne à leur galaxie
+            ajout = {k: [] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
+            for g, nom in enumerate(ORDRE):
+                f = os.path.join(opts['traceurs'], f'etoiles_visibles_{nom}.npz')
+                if not os.path.exists(f): continue
+                with np.load(f) as z: tp, tv = z['pos'].astype(np.float64), z['vel'].astype(np.float64)
+                mesure_p = np.array(cible['galaxies'][nom]['position_aujourdhui']); mesure_v = np.array(cible['galaxies'][nom]['vitesse_aujourdhui'])
+                # du repère de l'appli (Voie lactée à l'origine, au repos) au repère du calcul ; l'écart entre la place mesurée
+                # de la galaxie et celle que le calcul lui donne à t = 0 est retiré, pour que les étoiles restent sur leur masse.
+                ajout['pos'].append(tp - mesure_p + cp_[g]); ajout['vel'].append(tv - mesure_v + cv[g])
+                n = len(tp)
+                ajout['m'].append(np.full(n, 1.0)); ajout['eps'].append(np.full(n, 0.05)); ajout['kind'].append(np.full(n, 9, dtype=np.int8)); ajout['gid'].append(np.full(n, g, dtype=np.int8))
+                meta['traceurs'][g] = n
+                meta['decalage_a_t0'][nom] = dict(position=((cp_[g] - cp_[0]) - mesure_p).round(3).tolist(), vitesse=((cv[g] - cv[0]) - mesure_v).round(3).tolist())
+            p = {k: np.concatenate([p[k]] + ajout[k]) for k in p}
+    S = Calcul(p, theta=float(opts.get('theta', 0.7)))
+    cp = S.cp
+    tr = [cp.asarray(np.where((p['kind'] == 9) & (p['gid'] == g))[0]) for g in range(len(ORDRE))]
+    print(f"futur : {int((p['kind'] != 9).sum())} particules de masse, {int((p['kind'] == 9).sum())} étoiles visibles, de {t0:+.3f} à {t_fin:+.2f} Ga", flush=True)
+
+    def image(t, centres, vitesses):
+        blocs = [cp.asnumpy(S.pos[ix] - cp.asarray(centres[g])).astype(np.float16) for g, ix in enumerate(tr) if len(ix)]
+        nom = f"img_{len(meta['t']):05d}.f16"
+        if blocs:
+            np.concatenate(blocs).tofile(os.path.join(film, nom + '.tmp')); os.replace(os.path.join(film, nom + '.tmp'), os.path.join(film, nom))
+        meta['t'].append(round(t, 5))
+        json.dump(meta, open(os.path.join(film, 'film.json.tmp'), 'w', encoding='utf-8'), ensure_ascii=False); os.replace(os.path.join(film, 'film.json.tmp'), os.path.join(film, 'film.json'))
+
+    avancer(S, t0, t_fin, film, releve_ma=releve_ma, journal=journal, a_chaque_releve=image)
+    print('film terminé :', len(meta['t']), 'images')
 
 
 if __name__ == '__main__':
