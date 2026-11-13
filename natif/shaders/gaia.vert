@@ -18,6 +18,8 @@ void main() {
     uvec4 r = star[gl_VertexIndex];
     vec3 pos = uintBitsToFloat(r.xyz), move = vec3(0.0);
     uint flags = r.w >> 24;
+    /* meilleur rendu, vu de loin : flou angulaire (gaia_fiable.glsl) */
+    if ((pc.cellBase & GF_MODE_RENDU) != 0u) pos = gfFlou(pos, uint(gl_VertexIndex), gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, pos));
     /* orbite pas fiable (drapeau 2 absent) : montrée seulement autour d'aujourd'hui (gaia_fiable.glsl) */
     float garde = (flags & 2u) != 0u ? 1.0 : gfEffacement(pc.par.w);
     if (garde < 1.0e-4) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }

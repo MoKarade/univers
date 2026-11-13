@@ -58,3 +58,25 @@ plus larges que 15°. Référence sans rayons (mêmes étoiles, directions méla
   poussière), pas des étoiles assombries. Les retirer demanderait d'ajouter des étoiles non mesurées : contraire à la règle de Marc.
 - Le code de la poussière reste (drapeau 4, bits 16-31 des cases) mais n'agit que si gaia.bin est converti avec `--poussiere` ;
   le fichier livré ne l'est pas (choix soumis à Marc).
+
+## Vue « meilleur rendu » (demande de Marc, 12/11/2026 : « je veux que tu corriges mieux », avec un sélecteur)
+
+Réglage global `Sim::bestLook` (bouton « Vue », touche F4, du fil appli PC). En « 100 % mesuré », rien ne change. En « meilleur
+rendu », vu de loin seulement (poids = écart caméra-Soleil / distance de la source, 0 au Soleil) :
+1. **Éclat rééquilibré** (`pipeline/natif/gaia_reequilibre.py`, drapeau 4 de gaia.bin, bits 16-31 des cases de gaia_agrege.bin) :
+   par tranche de magnitude absolue, coquille de 250 pc et degré de longitude galactique, le nombre de sources est ramené à sa
+   moyenne sur 61° de longitude. Hypothèse : à même distance, le nombre d'étoiles varie lentement d'une direction à l'autre.
+   17,7 % de la lumière des étoiles change de place (moitié en plus, moitié en moins), 12,5 % pour les cases.
+2. **Flou angulaire de 3°** (`shaders/gaia_fiable.glsl`, `gfFlou`) : chaque source est décalée en travers de la ligne de visée
+   d'un angle fixe tiré au hasard (écart type 3°, l'incertitude de distance médiane de 5 %). Aucune étoile ajoutée.
+
+Mesures :
+| | 100 % mesuré | meilleur rendu |
+|---|---|---|
+| Rayons fins, vue de dessus galactique 2-4 kpc (données, dex) | 0,046 | 0,007 (rééquilibrage) ; 0,016 (flou seul) |
+| Rayons larges 15-90°, même vue | 0,072 | 0,030 |
+| Rayons à l'écran, appli, 58 000 al (dex, anneau 60-250 px) | 0,017 | 0,009 |
+
+Écartés, mesurés : rééquilibrage découpé aussi en latitude (45 % de la lumière bougerait, gain moindre) ; fenêtre de 15° (rayons
+larges restants). Captures : `captures/gaia_meilleur_rendu_oblique.png`, `captures/gaia_meilleur_rendu_dessus.png`
+(gauche : 100 % mesuré ; droite : meilleur rendu). Contrôle : `UNIVERS_VUE=meilleur` au lancement.

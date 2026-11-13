@@ -44,6 +44,8 @@ void main() {
         vec3 t2 = cross(n, t1);
         float d0 = length(c.pm.xyz) * s;
         vec3 q = (n + (2.0 * h.y - 1.0) * c.rest.x / length(c.pm.xyz) * t1 + (2.0 * h.z - 1.0) * c.rest.x / length(c.pm.xyz) * t2) * d0;
+        /* meilleur rendu, vu de loin : flou angulaire (gaia_fiable.glsl) */
+        if ((pc.cellBase & GF_MODE_RENDU) != 0u) q = gfFlou(q, uint(gl_VertexIndex) * 8u + uint(gl_InstanceIndex), gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, c.pm.xyz));
         vec3 dep = vec3(0.0), v = c.vel.xyz;
         if (pc.par.w == 0.0) dep = v * pc.par.z;
         else if (pc.exact > 0.5) {

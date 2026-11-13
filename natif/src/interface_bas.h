@@ -27,7 +27,7 @@ const char* grainLine(const Sim& sim) {
 // loin dans toutes les directions. Une ligne courte ; le survol explique.
 void raysNote(const Sim& sim) {
     if (sim.bestLook && sim.gaiaRebalancedCount)
-        ImGui::TextDisabled("Meilleur rendu : éclat des étoiles Gaia rééquilibré d'une direction à l'autre (%s de la lumière), hypothèse (survol).",
+        ImGui::TextDisabled("Meilleur rendu : étoiles Gaia floutées de 3° et éclat rééquilibré d'une direction à l'autre (%s de la lumière) : hypothèses (survol).",
                             (frNum(100.0 * sim.gaiaRebalancedShift, 2) + " %").c_str());
     else
         ImGui::TextDisabled("Rayons autour du Soleil : là où Gaia voit loin ou non (poussière, balayage), pas une vraie structure (survol : pourquoi).");
@@ -43,7 +43,8 @@ void raysNote(const Sim& sim) {
     if (sim.gaiaRebalancedCount)
         ImGui::TextWrapped("En vue « meilleur rendu » (bouton Vue, touche F4), l'éclat de %s étoiles est rééquilibré vu de loin : chaque morceau "
                            "de ciel, à une distance donnée, est ramené à la moyenne de ses voisins sur 15°. HYPOTHÈSE : à même distance, le "
-                           "nombre d'étoiles varie lentement d'une direction à l'autre. Aucune étoile n'est ajoutée ni déplacée ; vu du "
+                           "nombre d'étoiles varie lentement d'une direction à l'autre. Chaque étoile est aussi dessinée décalée d'un petit angle "
+                           "au hasard (3° en moyenne, autant que l'incertitude de sa distance, 5 %). Aucune étoile n'est ajoutée ; vu du "
                            "Soleil, le ciel reste celui mesuré. En vue « 100 % mesuré », rien n'est corrigé.",
                            frInt(static_cast<double>(sim.gaiaRebalancedCount)).c_str());
     ImGui::TextDisabled("Source : Gaia DR3 (Gaia Collaboration 2023).");
