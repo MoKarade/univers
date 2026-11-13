@@ -66,10 +66,10 @@ void whatYouSee(const Sim& sim) {
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
     if (sim.starShare() <= 0) return;
     // Voie lactée en volume (fil Gaia, docs/gaia-voie-lactee.md) : un modèle, dit comme tel dès qu'on la voit de loin.
-    // Choix de Marc (12/11) : pour l'état présent, seulement du mesuré. Sans la lueur d'ensemble, l'écran le dit.
-    if (sim.hasMilkyWay && sim.dist > 3000.0) {
-        ImGui::TextDisabled("La Voie lactée : modèle ajusté sur des mesures ; supposés : partage de la lumière au prorata des masses,");
-        ImGui::TextDisabled("lumière ajoutée par les bras, largeur de la barre longue.");
+    // Choix de Marc (13/11) : la Galaxie entière dès aujourd'hui en vue réaliste ; en « 100 % mesuré », seulement les étoiles mesurées.
+    if (sim.hasMilkyWay && sim.milkyWayModelShare > 0 && sim.dist > 3000.0) {
+        ImGui::TextDisabled("Voie lactée : étoiles Gaia mesurées une à une près du Soleil ; au-delà (pas de distance mesurée), lueur d'un modèle ajusté sur des mesures.");
+        ImGui::TextDisabled("Supposés dans ce modèle : partage de la lumière au prorata des masses, lumière ajoutée par les bras, largeur de la barre longue.");
     } else if (sim.dist > 3000.0) {
         // gaia_agrege.bin (fil Gaia, docs/gaia-voie-lactee.md) : la lumière des autres sources Gaia, additionnée par case.
         if (sim.hasGaia && sim.gaiaCount) {

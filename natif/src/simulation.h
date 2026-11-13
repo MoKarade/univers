@@ -192,9 +192,10 @@ struct Sim {
     // Lumière choisie pour le ciel : -1 = visible (étoiles et galaxies mesurées) ; sinon rang dans skyBandLabels (cartes du
     // ciel mesurées dans une autre lumière, fenetre.cpp). skyLegend : texte de la carte montrée, à afficher en permanence.
     int skyBand = -1;
-    // Choix de Marc (12/11/2026) : « 100 % mesuré » (par défaut) ou « meilleur rendu ». En meilleur rendu, des corrections
-    // NON mesurées peuvent s'appliquer (ex. éclat Gaia rééquilibré par direction) ; chacune le dit à l'écran.
-    bool bestLook = false;
+    // Choix de Marc (12/11/2026) : « 100 % mesuré » ou « meilleur rendu ». En meilleur rendu, des corrections NON mesurées
+    // peuvent s'appliquer (éclat Gaia rééquilibré, lueur de la Galaxie au-delà de Gaia) ; chacune le dit à l'écran.
+    bool bestLook = true;      // vue réaliste par défaut (Marc, 13/11/2026) : « 100 % mesuré » reste au menu (F4)
+    double milkyWayModelShare = 0;      // part de la lueur du modèle de la Voie lactée montrée à cette image (fenetre.cpp)
     // Sources Gaia sans distance, une à une à la lunette (gaia_ciel.h) : état pour l'écran.
     bool gaiaSkyActive = false;
     uint32_t gaiaSkyStars = 0, gaiaSkyPending = 0;
@@ -214,6 +215,7 @@ struct Sim {
     // Scénarios du Groupe local (clones.h) : nombre, part qui finit par une fusion Voie lactée-Andromède, et date de cette
     // fusion (16e, 50e, 84e centile, en milliards d'années) ; 0 scénario : fichier absent.
     uint32_t cloneCount = 0;
+    bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
     double cloneMergeProbability = 0, cloneMergeGa[3] = {0, 0, 0};
     std::vector<CalcState> calcStates;
     double gaiaCellDispersionKms = 0;    // dispersion médiane des vitesses dans une case de lumière additionnée (fil Gaia), à dire à l'écran

@@ -8,6 +8,8 @@ Format (petit-boutiste) :
   noms des galaxies : g × 8 octets (ASCII, complétés par des zéros), dans l'ordre MW, M31, M33, LMC
   date de fusion Voie lactée–Andromède par clone : n × f32 (Ga ; NaN si pas de fusion en 10 unités = 9,78 Ga)
   masses M200 par clone et galaxie : n × g × f32 (10^10 M☉, tirées)
+  (UNIVCLN2 seulement) date d'absorption par clone et galaxie : n × g × f32 (Ga ; NaN si jamais absorbée) : l'appli
+              cesse de montrer le point à cette date, au lieu de le recoller au centre de la galaxie qui l'absorbe
   positions : k × n × g × 3 × i16 (pas = quantum ; image i à i × pas Ga) ; repère galactocentrique d'astropy « v4.0 »
               (Soleil à x = −8,122 kpc, y vers la longitude 90°, z vers le pôle nord galactique), centre de masse des
               quatre galaxies au repos (origine qui dérive peu) ; une galaxie absorbée suit celle qui l'a absorbée.
@@ -30,11 +32,14 @@ def main():
     prob = float(np.isfinite(t).mean())
     noms = [str(x) for x in d['galaxies']]
     with open(out, 'wb') as f:
-        h = b'UNIVCLN1' + struct.pack('<IIIfff', n, g, k, float(d['pas_traj_ga']), QUANTUM, prob)
+        h = (b'UNIVCLN2' if 't_absorbee' in d else b'UNIVCLN1') + struct.pack('<IIIfff', n, g, k, float(d['pas_traj_ga']), QUANTUM, prob)
         f.write(h + b'\0' * (64 - len(h)))
         for s in noms: f.write(s.encode('ascii')[:8].ljust(8, b'\0'))
         f.write(t.astype('<f4').tobytes())
         f.write(d['m'].astype('<f4').tobytes())
+        if 't_absorbee' in d:
+            ta = d['t_absorbee'].astype(np.float32); ta[~np.isfinite(ta)] = np.nan
+            f.write(ta.astype('<f4').tobytes())
         f.write(q.astype('<i2').tobytes())
     print(json.dumps(dict(clones=n, galaxies=noms, images=k, pas_ga=float(d['pas_traj_ga']), probabilite=prob, octets=k * n * g * 6)))
 

@@ -22,6 +22,7 @@ Usage : python calcul.py <de_Ga> <a_Ga> [N_total] [--gpu]
 """
 import os, sys, json, time, math
 import numpy as np
+import energie_noire as EN      # énergie noire (w = -1), jamais négligée : energie_noire.py
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'sortie')
@@ -114,7 +115,9 @@ class Processeur:
     def forces(self):
         p = self.p
         acc, phi = self.f.gravity(p['pos'].astype(np.float32), (p['m'] * G).astype(np.float32), p['eps'].astype(np.float32), theta=0.6)
-        return acc.astype(np.float64), phi.astype(np.float64)
+        if not ENERGIE_NOIRE: return acc.astype(np.float64), phi.astype(np.float64)
+        # potentiel extérieur compté deux fois dans phi : l'énergie l'additionne avec un facteur ½ (energie)
+        return acc.astype(np.float64) + EN.acceleration(p['pos']), phi.astype(np.float64) + 2 * EN.potentiel(p['pos'])
 
     def energie(self, phi):
         p = self.p
@@ -138,7 +141,9 @@ class Carte:
         self.t_check = time.time()
 
     def forces(self):
-        return self.gg.gravity(self.p['pos'], self.mg, self.p['eps'], theta=self.THETA, quad=True)
+        acc, phi = self.gg.gravity(self.p['pos'], self.mg, self.p['eps'], theta=self.THETA, quad=True)
+        if not ENERGIE_NOIRE: return acc, phi
+        return acc + EN.acceleration(self.p['pos']), phi + 2 * EN.potentiel(self.p['pos'], xp=self.cp)
 
     def energie(self, phi):
         cp, p = self.cp, self.p
@@ -169,6 +174,7 @@ class Carte:
         self.t_check = time.time()
 
 
+ENERGIE_NOIRE = True      # --sans-energie-noire : pour comparer seulement
 SEUIL_OCCUPATION = 35      # % d'occupation de la carte, mesurée pendant notre pause, au-delà duquel on attend
 
 
@@ -179,6 +185,8 @@ def main():
     for a in sys.argv[1:]:
         if a.startswith('--theta='): Carte.THETA = float(a.split('=', 1)[1])
         if a.startswith('--sortie='): OUT = a.split('=', 1)[1]
+    global ENERGIE_NOIRE
+    ENERGIE_NOIRE = '--sans-energie-noire' not in sys.argv
     os.makedirs(OUT, exist_ok=True)
     jpath, spath, dpath = os.path.join(OUT, 'fusion.json'), os.path.join(OUT, 'etat.npz'), os.path.join(OUT, 'depart.npz')
     if args[0] in ('depart', 'depart_vl'):      # conditions de départ seules (AGAMA) : python calcul.py depart <N> | depart_vl <N disque>
@@ -213,6 +221,7 @@ def main():
         meta = json.load(open(jpath, encoding='utf-8')); debut = False
         if not reprise: assert abs(t - float(args[0])) < 1e-6, (t, args[0])
     S = Carte(p) if gpu else Processeur(p)
+    meta['energie_noire'] = f'constante cosmologique, H0 {EN.H0_KMS_MPC} km/s/Mpc, Omega_Lambda {EN.OMEGA_LAMBDA}' if ENERGIE_NOIRE else 'absente (comparaison)'
     meta['gravite'] = S.nom if not gpu else f'arbre de Barnes-Hut avec quadripôles (carte graphique), theta {Carte.THETA}'; meta['particules'] = int((p['kind'] < 9).sum())
     stars = (p['kind'] > 0) & (p['kind'] < 9); trac = np.where(p['kind'] == 9)[0]
     star_idx = [np.where((gid == k) & stars)[0] for k in range(len(meta['galaxies']))]
