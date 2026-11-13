@@ -308,6 +308,7 @@ int runWindow(const WindowOptions& opt) {
     FusionCloud fusionCloud;
     if (hasReplay) fusionCloud.create(g, fusionDir, HdrTarget::kFormat);
     double fusionShare = 0;
+    double companionShare = 0;      // Andromède, Triangle et Grand Nuage du calcul, montrés seuls dès aujourd'hui
     // Voie lactée seule, calculée en entier par le fil physique (toutes ses étoiles s'attirent : les bras naissent d'eux-mêmes).
     // Elle apparaît entre 200 et 400 millions d'années, quand le dessin mesuré des bras s'efface, et cède la place au calcul
     // de la rencontre avec Andromède en même temps que les étoiles mesurées (Sim::starShare). Bras calculés : leur place
@@ -579,7 +580,13 @@ int runWindow(const WindowOptions& opt) {
         // Étoiles du calcul de la fusion : la part que les étoiles mesurées leur laissent (Sim::starShare), éteinte quand on
         // regarde de trop près (moins de 3 000 années-lumière : un point du calcul n'est pas une étoile).
         fusionShare = (sim.wholeGalaxy ? 1.0 : 1.0 - sim.starShare()) * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0);
-        fusionCloud.update(g, sim.replayGa(), fusionShare);
+        // Les autres galaxies du Groupe local dès aujourd'hui (Marc, 13/11/2026 : « une seule galaxie, sa vraie forme, à sa
+        // place la plus probable ») : les points de M31, M33 et du Grand Nuage, au départ du calcul (positions et vitesses
+        // mesurées, galaxies modèles tirées des paramètres publiés), pendant que la Voie lactée est montrée par Gaia et sa lueur.
+        // Vue « meilleur rendu » seulement : ce sont des galaxies modèles, pas des étoiles mesurées une à une.
+        companionShare = sim.bestLook && !sim.wholeGalaxy ? sim.starShare() * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0) : 0.0;
+        sim.companionShare = companionShare;
+        fusionCloud.update(g, sim.replayGa(), std::max(fusionShare, companionShare));
         loneShare = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) *
                                         sim.starShare() * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0)
                                   : 0.0;
@@ -661,7 +668,10 @@ int runWindow(const WindowOptions& opt) {
         if (!skyOnly && loneGalaxy.count && milkyWayCentre >= 0)
             loneGalaxy.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, loneShare, sc.extent.width, sc.extent.height);
         if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0)
+        {
             fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height);
+            fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, companionShare, sc.extent.width, sc.extent.height, fusionCloud.milkyWayPoints);
+        }
         if (!skyOnly && (fusionPoints.count || clones.count || armTracers.count)) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
             still.par[2] = 0;

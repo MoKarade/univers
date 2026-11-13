@@ -65,6 +65,9 @@ void whatYouSee(const Sim& sim) {
         ImGui::TextDisabled(sim.starShare() > 0 ? "Les points qui apparaissent sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure)."
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
     if (sim.starShare() <= 0) return;
+    // Andromède, Triangle, Grand Nuage dès aujourd'hui (fenetre.cpp, companionShare) : galaxies modèles, dites comme telles.
+    if (sim.companionShare > 0 && sim.dist > 3000.0)
+        ImGui::TextDisabled("Andromède, Triangle, Grand Nuage : galaxies modèles (paramètres publiés) à leur place mesurée ; leurs routes possibles : Menu, « Incertitude ».");
     // Voie lactée en volume (fil Gaia, docs/gaia-voie-lactee.md) : un modèle, dit comme tel dès qu'on la voit de loin.
     // Choix de Marc (13/11) : la Galaxie entière dès aujourd'hui en vue réaliste ; en « 100 % mesuré », seulement les étoiles mesurées.
     if (sim.hasMilkyWay && sim.milkyWayModelShare > 0 && sim.dist > 3000.0) {

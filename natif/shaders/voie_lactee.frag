@@ -49,7 +49,11 @@ void main() {
         vec2 cell = texture(big, (p - lo) / (hi - lo)).rg;
         vec3 l = (p - sun) / localHalf * 0.5 + 0.5;      /* dans la carte mesurée : son détail remplace la moyenne de la case */
         float dust = all(greaterThanEqual(l, vec3(0.0))) && all(lessThanEqual(l, vec3(1.0))) && length(p - sun) < 1.24 ? texture(local, l).r : cell.g;      /* carte mesurée jusqu'à 1,24 kpc */
-        float j = cell.r + barLight(p);
+        /* bord de la grille (carré de ±16 kpc) : la lueur s'éteint en cercle entre 13 et 16 kpc du centre au lieu de
+           s'arrêter net sur un carré visible de loin [supposé ; bord du disque d'étoiles mesuré vers 13,9 kpc,
+           Minniti et al. 2011, ApJ 733, L43, à vérifier] */
+        float edge = 1.0 - smoothstep(0.8125 * u.grid.x, u.grid.x, length(p.xy));
+        float j = cell.r * edge + barLight(p);
         light += j * pow(10.0, -0.4 * (av + 0.5 * dust * dpc)) * dpc;
         av += dust * dpc;
     }

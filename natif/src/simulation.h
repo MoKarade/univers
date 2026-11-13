@@ -215,6 +215,7 @@ struct Sim {
     // Scénarios du Groupe local (clones.h) : nombre, part qui finit par une fusion Voie lactée-Andromède, et date de cette
     // fusion (16e, 50e, 84e centile, en milliards d'années) ; 0 scénario : fichier absent.
     uint32_t cloneCount = 0;
+    double companionShare = 0;    // part montrée d'Andromède, du Triangle et du Grand Nuage du calcul aujourd'hui (fenetre.cpp)
     bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
     double cloneMergeProbability = 0, cloneMergeGa[3] = {0, 0, 0};
     std::vector<CalcState> calcStates;
