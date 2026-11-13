@@ -60,12 +60,14 @@ Le dépôt a pourtant la bonne règle, écrite dans `CLAUDE.md` : « un fondu ne
 | 3 | Lueur modèle ajustée (`voie_lactee.bin`) | image d'ensemble | coupée, en cours de retour par le fil Voie lactée |
 | 4 | Film « Voie lactée seule », 10,5 M de particules | image de 200 Ma à ~4 Ga | disque exponentiel AGAMA, sans rapport avec les étoiles Gaia |
 | 5 | Voie lactée du film de la fusion, 3 M de particules | image après ~4,3 Ga | autre tirage, forme une barre où le Soleil-témoin part vers le centre (`groupe_local.h:10`) |
-| 6 | Voie lactée des 10 000 scénarios | nuages d'incertitude | un point de 1,0 ± 0,2 × 10¹² M☉, **autre repère** : R0 = 8,122 kpc et Soleil à (12,9 ; 245,6 ; 7,78) km/s contre 8,2 kpc et (11,1 ; 242,24 ; 7,25) ailleurs (`groupe_local_clones.py`, `galaxie_orbites.h:24,36`) |
+| 6 | Voie lactée des 10 000 scénarios | nuages d'incertitude | un point de 1,0 ± 0,2 × 10¹² M☉ ; repère un peu différent (R0 = 8,122 contre 8,2 kpc : 78 pc et ~4 km/s, petit) ; **Andromède à 761 kpc contre 785 dans le film** (`groupe_local_clones.py`, `calcul.py`) |
 | 7 | Dessin mesuré des bras, tourné en bloc à 28,2 km/s/kpc | bras près d'aujourd'hui | un solide, alors que les étoiles (n° 2) tournent chacune à sa vitesse |
 
 Même constat pour Andromède : 1,59 × 10¹² M☉ dans le film, 1,3 ± 0,4 dans les scénarios. Et pour l'issue : le film dit
-« fusion à 5,44 Ga », les scénarios disent « médiane 6,5 Ga, 90 % ». Vers 5,5 Ga, l'écran peut montrer **une galaxie
-déjà fusionnée et, par-dessus, des milliers de points où elle ne l'est pas**. Deux réponses contradictoires sur la même image.
+« fusion à 5,44 Ga », les scénarios disent « médiane 6,4 à 6,5 Ga, 90 % ». Les deux n'ont pas le même critère (centres
+à moins de 10 kpc pour l'un, 20 kpc pour l'autre) : avec le même, le film donne 4,64 Ga, dans la fourchette. L'écran
+montre quand même, à la même date, **une galaxie fusionnée et des points où elle ne l'est pas**, sans dire pourquoi.
+(Corrigé le 13/11 après revue : la première version exagérait cet écart et celui des repères.)
 
 ### 2.3 Les étoiles et les galaxies ne vivent pas dans le même monde [Certain]
 
@@ -88,7 +90,9 @@ plusieurs moteurs (c'est inévitable), c'est qu'ils ne partagent ni état, ni ma
   naît intact à l'instant où Marc appuie sur lecture.
 - Mesuré par le fil Andromède sur le calcul à 3 M de particules (`docs/analyse-spirales.md`) : à t = 0 les trois
   disques sont **parfaitement lisses** (force des bras 0,002, sous le bruit), puis **une barre pousse violemment entre
-  0,1 et 0,5 Ga** (jusqu'à 0,4 à 0,5). Le départ n'est donc même pas en équilibre pour une galaxie seule. Et les
+  0,1 et 0,5 Ga** (jusqu'à 0,4 à 0,5). Le départ est en équilibre mais **instable** : l'agitation des étoiles du
+  disque est réglée trop bas (indice de stabilité Q ≈ 0,7 au lieu de plus de 1,5, `modeles.py:58`) et le halo est calé
+  pour un autre disque que celui utilisé (253 km/s au Soleil au lieu de 230). Détail : `docs/revue-detaillee.md`, G1 à G5. Et les
   paramètres d'Andromède sont faux : disque de 3,0 kpc au lieu de 5,3, bulbe quatre fois trop léger, 783 kpc au lieu
   de 761 ; Triangle incliné à 49° au lieu de 54 à 56° ; Petit Nuage de Magellan absent. [Certain pour les mesures du
   calcul, Probable pour les valeurs publiées]
@@ -242,11 +246,15 @@ Cahier des charges de ce calcul, qui réunit ce que les fils fermés ou en atten
 
 1. **Énergie noire** : déjà branchée par le fil Voie lactée (16 % de la gravité Voie lactée–Andromède) [Certain selon ce fil].
 2. **Départ dans le passé** : `depart_passe.py` du fil Voie lactée (2 Ga avant aujourd'hui) est la bonne base.
-3. **Galaxies d'abord vieillies seules** jusqu'à avoir leur barre stable, puis posées sur leur orbite. Sans cela, la
-   barre pousse pendant le film (mesuré). La Voie lactée est tournée pour que sa barre soit à 28° aujourd'hui.
+3. **Modèles de départ corrigés d'abord** (disque stable, halo recalé, halo du Nuage coupé : G1, G2, G4 de la revue),
+   **puis** galaxies vieillies seules jusqu'à une barre stable, puis posées sur leur orbite. Vieillir un disque
+   instable ne donne qu'un disque épais à grosse barre. La Voie lactée est tournée pour que sa barre soit à 28° aujourd'hui.
 4. **Paramètres mesurés** pour Andromède, le Triangle, le Grand Nuage ; **Petit Nuage ajouté**.
 5. **Mêmes masses et même repère** que les scénarios d'incertitude.
-6. **Champ de gravité écrit à chaque image**, et film couvrant le passé comme le futur.
+6. **Champ de gravité écrit à chaque image**, un par galaxie, à centre mobile, plus serré près des passages ; film
+   couvrant le passé comme le futur ; lecteur de l'appli corrigé (il suppose aujourd'hui que le film commence à t = 0).
+7. **Images plus serrées, ou courbes entre images** : la ligne droite sur 20 Ma fausse tout le centre des galaxies (G3).
+8. `depart_passe.py` à finir avant usage : frottement, forces égales et opposées, tir correctif, témoins (revue, § 5).
 
 **Les bras : la difficulté qu'il faut dire.** Deux exigences se contredisent. Partir du passé donne la continuité, mais
 des bras posés il y a 2 Ga se sont effacés avant aujourd'hui. Poser les bras aujourd'hui d'après les vraies images
