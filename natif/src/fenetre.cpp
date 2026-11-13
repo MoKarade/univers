@@ -500,25 +500,44 @@ int runWindow(const WindowOptions& opt) {
             // Comment c'est obtenu, famille par famille.
             const double w = orbite::poidsOrbite(sim.years), share = sim.starShare();
             sim.calcStates.clear();
-            sim.calcStates.push_back({"Planètes et lunes", sim.ephemValid ? CalcMode::Measured : sim.outer ? CalcMode::Exact : CalcMode::Hidden, 0,
-                                      sim.ephemValid ? "éphémérides de la NASA, lues telles quelles" : sim.outer ? std::string("calculé ici (gravité mutuelle)") + (sim.planetMethod[0] ? std::string(", ") + sim.planetMethod : std::string()) : "hors des dates connues"});
+            {
+                // Éphémérides : un calcul de la NASA ajusté sur les mesures, lu tel quel (précalculé). Hors éphémérides : suivi pas
+                // à pas (calculé ici), puis table d'orbites (précalculée, approchée), puis rien.
+                const std::string method = sim.planetMethod;
+                const bool table = method == "table précalculée", direct = method == "suivi pas à pas";
+                sim.calcStates.push_back({"Planètes et lunes",
+                                          sim.ephemValid ? CalcMode::Precomputed : !sim.outer ? CalcMode::Hidden : direct ? CalcMode::Exact : table ? CalcMode::Approx : CalcMode::Hidden, 0,
+                                          sim.ephemValid ? "éphémérides de la NASA (calcul ajusté sur les mesures), lues telles quelles"
+                                          : !sim.outer ? "hors des dates connues"
+                                          : direct ? "calculé ici (gravité mutuelle), parti des éphémérides de la NASA ; les autres lunes ne sont pas montrées"
+                                          : table ? "table d'orbites calculée à l'avance, relue entre ses points : place sur l'orbite de moins en moins sûre"
+                                                  : "non montrées : au-delà de ce qui est calculé"});
+            }
             if (asteroids.ready)
                 sim.calcStates.push_back({"Astéroïdes et comètes", sim.asteroidGain(asteroids.epochJd) > 0 ? CalcMode::Approx : CalcMode::Hidden, 0,
                                           "orbite mesurée, suivie sans l'attraction des planètes ; montrés à moins de 300 ans de leurs mesures"});
-            if (hasProbes) sim.calcStates.push_back({"Sondes", CalcMode::Measured, 0, "trajectoires publiées par la NASA"});
+            if (hasProbes) sim.calcStates.push_back({"Sondes", CalcMode::Precomputed, 0, "trajectoires publiées par la NASA : reconstituées pour le passé, prévues pour l'avenir"});
             sim.calcStates.push_back({"Étoiles principales", share <= 0 ? CalcMode::Hidden : w < 0.01 ? CalcMode::Measured : CalcMode::Exact, sim.orbitLagSteps,
-                                      w < 0.01 ? "position et vitesse mesurées, ligne droite" : "départ mesuré ; orbite calculée exactement sur la carte graphique, potentiel de la Galaxie [modèle]"});
+                                      w < 0.01 ? "position et vitesse mesurées, ligne droite ; sans vitesse radiale mesurée, elle compte pour zéro"
+                                               : "départ mesuré ; orbite calculée pas à pas sur la carte graphique dans un modèle de la Galaxie (écart d'environ 5 000 al à 100 millions d'années)"});
             if (gaiaOk)
                 sim.calcStates.push_back({"Étoiles Gaia", share <= 0 ? CalcMode::Hidden : w < 0.01 ? CalcMode::Measured : gaia.orbitReady() ? CalcMode::Exact : CalcMode::Approx,
                                           sim.gaiaOrbitLagSteps > 0 ? sim.gaiaOrbitLagSteps : 0,
-                                          w < 0.01 ? "position et vitesse mesurées, ligne droite" : gaia.orbitReady() ? "départ mesuré ; orbite calculée exactement sur la carte graphique, potentiel de la Galaxie [modèle]"
+                                          w < 0.01 ? "position et vitesse mesurées, ligne droite ; deux étoiles sur trois sans vitesse radiale mesurée (comptée zéro)"
+                                          : gaia.orbitReady() ? "départ mesuré ; orbite calculée pas à pas sur la carte graphique dans un modèle de la Galaxie (écart d'environ 5 000 al à 100 millions d'années)"
                                                                                                                       : "épicycles (approché) pendant la préparation du calcul exact"});
             if (sim.hasGaiaAggregate)
                 sim.calcStates.push_back({"Lumière additionnée des autres sources Gaia", share <= 0 ? CalcMode::Hidden : w < 0.01 ? CalcMode::Measured : gaia.orbitReady() ? CalcMode::Exact : CalcMode::Approx,
                                           sim.gaiaOrbitLagSteps > 0 ? sim.gaiaOrbitLagSteps : 0,
                                           "somme de sources mesurées, rangée par cases ; chaque case suit l'orbite de la vitesse moyenne mesurée de ses sources"});
-            sim.calcStates.push_back({"Galaxies du Groupe local", sim.deepTime() ? (sim.replay ? CalcMode::Precomputed : CalcMode::Hidden) : CalcMode::Measured, 0,
-                                      sim.deepTime() ? "rejeu du calcul de la rencontre avec Andromède (fait à l'avance sur la carte graphique)" : "positions mesurées"});
+            {
+                const bool past = sim.years < kStartYears;      // le calcul de la rencontre ne couvre que l'avenir
+                sim.calcStates.push_back({"Galaxies du Groupe local", !sim.deepTime() ? CalcMode::Measured : sim.replay && !past ? CalcMode::Precomputed : CalcMode::Hidden, 0,
+                                          !sim.deepTime() ? "positions mesurées"
+                                          : past ? "non montrées : leur passé n'est pas calculé"
+                                          : sim.replay ? "rejeu du calcul de la rencontre avec Andromède (fait à l'avance, un scénario) ; les galaxies hors de ce calcul ne sont pas montrées"
+                                                       : "non montrées : calcul de la rencontre absent"});
+            }
             if (sim.replay)
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
@@ -534,7 +553,8 @@ int runWindow(const WindowOptions& opt) {
             if (sim.cloneCount)
                 sim.calcStates.push_back({"Scénarios du Groupe local", clones.count ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           "10 000 routes possibles des galaxies voisines, calculées à l'avance d'après l'incertitude des mesures"});
-            sim.calcStates.push_back({"Galaxies lointaines", CalcMode::Measured, 0, "positions mesurées ; expansion de l'univers calculée"});
+            sim.calcStates.push_back({"Galaxies lointaines", CalcMode::Exact, 0,
+                                      "direction et décalage vers le rouge mesurés ; distance calculée d'après le modèle d'univers (réglable), agrandie avec l'expansion"});
         }
         const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain()), sc.extent.height, sim.years);

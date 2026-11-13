@@ -123,9 +123,13 @@ void deepTimeNote(const Sim& sim) {
         if (kRates[sim.rate].yearsPerSecond < 1.0e7 && !sim.paused)
             ImGui::TextDisabled("Un tour de la Galaxie prend environ 230 millions d'années : à cette vitesse, la rotation est réelle mais invisible.");
     }
-    if (sim.starShare() < 1) {
-        ImGui::TextDisabled("Au-delà de 800 millions d'années, le calcul complet de la rencontre avec Andromède (un scénario) prend le relais "
-                            "des étoiles mesurées%s.", sim.starShare() > 0 ? " (fondu jusqu'à 1 milliard d'années)" : "");
+    if (sim.starShare() < 1 && sim.years < kStartYears)
+        ImGui::TextDisabled("Passé : les étoiles mesurées s'effacent entre %s et %s millions d'années avant aujourd'hui. Au-delà, rien n'est calculé : "
+                            "l'écran est vide.", frNum(kOrbitFadeYears / 1.0e6, 0).c_str(), frNum(kOrbitLimitYears / 1.0e6, 0).c_str());
+    if (sim.starShare() < 1 && sim.years >= kStartYears) {
+        ImGui::TextDisabled("Entre %s et %s milliards d'années, les étoiles mesurées s'effacent et les points du calcul de la rencontre avec "
+                            "Andromède (un scénario) les remplacent : ce ne sont pas les mêmes étoiles.",
+                            frNum(sim.starEraFadeYears / 1.0e9, 2).c_str(), frNum(sim.starEraEndYears / 1.0e9, 2).c_str());
         if (sim.replay)
             ImGui::TextDisabled("Dans ce calcul, la Voie lactée et Andromède fusionnent dans %s milliards d'années (énergie conservée à %s %% près).",
                                 frNum(sim.replay->fusionGa(), 3).c_str(), frNum(100.0 * sim.replay->deriveEnergie(), 2).c_str());
