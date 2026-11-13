@@ -134,6 +134,29 @@ public:
         stepAt = step_.back();
     }
 
+    // FILM : les états ne sont plus calculés ici, ils viennent du film du Groupe local (film_etoiles.h). etats : 8 flottants
+    // par corps, comme l'état de la carte (position galactocentrique en kpc, réservé, vitesse en km/s, réservé), pour TOUS
+    // les corps dans l'ordre du tampon (étoiles, autres corps, puis le Soleil). step : pas d'un million d'années de ces
+    // états. Tous les morceaux sont alors « à jour » à ce pas ; advance() ne doit pas être appelé tant que le film mène.
+    void setExternal(const Gpu& g, const std::vector<float>& etats, long step) {
+        if (etats.size() != static_cast<size_t>(count) * 8) return;
+        uploadFrom(g, reinterpret_cast<const uint8_t*>(etats.data()), 0, count);
+        uploaded_ = true;
+        external_ = true;
+        std::fill(step_.begin(), step_.end(), step);
+        target = step;
+        stepAt = step;
+        lagSteps = 0;
+    }
+    // Fin du film : au prochain advance(), les états repartent des états de départ (mesurés ou du modèle).
+    void leaveExternal() {
+        if (!external_) return;
+        external_ = false;
+        uploaded_ = false;
+        std::fill(step_.begin(), step_.end(), 0L);
+    }
+    bool external() const { return external_; }
+
     // Part du pas écoulée depuis l'état (0 à 1).
     float fraction(double since) const { return static_cast<float>(std::clamp(since / kStepYears - static_cast<double>(target), 0.0, 1.0)); }
 
@@ -150,7 +173,7 @@ public:
 private:
     std::thread worker_;
     std::atomic<bool> initDone_{false};
-    bool uploaded_ = false;
+    bool uploaded_ = false, external_ = false;
     std::vector<float> initial_;
     std::vector<Vec3> extraPos_, extraVel_;
     std::vector<std::pair<uint32_t, uint32_t>> ranges_;      // (première étoile, nombre)
@@ -195,7 +218,9 @@ private:
         initDone_.store(true);
     }
 
-    void upload(const Gpu& g, uint32_t first, uint32_t n) {
+    void upload(const Gpu& g, uint32_t first, uint32_t n) { uploadFrom(g, reinterpret_cast<const uint8_t*>(initial_.data()), first, n); }
+
+    void uploadFrom(const Gpu& g, const uint8_t* source, uint32_t first, uint32_t n) {
         constexpr VkDeviceSize kChunk = 256ull << 20;
         const VkDeviceSize base = static_cast<VkDeviceSize>(first) * 32, size = static_cast<VkDeviceSize>(n) * 32;
         Buffer staging = createBuffer(g, std::min(size, kChunk), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -203,7 +228,7 @@ private:
         check(vkMapMemory(g.dev, staging.mem, 0, VK_WHOLE_SIZE, 0, &p), "états Gaia");
         for (VkDeviceSize off = 0; off < size; off += kChunk) {
             const VkDeviceSize m = std::min(kChunk, size - off);
-            std::memcpy(p, reinterpret_cast<const uint8_t*>(initial_.data()) + base + off, m);
+            std::memcpy(p, source + base + off, m);
             VkCommandBuffer c = beginOnce(g);
             const VkBufferCopy region{0, base + off, m};
             vkCmdCopyBuffer(c, staging.buf, state.buf, 1, &region);

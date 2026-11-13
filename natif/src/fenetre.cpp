@@ -26,6 +26,7 @@
 #include "voie_lactee.h"
 #include "galaxies_formes.h"
 #include "vieillissement.h"
+#include "film_etoiles.h"
 #include "rendu_fenetre.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -283,6 +284,12 @@ int runWindow(const WindowOptions& opt) {
     Vieillissement vieillissement;
     vieillissement.load(dataDir + "/vieillissement.tsv");
     if (milkyWayStarsOk) milkyWayStars.enableSubClouds(16);      // chaque traceur : 16 étoiles en s'approchant (gaia.vert)
+    // Film du Groupe local (film_etoiles.h) : s'il est là, ces étoiles le suivent aux dates qu'il couvre.
+    FilmStars filmStars;
+    std::vector<float> filmStates;
+    const bool filmStarsOk = milkyWayStarsOk && milkyWayStars.externalStatesFit() && filmStars.load(dataDir, milkyWayStars.starCount());
+    if (filmStarsOk) sim.film = &filmStars.film;
+    std::printf("film du Groupe local : %s\n", filmStarsOk ? "lu, les etoiles visibles le suivent" : "absent ou incomplet, orbites de reference");
     // Andromède, Triangle, Nuages faits de leurs étoiles visibles (tirées des vraies photos, pipeline/natif/etoiles_visibles_photos.py),
     // autour d'aujourd'hui : sans orbite exacte (le potentiel de l'appli ne contient que la Voie lactée), elles s'effacent en
     // quelques millions d'années (gaia_fiable.glsl) et la photo déplacée en bloc prend le relais, sans double lumière.
@@ -554,9 +561,33 @@ int runWindow(const WindowOptions& opt) {
             // dessinées à l'image d'avant, et retombe à « à jour » dès qu'il n'en voit pas) ; tant qu'une feuille n'a pas
             // rattrapé la date, elle est dessinée en épicycles, valables seulement près d'aujourd'hui.
             if (milkyWayStarsOk) {
-                VkCommandBuffer once = beginOnce(g);
-                milkyWayStars.advance(g, once, shownYears, test && !opt.hasPath ? 1000000 : 64);
-                endOnce(g, once);
+                // Quand le film du Groupe local couvre la date, les étoiles visibles le suivent (film_etoiles.h) : l'état de chaque
+                // étoile au pas d'un million d'années de la date montrée vient du film, plus du calcul d'orbites de l'appli.
+                filmStars.reload(dt);
+                const long step = milkyWayStars.stepOf(shownYears);
+                const double tRaw = (milkyWayStars.yearsOfStep(step) - kStartYears) / 1.0e9, tStep = std::max(tRaw, 0.0);
+                const bool byFilm = filmStarsOk && tRaw > -2.0e-3 && filmStars.covers(tStep);
+                if (byFilm) {
+                    if (step != filmStars.lastStep || !milkyWayStars.externalStates()) {
+                        sim.ensureExact();      // le Soleil : son orbite selon l'appli (il n'est pas dans le film)
+                        const double y = milkyWayStars.yearsOfStep(step), h = 1.0e3;
+                        const phys::Vec3 s0 = sim.exact.position(0, y - h), s1 = sim.exact.position(0, y + h), s = sim.exact.position(0, y);
+                        const double k = 3.0856775814913673e16 / (2.0 * h * kYearSeconds);      // kpc par an -> km/s
+                        if (filmStars.states(tStep, s, {(s1.x - s0.x) * k, (s1.y - s0.y) * k, (s1.z - s0.z) * k}, filmStates)) {
+                            milkyWayStars.setExternalStates(g, filmStates, step);
+                            filmStars.lastStep = step;
+                        }
+                    }
+                } else {
+                    if (milkyWayStars.externalStates()) {      // on sort du film : retour aux orbites de référence
+                        milkyWayStars.leaveExternalStates();
+                        filmStars.lastStep = LONG_MIN;
+                    }
+                    VkCommandBuffer once = beginOnce(g);
+                    milkyWayStars.advance(g, once, shownYears, test && !opt.hasPath ? 1000000 : 64);
+                    endOnce(g, once);
+                }
+                sim.filmLeads = byFilm && milkyWayStars.externalStates();
             }
             holdOn = shownYears != wanted;
             holdGoal = wanted;
@@ -611,6 +642,9 @@ int runWindow(const WindowOptions& opt) {
                                           : sim.replay ? "rejeu du calcul de la rencontre avec Andromède (fait à l'avance, un scénario) ; les galaxies hors de ce calcul ne sont pas montrées"
                                                        : "non montrées : calcul de la rencontre absent"});
             }
+            if (sim.filmLeads)
+                    sim.calcStates.push_back({"Étoiles visibles de la Voie lactée", CalcMode::Precomputed, 0,
+                                              "film du calcul unique du Groupe local (cinq galaxies qui s'attirent, énergie noire) : les mêmes étoiles qu'aujourd'hui, emportées par ce calcul ; un scénario, sans barre dans la masse"});
             if (sim.replay)
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
@@ -879,6 +913,8 @@ int runWindow(const WindowOptions& opt) {
                     sim.firstPassageGa, sim.starEraEndYears / 1.0e9, sim.starEraFadeYears / 1.0e9, sim.starShare());
         if (milkyWayStarsOk)
         {
+            std::printf("film du Groupe local a cette date : %s (film de %.3f a %.3f milliards d'annees, %d images)\n", sim.filmLeads ? "il mene les etoiles visibles" : "non",
+                        filmStarsOk ? filmStars.film.debutGa() : 0.0, filmStarsOk ? filmStars.film.finGa() : 0.0, filmStarsOk ? filmStars.film.images() : 0);
             std::printf("etoiles du modele : orbites exactes au pas %ld, retard %ld pas, pretes %d ; feuilles en epicycles %u sur %u\n", milkyWayStars.orbitStep(),
                         milkyWayStars.orbitLagSteps(), milkyWayStars.orbitReady() ? 1 : 0, milkyWayStars.epicycleLeaves(), milkyWayStars.leafCount());
             // contrôle du repère : Soleil selon l'appli (CPU), Soleil selon la carte graphique (dernier état), centre des étoiles

@@ -4,6 +4,7 @@
 #include <thread>
 #include "avancement.h"
 #include "centres_reference.h"
+#include "film_v2.h"
 #include "ciel_bandes.h"
 #include "commun.h"
 #include "completude.h"
@@ -218,6 +219,11 @@ struct Sim {
     uint32_t cloneCount = 0;
     double companionShare = 0;    // part montrée d'Andromède, du Triangle et du Grand Nuage du calcul aujourd'hui (fenetre.cpp)
     const CentresReference* centres = nullptr;      // centres de référence des galaxies (fenetre.cpp), sinon le calcul de la fusion
+    // Film du Groupe local (film_etoiles.h) : quand il couvre la date montrée, c'est lui qui donne le centre des galaxies
+    // voisines et la place des étoiles visibles de la Voie lactée ; sinon les centres et les orbites de référence.
+    const phys::film::FilmV2* film = nullptr;
+    bool filmLeads = false;      // à cette image, les étoiles visibles suivent le film
+    bool filmCovers(double tGa) const { return film && film->images() >= 5 && tGa >= film->debutGa() && tGa <= film->date(film->images() - 2); }
     uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
     double milkyWayStarShare = 0;     // part montrée à cette image
     // Exposition (Marc, 13/11/2026) : « photo » (meilleur rendu) = exposition automatique sur la galaxie la plus brillante
@@ -634,7 +640,7 @@ struct Sim {
             const int ci = centres && centres->ready ? CentresReference::indexOf(b.name) : -1;
             if (ci >= 0) {
                 phys::Vec3 g;
-                if (centres->centre(ci, tGa, g)) {
+                if ((filmCovers(tGa) && ci < film->galaxies() && film->centre(ci, tGa, g)) || centres->centre(ci, tGa, g)) {
                     const Vec3 w = fromGalactocentric(g);
                     galPos[i] = {w.x + shift.x, w.y + shift.y, w.z + shift.z};
                     galValid[i] = 1;

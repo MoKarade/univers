@@ -342,6 +342,15 @@ public:
     // Contrôle : la prochaine avance porte sur toutes les feuilles, pas seulement les visibles.
     void wantAllLeaves() { visible_.resize(file_.leafCount); for (uint32_t i = 0; i < file_.leafCount; ++i) visible_[i] = i; }
     const GaiaOrbits& orbits() const { return orbits_; }
+    // FILM (film_etoiles.h) : nombre d'étoiles du fichier, pas d'un million d'années de la date montrée, et remplacement des
+    // états par ceux du film (8 flottants par étoile dans l'ordre du fichier, puis le Soleil en dernier).
+    uint64_t starCount() const { return file_.n; }
+    long stepOf(double years) const { return static_cast<long>(std::floor((years - (static_cast<double>(file_.epoch) - 2000.0)) / GaiaOrbits::kStepYears)); }
+    double yearsOfStep(long step) const { return static_cast<double>(step) * GaiaOrbits::kStepYears + (static_cast<double>(file_.epoch) - 2000.0); }
+    bool externalStatesFit() const { return ready && orbits_.count == file_.n + 1; }      // étoiles + le Soleil, sans autre corps
+    void setExternalStates(const Gpu& g, const std::vector<float>& etats, long step) { if (ready) orbits_.setExternal(g, etats, step); }
+    void leaveExternalStates() { orbits_.leaveExternal(); }
+    bool externalStates() const { return orbits_.external(); }
     uint32_t epicycleLeaves() const { return epicycleLeaves_; }
     uint32_t leafCount() const { return file_.leafCount; }
 

@@ -56,6 +56,9 @@ essai temps_rapide      "$B/essai_temps_rapide.exe" "$D/etoiles.bin"
 essai lune              "$P/essai_lune.exe" "$D/de440.bsp"
 essai systeme_solaire   "$P/essai_systeme_solaire.exe" "$D/de440.bsp" "$D/orbites_planetes.bin"
 essai galaxie_orbites   "$P/essai_galaxie.exe"
+# Film du Groupe local : seulement s'il est là (dossier écrit dans film_dossier.txt, à côté des données).
+FILM="$(head -1 "$D/film_dossier.txt" 2>/dev/null | tr -d '')"
+[ -n "$FILM" ] && [ -f "$FILM/film_index.bin" ] && essai film "$P/essai_film.exe" "$FILM"
 essai continuite        "$B/essai_continuite.exe" "$D/etoiles.bin" --max "$CASSURES_MAX"
 grep -E "cassures de continuité|Référence" "$B/continuite.log" | sed 's/^/         /'
 
