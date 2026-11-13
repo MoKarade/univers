@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["petit_nuage --halo=0.6"]') }}
+        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["voie_lactee 3500000","andromede 4000000","triangle 1000000 --halo=0.85","grand_nuage 1000000 --halo=0.85","petit_nuage 300000 --halo=0.6"]') }}
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
@@ -42,10 +42,10 @@ jobs:
         working-directory: pipeline/fusion
         env:
           GALAXIE: ${{ matrix.galaxie }}
-          N: ${{ inputs.n || (startsWith(matrix.galaxie, 'triangle') && '1000000') || (startsWith(matrix.galaxie, 'grand_nuage') && '1000000') || (startsWith(matrix.galaxie, 'petit_nuage') && '300000') || '2000000' }}
+        # Chaque entrée : « galaxie nombre-de-particules [options de modeles_v2.py] ».
         run: |
           set -- $GALAXIE
-          nom=$1; shift
-          python modeles_v2.py "$nom" "$N" "$(echo "$GALAXIE" | tr -d ' =' | tr -- '-' '_').npz" "$@"
+          nom=$1; n=$2; shift 2
+          python modeles_v2.py "$nom" "$n" "$nom.npz" "$@"
       - uses: actions/upload-artifact@v4
         with: { name: "galaxie-seule-${{ strategy.job-index }}", path: pipeline/fusion/*.npz, retention-days: 14 }
