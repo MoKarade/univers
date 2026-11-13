@@ -330,12 +330,14 @@ def main():
     if os.path.exists(etat):
         # reprise : les morceaux déjà écrits l'ont été avec un facteur ; on garde CELUI-LÀ (12/11/2026 : une reprise
         # lancée sans la carte entière à côté recalculait 1 au lieu de 10 000 pour eROSITA)
-        e = np.load(etat)
-        if 'facteur' not in e.files:
-            raise SystemExit(f'{etat} : facteur absent ; le mettre avant de reprendre (voir fiche.json)')
-        if float(e['facteur']) != facteur:
-            print(f'  reprise : facteur {float(e["facteur"]):g} des morceaux déjà faits gardé (calculé ici : {facteur:g})', flush=True)
-        facteur = float(e['facteur'])
+        # fichier lu puis FERMÉ : sous Windows, un .npz resté ouvert empêche de le remplacer à la fin du morceau
+        with np.load(etat) as e:
+            if 'facteur' not in e.files:
+                raise SystemExit(f'{etat} : facteur absent ; le mettre avant de reprendre (voir fiche.json)')
+            f_etat = float(e['facteur'])
+        if f_etat != facteur:
+            print(f'  reprise : facteur {f_etat:g} des morceaux déjà faits gardé (calculé ici : {facteur:g})', flush=True)
+        facteur = f_etat
     if not fiche.get('stats') and not os.path.exists(etat):
         raise SystemExit(f'ciel_{a.nom}.bin absent de {a.sortie} : pas de statistiques pour choisir le facteur float16')
     table = cb.orientations(w)[0].ravel()
@@ -350,9 +352,9 @@ def main():
     idx = {k: np.zeros(12 * 4 ** k, dtype=np.uint32) for k in ordres}
     faits, depass, absentes = set(), 0, 0
     if os.path.exists(etat):
-        e = np.load(etat)
-        idx = {k: e[f'idx{k}'] for k in ordres}
-        faits, depass, absentes = set(e['faits'].tolist()), int(e['depass']), int(e['absentes'])
+        with np.load(etat) as e:
+            idx = {k: np.array(e[f'idx{k}']) for k in ordres}
+            faits, depass, absentes = set(e['faits'].tolist()), int(e['depass']), int(e['absentes'])
 
     i_r, n_r = (int(x) for x in a.rang.split('/'))
     av = Avancement(a.avancement, 'Tuiles fines du ciel (ordre 6, pixel de 6,4″)', 100 * n_r, '%')
