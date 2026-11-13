@@ -23,6 +23,7 @@ Usage : python calcul.py <de_Ga> <a_Ga> [N_total] [--gpu]
 import os, sys, json, time, math
 import numpy as np
 import energie_noire as EN      # énergie noire (w = -1), jamais négligée : energie_noire.py
+import masse_liee as ML         # à quelle galaxie appartient chaque particule, image par image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'sortie')
@@ -124,6 +125,7 @@ class Processeur:
         return 0.5 * float(np.sum(p['m'] * np.sum(p['vel'] ** 2, axis=1))) + 0.5 * float(np.sum(p['m'] * phi))
 
     def pos(self): return self.p['pos']
+    def vel(self): return self.p['vel']
     def etat(self): return self.p
     def attendre(self): pass
 
@@ -150,6 +152,7 @@ class Carte:
         return 0.5 * float(cp.sum(p['m'] * cp.sum(p['vel'] ** 2, axis=1))) + 0.5 * float(cp.sum(p['m'] * phi))
 
     def pos(self): return self.cp.asnumpy(self.p['pos'])
+    def vel(self): return self.cp.asnumpy(self.p['vel'])
 
     def etat(self):
         out = dict(self.np_p); out['pos'] = self.cp.asnumpy(self.p['pos']); out['vel'] = self.cp.asnumpy(self.p['vel'])
@@ -193,7 +196,8 @@ def main():
         p, gid, show, meta = construire(int(args[1])) if args[0] == 'depart' else construire_voie_lactee(int(args[1]))
         np.savez_compressed(dpath, gid=gid, show=show, meta=json.dumps(meta, ensure_ascii=False), **p)
         print('départ écrit :', len(p['m']), 'particules'); return
-    reprise = args[0] == 'reprise'      # python calcul.py reprise <a_Ga> : repart du dernier instantané
+    reprise = args[0] == 'reprise'
+    membre_repris = None      # python calcul.py reprise <a_Ga> : repart du dernier instantané
     t_to = float(args[1])
     if not reprise and float(args[0]) <= 0:      # départ : aujourd'hui (0) ou dans le passé (depart_passe.py, meta['debut_ga'])
         if os.path.exists(dpath):
@@ -219,6 +223,7 @@ def main():
     else:
         with np.load(spath) as z:      # fermé tout de suite : sous Windows, un fichier ouvert ne peut pas être remplacé
             p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; t = float(z['t'])
+            membre_repris = z['membre'] if 'membre' in z else None
         meta = json.load(open(jpath, encoding='utf-8')); debut = False
         if not reprise: assert abs(t - float(args[0])) < 1e-6, (t, args[0])
     S = Carte(p) if gpu else Processeur(p)
@@ -229,6 +234,12 @@ def main():
     acc, phi = S.forces()
     if meta['e0'] is None: meta['e0'] = S.energie(phi)
     frames, t0 = [], time.time()
+    # Appartenance de chaque particule (masse_liee.py) : au départ, sa galaxie d'origine ; les traceurs n'en ont pas.
+    massive = p['kind'] < 9
+    membre = gid[massive].astype(np.int8).copy()
+    if not debut and membre_repris is not None: membre = membre_repris
+    meta.setdefault('masse_liee', []); meta.setdefault('masse_libre', [])
+    meta['masse_liee_colonnes'] = 'par image et par galaxie : masse liée (M☉, matière noire comprise), étoiles liées, masse venue d’autres galaxies'
     steps = int(round((t_to - t) * 1000 / DT_MA)); every = int(round(KF_MA / DT_MA))
 
     def image():
@@ -236,6 +247,11 @@ def main():
         for sel in star_idx: cs.append(centre(pos[sel], p['m'][sel]).round(3).tolist() if len(sel) else [0.0, 0.0, 0.0])      # galaxie absente : 0
         meta['t'].append(round(t, 4)); meta['centres'].append(cs); meta['traceurs_pos'].append(pos[trac].round(3).tolist())
         e = S.energie(phi); meta['energie'].append(e / meta['e0'] - 1)
+        nonlocal membre
+        mp = p['m'][massive]; et = (p['kind'][massive] > 0)
+        membre = ML.appartenance(pos[massive], S.vel()[massive], mp, et, membre, cs)
+        b, libre = ML.bilan(mp, et, gid[massive], membre, len(cs))
+        meta['masse_liee'].append([[float('%.5g' % x) for x in g] for g in b]); meta['masse_libre'].append(float('%.5g' % libre))
         d = math.dist(cs[0], cs[1]) if len(star_idx[1]) else 0.0      # Voie lactée seule : pas de séparation
         if len(star_idx[1]) and meta['fusion_ga'] is None and d < 10 and t > 1: meta['fusion_ga'] = round(t, 3)
         if meta['fusion_ga'] is not None and d > 30: meta['fusion_ga'] = None      # séparés de nouveau : pas encore la fusion
@@ -249,7 +265,7 @@ def main():
             name = f'kf_{len(meta["fichiers"]):03d}.bin'
             np.concatenate(frames).tofile(os.path.join(OUT, name)); meta['fichiers'].append([name, len(frames)]); frames.clear()
         meta['derive_max'] = max(abs(x) for x in meta['energie'])
-        np.savez(spath + '.tmp.npz', t=t, gid=gid, show=show, **S.etat()); os.replace(spath + '.tmp.npz', spath)
+        np.savez(spath + '.tmp.npz', t=t, gid=gid, show=show, membre=membre, **S.etat()); os.replace(spath + '.tmp.npz', spath)
         json.dump(meta, open(jpath + '.tmp', 'w', encoding='utf-8'), ensure_ascii=False); os.replace(jpath + '.tmp', jpath)
 
     if debut: image()
