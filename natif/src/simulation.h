@@ -14,6 +14,7 @@
 #include "lune.h"
 #include "sondes.h"
 #include "systeme_solaire.h"
+#include "chaos.h"
 
 namespace {
 
@@ -179,6 +180,7 @@ struct Sim {
     bool ephemValid = false;             // la date courante est dans la plage des éphémérides des planètes
     std::vector<char> planetValid;       // pour chaque astre de type planète ou lune : sa position est connue à la date courante
     std::vector<char> planetComputed;    // sa position vient du calcul (hors des fichiers de la NASA), pas d'une éphéméride : à dire à l'écran
+    chaos::Run chaosRun;      // orbite de la Terre au-delà de 10 millions d'années (calcul du chaos, chaos.h)
     const phys::SystemeSolaire* outer = nullptr;      // calcul du système solaire hors de la plage de la NASA (bibliothèque univers_physique) ; nul tant qu'il n'est pas prêt
     int focus = 0;
     double years = kStartYears;          // années juliennes depuis J2000,0

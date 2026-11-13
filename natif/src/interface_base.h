@@ -343,7 +343,23 @@ void firstFrame(Sim& sim, UiState& ui) {
 // ---------------------------------------------------------------- orbites, noms, survol
 
 void drawOrbits(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
-    if (!sim.ephemValid) return;
+    if (!sim.ephemValid) {      // au-delà de 10 millions d'années : seule l'orbite de la Terre est connue (chaos.h)
+        double e = 0, peri = 0, spread = 0;
+        const double after = sim.years - chaos::kStartYears;
+        if (after < 1.0e7 || !sim.chaosRun.orbit(after, e, peri, spread)) return;
+        ImDrawList* dl = ImGui::GetBackgroundDrawList();
+        ImVec2 prev;
+        bool hasPrev = false;
+        for (int k = 0; k <= 180; ++k) {
+            const double nu = 2.0 * kPi * k / 180.0, r = (1.0 - e * e) / (1.0 + e * std::cos(nu)) * kAuInLy;
+            ImVec2 at;
+            const bool ok = projectLoose(cam, {r * std::cos(nu + peri), r * std::sin(nu + peri), 0.0}, w, h, at);
+            if (ok && hasPrev) dl->AddLine(prev, at, IM_COL32(255, 196, 110, 150), 1.2f * ui.s);
+            prev = at;
+            hasPrev = ok;
+        }
+        return;
+    }
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
     ui.orbits.update(sim);
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {

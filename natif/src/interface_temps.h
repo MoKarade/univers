@@ -90,6 +90,25 @@ void gaiaMotionNote(const Sim& sim) {
     }
 }
 
+// Au-delà de la table des orbites (10 millions d'années) : ce que le calcul du chaos du fil physique dit de la Terre.
+void chaosNote(const Sim& sim) {
+    const double after = sim.years - chaos::kStartYears;
+    if (!sim.chaosRun.ready() || after < 1.0e7) return;
+    double e = 0, w = 0, spread = 0;
+    if (!sim.chaosRun.orbit(after, e, w, spread)) {
+        ImGui::TextDisabled("Terre : même son orbite est inconnue au-delà d'environ 60 millions d'années (chaos du système solaire, mesuré par 32 copies).");
+        return;
+    }
+    const std::string ecc = frNum(e, 3), deg = frInt(spread * 180.0 / kPi);
+    if (after <= chaos::kPositionHorizonYears)
+        ImGui::TextDisabled("Terre : orbite calculée ici (excentricité %s, trait orange) ; sa place sur l'orbite n'est pas gardée par le calcul ; "
+                            "écart entre 32 copies parties à 15 m près : %s°.", ecc.c_str(), deg.c_str());
+    else
+        ImGui::TextDisabled("Terre : orbite encore calculable (excentricité %s) ; sa place sur l'orbite est inconnue au-delà de 45 millions "
+                            "d'années : 32 copies parties à 15 m près s'écartent de %s° (chaos, mesuré).", ecc.c_str(), deg.c_str());
+    ImGui::TextDisabled("Orbite tracée dans le plan de l'écliptique : son inclinaison de quelques degrés n'est pas gardée par le calcul.");
+}
+
 void deepTimeNote(const Sim& sim) {
     gaiaMotionNote(sim);
     if (!sim.deepTime()) return;
@@ -183,8 +202,10 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     }
     if (ui.openNotes) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
     if (std::fabs(sim.years - kStartYears) >= 1.0 && ImGui::CollapsingHeader("Ce qui est mesuré, calculé ou supposé à cette date")) {
-        if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim))
+        if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim)) {
             ImGui::TextDisabled("Planètes non montrées à cette date : leur calcul couvre 10 millions d'années avant et après aujourd'hui.");
+            chaosNote(sim);
+        }
         else if (!sim.ephemValid && !sim.outer) ImGui::TextDisabled("Hors de 1550-2650 (plage des éphémérides de la NASA) : calcul des planètes en préparation.");
         else if (!sim.ephemValid)
             ImGui::TextDisabled("Hors de 1550-2650 : planètes calculées ici (gravité mutuelle partie des éphémérides de la NASA) ; lunes et orbites non montrées.");

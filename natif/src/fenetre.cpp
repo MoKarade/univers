@@ -158,7 +158,8 @@ int runWindow(const WindowOptions& opt) {
             }
         });
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
-    loadGravWaves(dataDir + "/ondes_gravitationnelles.tsv");      // ondes gravitationnelles (GWOSC) : fenêtre ouverte depuis « Aller à »
+    loadGravWaves(dataDir + "/ondes_gravitationnelles.tsv");
+    sim.chaosRun.load(dataDir + "/chaos_futur_60ma.bin");      // orbite de la Terre de 10 à 60 millions d'années (fil physique)      // ondes gravitationnelles (GWOSC) : fenêtre ouverte depuis « Aller à »
     if (!opt.target.empty()) {
         bool found = false;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
