@@ -11,6 +11,8 @@ layout(set = 0, binding = 0) uniform Table { vec4 d[65]; } table;      /* 257 di
 layout(push_constant) uniform Pc { mat4 viewProj; vec4 cam; vec4 par; } pc;   /* par : éclat, hauteur en pixels, 1 / ln(1 + zMax), taille du point */
 layout(location = 0) out vec3 vCol;
 void main() {
+    /* galaxie dessinée par galaxies_formes.h (forme mesurée, particules) : 4e octet de couleur = 128 (galaxies_formes.py) */
+    if (abs(inCol.a - 128.0 / 255.0) < 0.002) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
     float u = clamp(log(1.0 + inZ) * pc.par.z, 0.0, 1.0) * 256.0;
     int k = min(int(u), 255);
     float a = table.d[k >> 2][k & 3], b = table.d[(k + 1) >> 2][(k + 1) & 3];

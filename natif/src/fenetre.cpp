@@ -24,6 +24,7 @@
 #include "spheres.h"
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
+#include "galaxies_formes.h"
 #include "rendu_fenetre.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -345,6 +346,10 @@ int runWindow(const WindowOptions& opt) {
     GalaxyFile galaxyFile;
     GalaxyRenderer galaxies;
     if (openGalaxies(dataDir + "/galaxies.bin", galaxyFile)) galaxies.create(g, galaxyFile, HdrTarget::kFormat);
+    // Galaxies de forme mesurée faites de particules (galaxies_formes.h) : 532 427 du SGA-2020 et d'HyperLEDA.
+    GalaxyShapes galaxyShapes;
+    galaxyShapes.create(g, dataDir + "/galaxies_formes.bin", HdrTarget::kFormat);
+    sim.galaxyShapeCount = galaxyShapes.count;
     AsteroidRenderer asteroids;
     asteroids.create(g, dataDir + "/asteroides.bin", HdrTarget::kFormat);
     sim.asteroidEpochJd = asteroids.ready ? asteroids.epochJd : 0;
@@ -688,6 +693,11 @@ int runWindow(const WindowOptions& opt) {
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
         if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
+        if (!skyOnly && galaxyShapes.ready) {
+            galaxyShapes.prepare(cam, galaxies, sc.extent.height);
+            galaxyShapes.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);
+            sim.galaxyShapesShown = galaxyShapes.shown;
+        }
         if (!skyOnly && neighbourStarsOk && sim.bestLook) {      // galaxies voisines faites d'étoiles, à toute date (gaia.vert, drapeau 32)
             float table[4 * 16] = {};
             for (int k = 0; k < 4; ++k) {
@@ -858,6 +868,7 @@ int runWindow(const WindowOptions& opt) {
     armTracers.release(g);
     asteroids.release(g);
     galaxies.release(g);
+    galaxyShapes.release(g);
     spheres.release(g);
     if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
         const uint32_t n = std::min<uint32_t>(20000, orbits.count);

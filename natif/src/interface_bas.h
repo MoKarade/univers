@@ -64,6 +64,8 @@ void whatYouSee(const Sim& sim) {
     if (sim.replay && sim.starShare() < 1 && sim.years > kStartYears)
         ImGui::TextDisabled(sim.starShare() > 0 ? "Les points qui apparaissent sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure)."
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
+    if (sim.galaxyShapesShown)
+        ImGui::TextDisabled("%u galaxies faites de particules : taille, forme, orientation et éclat MESURÉS (SGA-2020, HyperLEDA) ; bras, côté proche, type manquant : modèle.", sim.galaxyShapesShown);
     if (sim.starShare() <= 0) return;
     // Andromède, Triangle, Grand Nuage dès aujourd'hui (fenetre.cpp, companionShare) : galaxies modèles, dites comme telles.
     if (sim.neighbourStarCount && sim.bestLook && sim.dist > 3000.0)
