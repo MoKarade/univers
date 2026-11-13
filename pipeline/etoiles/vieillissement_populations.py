@@ -240,11 +240,11 @@ def essai(chemin):
     i1, i10 = int(np.argmin(abs(la - 9.0))), int(np.argmin(abs(la - 10.0)))
     pente = (math.log10(L[i10]) - math.log10(L[i1])) / (la[i10] - la[i1])
     print(f'population simple solaire : L(1 Ga) = {L[i1]:.3g}, L(10 Ga) = {L[i10]:.3g} L☉/M☉ ; pente d log L / d log t = {pente:.2f} '
-          '(attendu ≈ −0,8 à −1,0 : Tinsley 1980, Bruzual et Charlot 2003)')
+          '(valeur classique d’environ −0,8, de mémoire [À vérifier] ; tolérance −0,7 à −1,1)')
     ok &= -1.1 < pente < -0.7
     ml = 1 / L[i10]
-    print(f'rapport masse formée / lumière bolométrique à 10 Ga : {ml:.2f} (attendu de l’ordre de 1 à 3 pour Kroupa, '
-          'sans naines blanches)')
+    print(f'rapport masse formée / lumière bolométrique à 10 Ga : {ml:.2f} (attendu : quelques unités, de mémoire [À vérifier] ; '
+          'tolérance 0,5 à 5)')
     ok &= 0.5 < ml < 5
     for comp, b in t['composantes'].items():
         for reg in ('sans_naissance', 'naissance_continue'):
