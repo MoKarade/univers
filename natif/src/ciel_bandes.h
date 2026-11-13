@@ -27,6 +27,7 @@ struct SkyBandUbo {      // std140 : tout en vec4
     float proj[4];       // 1 / (tan(champ/2) × rapport largeur/hauteur), 1 / tan(champ/2), rien, 1
     float fine[4];       // tuiles fines (ciel_tuiles.h) : ordre le plus grossier, le plus fin, log2(largeur), 1 si présentes
     float cut[4];        // par catalogue : grandeur relative (à la médiane) sous laquelle une source n'est pas dessinée
+    float tile[4];       // tuiles fines : 1 / facteur des float16, rien, rien, rien
 };
 
 // Catalogue de sources de la bande (sources_<bande>.bin, pipeline/natif/sources_bandes.py) : directions mesurées.
@@ -492,6 +493,7 @@ public:
             u.fine[1] = static_cast<float>(tiles_.orderMax);
             u.fine[2] = static_cast<float>(tiles_.logWidth);
             u.fine[3] = 1.0f;
+            u.tile[0] = static_cast<float>(1.0 / tiles_.scale);
         }
         std::memcpy(mapped_[ring_], &u, sizeof(u));
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};

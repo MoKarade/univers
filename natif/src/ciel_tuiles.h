@@ -31,6 +31,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <unordered_map>
 
 namespace {
@@ -78,7 +79,8 @@ public:
     bool active = false;          // des tuiles fines existent pour la carte chargée
     uint32_t width = 0, logWidth = 0, orderMin = 0, orderMax = 0;
     std::string dir, root;
-    uint32_t shownOrder = 0;      // ordre le plus fin chargé au centre de l'écran (0 : aucune tuile fine)
+    uint32_t shownOrder = 0;
+    double scale = 1;             // valeurs stockées × facteur_float16 (fiche.json) : float16 ne va que de 6e-8 à 65504      // ordre le plus fin chargé au centre de l'écran (0 : aucune tuile fine)
     uint32_t pending() const { return static_cast<uint32_t>(inFlight_); }
 
     // Cherche les index ordre_K.idx du relevé dans indexDir ; les paquets sont dans bundleRoot. On ne garde que les ordres
@@ -111,6 +113,14 @@ public:
             lv.push_back(std::move(L));
         }
         if (lv.empty()) return false;
+        {      // facteur des float16 (pipeline/natif/tuiles_bandes.py) : valeur mesurée = valeur stockée / facteur
+            std::ifstream fj(indexDir + "/fiche.json", std::ios::binary);
+            std::string js((std::istreambuf_iterator<char>(fj)), std::istreambuf_iterator<char>());
+            const std::string k = "\"facteur_float16\": ";
+            const size_t p = js.find(k);
+            scale = p == std::string::npos ? 1.0 : std::atof(js.c_str() + p + k.size());
+            if (!(scale > 0)) return false;      // facteur illisible : mieux vaut pas de tuiles que des valeurs fausses
+        }
         // Les ordres doivent se suivre (la table de pages les met bout à bout, ordre par ordre).
         for (size_t i = 1; i < lv.size(); ++i)
             if (lv[i].order != lv[i - 1].order + 1) { lv.resize(i); break; }
