@@ -18,6 +18,7 @@ public:
     bool ready = false;
     uint32_t count = 0, shown = 0;      // galaxies, galaxies montrées en particules à la dernière image
     uint64_t particles = 0;
+    double maxSurface = 0;      // brillance de surface moyenne la plus forte des galaxies résolues (flux par pixel, exposition 1)
 
     bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
         std::ifstream f(path, std::ios::binary | std::ios::ate);
@@ -68,6 +69,7 @@ public:
         const double tx = cam.tanHalf * cam.aspect * 1.05, ty = cam.tanHalf * 1.05;
         shown = 0;
         particles = 0;
+        maxSurface = 0;
         for (uint32_t i = 0; i < count; ++i) {
             const W& w = world_[i];
             const double rx = w.x - cam.pos.x, ry = w.y - cam.pos.y, rz = w.z - cam.pos.z;
@@ -80,6 +82,10 @@ public:
             const double size = recs_[i].diam * 2.9088821e-4 * w.d;      // diamètre (al)
             const double px = size / std::max(dc, 1.0) * pxPerRad;
             if (px < 2.0 || shown >= kMaxShown) continue;
+            if (px > 40.0) {      // galaxie bien résolue (plus de 40 pixels) : flux vu de la caméra / surface de son disque à l'écran
+                const double fl = std::pow(10.0, -0.4 * recs_[i].r) * (w.d / std::max(dc, 1.0)) * (w.d / std::max(dc, 1.0));
+                maxSurface = std::max(maxSurface, fl / (0.785398 * px * px * std::max(static_cast<double>(recs_[i].ba), 0.2)));
+            }
             // dans le champ (avec la marge de la taille de la galaxie)
             const double f = rx * cam.fwd.x + ry * cam.fwd.y + rz * cam.fwd.z;
             if (f < -size) continue;

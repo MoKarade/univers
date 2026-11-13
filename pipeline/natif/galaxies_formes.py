@@ -33,7 +33,14 @@ from astropy.io import fits
 from scipy.spatial import cKDTree
 
 EPS = math.radians(84381.448 / 3600.0)
-EXCLUS_PGC = {2557, 5818, 17223, 3085}       # M31, M33, Grand et Petit Nuage : déjà faits de leurs étoiles
+EXCLUS_PGC = {2557, 5818, 17223, 3085}
+# Galaxies de Messier et leur numéro NGC (catalogue de Messier ; M102 = NGC 5866, attribution usuelle) : noms cherchables.
+MESSIER = {32: 221, 49: 4472, 51: 5194, 58: 4579, 59: 4621, 60: 4649, 61: 4303, 63: 5055, 64: 4826, 65: 3623, 66: 3627,
+           74: 628, 77: 1068, 81: 3031, 82: 3034, 83: 5236, 84: 4374, 85: 4382, 86: 4406, 87: 4486, 88: 4501, 89: 4552,
+           90: 4569, 91: 4548, 94: 4736, 95: 3351, 96: 3368, 98: 4192, 99: 4254, 100: 4321, 101: 5457, 102: 5866,
+           104: 4594, 105: 3379, 106: 4258, 108: 3556, 109: 3992, 110: 205}
+# Messier absentes de SGA, trouvées dans HyperLEDA par leur numéro PGC (M104, M86, M90, M98).
+MESSIER_PGC = {104: (42407, 4594), 86: (40653, 4406), 90: (41024, 4569), 98: (39028, 4192)}       # M31, M33, Grand et Petit Nuage : déjà faits de leurs étoiles
 ARCSEC = math.radians(1 / 3600)
 
 
@@ -85,13 +92,55 @@ def lire_leda(chemin):
                 logd25=f('logD25'), logr25=f('logR25'), pa=f('PA'))
 
 
+def ecrire_noms(chemin, S, u, dist, z, place, n_s, donnees, pgc_l=()):
+    """Noms cherchables dans l'appli (Messier, NGC, IC) pour les galaxies SGA placées, s'ils ne sont pas déjà des astres
+    de l'appli (galaxies_noms.tsv, galaxies_cf4.tsv). Position : direction mesurée x distance mesurée, sinon distance du
+    décalage vers le rouge (Planck 2018, distance comobile, comme la table de l'appli à l'ouverture)."""
+    from astropy.cosmology import FlatLambdaCDM
+    cosmo = FlatLambdaCDM(H0=67.4, Om0=0.315)
+    deja = set()
+    for fic in ('galaxies_noms.tsv', 'galaxies_cf4.tsv'):
+        ch = os.path.join(donnees, fic)
+        if os.path.exists(ch): deja |= {l.split('\t')[0] for l in open(ch, encoding='utf-8')}
+    messier = {f'NGC {v}': k for k, v in MESSIER.items()}
+    lignes = []
+    for i in range(n_s):
+        if not place[i]: continue
+        g = str(S['GALAXY'][i]).strip()
+        nom = None
+        for pre in ('NGC', 'IC'):
+            if g.startswith(pre) and g[len(pre):].isdigit(): nom = f'{pre} {int(g[len(pre):])}'
+        if not nom: continue
+        if nom in messier:      # alias de Messier : ajouté même si la NGC est déjà un astre (sous son seul numéro NGC)
+            m = f'M{messier[nom]}'
+            if m in deja or any(f'({m})' in x for x in deja): continue
+            nom = f'{m} ({nom})'
+        elif nom in deja: continue
+        d = dist[i] if dist[i] > 0 else cosmo.comoving_distance(z[i]).to_value('Mpc') * 3.2615637769e6
+        p = u[i] * d
+        mes = 'distance mesurée (Cosmicflows-4)' if dist[i] > 0 else f'distance d\'après z = {z[i]:.4f}'
+        lignes.append(f'{nom}\t{p[0]:.6g}\t{p[1]:.6g}\t{p[2]:.6g}\tgalaxie ; forme mesurée (SGA-2020) ; {mes}\t{3 if nom.startswith("M") else 9}')
+    pgc_l = np.asarray(pgc_l)
+    for m, (pgc, ngc) in MESSIER_PGC.items():      # Messier absentes de SGA : trouvées dans HyperLEDA par leur PGC
+        k = np.nonzero(pgc_l == pgc)[0]
+        if not len(k) or f'M{m}' in deja or any(f'(M{m})' in x for x in deja): continue
+        i = n_s + int(k[0])
+        if not place[i]: continue
+        d = dist[i] if dist[i] > 0 else cosmo.comoving_distance(z[i]).to_value('Mpc') * 3.2615637769e6
+        p = u[i] * d
+        mes = 'distance mesurée (Cosmicflows-4)' if dist[i] > 0 else f'distance d\'après z = {z[i]:.4f}'
+        lignes.append(f'M{m} (NGC {ngc})\t{p[0]:.6g}\t{p[1]:.6g}\t{p[2]:.6g}\tgalaxie ; forme mesurée (HyperLEDA) ; {mes}\t3')
+    with open(chemin, 'w', encoding='utf-8', newline='\n') as f: f.write('\n'.join(lignes) + '\n')
+    print(f'{len(lignes)} noms cherchables (Messier, NGC, IC) -> {chemin}')
+
+
 def main():
     sga_f, leda_f, donnees, sortie = sys.argv[1:5]
     t0 = time.time()
     s = fits.open(sga_f, memmap=True)['ELLIPSE'].data
     pgc_s = np.asarray(s['PGC']).astype(np.int64)
     garde = ~np.isin(pgc_s, list(EXCLUS_PGC)) & (np.asarray(s['D26']) > 0)
-    S = {k: np.asarray(s[k])[garde] for k in ('RA', 'DEC', 'D26', 'BA', 'PA', 'MORPHTYPE', 'Z_LEDA', 'R_MAG_SB26', 'G_MAG_SB26', 'MAG_LEDA', 'PGC')}
+    S = {k: np.asarray(s[k])[garde] for k in ('RA', 'DEC', 'D26', 'BA', 'PA', 'MORPHTYPE', 'Z_LEDA', 'R_MAG_SB26', 'G_MAG_SB26', 'MAG_LEDA', 'PGC', 'GALAXY')}
     print(f'SGA : {garde.sum()} galaxies ({time.time() - t0:.0f} s)')
     L = lire_leda(leda_f)
     lg = (L['otype'] == 'G') & ~np.isin(L['pgc'], list(EXCLUS_PGC)) & ~np.isin(L['pgc'], S['PGC']) & np.isfinite(L['logd25'])
@@ -157,6 +206,7 @@ def main():
     with open(os.path.join(sortie, 'galaxies_formes.bin'), 'wb') as f:
         h = b'UNIVGFM1' + np.uint32(len(rec)).tobytes()
         f.write(h + b'\0' * (64 - len(h))); f.write(rec.tobytes())
+    ecrire_noms(os.path.join(sortie, 'galaxies_formes_noms.tsv'), S, u, dist, z, place, n_s, donnees, L['pgc'])
     out = bytearray(brut.tobytes()); out[64 + 4 * col:64 + 4 * col + 4 * n] = couleur.tobytes()
     with open(os.path.join(sortie, 'galaxies.bin'), 'wb') as f: f.write(out)
     print(f'-> {sortie} : {len(rec)} galaxies ; magnitude mesurée {int((rec["f"] & 1 > 0).sum())}, forme {int((rec["f"] & 2 > 0).sum())}, '

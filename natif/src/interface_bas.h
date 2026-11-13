@@ -64,6 +64,13 @@ void whatYouSee(const Sim& sim) {
     if (sim.replay && sim.starShare() < 1 && sim.years > kStartYears)
         ImGui::TextDisabled(sim.starShare() > 0 ? "Les points qui apparaissent sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure)."
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
+    if (sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv != 0))
+        ImGui::TextDisabled("Exposition photo : pose ×%s (automatique%s), étirement asinh ; l'éclat réel n'est pas changé (Menu : « œil nu »).",
+                            frInt(sim.photoGain * std::pow(2.0, sim.exposureEv)).c_str(), sim.exposureEv != 0 ? (", " + frNum(sim.exposureEv, 0) + " IL").c_str() : "");
+    else if (!sim.photoExposure && sim.exposureEv != 0)
+        ImGui::TextDisabled("Œil nu, pose réglée à %s IL.", frNum(sim.exposureEv, 0).c_str());
+    if (sim.dist > 3.0e6)
+        ImGui::TextDisabled("Galaxies lointaines (points) : direction et décalage vers le rouge mesurés ; éclat et taille SUPPOSÉS (fonction de luminosité, Blanton 2003).");
     if (sim.galaxyShapesShown)
         ImGui::TextDisabled("%u galaxies faites de particules : taille, forme, orientation et éclat MESURÉS (SGA-2020, HyperLEDA) ; bras, côté proche, type manquant : modèle.", sim.galaxyShapesShown);
     if (sim.starShare() <= 0) return;

@@ -220,6 +220,11 @@ struct Sim {
     const CentresReference* centres = nullptr;      // centres de référence des galaxies (fenetre.cpp), sinon le calcul de la fusion
     uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
     double milkyWayStarShare = 0;     // part montrée à cette image
+    // Exposition (Marc, 13/11/2026) : « photo » (meilleur rendu) = exposition automatique sur la galaxie la plus brillante
+    // à l'écran + étirement asinh ; « œil nu » = éclat physique, compression de Reinhard. exposureEv : réglage à la main
+    // (crans de 1 IL = ×2). photoGain : gain calculé à cette image.
+    bool photoExposure = true;
+    double exposureEv = 0, photoGain = 1;
     uint32_t galaxyShapeCount = 0, galaxyShapesShown = 0;      // galaxies de forme mesurée (galaxies_formes.h), montrées en particules
     uint64_t neighbourStarCount = 0;   // étoiles des galaxies voisines (voisines_etoiles.bin), montrées à toute date
     bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
@@ -397,7 +402,9 @@ struct Sim {
         // Puis, s'il est à côté, galaxies_cf4.tsv : 55 637 galaxies à distance mesurée (Cosmicflows-4, noms OpenNGC),
         // écrit par pipeline/natif/galaxies_cf4.py ; priorité 9 : nom montré seulement de près ou au survol.
         const std::string cf4Path = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "galaxies_cf4.tsv";
-        for (const std::string& path : {galaxiesPath, cf4Path})
+        // Puis galaxies_formes_noms.tsv : Messier, NGC et IC de forme mesurée (pipeline/natif/galaxies_formes.py), cherchables.
+        const std::string formesPath = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "galaxies_formes_noms.tsv";
+        for (const std::string& path : {galaxiesPath, cf4Path, formesPath})
         for (std::ifstream gf(path); std::getline(gf, line);) {
             std::vector<std::string> cols;
             size_t from = 0;

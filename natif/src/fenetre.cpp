@@ -616,7 +616,18 @@ int runWindow(const WindowOptions& opt) {
                                       "direction et décalage vers le rouge mesurés ; distance calculée d'après le modèle d'univers (réglable), agrandie avec l'expansion"});
         }
         const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
-        const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain()), sc.extent.height, sim.years);
+        // Exposition « photo » : temps de pose choisi pour que la galaxie résolue la plus brillante à l'écran ait une brillance
+        // moyenne de 0,3 (avant l'étirement asinh) ; la même pose pour tout ce qui est à l'écran (les étoiles saturent, comme
+        // sur une photo). Aucune lumière n'est ajoutée ni retirée : seule la pose change. Réglable par crans (exposureEv).
+        {
+            const double base = kExposure * sim.brightnessBoost() * sim.fieldGain();
+            double want = 1.0;
+            if (sim.bestLook && sim.photoExposure && galaxyShapes.maxSurface > 0)
+                want = std::clamp(0.3 / (galaxyShapes.maxSurface * base), 1.0, 1.0e6);
+            sim.photoGain = test ? want : sim.photoGain + (want - sim.photoGain) * std::min(1.0, 4.0 * dt);      // sans à-coup
+            if (!(sim.bestLook && sim.photoExposure)) sim.photoGain = 1.0;
+        }
+        const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain() * sim.photoGain * std::pow(2.0, sim.exposureEv)), sc.extent.height, sim.years);
 
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
@@ -778,7 +789,7 @@ int runWindow(const WindowOptions& opt) {
         transition(cmd, final.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, final.view, sc.extent);
-        screen.draw(cmd, sc.extent);
+        screen.draw(cmd, sc.extent, sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv > 0) ? 1.0f : 0.0f);      // étirement « photo » seulement quand une galaxie résolue règle la pose
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
         vkCmdEndRendering(cmd);
         // 3. Copie dans la fenêtre.

@@ -132,6 +132,9 @@ struct ScreenPass {
         VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         li.setLayoutCount = 1;
         li.pSetLayouts = &setLayout;
+        const VkPushConstantRange pcr{VK_SHADER_STAGE_FRAGMENT_BIT, 0, 16};      // mode de rendu des tons (ecran.frag)
+        li.pushConstantRangeCount = 1;
+        li.pPushConstantRanges = &pcr;
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout), "agencement de l'écran");
         vs = shader(g, "ecran.vert.spv");
         fs = shader(g, "ecran.frag.spv");
@@ -192,13 +195,16 @@ struct ScreenPass {
     }
 
     // À appeler dans la passe de l'image finale.
-    void draw(VkCommandBuffer cmd, VkExtent2D extent) const {
+    // photo : 0 = œil nu (compression de Reinhard, couleur par couleur) ; 1 = photo (étirement asinh sur la luminance).
+    void draw(VkCommandBuffer cmd, VkExtent2D extent, float photo = 0.0f) const {
         const VkViewport vp{0, 0, static_cast<float>(extent.width), static_cast<float>(extent.height), 0, 1};
         const VkRect2D scissor{{0, 0}, extent};
         vkCmdSetViewport(cmd, 0, 1, &vp);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &set, 0, nullptr);
+        const float p[4] = {photo, 0, 0, 0};
+        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(p), p);
         vkCmdDraw(cmd, 3, 1, 0, 0);
     }
 
