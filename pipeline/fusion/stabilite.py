@@ -85,3 +85,38 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def voie_lactee_mcmillan():
+    """Voie lactée de McMillan 2017 (MNRAS 465, 76), meilleur modèle (table 3) : disque mince 896 M☉/pc² et 2,50 kpc, disque
+    épais 183 M☉/pc² et 3,02 kpc, bulbe 9,23e9 M☉, gaz 1,1e10 + 1,2e9 M☉, halo NFW 0,00854 M☉/pc³ et 19,6 kpc ; R0 = 8,21 kpc,
+    v0 = 233,1 km/s. Le bulbe (loi de puissance tronquée) est pris ici en masse ponctuelle au-delà de 2 kpc, et le gaz comme
+    un disque exponentiel de 7 kpc : approximations suffisantes pour Q entre 3 et 12 kpc, pas pour le centre."""
+    r = np.linspace(2.0, 16.0, 3000)
+    mince, epais = 2 * math.pi * 896e6 * 2.50 ** 2, 2 * math.pi * 183e6 * 3.02 ** 2
+    x = r / 19.6
+    v2 = (4 * math.pi * G * 0.00854e9 * 19.6 ** 3 * (np.log(1 + x) - x / (1 + x)) / r + v2_disque(r, mince, 2.50) + v2_disque(r, epais, 3.02)
+          + G * 9.23e9 / r + v2_disque(r, 1.22e10, 7.0))
+    vc = np.sqrt(v2)
+    om2 = v2 / r ** 2
+    kappa = np.sqrt(np.clip(np.gradient(om2, r) * r + 4 * om2, 1e-12, None))
+    sig_etoiles = 896e6 * np.exp(-r / 2.50) + 183e6 * np.exp(-r / 3.02)
+    return r, vc, kappa, sig_etoiles, mince, epais
+
+
+def compare():
+    r, vc, kappa, sig, mince, epais = voie_lactee_mcmillan()
+    at = lambda a: float(np.interp(8.21, r, a))
+    print('\nVoie lactée publiée (McMillan 2017, meilleur modèle), recalculée ici :')
+    print(f"  disque mince {mince / 1e10:.2f}e10 M☉, disque épais {epais / 1e10:.2f}e10 M☉ (contre un seul disque de 6,8e10 dans modeles.py)")
+    print(f"  au Soleil : vitesse circulaire {at(vc):.0f} km/s (publié : 233,1) ; disque d'étoiles {at(sig) / 1e6:.0f} M☉/pc²")
+    # Dispersion radiale mesurée au Soleil : 35 ± 5 km/s pour le disque mince vieux (Bland-Hawthorn & Gerhard 2016, § 5.4) ; profil
+    # exponentiel de longueur 2 Rd, comme dans modeles.py.
+    for s0 in (30.0, 35.0, 40.0):
+        q = s0 * np.exp(-(r - 8.21) / (2 * 2.50)) * kappa / (3.36 * G * sig)
+        zone = (r > 3) & (r < 12)
+        print(f"  dispersion radiale de {s0:.0f} km/s au Soleil : Q = {float(np.interp(8.21, r, q)):.2f} au Soleil, minimum {float(q[zone].min()):.2f} à {float(r[zone][q[zone].argmin()]):.1f} kpc")
+
+
+if __name__ == '__main__':
+    compare()
