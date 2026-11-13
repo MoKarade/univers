@@ -15,6 +15,7 @@
 #include "sondes.h"
 #include "systeme_solaire.h"
 #include "chaos.h"
+#include "vie_etoiles.h"
 
 namespace {
 
@@ -517,6 +518,15 @@ struct Sim {
     double gaiaReliableLight = 0;        // part de leur lumière
     uint64_t gaiaRebalancedCount = 0;    // étoiles Gaia à l'éclat rééquilibré vu de loin (hypothèse, docs/gaia-rayons.md)
     double gaiaRebalancedShift = 0;      // part de la lumière déplacée
+    // Vie des étoiles (vie_etoiles.h) : chargée, étoiles par source (inconnu, Gaia FLAME, diagramme, diagramme brut), date
+    // des résultats montrés (années depuis aujourd'hui), étoiles changées et absentes, durée du dernier calcul, calcul en cours.
+    bool lifeReady = false, lifePending = false;
+    const vie::Engine* lifeEngine = nullptr;
+    const vie::Rec* lifeMainRec = nullptr;                                 // place de chaque étoile du catalogue principal
+    const std::vector<float>* lifeMag = nullptr, * lifeBv = nullptr;      // magnitudes V et B-V montrées (catalogue principal)
+    double sunLifeDMag = 0, sunLifeDBv = 0;                               // Soleil : écart calculé à la date montrée
+    uint64_t lifeSourceCount[4]{}, lifeChanged = 0, lifeHidden = 0;
+    double lifeDt = 0, lifeMs = 0;
     bool hasGaia = false, hasGaiaAggregate = false, hasMilkyWay = false;      // catalogue Gaia et Voie lactée en volume chargés (pour les textes de l'interface)
     const phys::fusion::Rejeu* replay = nullptr;
     // Indicateur de complétude et de précision par échelle (completude.h), calculé une fois au chargement ; nul avant.
@@ -676,7 +686,9 @@ struct Sim {
             const double phase = std::max((std::sin(alpha) + (kPi - alpha) * std::cos(alpha)) / kPi, 1e-6);
             return b.h + 5.0 * std::log10((r / kAuInLy) * (dist / kAuInLy)) - 2.5 * std::log10(phase);
         }
-        const double absMag = b.kind == Kind::Sun ? kSunAbsMag : stars->mag()[b.star];
+        // éclat mesuré, plus le changement calculé par la vie des étoiles (vie_etoiles.h) à la date montrée
+        const double absMag = b.kind == Kind::Sun ? kSunAbsMag + sunLifeDMag
+                              : lifeMag && static_cast<size_t>(b.star) < lifeMag->size() ? (*lifeMag)[static_cast<size_t>(b.star)] : stars->mag()[b.star];
         return absMag + 5.0 * std::log10(dist / 3.2615638) - 5.0;
     }
 

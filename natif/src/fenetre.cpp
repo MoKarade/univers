@@ -23,6 +23,7 @@
 #include "points_planetes.h"
 #include "spheres.h"
 #include "traceurs_bras.h"
+#include "vie_etoiles.h"
 #include "voie_lactee.h"
 #include "rendu_fenetre.h"
 
@@ -277,6 +278,40 @@ int runWindow(const WindowOptions& opt) {
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
     sr.create(g, stars, HdrTarget::kFormat, gaiaOk);
+    // Vie des étoiles (vie_etoiles.h) : éclat et couleur mesurés + changement calculé jusqu'à la date montrée. Facultatif :
+    // sans le dossier vie/, les étoiles gardent leur éclat mesuré à toute date (comme avant).
+    vie::Life life;
+    vie::GaiaSet lifeA, lifeB;
+    vie::MainSet lifeMain;
+    vie::WordWriter lifeWriter;
+    VkDescriptorSet lifeSetA{}, lifeSetB{};
+    if (life.engine.open(dataDir + "/vie")) {
+        auto attachGaia = [&](vie::GaiaSet& s, GaiaRenderer& r, const char* name) {
+            const GaiaFile& f = r.fileInfo();
+            if (!s.attach(dataDir + "/vie/" + name, f.stars, f.n)) return false;
+            s.leaves.resize(f.leafCount);
+            for (uint32_t i = 0; i < f.leafCount; ++i) s.leaves[i] = {f.leaves[i].first, f.leaves[i].n};
+            s.bins = f.bins;
+            s.bin0 = f.bin0;
+            s.binWidth = f.binWidth;
+            r.setLife(&s.gainShown, &s.deltaShown);
+            life.gaia.push_back(&s);
+            return true;
+        };
+        lifeWriter.create(g);
+        if (gaiaOk && attachGaia(lifeA, gaia, "vie_a.bin")) lifeSetA = lifeWriter.bind(g, gaia.starsBuffer());
+        if (gaiaBOk && attachGaia(lifeB, gaiaB, "vie_b.bin")) lifeSetB = lifeWriter.bind(g, gaiaB.starsBuffer());
+        if (lifeMain.attach(dataDir + "/vie/vie_principal.bin", stars.mag(), stars.bv(), sr.count - 1)) life.main = &lifeMain;
+    }
+    sim.lifeReady = life.engine.ready;
+    if (life.engine.ready) sim.lifeEngine = &life.engine;
+    if (life.main) {
+        sim.lifeMainRec = lifeMain.rec;
+        sim.lifeMag = &lifeMain.magShown;
+        sim.lifeBv = &lifeMain.bvShown;
+    }
+    for (const vie::GaiaSet* s : life.gaia)
+        for (int k = 0; k < 4; ++k) sim.lifeSourceCount[k] += s->count[k];
     // Ciel dans une autre lumière (radio, infrarouge, X…) : cartes mesurées ciel_NOM.bin, une à la fois (fil longueurs d'onde).
     SkyBandRenderer sky;
     sky.create(g, HdrTarget::kFormat);
@@ -513,7 +548,13 @@ int runWindow(const WindowOptions& opt) {
                                           sim.gaiaOrbitLagSteps > 0 ? sim.gaiaOrbitLagSteps : 0,
                                           w < 0.01 ? "position et vitesse mesurées, ligne droite" : gaia.orbitReady() ? "départ mesuré ; orbite calculée exactement sur la carte graphique, potentiel de la Galaxie [modèle]"
                                                                                                                       : "épicycles (approché) pendant la préparation du calcul exact"});
-            if (sim.hasGaiaAggregate)
+            if (sim.lifeReady) {
+                const bool lifeToday = std::fabs(sim.years - kStartYears) < 1.0;
+                sim.calcStates.push_back({"Éclat et couleur des étoiles", lifeToday ? CalcMode::Measured : sim.lifePending ? CalcMode::Approx : CalcMode::Exact, 0,
+                                          lifeToday ? "mesurés (Gaia DR3, Hipparcos)"
+                                                    : sim.lifePending ? "calcul de la vie des étoiles en cours : éclats d'une date voisine"
+                                                                      : "mesurés aujourd'hui + changement calculé : naissance, vieillissement, supernova ou naine blanche [modèles MIST et Montréal]"});
+            }            if (sim.hasGaiaAggregate)
                 sim.calcStates.push_back({"Lumière additionnée des autres sources Gaia", share <= 0 ? CalcMode::Hidden : w < 0.01 ? CalcMode::Measured : gaia.orbitReady() ? CalcMode::Exact : CalcMode::Approx,
                                           sim.gaiaOrbitLagSteps > 0 ? sim.gaiaOrbitLagSteps : 0,
                                           "somme de sources mesurées, rangée par cases ; chaque case suit l'orbite de la vitesse moyenne mesurée de ses sources"});
@@ -536,7 +577,33 @@ int runWindow(const WindowOptions& opt) {
                                           "10 000 routes possibles des galaxies voisines, calculées à l'avance d'après l'incertitude des mesures"});
             sim.calcStates.push_back({"Galaxies lointaines", CalcMode::Measured, 0, "positions mesurées ; expansion de l'univers calculée"});
         }
-        const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
+        // Vie des étoiles : les résultats prêts partent vers la carte, puis le calcul repart pour la date montrée.
+        if (life.engine.ready) {
+            if (life.done.load()) {
+                if (lifeSetA) lifeWriter.write(g, lifeSetA, lifeA);
+                if (lifeSetB) lifeWriter.write(g, lifeSetB, lifeB);
+                if (life.main && lifeMain.dirty) {
+                    lifeMain.magShown.swap(lifeMain.magNext);
+                    lifeMain.bvShown.swap(lifeMain.bvNext);
+                    sr.setMagnitudesAndColors(g, lifeMain.magShown.data(), lifeMain.bvShown.data(), lifeMain.n,
+                                              life.sunHidden ? vie::kHidden : static_cast<float>(kSunAbsMag + life.sunDMag),
+                                              static_cast<float>(kSunBv + life.sunDBv));
+                    lifeMain.dirty = false;
+                    lifeMain.magNext = lifeMain.magShown;
+                    lifeMain.bvNext = lifeMain.bvShown;
+                }
+                sim.sunLifeDMag = life.sunHidden ? 99.0 : life.sunDMag;
+                sim.sunLifeDBv = life.sunDBv;
+                life.appliedDt = life.computedDt;
+                sim.lifeMs = life.lastMs;
+                sim.lifeHidden = lifeA.hidden + lifeB.hidden;
+                sim.lifeChanged = lifeA.changed + lifeB.changed;
+                life.done = false;
+            }
+            life.request(sim.years - kStartYears);
+            sim.lifeDt = life.appliedDt;
+            sim.lifePending = life.busy.load() || life.done.load();
+        }        const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain()), sc.extent.height, sim.years);
 
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
@@ -733,6 +800,7 @@ int runWindow(const WindowOptions& opt) {
     screen.release(g);
     planets.release(g);
     gaiaSky.destroy(g);
+    lifeWriter.release(g);
     if (gaiaBOk) gaiaB.release(g);
     gaia.release(g);
     milkyWay.release(g);

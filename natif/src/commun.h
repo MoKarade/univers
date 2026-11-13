@@ -477,6 +477,37 @@ struct StarRenderer {
         vkCmdDraw(cmd, count, 1, 0, 0);
     }
 
+    // Vie des étoiles (vie_etoiles.h) : magnitudes et couleurs B-V montrées (n premières étoiles, puis le Soleil en dernier).
+    // Même table de couleur que create. Les autres étoiles du fichier gardent leurs valeurs mesurées.
+    void setMagnitudesAndColors(const Gpu& g, const float* mag, const float* bv, size_t n, float sunMag, float sunBv) {
+        n = std::min<size_t>(n, count - 1);
+        std::vector<std::array<uint8_t, 4>> lut(512);
+        for (int i = 0; i < 512; ++i) lut[i] = colorOfBv(-0.5 + 3.2 * i / 511.0);
+        auto colorOf = [&](double b) { return lut[static_cast<size_t>(std::clamp((b + 0.5) / 3.2 * 511.0, 0.0, 511.0))]; };
+        std::vector<float> m(mag, mag + n);
+        m.push_back(sunMag);
+        std::vector<std::array<uint8_t, 4>> c(n + 1);
+        for (size_t i = 0; i < n; ++i) c[i] = colorOf(bv[i]);
+        c[n] = colorOf(sunBv);
+        auto put = [&](Buffer& dst, VkDeviceSize offset, const void* data, VkDeviceSize size) {
+            Buffer staging = createBuffer(g, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            void* p = nullptr;
+            check(vkMapMemory(g.dev, staging.mem, 0, size, 0, &p), "accès au tampon");
+            std::memcpy(p, data, size);
+            vkUnmapMemory(g.dev, staging.mem);
+            VkCommandBuffer cmd = beginOnce(g);
+            const VkBufferCopy region{0, offset, size};
+            vkCmdCopyBuffer(cmd, staging.buf, dst.buf, 1, &region);
+            endOnce(g, cmd);
+            destroy(g, staging);
+        };
+        // les n premières étoiles, puis le Soleil (dernier sommet : count - 1)
+        put(vb[3], 0, m.data(), n * 4);
+        put(vb[3], static_cast<VkDeviceSize>(count - 1) * 4, &m[n], 4);
+        put(vb[4], 0, c.data(), n * 4);
+        put(vb[4], static_cast<VkDeviceSize>(count - 1) * 4, c[n].data(), 4);
+    }
+
     void release(const Gpu& g) {
         vkDestroyPipeline(g.dev, pipeline, nullptr);
         vkDestroyPipelineLayout(g.dev, layout, nullptr);

@@ -234,6 +234,40 @@ void radiusRow(const Body& b, float s) {
     row("Rayon", (b.radiusKm >= 100 ? frInt(b.radiusKm) : frNum(b.radiusKm)) + " km", "mesuré", s);
 }
 
+// Durée lisible : années, milliers, millions ou milliards d'années.
+std::string frAge(double y) {
+    const double a = std::fabs(y);
+    if (a >= 1e9) return frNum(y / 1e9) + " milliards d'années";
+    if (a >= 1e6) return frNum(y / 1e6) + " millions d'années";
+    if (a >= 1e4) return frNum(y / 1e3) + " milliers d'années";
+    return frInt(y) + " ans";
+}
+
+// Vie de l'étoile (vie_etoiles.h) : âge, masse, étape et fin, avec leur origine. Le Soleil a son âge mesuré (météorites).
+void lifeRows(const Sim& sim, const Body& fb, bool today, float s) {
+    if (!sim.lifeEngine) return;
+    vie::Rec r{};
+    if (fb.kind == Kind::Sun) r = sim.lifeEngine->sunRec();
+    else if (sim.lifeMainRec && fb.star >= 0) r = sim.lifeMainRec[fb.star];
+    else return;
+    const double dt = sim.years - kStartYears;
+    const vie::Engine::Card k = sim.lifeEngine->card(r, dt);
+    if (!k.known) {
+        row("Âge", "inconnu (éclat ou couleur hors des modèles) : son éclat reste celui mesuré", "", s);
+        return;
+    }
+    const char* model = "calculé (modèles d'évolution MIST)";
+    std::string age = frAge(k.ageNow);
+    if (fb.kind != Kind::Sun && k.ageLo > 0 && k.ageHi > 0) age += " (entre " + frAge(k.ageLo) + " et " + frAge(k.ageHi) + ")";
+    row("Âge aujourd'hui", age, fb.kind == Kind::Sun ? "mesuré (météorites)" : vie::sourceName(k.source), s);
+    row("Masse à sa naissance", frNum(k.mass) + " fois le Soleil", fb.kind == Kind::Sun ? "mesuré" : model, s);
+    row(today ? "Étape de sa vie" : "Étape à cette date", vie::phaseName(k.phaseThen), model, s);
+    const double left = k.lifeLeft - (today ? 0.0 : dt);
+    if (left > 0)
+        row("Fin", (k.supernova ? "explose en supernova dans " : "devient naine blanche dans ") + frAge(left), model, s);
+    if (!today) ImGui::TextDisabled("Éclat et couleur : mesurés aujourd'hui, plus le changement calculé jusqu'à cette date.");
+}
+
 void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     const Body& fb = sim.bodies[static_cast<size_t>(f)];
     const Vec3 p = sim.position(f);
@@ -296,8 +330,15 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     } else {
         radiusRow(fb, s);
     }
-    if (fb.kind == Kind::Sun || fb.kind == Kind::Star)
-        row("Température", frInt(4600.0 * (1.0 / (0.92 * fb.bv + 1.7) + 1.0 / (0.92 * fb.bv + 0.62))) + " K en surface", "calculé d'après la couleur", s);
+    if (fb.kind == Kind::Sun || fb.kind == Kind::Star) {
+        // Couleur montrée : mesurée, plus le changement calculé par la vie de l'étoile à la date montrée (vie_etoiles.h).
+        double bv = fb.bv;
+        if (fb.kind == Kind::Sun) bv += sim.sunLifeDBv;
+        else if (sim.lifeBv && fb.star >= 0 && static_cast<size_t>(fb.star) < sim.lifeBv->size()) bv = (*sim.lifeBv)[static_cast<size_t>(fb.star)];
+        row("Température", frInt(4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62))) + " K en surface",
+            today ? "calculé d'après la couleur mesurée" : "calculé d'après la couleur (mesurée, puis vie de l'étoile calculée)", s);
+        lifeRows(sim, fb, today, s);
+    }
     if (fb.kind != Kind::Galaxy && fb.kind != Kind::Probe && fb.kind != Kind::Asteroid && (fb.kind != Kind::Planet || fb.hasPhotometry)) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé", s);
     ImGui::Separator();
     if (fb.kind == Kind::Planet && computed) ImGui::TextDisabled("Position : calculée ici (gravité mutuelle, partie des éphémérides JPL DE440 de la NASA).");

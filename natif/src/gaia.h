@@ -139,6 +139,11 @@ public:
     // par case (« ciel seul ») est alors retirée pour ne pas la compter deux fois.
     bool hideSkyOnly = false;
     VkBuffer colorBuffer() const { return colors_.buf; }
+    // Vie des étoiles (vie_etoiles.h) : tampon des étoiles (mot magnitude | couleur | drapeaux réécrit), fichier, et par feuille
+    // l'éclat gagné au plus et l'écart de lumière par tranche, pour que le tri par éclat et la lumière sautée restent justes.
+    VkBuffer starsBuffer() const { return stars_.buf; }
+    const GaiaFile& fileInfo() const { return file_; }
+    void setLife(const std::vector<float>* gain, const std::vector<float>* delta) { lifeGain_ = gain; lifeDelta_ = delta; }
     bool starReliable(uint64_t i) const { return i < file_.n && (file_.stars[i * 16 + 15] & GaiaFiable::kOrbiteFiable); }
     // Part de la lumière de la feuille i portée par des étoiles à orbite fiable (0 à 1).
     float leafReliableShare(uint32_t i) const { return i < leafShare_.size() ? leafShare_[i] : 0.0f; }
@@ -311,6 +316,8 @@ private:
     // lumière fiable, lumière rééquilibrée, lumière fiable rééquilibrée (4 × bins flottants par feuille, ordre ci-dessus
     // après la lumière totale du fichier).
     std::vector<float> leafShare_, leafMaxGain_, extra_;
+    const std::vector<float>* lifeGain_ = nullptr;      // vie des étoiles : éclat gagné au plus par feuille (mag)
+    const std::vector<float>* lifeDelta_ = nullptr;     // vie des étoiles : écart de lumière par feuille et par tranche
 
     void summarizeReliability() {
         const uint32_t nb = file_.bins;
@@ -449,7 +456,8 @@ private:
                 // magnitude absolue (mesurée) la plus faible qui compte ; vu de loin, en vue « meilleur rendu », le rééquilibrage
                 // peut rendre une étoile jusqu'à leafMaxGain plus brillante (gaia_fiable.glsl) : la limite recule d'autant
                 const double wd = improved ? GaiaFiable::poidsLoin(std::sqrt(dot(cam.pos, cam.pos)), std::sqrt(dot(centre_[i], centre_[i]))) : 0.0;
-                const double absLim = mLim - 5.0 * std::log10(dPc / 10.0) + wd * leafMaxGain_[i];
+                const double life = lifeGain_ && i < lifeGain_->size() ? (*lifeGain_)[i] : 0.0;      // étoiles devenues plus brillantes (vie_etoiles.h)
+                const double absLim = mLim - 5.0 * std::log10(dPc / 10.0) + wd * leafMaxGain_[i] + life;
                 uint32_t a = 0, b = L.n;      // première étoile trop faible (les magnitudes croissent dans la feuille)
                 while (a < b) {
                     const uint32_t m = (a + b) / 2;
@@ -483,6 +491,8 @@ private:
             const double mes = e[b] + fade * (lumAll[b] - e[b]);
             const double net = e[2 * file_.bins + b] + fade * (e[file_.bins + b] - e[2 * file_.bins + b]);
             mixed[b] = static_cast<float>((1.0 - wd) * mes + wd * net);
+            if (lifeDelta_ && (static_cast<size_t>(i) + 1) * file_.bins <= lifeDelta_->size())      // lumière changée par la vie des étoiles
+                mixed[b] = std::max(0.0f, mixed[b] + (*lifeDelta_)[static_cast<size_t>(i) * file_.bins + b]);
         }
         const float* lum = mixed.data();
         double sum = 0, colSum = 0, colW = 0;
