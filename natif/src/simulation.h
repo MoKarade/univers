@@ -3,6 +3,7 @@
 #include "asteroides_catalogue.h"
 #include <thread>
 #include "avancement.h"
+#include "centres_reference.h"
 #include "ciel_bandes.h"
 #include "commun.h"
 #include "completude.h"
@@ -216,6 +217,7 @@ struct Sim {
     // fusion (16e, 50e, 84e centile, en milliards d'années) ; 0 scénario : fichier absent.
     uint32_t cloneCount = 0;
     double companionShare = 0;    // part montrée d'Andromède, du Triangle et du Grand Nuage du calcul aujourd'hui (fenetre.cpp)
+    const CentresReference* centres = nullptr;      // centres de référence des galaxies (fenetre.cpp), sinon le calcul de la fusion
     uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
     double milkyWayStarShare = 0;     // part montrée à cette image
     int galaxyImageCount = 0;     // galaxies voisines montrées par leur vraie photo (galaxies_images.h)
@@ -616,6 +618,18 @@ struct Sim {
         for (size_t i = 0; i < bodies.size(); ++i) {
             const Body& b = bodies[i];
             if (b.kind != Kind::Galaxy) continue;
+            // Centres de référence (centres_reference.h) : Andromède, Triangle, Nuages de Magellan, en bloc le long de leur
+            // centre, à toute date calculée, aujourd'hui compris (mêmes valeurs que la table unique et que leurs étoiles).
+            const int ci = centres && centres->ready ? CentresReference::indexOf(b.name) : -1;
+            if (ci >= 0) {
+                phys::Vec3 g;
+                if (centres->centre(ci, tGa, g)) {
+                    const Vec3 w = fromGalactocentric(g);
+                    galPos[i] = {w.x + shift.x, w.y + shift.y, w.z + shift.z};
+                    galValid[i] = 1;
+                }
+                continue;
+            }
             const int ref = i < replayRef.size() ? replayRef[i] : -1;
             if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
                 galPos[i] = {b.fixedPos.x + shift.x, b.fixedPos.y + shift.y, b.fixedPos.z + shift.z};

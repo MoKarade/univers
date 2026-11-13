@@ -15,7 +15,7 @@ le calcul fait évoluer. Ici, chaque traceur est un point de la photo :
   s'approche [M31 : nord-est, certain ; les autres : à vérifier].
 Repère phys::galaxie de l'appli : centre de la Voie lactée à l'origine, Soleil à (-8,2 ; 0 ; 0) kpc, vitesse du Soleil
 (11,1 ; 242,24 ; 7,25) km/s (galaxie_orbites.h).
-Usage : python etoiles_visibles_photos.py <dossier galaxies-images> <dossier de sortie>
+Usage : python etoiles_visibles_photos.py <dossier galaxies-images> <dossier de sortie> [univers.json]
 """
 import sys as _sys
 _sys.stdout.reconfigure(encoding='utf-8')
@@ -26,11 +26,10 @@ import astropy.units as u
 from astropy.coordinates import SkyCoord, Galactocentric, CartesianDifferential, Distance
 
 SOLEIL_R0 = 8.2
-# Conditions du calcul de la rencontre (pipeline/fusion/conditions.json) : source unique pour la place, la vitesse
-# d'ensemble et l'axe de rotation quand elles y sont (M31 : Wu et al. 2025, Gaia ; axe vérifié sur les mesures, côté
-# nord-est qui s'éloigne, Rubin & Ford 1970, Chemin et al. 2009). Le Petit Nuage n'y est pas : mesures citées plus bas.
-CONDITIONS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fusion', 'conditions.json')
-SOLEIL_V = (11.1, 242.24, 7.25)
+SOLEIL_V = (11.1, 242.24, 7.25)      # km/s, galaxie_orbites.h (kSunUvw) ; sert seulement au contrôle astropy
+# Table unique (pipeline/constantes/univers.json, branche table-unique, PR 97) : source unique pour la place, la vitesse
+# d'ensemble et l'axe de rotation d'aujourd'hui (galaxies.<nom>.aujourdhui, galaxies.<nom>.disque.axe_rotation).
+TABLE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'constantes', 'univers.json')
 # nom : fichier, nombre de traceurs (plafonds du contrat), module de distance, µα* et µδ (µas/an), v_los (km/s),
 #       vitesse de rotation (km/s) et rayon où elle est atteinte (kpc), agitation (km/s), épaisseur (kpc), bulbe (kpc)
 GALAXIES = {
@@ -62,7 +61,7 @@ def eq_vers_gal():
 def main():
     src, sortie = sys.argv[1:3]
     geo = lire_tsv(src)
-    cond = json.load(open(CONDITIONS, encoding='utf-8'))
+    table = json.load(open(sys.argv[3] if len(sys.argv) > 3 else TABLE, encoding='utf-8'))
     E2G = eq_vers_gal()
     gc_frame = Galactocentric(galcen_distance=SOLEIL_R0 * u.kpc, z_sun=0 * u.pc,
                               galcen_v_sun=CartesianDifferential(list(SOLEIL_V) * u.km / u.s))
@@ -103,16 +102,14 @@ def main():
         c_vel = np.array([gc.v_x.to_value(u.km / u.s), gc.v_y.to_value(u.km / u.s), gc.v_z.to_value(u.km / u.s)])
         source_ens = 'module de distance, mouvement propre et vitesse radiale mesurés (voir sources), astropy'
         spin_g = None
-        cle = {'andromede': ('m31', 'm31'), 'grand_nuage': ('lmc', 'lmc'), 'triangle': (None, 'm33')}.get(nom)
-        if cle:
-            if cle[0]:
-                c_pos, c_vel = np.array(cond[cle[0]]['pos']), np.array(cond[cle[0]]['vel'])
-                spin_g = np.array(cond[cle[0]]['spin'] if 'spin' in cond[cle[0]] else cond[cle[0] + '_spin'])
-            else:
-                dw = [x for x in cond['dwarfs'] if 'Triangle' in x['name']][0]
-                c_pos, c_vel = np.array(dw['pos']), np.array(dw['vel'])
-                spin_g = np.array(cond['m33_spin'])
-            source_ens = 'pipeline/fusion/conditions.json (conditions du calcul de la rencontre)'
+        t_gal = table['galaxies'].get(nom, {})
+        if t_gal.get('aujourdhui'):
+            ecart_pos = float(np.linalg.norm(np.array(t_gal['aujourdhui']['position']) - c_pos))
+            ecart_vel = float(np.linalg.norm(np.array(t_gal['aujourdhui']['vitesse']) - c_vel))
+            c_pos, c_vel = np.array(t_gal['aujourdhui']['position']), np.array(t_gal['aujourdhui']['vitesse'])
+            source_ens = f'pipeline/constantes/univers.json (table unique ; écart avec le calcul astropy de ce script : {ecart_pos:.3f} kpc, {ecart_vel:.2f} km/s)'
+        if (t_gal.get('disque') or {}).get('axe_rotation'):
+            spin_g = np.array(t_gal['disque']['axe_rotation'])
         # rotation du disque dans le repère de l'appli : axe du calcul quand il existe, sinon côté du grand axe qui s'approche
         off_g = off @ E2G.T
         if spin_g is None:
@@ -125,10 +122,7 @@ def main():
             # L'axe du calcul ne tombe pas sur la normale du disque mesuré (angle de position et inclinaison publiés) :
             # on garde le plan MESURÉ et seulement le SENS de rotation du calcul ; l'écart est écrit dans meta.
             spin_g = n_photo * (1.0 if np.dot(axe_calcul, n_photo) >= 0 else -1.0)
-        if nom == 'triangle':
-            # Triangle : le côté nord-est (angle de position) s'APPROCHE (Corbelli & Schneider 1997, Corbelli et al. 2014) ;
-            # la mesure l'emporte sur le sens du calcul.
-            spin_g = n_photo * (1.0 if np.dot(np.cross(n_photo, E2G @ grand), -(E2G @ u0)) > 0 else -1.0)
+
         tang = np.cross(spin_g[None], off_g); tang /= np.maximum(np.linalg.norm(tang, axis=1), 1e-9)[:, None]
         vel_int = tang * vphi[:, None] + rng.normal(0, sig, (n, 3))
         pos = c_pos[None] + off_g

@@ -59,6 +59,8 @@ Get-ChildItem "$Donnees\tuiles" -Directory -ErrorAction SilentlyContinue | ForEa
 }
 # Vraies photos des galaxies voisines (pipeline/natif/galaxies_images.py), si elles ont été préparées.
 if (Test-Path "$Donnees\galaxies-images\galaxies_images.tsv") { Get-ChildItem "$Donnees\galaxies-images" -File | ForEach-Object { Copier-SiChange $_.FullName "$Cible\$($_.Name)" } }
+# Centres de référence des galaxies du Groupe local (pipeline/natif/centres_bin.py), s'ils ont été préparés.
+if (Test-Path "$Donnees\centres_reference.bin") { Copier-SiChange "$Donnees\centres_reference.bin" "$Cible\centres_reference.bin" }
 # Étoiles visibles du modèle de la Voie lactée (pipeline/natif/etoiles_visibles.py), si elles ont été préparées.
 if (Test-Path "$Donnees\etoiles-visibles\vl_etoiles.bin") { Copier-SiChange "$Donnees\etoiles-visibles\vl_etoiles.bin" "$Cible\vl_etoiles.bin" }
 foreach ($f in 'gaia.bin', 'gaia_b.bin', 'gaia_agrege.bin', 'voie_lactee.bin') { if (Test-Path "$Gaia\$f") { Copier-SiChange "$Gaia\$f" "$Cible\$f" } }

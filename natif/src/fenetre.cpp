@@ -192,7 +192,20 @@ int runWindow(const WindowOptions& opt) {
     const std::string fusionDir = dataDir + (std::filesystem::exists(dataDir + "/fusion-toutes/fusion_centres.bin") ? "/fusion-toutes"
                                              : std::filesystem::exists(dataDir + "/fusion-3m/fusion_centres.bin") ? "/fusion-3m" : "/fusion");
     const bool hasReplay = replay.charger(fusionDir + "/fusion_centres.bin", "");      // centres et traceurs ; les étoiles : fusion_nuage.h
+    // Centres de référence des galaxies du Groupe local (centres_reference.h, PR 97) : chaque galaxie se déplace en bloc.
+    CentresReference centresRef;
+    if (centresRef.load(dataDir + "/centres_reference.bin")) sim.centres = &centresRef;
     sim.linkReplay(hasReplay ? &replay : nullptr, fusionDir + "/fusion_noms.tsv");
+    if (sim.centres) {      // contrôle chiffré : place d'aujourd'hui des centres contre la place mesurée du catalogue
+        for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
+            const int ci = CentresReference::indexOf(sim.bodies[static_cast<size_t>(i)].name);
+            phys::Vec3 c;
+            if (ci < 0 || !centresRef.centre(ci, 0.0, c)) continue;
+            const Vec3 w = Sim::fromGalactocentric(c), f0 = sim.bodies[static_cast<size_t>(i)].fixedPos;
+            const Vec3 d = w - f0;
+            std::printf("centres de reference : %s a t = 0, ecart au catalogue %.3f kpc\n", sim.bodies[static_cast<size_t>(i)].name.c_str(), std::sqrt(dot(d, d)) / 3261.5637769);
+        }
+    }
     if (opt.hasYears) sim.years = opt.years;
     if (opt.fovDeg > 0) sim.fovDeg = std::clamp(opt.fovDeg, Sim::kFovMin, Sim::kFovMax);
     sim.refreshEphemeris();
@@ -662,7 +675,8 @@ int runWindow(const WindowOptions& opt) {
             const double loneTime = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) : 0.0;
             // Avec les étoiles visibles du modèle, plus de lueur : la Voie lactée est faite d'étoiles.
             sim.milkyWayModelShare = sim.bestLook && !milkyWayStarsOk ? sim.starShare() * (1.0 - loneTime) : 0.0;
-            sim.galaxyImageShare = sim.bestLook ? sim.starShare() : 0.0;      // vraies photos tant que les étoiles mesurées sont montrées
+            // vraies photos : tant que les étoiles mesurées sont montrées ; à toute date si les centres de référence les déplacent
+            sim.galaxyImageShare = sim.bestLook ? (sim.centres ? 1.0 : sim.starShare()) : 0.0;
             galaxyImages.draw(cmd, cam, sim, sc.extent.width, sc.extent.height, pc.par[0], sim.galaxyImageShare);
             if (sim.milkyWayModelShare > 0)
                 milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayModelShare), sim.years);
@@ -692,7 +706,9 @@ int runWindow(const WindowOptions& opt) {
             loneGalaxy.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, loneShare, sc.extent.width, sc.extent.height);
         if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0)
         {
-            fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height);
+            // avec les centres de référence, les autres galaxies sont leurs photos déplacées en bloc : seuls les points de la Voie lactée
+            fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height, 0,
+                             sim.centres && galaxyImages.count >= 3 ? fusionCloud.milkyWayPoints : 0u);
             if (galaxyImages.count < 3)      // sans les photos : les points du calcul montrent les autres galaxies
                 fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, companionShare, sc.extent.width, sc.extent.height, fusionCloud.milkyWayPoints);
         }
