@@ -207,19 +207,46 @@ def ecart_a_la_cible(journal, cible):
     return out
 
 
+def jacobien_orbite(pos0, vel0, T, r_tab, m_tab, m_sat):
+    """Comment l'état d'arrivée (position, vitesse) d'une galaxie change quand on change son état de départ : matrice 6 x 6,
+    par différences finies sur une orbite SIMPLE (un point dans la masse enfermée de la Voie lactée, sans frottement).
+    Ce modèle simple ne sert qu'à orienter la correction ; l'écart lui-même vient du vrai calcul."""
+    def orbite(x, v):
+        x = np.array(x, float); v = np.array(v, float); n = max(200, int(abs(T) / 0.002)); h = T / n
+        def acc(x):
+            r = max(np.linalg.norm(x), 1.0)
+            return -G * (np.interp(r, r_tab, m_tab) + m_sat) * x / r ** 3
+        a = acc(x)
+        for _ in range(n):
+            v = v + 0.5 * h * a; x = x + h * v; a = acc(x); v = v + 0.5 * h * a
+        return np.concatenate([x, v])
+    base = orbite(pos0, vel0); J = np.zeros((6, 6))
+    for k in range(6):
+        d = np.zeros(6); d[k] = 1.0 if k < 3 else 0.5      # 1 kpc ou 0,5 km/s
+        J[:, k] = (orbite(np.array(pos0) + d[:3], np.array(vel0) + d[3:]) - base) / d[k]
+    return J
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
     mode = args[0]
     cible = json.load(open(os.path.join(ICI, 'resultats', 'cible_aujourdhui.json'), encoding='utf-8'))
     t_depart = float(cible['debut_reference_ga'])
+    if 'depart' in opts:      # départ plus récent : premier état lu dans les orbites de référence (centres_reference.npz)
+        with np.load(os.path.join(ICI, 'resultats', 'centres_reference.npz')) as z:
+            i = int(np.argmin(np.abs(z['t'] - float(opts['depart']))))
+            t_depart = float(z['t'][i]); ref = {n: dict(pos=z['pos'][i, g].astype(float).tolist(), vel=z['vel'][i, g].astype(float).tolist()) for g, n in enumerate(ORDRE)}
+    else:
+        ref = {n: dict(pos=cible['galaxies'][n]['position_reference_moins_passe'], vel=cible['galaxies'][n]['vitesse_reference_moins_passe']) for n in ORDRE}
     if mode in ('tir', 'passe'):
         dossier, sortie = args[1], args[2]
         os.makedirs(sortie, exist_ok=True)
         if 'etat' in opts:
-            etat = json.load(open(opts['etat'], encoding='utf-8'))['etat']
+            precedent = json.load(open(opts['etat'], encoding='utf-8'))
+            etat, t_depart = precedent['etat'], float(precedent['t_depart'])
         else:
-            etat = {n: dict(pos=cible['galaxies'][n]['position_reference_moins_passe'], vel=cible['galaxies'][n]['vitesse_reference_moins_passe']) for n in ORDRE}
+            etat = ref
         p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)))
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
         S = Calcul(p, theta=float(opts.get('theta', 0.7)))
@@ -229,13 +256,20 @@ def main():
         # retiré de la position de départ, compte tenu de ce que le changement de vitesse déplace sur la durée du trajet
         # (mouvement libre : une approximation, d'où les tirs successifs). Amorti pour ne pas osciller.
         amorti, T = float(opts.get('amorti', 0.8)), -t_depart / T_UNIT
+        vl = p['gid'] == 0
+        r = np.sort(np.linalg.norm(p['pos'][vl] - np.average(p['pos'][vl], axis=0, weights=p['m'][vl]), axis=1))      # masse enfermée de la Voie lactée (au départ)
+        m_tab = np.cumsum(np.full(len(r), 0) + p['m'][vl][np.argsort(np.linalg.norm(p['pos'][vl] - np.average(p['pos'][vl], axis=0, weights=p['m'][vl]), axis=1))])
+        pas = max(1, len(r) // 2000); r_tab, m_tab = r[::pas], m_tab[::pas]
         corrige = {}
-        for n in ORDRE:
+        for g, n in enumerate(ORDRE):
             e = dict(pos=list(map(float, etat[n]['pos'])), vel=list(map(float, etat[n]['vel'])))
             if n in ecart:
-                dx, dv = np.array(ecart[n]['dx']), np.array(ecart[n]['dv'])
-                e['vel'] = (np.array(e['vel']) - amorti * dv).tolist()
-                e['pos'] = (np.array(e['pos']) - amorti * (dx - dv * T)).tolist()
+                # Newton : on cherche le changement de départ qui annule l'écart d'arrivée, avec la matrice de l'orbite simple.
+                J = jacobien_orbite(e['pos'], e['vel'], T, r_tab, m_tab, float(p['m'][p['gid'] == g].sum()))
+                d = np.linalg.lstsq(J, -np.concatenate([ecart[n]['dx'], ecart[n]['dv']]), rcond=1e-6)[0] * amorti
+                # garde-fou : jamais plus de 60 % de la distance ni de 150 km/s en un tir
+                fx = min(1.0, 0.6 * np.linalg.norm(e['pos']) / max(np.linalg.norm(d[:3]), 1e-9)); fv = min(1.0, 150.0 / max(np.linalg.norm(d[3:]), 1e-9)); f = min(fx, fv)
+                e['pos'] = (np.array(e['pos']) + f * d[:3]).tolist(); e['vel'] = (np.array(e['vel']) + f * d[3:]).tolist()
             corrige[n] = e
         json.dump(dict(t_depart=t_depart, etat=corrige, ecart_du_tir=ecart, particules=int(len(p['m']))), open(os.path.join(sortie, 'etat_corrige.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         json.dump(dict(t_depart=t_depart, etat=etat), open(os.path.join(sortie, 'etat_utilise.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
