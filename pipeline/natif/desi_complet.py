@@ -28,7 +28,16 @@ def tranche(sortie: str, k: int) -> None:
     out = os.path.join(sortie, f'desi_{k:02d}.csv')
     if os.path.exists(out):
         return
-    q = REQ.format(a=k * LARGEUR, b=(k + 1) * LARGEUR)
+    # Le serveur a répondu « 502 » à des requêtes de 10 min (12/11/2026, en soirée) : chaque tranche est demandée en
+    # quatre quarts (desi_KK_Q.csv), plus courts.
+    for qt in range(4):
+        a = k * LARGEUR + qt * LARGEUR / 4
+        demande(sortie, os.path.join(sortie, f'desi_{k:02d}_{qt}.csv'), REQ.format(a=a, b=a + LARGEUR / 4), f'{k}.{qt}')
+
+
+def demande(sortie: str, out: str, q: str, k: str) -> None:
+    if os.path.exists(out):
+        return
     for essai in range(6):
         t = time.time()
         try:
@@ -48,7 +57,7 @@ def tranche(sortie: str, k: int) -> None:
                 continue
             lignes = sum(1 for _ in open(out + '.part', 'rb')) - 1
             os.replace(out + '.part', out)
-            print(f'tranche {k + 1}/{TRANCHES} : {lignes} objets, {n / 1e6:.1f} Mo en {time.time() - t:.0f} s', flush=True)
+            print(f'tranche {k} (sur {TRANCHES}) : {lignes} objets, {n / 1e6:.1f} Mo en {time.time() - t:.0f} s', flush=True)
             return
         except Exception as e:      # coupure réseau : on réessaie la même tranche
             print(f'tranche {k} essai {essai} : {str(e)[:160]}', flush=True)
