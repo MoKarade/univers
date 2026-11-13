@@ -72,6 +72,22 @@ class Film:
         return 0.5 * ((2 * p1) + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u ** 3)
 
 
+def ecrire_index(dossier):
+    """Index binaire pour l'appli (qui ne lit pas le JSON) : film_index.bin, petit-boutiste.
+    « UNIVFLM2 » (8 octets), nombre d'images (u32), nombre de galaxies (u32), puis par galaxie le nombre d'étoiles visibles
+    (u64), puis par image : date en Ga (f64), centre de chaque galaxie relatif à la Voie lactée (3 f64 chacun, kpc),
+    vitesse de chaque centre (3 f64 chacun, km/s), écart d'énergie (f64)."""
+    import struct
+    f = Film(dossier)
+    g = len(f.galaxies)
+    out = [b'UNIVFLM2', struct.pack('<II', len(f), g), struct.pack(f'<{g}Q', *f.n)]
+    for i in range(len(f)):
+        out.append(struct.pack('<d', float(f.t[i])) + np.asarray(f._centres[i], '<f8').tobytes() + np.asarray(f._vitesses[i], '<f8').tobytes() + struct.pack('<d', float(f.energie[i])))
+    tmp = os.path.join(dossier, 'film_index.bin.tmp')
+    with open(tmp, 'wb') as fh: fh.write(b''.join(out))
+    os.replace(tmp, os.path.join(dossier, 'film_index.bin'))
+
+
 if __name__ == '__main__':
     import sys
     f = Film(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)

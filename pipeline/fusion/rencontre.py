@@ -421,7 +421,15 @@ def futur(sortie, t_fin, opts, cible):
         meta['t'].append(round(t, 5))
         json.dump(meta, open(os.path.join(film, 'film.json.tmp'), 'w', encoding='utf-8'), ensure_ascii=False); os.replace(os.path.join(film, 'film.json.tmp'), os.path.join(film, 'film.json'))
 
-    avancer(S, t0, t_fin, film, releve_ma=releve_ma, journal=journal, a_chaque_releve=image)
+    def image_et_index(t, centres, vitesses):
+        image(t, centres, vitesses)
+        try:      # index binaire pour l'appli, refait à chaque image (quelques dizaines de ko) ; ne doit jamais arrêter le calcul
+            import film_v2
+            film_v2.ecrire_index(film)
+        except Exception as err:
+            print(f'  index du film non écrit : {err}', flush=True)
+
+    avancer(S, t0, t_fin, film, releve_ma=releve_ma, journal=journal, a_chaque_releve=image_et_index)
     print('film terminé :', len(meta['t']), 'images')
 
 
