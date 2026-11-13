@@ -149,6 +149,13 @@ RELEVES = {
         reference='Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC)',
         couverture_publiee='tout le ciel', echelle='log',
         secours=[dict(adresse='https://irsa.ipac.caltech.edu/data/hips/CDS/AllWISE/W1', reference="Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC) ; tuiles HiPS du CDS, copie de l'IRSA")]),
+    'wise46': dict(
+        hips='CDS/P/allWISE/W2', bande='infrarouge', libelle='Infrarouge proche 4,6 µm (WISE)',
+        mesure='Brillance du ciel à 4,6 µm (étoiles froides, poussière chaude)', unite='DN (unité du détecteur)',
+        resolution_arcmin=6.4 / 60, longueur_onde='4,6 µm',
+        reference='Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC)',
+        couverture_publiee='tout le ciel', echelle='log',
+        secours=[dict(adresse='https://irsa.ipac.caltech.edu/data/hips/CDS/AllWISE/W2', reference="Wright et al. 2010, AJ 140, 1868 ; AllWISE (Cutri et al. 2013, IPAC) ; tuiles HiPS du CDS, copie de l'IRSA")]),
     '2massk': dict(
         hips='CDS/P/2MASS/K', bande='infrarouge', libelle='Infrarouge proche 2,2 µm (2MASS K)',
         mesure='Brillance du ciel en bande Ks (2,2 µm)', unite='DN (unité du détecteur)',

@@ -16,6 +16,8 @@ layout(std140, set = 0, binding = 0) uniform U {
     vec4 grid;             /* x : Nside ; y : niveaux de la pyramide ; z : angle d'un pixel de l'écran au centre (rad) ; w : rien */
     vec4 eqRight, eqUp, eqFwd, proj;      /* pour les sources (ciel_sources.vert) */
     vec4 fine;             /* tuiles fines (ciel_tuiles.h) : x ordre le plus grossier, y le plus fin, z log2(largeur), w 1 si présentes */
+    vec4 cut;              /* sources (ciel_sources.vert) */
+    vec4 tile;             /* x : 1 / facteur des float16 (valeur mesurée = valeur stockée × x) */
 } u;
 layout(std430, set = 0, binding = 1) readonly buffer Carte { float v[]; } carte;
 layout(std430, set = 0, binding = 3) readonly buffer Pages { uint p[]; } pages;      /* 0 : tuile pas chargée ; sinon emplacement + 1 */
@@ -86,7 +88,7 @@ float fineValue(vec3 d, float screen, out bool found) {
             uint idx = (s - 1u) * w * w + local;
             vec2 h = unpackHalf2x16(tuiles.h[idx >> 1]);
             found = true;
-            return (idx & 1u) == 0u ? h.x : h.y;
+            return ((idx & 1u) == 0u ? h.x : h.y) * u.tile.x;
         }
     }
     return 0.0;

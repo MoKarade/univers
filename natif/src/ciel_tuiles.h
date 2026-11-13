@@ -31,6 +31,9 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <iterator>
+#include <array>
+#include <limits>
 #include <unordered_map>
 
 namespace {
@@ -73,12 +76,28 @@ inline std::filesystem::path utf8Path(const std::string& s) {
     return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()), s.size()));
 }
 
+// halfToFloat (float16 → float) : commun.h.
+inline float percentile995(const std::vector<uint16_t>& d) {
+    std::vector<float> v;
+    v.reserve(d.size());
+    for (uint16_t h : d) {
+        const float x = halfToFloat(h);
+        if (std::isfinite(x)) v.push_back(x);
+    }
+    if (v.empty()) return 0;
+    const size_t k = static_cast<size_t>(0.995 * (v.size() - 1));
+    std::nth_element(v.begin(), v.begin() + static_cast<std::ptrdiff_t>(k), v.end());
+    return v[k];
+}
+
 class SkyTileStream {
 public:
     bool active = false;          // des tuiles fines existent pour la carte chargée
     uint32_t width = 0, logWidth = 0, orderMin = 0, orderMax = 0;
     std::string dir, root;
     uint32_t shownOrder = 0;      // ordre le plus fin chargé au centre de l'écran (0 : aucune tuile fine)
+    int wanted = -1;              // ordre que le champ demanderait (< orderMin : champ trop large pour les tuiles)
+    double scale = 1;             // valeurs stockées × facteur_float16 (fiche.json) : float16 ne va que de 6e-8 à 65504
     uint32_t pending() const { return static_cast<uint32_t>(inFlight_); }
 
     // Cherche les index ordre_K.idx du relevé dans indexDir ; les paquets sont dans bundleRoot. On ne garde que les ordres
@@ -111,6 +130,14 @@ public:
             lv.push_back(std::move(L));
         }
         if (lv.empty()) return false;
+        {      // facteur des float16 (pipeline/natif/tuiles_bandes.py) : valeur mesurée = valeur stockée / facteur
+            std::ifstream fj(indexDir + "/fiche.json", std::ios::binary);
+            std::string js((std::istreambuf_iterator<char>(fj)), std::istreambuf_iterator<char>());
+            const std::string k = "\"facteur_float16\": ";
+            const size_t p = js.find(k);
+            scale = p == std::string::npos ? 1.0 : std::atof(js.c_str() + p + k.size());
+            if (!(scale > 0)) return false;      // facteur illisible : mieux vaut pas de tuiles que des valeurs fausses
+        }
         // Les ordres doivent se suivre (la table de pages les met bout à bout, ordre par ordre).
         for (size_t i = 1; i < lv.size(); ++i)
             if (lv[i].order != lv[i - 1].order + 1) { lv.resize(i); break; }
@@ -133,11 +160,23 @@ public:
         check(vkMapMemory(g.dev, staging_.mem, 0, tileBytes_ * kBatch, 0, &stagingMap_), "tuiles du ciel");
         slotKey_.assign(slots_, kNone);
         slotSeen_.assign(slots_, 0);
+        slotHigh_.assign(slots_, 0.0f);
+        slotCover_.assign(slots_, std::array<uint8_t, 64>{});
         state_.clear();
         stop_ = false;
         for (auto& t : workers_) t = std::thread([this] { run(); });
         active = true;
         return true;
+    }
+
+    // Le plus fort des 99,5e centiles des tuiles demandées à cette image (valeur mesurée), 0 s'il n'y en a pas : sert à
+    // relever le haut de l'échelle de couleur en vue serrée, pour ne pas saturer un noyau de galaxie.
+    double viewHigh() const {
+        if (!active) return 0;
+        float h = 0;
+        for (uint32_t s = 0; s < slots_; ++s)
+            if (slotKey_[s] != kNone && slotSeen_[s] == frame_) h = std::max(h, slotHigh_[s]);
+        return h / scale;
     }
 
     VkDescriptorBufferInfo pageInfo() const { return {page_.buf, 0, pages_ * 4}; }
@@ -158,6 +197,7 @@ public:
         if (!active) return;
         ++frame_;
         const int want = wantedOrder(screen);
+        wanted = want;
         std::vector<uint64_t> need;
         if (want >= static_cast<int>(orderMin)) {
             const uint32_t top = std::min<uint32_t>(static_cast<uint32_t>(want), orderMax);
@@ -204,7 +244,15 @@ public:
         shownOrder = 0;
         for (int k = std::min<int>(want, orderMax); k >= static_cast<int>(orderMin); --k) {
             auto it = state_.find(tileKey(static_cast<uint32_t>(k), center));
-            if (it != state_.end() && it->second >= 0) { shownOrder = static_cast<uint32_t>(k); break; }
+            if (it == state_.end() || it->second < 0) continue;
+            // la tuile est là ; le centre de l'écran y est-il mesuré ? (sous-carré de w/8 × w/8 pixels)
+            int face, ix, iy;
+            const double n = std::sqrt(center.x * center.x + center.y * center.y + center.z * center.z);
+            healpixFaceXY(width << k, center.x / n, center.y / n, center.z / n, face, ix, iy);
+            const uint64_t local = healpixInterleave(static_cast<uint32_t>(ix) & (width - 1), static_cast<uint32_t>(iy) & (width - 1));
+            if (!slotCover_[it->second][local >> (2 * logWidth - 6)]) continue;
+            shownOrder = static_cast<uint32_t>(k);
+            break;
         }
     }
 
@@ -254,6 +302,8 @@ private:
     struct Read {
         uint64_t key;
         std::vector<uint16_t> data;      // vide : lecture ratée
+        float high = 0;                  // 99,5e centile des valeurs mesurées de la tuile (valeur stockée, avant facteur)
+        std::array<uint8_t, 64> cover{}; // 1 si au moins un pixel mesuré dans chacun des 64 sous-carrés emboîtés de la tuile
     };
     static constexpr uint32_t kBatch = 32;              // tuiles envoyées au plus par image
     static constexpr int kAbsent = -2, kLoading = -1;
@@ -267,6 +317,8 @@ private:
     uint32_t* pageMap_ = nullptr;
     void* stagingMap_ = nullptr;
     std::vector<uint64_t> slotKey_, slotSeen_;
+    std::vector<float> slotHigh_;
+    std::vector<std::array<uint8_t, 64>> slotCover_;
     std::unordered_map<uint64_t, int> state_;      // clé → emplacement (≥ 0), kLoading ou kAbsent
     uint64_t frame_ = 0;
 
@@ -319,6 +371,13 @@ private:
                 r.data.resize(static_cast<size_t>(width) * width);
                 f.read(reinterpret_cast<char*>(r.data.data()), static_cast<std::streamsize>(tileBytes_));
                 if (!f) r.data.clear();
+                else {
+                    r.high = percentile995(r.data);
+                    const size_t per = r.data.size() / 64;      // ordre emboîté : chaque sous-carré est un morceau contigu
+                    for (size_t b = 0; b < 64; ++b)
+                        for (size_t i = b * per; i < (b + 1) * per; ++i)
+                            if ((r.data[i] & 0x7C00u) != 0x7C00u) { r.cover[b] = 1; break; }      // exposant plein = NaN ou infini
+                }
             }
             {
                 std::lock_guard<std::mutex> lk(mu_);
@@ -356,6 +415,8 @@ private:
             }
             slotKey_[slot] = r.key;
             slotSeen_[slot] = frame_;
+            slotHigh_[slot] = r.high;
+            slotCover_[slot] = r.cover;
             it->second = slot;
             std::memcpy(static_cast<char*>(stagingMap_) + used * tileBytes_, r.data.data(), tileBytes_);
             copies.push_back({used * tileBytes_, static_cast<VkDeviceSize>(slot) * tileBytes_, tileBytes_});

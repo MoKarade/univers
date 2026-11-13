@@ -27,6 +27,7 @@ struct SkyBandUbo {      // std140 : tout en vec4
     float proj[4];       // 1 / (tan(champ/2) × rapport largeur/hauteur), 1 / tan(champ/2), rien, 1
     float fine[4];       // tuiles fines (ciel_tuiles.h) : ordre le plus grossier, le plus fin, log2(largeur), 1 si présentes
     float cut[4];        // par catalogue : grandeur relative (à la médiane) sous laquelle une source n'est pas dessinée
+    float tile[4];       // tuiles fines : 1 / facteur des float16, rien, rien, rien
 };
 
 // Catalogue de sources de la bande (sources_<bande>.bin, pipeline/natif/sources_bandes.py) : directions mesurées.
@@ -386,9 +387,17 @@ public:
                 const double shown = 206264.806 * std::sqrt(kPi / 3.0) / (static_cast<double>(tiles_.width) * (1u << tiles_.shownOrder));
                 std::snprintf(b, sizeof b, "Tuiles fines : pixel de %.2g″ au centre (le plus fin : %.2g″)%s.", shown, finest,
                               tiles_.pending() ? ", lecture en cours" : "");
+            } else if (tiles_.wanted >= static_cast<int>(tiles_.orderMin)) {
+                std::snprintf(b, sizeof b, "Tuiles fines : rien de mesuré plus finement au centre de la vue%s.",
+                              tiles_.pending() ? " (ou lecture en cours)" : "");
             } else {
                 std::snprintf(b, sizeof b, "Tuiles fines disponibles jusqu'à %.2g″ par pixel : resserrer le champ pour les voir.", finest);
             }
+            l.push_back(b);
+        }
+        if (viewHigh_ > 0) {
+            std::snprintf(b, sizeof b, "Haut de l'échelle relevé à %.3g %s pour cette vue (99,5 %% des pixels mesurés à l'écran en dessous), au lieu de %.3g pour le ciel entier.",
+                          viewHigh_, info.unit.c_str(), info.hi);
             l.push_back(b);
         }
         std::snprintf(b, sizeof b, "Fausses couleurs, échelle %s de %.3g à %.3g %s. Hachures : pas de mesure.",
@@ -450,7 +459,14 @@ public:
         std::memcpy(u.up, uu, 16);
         std::memcpy(u.fwd, ff, 16);
         u.scale[0] = static_cast<float>(info.lo);
-        u.scale[1] = static_cast<float>(info.hi);
+        // Vue serrée sur des tuiles fines : si le plus brillant mesuré à l'écran dépasse le haut de l'échelle du ciel entier,
+        // on relève le haut (sinon un noyau de galaxie sature) ; jamais abaissé. La légende le dit (viewHigh_).
+        viewHigh_ = 0;
+        if (tiles_.active && tiles_.shownOrder) {
+            const double vh = tiles_.viewHigh();
+            if (vh > 1.05 * info.hi) viewHigh_ = vh;      // relèvement de moins de 5 % : on garde l'échelle du ciel entier
+        }
+        u.scale[1] = static_cast<float>(viewHigh_ > 0 ? viewHigh_ : info.hi);
         u.scale[2] = info.scaleKind == "asinh" ? 2.0f : (info.scaleKind == "log" ? 1.0f : 0.0f);
         u.scale[3] = static_cast<float>(alpha);
         u.grid[0] = static_cast<float>(info.nside);
@@ -492,6 +508,7 @@ public:
             u.fine[1] = static_cast<float>(tiles_.orderMax);
             u.fine[2] = static_cast<float>(tiles_.logWidth);
             u.fine[3] = 1.0f;
+            u.tile[0] = static_cast<float>(1.0 / tiles_.scale);
         }
         std::memcpy(mapped_[ring_], &u, sizeof(u));
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
@@ -563,6 +580,7 @@ public:
 
 private:
     static constexpr int kRing = 4;
+    double viewHigh_ = 0;      // haut de l'échelle relevé pour la vue (0 : celui du ciel entier)
     static constexpr double kSourcesOnScreen = 1000.0;      // sources d'un catalogue à l'écran, à peu près, en champ large
     const Gpu* gpu_ = nullptr;
     SkyTileStream tiles_;

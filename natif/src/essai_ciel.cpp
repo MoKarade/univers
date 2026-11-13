@@ -99,7 +99,8 @@ int main(int argc, char** argv) {
     auto t0 = std::chrono::steady_clock::now();
     if (!sky.load(g, argv[1])) fail("chargement de la carte");
     std::printf("chargee en %.2f s\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
-    for (const auto& s : sky.legend(std::sqrt(eye.x * eye.x + eye.y * eye.y + eye.z * eye.z))) std::printf("  | %s\n", s.c_str());
+    for (const auto& s : sky.legend(std::sqrt(eye.x * eye.x + eye.y * eye.y + eye.z * eye.z)))
+        if (s.rfind("Tuiles fines", 0) != 0) std::printf("  | %s\n", s.c_str());      /* état des tuiles : après leur lecture */
 
     HdrTarget target;
     target.create(g, width, height, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
@@ -115,8 +116,6 @@ int main(int argc, char** argv) {
         auto t1 = std::chrono::steady_clock::now();
         sky.requestTiles(cam, width, height, true);
         std::printf("tuiles fines lues en %.2f s\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count());
-        for (const auto& s : sky.legend(std::sqrt(eye.x * eye.x + eye.y * eye.y + eye.z * eye.z)))
-            if (s.rfind("Tuiles fines", 0) == 0) std::printf("  | %s\n", s.c_str());
     }
     VkCommandBuffer cmd = beginOnce(g);
     transition(cmd, target.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -133,6 +132,9 @@ int main(int argc, char** argv) {
     ri.pColorAttachments = &color;
     vkCmdBeginRendering(cmd, &ri);
     sky.draw(cmd, cam, width, height);
+    /* état des tuiles et échelle de cette image (posés par draw) */
+    for (const auto& s : sky.legend(std::sqrt(eye.x * eye.x + eye.y * eye.y + eye.z * eye.z)))
+        if (s.rfind("Tuiles fines", 0) == 0 || s.rfind("Haut de l'échelle", 0) == 0) std::printf("  | %s\n", s.c_str());
     vkCmdEndRendering(cmd);
     transition(cmd, target.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
