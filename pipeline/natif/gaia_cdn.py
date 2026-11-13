@@ -30,6 +30,7 @@ CDN = 'https://cdn.gea.esac.esa.int/Gaia/gdr3/gaia_source/'
 COLS = ['source_id', 'ra', 'dec', 'parallax', 'parallax_error', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error',
         'radial_velocity', 'radial_velocity_error', 'phot_g_mean_mag', 'bp_rp', 'ruwe']
 PLAFOND = 22e9      # octets gardés sur le PC en attendant l'envoi au Drive
+DEJA_ENVOYES: set[str] = set()      # Parquet déjà rangés sur le Drive (--drive) : pas retéléchargés
 
 
 def telecharger(url: str, chemin: str) -> str:
@@ -44,7 +45,7 @@ def telecharger(url: str, chemin: str) -> str:
 
 def un_fichier(sortie: str, nom: str, attendu: str) -> tuple[str, int, float]:
     final = os.path.join(sortie, nom.replace('.csv.gz', '.parquet'))
-    if os.path.exists(final):
+    if os.path.exists(final) or os.path.basename(final) in DEJA_ENVOYES:      # déjà là, ou déjà parti sur le Drive
         return nom, -1, 0.0
     # Place sur le PC (Marc, 12/11/2026) : au-delà de PLAFOND octets en attente dans le dossier, on attend que les lots
     # partent sur le Drive (déplacés par un autre script) avant de télécharger la suite.
@@ -74,7 +75,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('sortie')
     ap.add_argument('--simultanes', type=int, default=6)
+    ap.add_argument('--drive', help='dossier du Drive où les Parquet finis sont envoyés (vers_drive.py)')
     a = ap.parse_args()
+    if a.drive and os.path.isdir(a.drive):
+        DEJA_ENVOYES.update(n for n in os.listdir(a.drive) if n.endswith('.parquet'))
+        print(f'{len(DEJA_ENVOYES)} fichiers déjà sur le Drive', flush=True)
     os.makedirs(a.sortie, exist_ok=True)
     liste = urllib.request.urlopen(CDN + '_MD5SUM.txt', timeout=120).read().decode().split('\n')
     fichiers = [(l.split()[1], l.split()[0]) for l in liste if l.strip().endswith('.csv.gz')]
