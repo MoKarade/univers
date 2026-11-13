@@ -158,3 +158,18 @@ Les quatre disques restent calmes. Ce qui n'est pas encore bon :
 - le disque de la Voie lactée s'épaissit de 13 % dans les 100 premiers millions d'années : léger défaut d'équilibre vertical ;
 - Triangle et Grand Nuage : particules de matière noire 15 à 22 fois plus lourdes que les étoiles (il en faut moins de 10) ;
 - le gaz est pris comme des étoiles froides ; le Petit Nuage manque.
+
+## 10. Position, vitesse et axe de rotation d'aujourd'hui (repère `phys::galaxie`)
+
+Valeurs utilisées par les étoiles visibles (`docs/contrat-etoiles-visibles.md`, fichiers du fil « Montrer la Voie lactée
+entière », 13/11). La table unique de constantes du plan B+ tranchera ; la masse et la lumière doivent partir des mêmes.
+
+| Galaxie | Vitesse d'ensemble (km/s) | Axe de rotation | Source et statut |
+|---|---|---|---|
+| Andromède | (28,4 ; −109,8 ; 41,4) | (−0,445 ; −0,766 ; −0,464) ; côté nord-est qui s'éloigne | mouvement propre de Wu et al. 2025 ; axe de la page, contrôlé [à relire : distance 761 ou 785 kpc] |
+| Triangle | (39,6 ; 79,6 ; 126,0) | (0,189 ; 0,968 ; −0,165) : angle de position 22°, inclinaison 55° (Corbelli et Schneider 1997) ; côté nord-est qui s'approche | **l'axe de l'ancien calcul, (0,672 ; −0,477 ; 0,567), est faux** (accord de 0,43 seulement avec la mesure) |
+| Grand Nuage | (−57,2 ; −234,5 ; 220,6) | (−0,278 ; −0,949 ; −0,149) : ligne des nœuds 139,1°, inclinaison 34,7° (van der Marel et Kallivayalil 2014) ; sens à confirmer | **l'axe de l'ancien calcul est faux** (accord de 0,65) |
+| Petit Nuage | (3,2 ; −162,9 ; 143,3) ; centre (16,0 ; −37,6 ; −43,6) kpc | sens de rotation non mesuré ; rotation 25 km/s, agitation 26 km/s (Stanimirović et al. 2004) | module de distance 18,977 (Graczyk et al. 2020) ; mouvement propre (0,772 ; −1,117) mas/an et 145,6 km/s (Kallivayalil et al. 2013) [non relu par moi] |
+
+Les vitesses d'Andromède, du Triangle et du Grand Nuage viennent encore de `conditions.json` (ancien calcul) : à
+reprendre des mesures dans la table unique.
