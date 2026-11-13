@@ -69,7 +69,7 @@ def chaos(sens='futur'):
     ecrire('chaos_systeme_solaire' + ('' if sens == 'futur' else '_passe'),
            nom='Chaos du système solaire' + ('' if sens == 'futur' else ', vers le passé') + ' (32 copies écartées de 15 m)', fait=60 if fini else ma, total=60,
            unite='millions d’années', debut=iso(os.path.getctime(j)) if os.path.exists(j) else '', maj=iso(time.time()), etat=etat,
-           detail='Jusqu’où la Terre reste prévisible dans le ' + sens)
+           detail='Jusqu’où la Terre reste prévisible dans le ' + ('futur' if sens == 'futur' else 'passé'))
     return etat
 
 
