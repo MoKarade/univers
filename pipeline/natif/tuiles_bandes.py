@@ -161,6 +161,72 @@ def ecrire_idx(chemin, ordre, w, idx):
     os.replace(chemin + '.part', chemin)
 
 
+class ArchiveBrut:
+    """Archive du brut morceau par morceau : les FITS d'un morceau (gardés dans `brut`) sont copiés dans `dest` avec
+    l'arborescence HiPS (Norder/Dir/Npix), vérifiés (même nombre, mêmes tailles), puis supprimés en local. Tous les
+    ~20 Go, on attend que la file d'envoi de Drive pour ordinateur soit vide (sa base lue en lecture seule) : le
+    téléchargement attend avec, le transitoire local reste petit. C: doit garder au moins 150 Go libres."""
+    LOT = 20e9
+    LIBRE_MIN = 150e9
+    DB = os.path.expandvars(r'%LOCALAPPDATA%\Google\DriveFS\101439376997532179266\metadata_sqlite_db')
+
+    def __init__(self, brut, dest, adresse, reference, premier_morceau):
+        self.brut, self.dest, self.depuis_lot = brut, dest, 0.0
+        os.makedirs(dest, exist_ok=True)
+        lisez = os.path.join(dest, 'LISEZMOI.txt')
+        if not os.path.exists(lisez):
+            with open(lisez, 'w', encoding='utf-8') as f:
+                f.write(f'{os.path.basename(dest)}\nAdresse d\'origine : {adresse}\nRéférence : {reference}\n'
+                        f'Tuiles HiPS telles que servies (certaines compressées en gzip), rangées en Norder<k>/Dir<d>/Npix<n>.fits.\n')
+        with open(lisez, 'a', encoding='utf-8') as f:
+            f.write(f'{time.strftime("%Y-%m-%d %H:%M")} : ordre {K_FIN} archivé à partir du morceau {premier_morceau + 1} '
+                    f'sur 48 (morceaux de 1024 tuiles ; les morceaux précédents ont été faits sans garder le brut).\n')
+
+    def file_envoi(self):
+        import sqlite3
+        c = sqlite3.connect(f'file:{self.DB}?mode=ro', uri=True)
+        try:
+            return c.execute('select count(*) from operations').fetchone()[0]
+        finally:
+            c.close()
+
+    def attendre(self):
+        import shutil
+        while True:
+            ops, libre = self.file_envoi(), shutil.disk_usage('C:\\').free
+            if ops == 0 and libre >= self.LIBRE_MIN:
+                return
+            if ops == 0:
+                raise SystemExit(f'C: n\'a plus que {libre / 1e9:.0f} Go libres (minimum 150) : arrêt')
+            print(f'  archive : attente de l\'envoi vers Google ({ops} opérations, C: {libre / 1e9:.0f} Go libres)', flush=True)
+            time.sleep(30)
+
+    def morceau(self, ordre, ns):
+        import shutil
+        liste = []
+        for n in ns:
+            rel = os.path.join(f'Norder{ordre}', f'Dir{(n // 10000) * 10000}', f'Npix{n}.fits')
+            if os.path.exists(os.path.join(self.brut, rel)):
+                liste.append((rel, os.path.getsize(os.path.join(self.brut, rel))))
+        taille = sum(t for _, t in liste)
+        if self.depuis_lot + taille > self.LOT:
+            self.attendre()
+            self.depuis_lot = 0.0
+        for rel, t in liste:
+            cible = os.path.join(self.dest, rel)
+            os.makedirs(os.path.dirname(cible), exist_ok=True)
+            if not (os.path.exists(cible) and os.path.getsize(cible) == t):
+                shutil.copyfile(os.path.join(self.brut, rel), cible)
+        ko = [rel for rel, t in liste if not os.path.exists(os.path.join(self.dest, rel))
+              or os.path.getsize(os.path.join(self.dest, rel)) != t]
+        if ko:
+            raise SystemExit(f'archive : {len(ko)} fichiers différents sur la destination ({ko[:5]}) ; brut local gardé')
+        for rel, _ in liste:
+            os.remove(os.path.join(self.brut, rel))
+        self.depuis_lot += taille
+        return len(liste), taille
+
+
 def ecrire_fiche(dossier_idx, fiche):
     """fiche.json écrite d'un coup (.part puis renommage)."""
     chemin = os.path.join(dossier_idx, 'fiche.json')
@@ -242,6 +308,7 @@ def main():
     ap.add_argument('--avancement', help="fichier d'avancement lu par l'appli")
     ap.add_argument('--rang', default='1/1', help="place de ce relevé dans le lot, « i/n »")
     ap.add_argument('--zones', action='store_true', help="ajoute les ordres 7 et 8 sur les seules zones de ZONES")
+    ap.add_argument('--archive', help="dossier d'archive du brut (Drive), rempli morceau par morceau ; demande --brut")
     a = ap.parse_args()
     if a.zones:
         return main_zones(a)
@@ -280,6 +347,12 @@ def main():
     av = Avancement(a.avancement, 'Tuiles fines du ciel (ordre 6, pixel de 6,4″)', 100 * n_r, '%')
     n_morceaux = (12 * 4 ** K_BAS) >> (2 * G)          # groupes de 64 tuiles d'ordre 4 : 48
     par_morceau = 1 << (2 * (G + K_FIN - K_BAS))       # tuiles d'ordre 6 par morceau : 1024
+    archive = None
+    if a.archive:
+        if not a.brut:
+            raise SystemExit('--archive demande --brut (dossier local où garder le brut d’un morceau)')
+        premier_m = min([m for m in range(n_morceaux) if m not in faits] or [n_morceaux])
+        archive = ArchiveBrut(a.brut, a.archive, adresse, fiche.get('reference', ''), premier_m)
     t0 = time.time()
     with cf.ThreadPoolExecutor(a.simultanes) as ex:
         for m in range(n_morceaux):
@@ -303,6 +376,9 @@ def main():
                      **{f'idx{k}': idx[k] for k in ordres})
             os.replace(etat[:-4] + '_part.npz', etat)
             print(f'  morceau {m + 1}/{n_morceaux} fait, {time.time() - t0:.0f} s', flush=True)
+            if archive:
+                nb, taille = archive.morceau(K_FIN, range(premier, premier + par_morceau))
+                print(f'  morceau {m + 1} : brut archivé, {nb} fichiers, {taille / 1e9:.2f} Go', flush=True)
             av.ecrire(100 * (i_r - 1) + int(100 * len(faits) / n_morceaux), 'en cours',
                       f'{r["libelle"]} : morceau {len(faits)} sur {n_morceaux} (relevé {i_r} sur {n_r})', True)
 
