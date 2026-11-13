@@ -387,6 +387,9 @@ public:
                 const double shown = 206264.806 * std::sqrt(kPi / 3.0) / (static_cast<double>(tiles_.width) * (1u << tiles_.shownOrder));
                 std::snprintf(b, sizeof b, "Tuiles fines : pixel de %.2g″ au centre (le plus fin : %.2g″)%s.", shown, finest,
                               tiles_.pending() ? ", lecture en cours" : "");
+            } else if (tiles_.wanted >= static_cast<int>(tiles_.orderMin)) {
+                std::snprintf(b, sizeof b, "Tuiles fines : rien de mesuré plus finement au centre de la vue%s.",
+                              tiles_.pending() ? " (ou lecture en cours)" : "");
             } else {
                 std::snprintf(b, sizeof b, "Tuiles fines disponibles jusqu'à %.2g″ par pixel : resserrer le champ pour les voir.", finest);
             }

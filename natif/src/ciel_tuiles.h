@@ -94,8 +94,9 @@ public:
     bool active = false;          // des tuiles fines existent pour la carte chargée
     uint32_t width = 0, logWidth = 0, orderMin = 0, orderMax = 0;
     std::string dir, root;
-    uint32_t shownOrder = 0;
-    double scale = 1;             // valeurs stockées × facteur_float16 (fiche.json) : float16 ne va que de 6e-8 à 65504      // ordre le plus fin chargé au centre de l'écran (0 : aucune tuile fine)
+    uint32_t shownOrder = 0;      // ordre le plus fin chargé au centre de l'écran (0 : aucune tuile fine)
+    int wanted = -1;              // ordre que le champ demanderait (< orderMin : champ trop large pour les tuiles)
+    double scale = 1;             // valeurs stockées × facteur_float16 (fiche.json) : float16 ne va que de 6e-8 à 65504
     uint32_t pending() const { return static_cast<uint32_t>(inFlight_); }
 
     // Cherche les index ordre_K.idx du relevé dans indexDir ; les paquets sont dans bundleRoot. On ne garde que les ordres
@@ -194,6 +195,7 @@ public:
         if (!active) return;
         ++frame_;
         const int want = wantedOrder(screen);
+        wanted = want;
         std::vector<uint64_t> need;
         if (want >= static_cast<int>(orderMin)) {
             const uint32_t top = std::min<uint32_t>(static_cast<uint32_t>(want), orderMax);
