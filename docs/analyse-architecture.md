@@ -285,6 +285,29 @@ Terre, perte de masse du Soleil, raccords de la Lune (priorités 3 et 4 de l'aud
 Les deux calculs en cours (« Voie lactée seule », « fusion-toutes ») : les laisser finir, ils servent de contrôle
 (stabilité du disque, apparition de la barre). Ils ne seront plus l'image finale.
 
+## 7 bis. Calculs beaucoup plus longs (demande de Marc, 13/11 : la précision d'abord, le temps n'est pas une limite)
+
+Base de mesure : les deux calculs annoncés par le fil physique sur la RTX 5080 (3 M de particules, 10 Ga, environ 9 h ;
+10,5 M, 4,7 Ga, environ 18 h) donnent **environ 0,35 h par million de particules et par milliard d'années** au pas de
+0,25 Ma. Tout ce qui suit est une **estimation** tirée de ces deux points.
+
+| Palier | Particules | Finesse | Durée de carte graphique | Place |
+|---|---|---|---|---|
+| Aujourd'hui | 3 M | 115 pc | 9 h | 6 Go |
+| **1. Plafond du PC, gravité seule** | 30 M (dont ~10 M d'étoiles), de −2 à +10 Ga | ~50 pc, pas de 0,125 Ma | **10 à 11 jours**, plus 2 à 3 jours pour vieillir chaque galaxie seule avant, plus les essais de réglage (~2 h chacun à 3 M) | **~50 Go** : 36 Go d'images d'étoiles + 17 Go d'états complets, sur le Drive |
+| 2. Avec gaz et naissance d'étoiles | à fixer par un essai | à fixer | **non mesurée** : semaines probables ; les codes publics (GADGET-4, GIZMO, SWIFT) tournent sur le processeur, sous Linux | non mesurée |
+| 3. 100 M et plus | — | — | ne tient pas dans les 16 Go de la carte avec le code actuel [À vérifier] ; demanderait de réécrire le moteur ou de louer du calcul (payant, donc exclu) | — |
+
+Ce qu'il faut savoir avant de dire oui au palier 1 :
+- 30 M est le plafond estimé **appli fermée** (le calcul à 10,5 M prend 4,2 Go, l'appli ouverte 9 Go). Pendant ces
+  jours, soit l'appli reste fermée, soit le calcul descend vers 15 M.
+- Le calcul se met déjà en pause quand Marc joue ; la durée réelle sera donc plus longue que la durée de carte.
+- Plus de particules ne corrige pas un mauvais départ. L'ordre reste : cahier des charges, galaxies vieillies seules,
+  réglage en petit, **puis** le grand calcul. Sinon ce sont 10 jours perdus.
+- Les autres calculs peuvent aussi s'allonger pour presque rien : scénarios d'incertitude (10 000 → 100 000), chaos du
+  système solaire (32 copies sur 60 Ma → plus de copies, plus loin).
+- 50 Go dépassent le seuil « prévenir avant » : **accord de Marc demandé** (le Drive a 20 To libres).
+
 ## 8. Recommandation
 
 **Option B, en commençant par les étapes 0 et 2.** Le point le plus urgent n'est pas du code : c'est de **ne pas
