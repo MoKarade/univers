@@ -331,7 +331,34 @@ def futur(sortie, t_fin, opts, cible):
     tr = [cp.asarray(np.where((p['kind'] == 9) & (p['gid'] == g))[0]) for g in range(len(ORDRE))]
     print(f"futur : {int((p['kind'] != 9).sum())} particules de masse, {int((p['kind'] == 9).sum())} étoiles visibles, de {t0:+.3f} à {t_fin:+.2f} Ga", flush=True)
 
+    champ = None
+    if 'champ' in opts:      # champ de gravité en coefficients (pipeline/champ/champ_bfe.py, docs/champ-coefficients.md), toutes les --champ images
+        sys.path.insert(0, os.path.join(ICI, '..', 'champ'))
+        import champ_bfe as champ
+        os.makedirs(os.path.join(film, 'champ'), exist_ok=True)
+    masse_de = [cp.asarray(np.where((p['kind'] != 9) & (p['gid'] == g))[0]) for g in range(len(ORDRE))]
+    etoile_de = S.idx
+
+    def ecrire_champ(k, centres, vitesses):
+        m_gal = [float(cp.sum(S.m[ix])) for ix in masse_de]
+        for g, nom in enumerate(ORDRE):
+            ix = masse_de[g]
+            pos = cp.asnumpy(S.pos[ix]) - centres[g]
+            e = etoile_de[g]      # axe : moment cinétique des étoiles de la galaxie, à cette image
+            L = cp.asnumpy(cp.sum(cp.cross(S.pos[e] - cp.asarray(centres[g]), S.vel[e] - cp.asarray(vitesses[g])) * S.m[e][:, None], axis=0))
+            axe = (L / np.linalg.norm(L)).tolist() if np.linalg.norm(L) > 0 else None
+            rmax = None
+            if g >= 3:      # les Nuages : au-delà de leur rayon de marée dans la Voie lactée, leur champ propre n'a plus de sens
+                rmax = champ.rayon_jacobi(float(np.linalg.norm(centres[g] - centres[0])), m_gal[g], m_gal[0])
+            Cf = champ.coefficients(pos, cp.asnumpy(S.m[ix]), p['kind'][cp.asnumpy(ix)], axe=axe, rayon_max=rmax)
+            champ.sauver(Cf, os.path.join(film, 'champ', f'champ_{k:05d}_{nom}.npz'))
+
     def image(t, centres, vitesses):
+        if champ is not None and len(meta['t']) % int(opts['champ']) == 0:
+            try:
+                ecrire_champ(len(meta['t']), centres, vitesses)
+            except Exception as err:      # le champ ne doit jamais arrêter le calcul : on le dit et on continue
+                print(f'  champ non écrit à t = {t:+.3f} Ga : {err}', flush=True)
         blocs = [cp.asnumpy(S.pos[ix] - cp.asarray(centres[g])).astype(np.float16) for g, ix in enumerate(tr) if len(ix)]
         nom = f"img_{len(meta['t']):05d}.f16"
         if blocs:
