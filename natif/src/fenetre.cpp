@@ -287,6 +287,7 @@ int runWindow(const WindowOptions& opt) {
     int skyLoaded = -1;
     if (opt.skyBand >= 0) sim.skyBand = opt.skyBand;
     if (opt.wholeGalaxy) sim.wholeGalaxy = true;
+    if (opt.uncertainty) sim.showClones = true;
     OrbitGpu orbits;      // orbite exacte de chaque étoile, calculée sur la carte graphique
     orbits.create(g, stars, sr, HdrTarget::kFormat);
     PlanetPoints planets;
