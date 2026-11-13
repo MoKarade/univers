@@ -26,6 +26,10 @@ import astropy.units as u
 from astropy.coordinates import SkyCoord, Galactocentric, CartesianDifferential, Distance
 
 SOLEIL_R0 = 8.2
+# Conditions du calcul de la rencontre (pipeline/fusion/conditions.json) : source unique pour la place, la vitesse
+# d'ensemble et l'axe de rotation quand elles y sont (M31 : Wu et al. 2025, Gaia ; axe vérifié sur les mesures, côté
+# nord-est qui s'éloigne, Rubin & Ford 1970, Chemin et al. 2009). Le Petit Nuage n'y est pas : mesures citées plus bas.
+CONDITIONS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fusion', 'conditions.json')
 SOLEIL_V = (11.1, 242.24, 7.25)
 # nom : fichier, nombre de traceurs (plafonds du contrat), module de distance, µα* et µδ (µas/an), v_los (km/s),
 #       vitesse de rotation (km/s) et rayon où elle est atteinte (kpc), agitation (km/s), épaisseur (kpc), bulbe (kpc)
@@ -58,6 +62,7 @@ def eq_vers_gal():
 def main():
     src, sortie = sys.argv[1:3]
     geo = lire_tsv(src)
+    cond = json.load(open(CONDITIONS, encoding='utf-8'))
     E2G = eq_vers_gal()
     gc_frame = Galactocentric(galcen_distance=SOLEIL_R0 * u.kpc, z_sun=0 * u.pc,
                               galcen_v_sun=CartesianDifferential(list(SOLEIL_V) * u.km / u.s))
@@ -89,18 +94,49 @@ def main():
         off += nrm[None] * np.arctanh(rng.uniform(-0.999, 0.999, n))[:, None] * hz      # épaisseur [modèle]
         R = np.linalg.norm(off, axis=1)
         # rotation : côté +grand axe qui s'approche (vitesse vers le Soleil, -u0)
-        spin = nrm * (1.0 if np.dot(np.cross(nrm, grand), -u0) > 0 else -1.0)
         vphi = vrot * np.clip(R / rrot, 0, 1)
-        tang = np.cross(spin[None], off); tang /= np.maximum(np.linalg.norm(tang, axis=1), 1e-9)[:, None]
-        v_int = tang * vphi[:, None] + rng.normal(0, sig, (n, 3))
         # vitesse d'ensemble mesurée -> phys::galaxie
         sky = SkyCoord(ra=g['ra'] * u.deg, dec=g['dec'] * u.deg, distance=D * u.kpc, pm_ra_cosdec=pmra / 1000 * u.mas / u.yr,
                        pm_dec=pmdec / 1000 * u.mas / u.yr, radial_velocity=vr * u.km / u.s)
         gc = sky.transform_to(gc_frame)
         c_pos = np.array([gc.x.to_value(u.kpc), gc.y.to_value(u.kpc), gc.z.to_value(u.kpc)])
         c_vel = np.array([gc.v_x.to_value(u.km / u.s), gc.v_y.to_value(u.km / u.s), gc.v_z.to_value(u.km / u.s)])
-        pos = c_pos[None] + off @ E2G.T
-        vel = c_vel[None] + v_int @ E2G.T
+        source_ens = 'module de distance, mouvement propre et vitesse radiale mesurés (voir sources), astropy'
+        spin_g = None
+        cle = {'andromede': ('m31', 'm31'), 'grand_nuage': ('lmc', 'lmc'), 'triangle': (None, 'm33')}.get(nom)
+        if cle:
+            if cle[0]:
+                c_pos, c_vel = np.array(cond[cle[0]]['pos']), np.array(cond[cle[0]]['vel'])
+                spin_g = np.array(cond[cle[0]]['spin'] if 'spin' in cond[cle[0]] else cond[cle[0] + '_spin'])
+            else:
+                dw = [x for x in cond['dwarfs'] if 'Triangle' in x['name']][0]
+                c_pos, c_vel = np.array(dw['pos']), np.array(dw['vel'])
+                spin_g = np.array(cond['m33_spin'])
+            source_ens = 'pipeline/fusion/conditions.json (conditions du calcul de la rencontre)'
+        # rotation du disque dans le repère de l'appli : axe du calcul quand il existe, sinon côté du grand axe qui s'approche
+        off_g = off @ E2G.T
+        if spin_g is None:
+            spin_g = E2G @ (nrm * (1.0 if np.dot(np.cross(nrm, grand), -u0) > 0 else -1.0))
+        spin_g = spin_g / np.linalg.norm(spin_g)
+        n_photo = E2G @ nrm
+        accord = abs(float(np.dot(spin_g, n_photo)))      # le plan de la photo et l'axe de rotation doivent concorder
+        axe_calcul = spin_g.copy()
+        if accord < 0.95:
+            # L'axe du calcul ne tombe pas sur la normale du disque mesuré (angle de position et inclinaison publiés) :
+            # on garde le plan MESURÉ et seulement le SENS de rotation du calcul ; l'écart est écrit dans meta.
+            spin_g = n_photo * (1.0 if np.dot(axe_calcul, n_photo) >= 0 else -1.0)
+        if nom == 'triangle':
+            # Triangle : le côté nord-est (angle de position) s'APPROCHE (Corbelli & Schneider 1997, Corbelli et al. 2014) ;
+            # la mesure l'emporte sur le sens du calcul.
+            spin_g = n_photo * (1.0 if np.dot(np.cross(n_photo, E2G @ grand), -(E2G @ u0)) > 0 else -1.0)
+        tang = np.cross(spin_g[None], off_g); tang /= np.maximum(np.linalg.norm(tang, axis=1), 1e-9)[:, None]
+        vel_int = tang * vphi[:, None] + rng.normal(0, sig, (n, 3))
+        pos = c_pos[None] + off_g
+        vel = c_vel[None] + vel_int
+        # contrôle : vitesse le long de la ligne de visée (vue du Soleil) du côté +grand axe (vers l'angle de position)
+        ligne = E2G @ u0
+        cote = (off @ grand) > 0.3 * np.percentile(np.abs(off @ grand), 90)
+        v_cote = float(np.mean(vel_int[cote] @ ligne))
         # couleur et composante
         pix = img[np.clip(lig.astype(int), 0, h - 1), np.clip(col.astype(int), 0, w - 1)]
         r_br = (pix[:, 2] + 0.02) / (pix[:, 0] + 0.02)
@@ -115,11 +151,14 @@ def main():
         graine = rng.integers(0, 2 ** 32, n, dtype=np.uint64).astype(np.uint32)
         meta = dict(galaxie=nom, date='2026-11-13', repere='phys::galaxie (galaxie_orbites.h), kpc, km/s, t = 0',
                     photo=f'{fic}.png ({"Mellinger 2009" if fic in ("lmc", "smc") else "DSS2"}, SkyView)', distance_kpc=D,
-                    centre_kpc=c_pos.tolist(), vitesse_kms=c_vel.tolist(), nombre={str(c): int((comp == c).sum()) for c in (1, 2, 5)},
+                    centre_kpc=c_pos.tolist(), vitesse_kms=c_vel.tolist(), source_ensemble=source_ens,
+                    axe_rotation=spin_g.tolist(), axe_du_calcul=axe_calcul.tolist(), accord_axe_plan_photo=accord, vitesse_visee_cote_angle_position_kms=v_cote, nombre={str(c): int((comp == c).sum()) for c in (1, 2, 5)},
                     sources=SOURCES, modele='épaisseur, lumière par traceur, couleur depuis la photo, sens de rotation hors M31')
         np.savez_compressed(os.path.join(sortie, f'etoiles_visibles_{nom}.npz'), pos=pos, vel=vel, lum=lum, teff=teff.astype(np.float32),
                             comp=comp, graine=graine, meta=json.dumps(meta, ensure_ascii=False))
-        print(f'{nom} : {n} traceurs, centre {np.round(c_pos, 1)} kpc ({D:.1f} kpc du Soleil), vitesse {np.round(c_vel, 1)} km/s')
+        sens = "s'éloigne" if v_cote > 0 else "s'approche"
+        print(f"{nom} : {n} traceurs, centre {np.round(c_pos, 1)} kpc, vitesse {np.round(c_vel, 1)} km/s ({source_ens}) ; "
+              f"axe {np.round(spin_g, 3)} (accord avec le plan de la photo {accord:.3f}) ; côté de l'angle de position : {v_cote:+.0f} km/s ({sens})")
 
 
 if __name__ == '__main__':

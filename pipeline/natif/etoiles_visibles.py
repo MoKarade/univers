@@ -12,7 +12,7 @@ y vers la longitude 90°, z vers le nord galactique ; rotation dans le sens des 
 
 Composantes (masses : docs/parametres-galaxies.md de modeles-depart ; lumière = masse / rapport masse-lumière de la
 population, ML_V [Supposition] ; lumière V totale : M_V = -21,51, Licquia et al. 2015) :
-- 1 disque mince : Σ0 = 896 M☉/pc², Rd = 2,50 kpc, hz = 0,30 kpc ; lisse (la masse est lisse) ;
+- 1 disque mince : Σ0 = 896 M☉/pc², Rd = 2,50 kpc, hz = 0,30 kpc (exponentiel en z) ; lisse (la masse est lisse) ;
 - 4 disque épais : Σ0 = 183 M☉/pc², Rd = 3,02 kpc, hz = 0,90 kpc ;
 - 2 bulbe et barre (lumière) : bulbe en cacahuète exponentiel triaxial 0,70 × 0,44 × 0,18 kpc et barre longue de 5 kpc
   de demi-longueur, hauteurs 180 et 45 pc (Wegg & Gerhard 2013, Wegg et al. 2015 ; Bland-Hawthorn & Gerhard 2016),
@@ -21,7 +21,7 @@ population, ML_V [Supposition] ; lumière V totale : M_V = -21,51, Licquia et al
   (atténués), et dans les 1 413 régions HII WISE avec distance (Anderson et al. 2014) [modèle : part de lumière] ;
 - 6 halo d'étoiles : 1e9 M☉, densité r^-3,5 aplatie 0,6, de 1 à 50 kpc (Deason et al. 2011) [modèle].
 Vitesses : vitesse circulaire de McMillan 2017 (198, 222, 234, 227, 221 km/s à 2, 4, 8,21, 15, 25 kpc) et agitation
-(disque mince 35 km/s au Soleil, épais 50 km/s, décroissance exponentielle sur 5 kpc ; bulbe 100 km/s ; halo 120 km/s ;
+(disque mince 35 km/s au Soleil, épais 50 km/s, croissance exponentielle vers le centre sur 5 kpc, bornée à 60 et 90 km/s ; bulbe 100 km/s ; halo 120 km/s ;
 jeunes 10 km/s) ; barre : rotation d'ensemble à 39 km/s/kpc dans la limite de la vitesse circulaire.
 Lumière de chaque traceur : tirée d'une loi de Pareto (indice 1,5), somme égale à la lumière de sa composante
 [modèle : les traceurs portent la lumière de toutes les étoiles faibles qui les entourent].
@@ -63,15 +63,17 @@ def tourner(R, x, y, vphi):
     return np.stack([vphi * y / R, -vphi * x / R], 1)
 
 
-def disque(rng, n, Rd, hz, s0, rmax=15.0):
+def disque(rng, n, Rd, hz, s0, smax, rmax=15.0):
     # bord du disque d'étoiles mesuré vers 13,9 kpc (Minniti et al. 2011) : coupure adoucie entre 13 et 16 kpc
     R = rng.gamma(2.0, Rd, n * 3)
     R = R[rng.uniform(size=len(R)) < np.clip((16.0 - R) / 3.0, 0.0, 1.0)][:n]
     th = rng.uniform(0, 2 * math.pi, n)
-    z = np.arctanh(rng.uniform(-0.999999, 0.999999, n)) * hz      # densité sech²(z / hz) : z = hz artanh(u)
+    z = rng.laplace(0.0, hz, n)      # densité exponentielle exp(-|z| / hz) (McMillan 2017) : médiane de |z| = hz ln 2
     p = np.stack([R * np.cos(th), R * np.sin(th), z], 1)
-    s = s0 * np.exp(-(R - 8.21) / 5.0)
-    vt = tourner(R, p[:, 0], p[:, 1], vc(R) - s ** 2 / np.maximum(vc(R), 1.0))       # retard de rotation des étoiles agitées (dérive asymétrique, ordre de grandeur)
+    # agitation : s0 au Soleil, croissance exponentielle vers le centre sur 5 kpc, bornée (disque intérieur mesuré à
+    # 50-60 km/s pour le disque mince, APOGEE ; ce n'est pas le bulbe, qui a sa propre agitation de 100 km/s, BRAVA)
+    s = np.minimum(s0 * np.exp(-(R - 8.21) / 5.0), smax)
+    vt = tourner(R, p[:, 0], p[:, 1], np.maximum(vc(R) - s ** 2 / np.maximum(vc(R), 1.0), 0.5 * vc(R)))       # retard de rotation des étoiles agitées (dérive asymétrique, ordre de grandeur)
     vel = np.zeros((n, 3))
     vel[:, :2] = vt
     er = p[:, :2] / np.maximum(R, 1e-6)[:, None]; ep = np.stack([er[:, 1], -er[:, 0]], 1)
@@ -133,9 +135,9 @@ def main():
     poids = {c: MASSE[c] / ML_V[c] for c in (1, 4, 2, 6)}
     for c in poids: L_comp[c] = L_V * poids[c] / sum(poids.values())
     L_comp[5] = PART_JEUNES * L_comp[1]; L_comp[1] *= 1 - PART_JEUNES
-    p, u = disque(rng, nb[1], 2.50, 0.30, 35.0); pos.append(p); vel.append(u); comp.append(np.full(nb[1], 1, np.int8))
+    p, u = disque(rng, nb[1], 2.50, 0.30, 35.0, 60.0); pos.append(p); vel.append(u); comp.append(np.full(nb[1], 1, np.int8))
     teff.append(np.clip(rng.normal(5200, 700, nb[1]), 3300, 9000))
-    p, u = disque(rng, nb[4], 3.02, 0.90, 50.0); pos.append(p); vel.append(u); comp.append(np.full(nb[4], 4, np.int8))
+    p, u = disque(rng, nb[4], 3.02, 0.90, 50.0, 90.0); pos.append(p); vel.append(u); comp.append(np.full(nb[4], 4, np.int8))
     teff.append(np.clip(rng.normal(4900, 400, nb[4]), 3300, 7000))
     p, u = bulbe_barre(rng, nb[2]); pos.append(p); vel.append(u); comp.append(np.full(nb[2], 2, np.int8))
     teff.append(np.clip(rng.normal(4400, 300, nb[2]), 3300, 6000))
@@ -176,6 +178,7 @@ def main():
                 lumiere_V_Lsol=float(lum.sum()), lumiere_montree_hors_Gaia=float(lum_vue.sum()),
                 sources='docs/parametres-galaxies.md (modeles-depart), McMillan 2017, Wegg & Gerhard 2013, Wegg et al. 2015, '
                         'Bland-Hawthorn & Gerhard 2016, Reid et al. 2019, Anderson et al. 2014, Licquia et al. 2015, Deason et al. 2011',
+                rotation='axe -z (φ décroissants), McMillan 2017', vitesse_ensemble_kms=[0, 0, 0],
                 modele='bras prolongés au-delà des portions mesurées, lumière par traceur (Pareto), couleurs par composante, halo')
     os.makedirs(sortie, exist_ok=True)
     np.savez_compressed(os.path.join(sortie, 'etoiles_visibles_voie_lactee.npz'), pos=pos, vel=vel, lum=lum.astype(np.float32),

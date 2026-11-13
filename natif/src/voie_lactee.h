@@ -85,6 +85,10 @@ public:
 
     // Angle de la barre (rad, depuis l'axe x galactique vers y), years : années depuis J2000,0. Même fonction que les
     // orbites des étoiles du fil de la gravité (natif/physique/galaxie_orbites.h).
+    // Carte de lumière et de poussière (canal g : A_V par pc), pour les étoiles du modèle (gaia.h, attachDust).
+    VkImageView gridView() const { return ready ? big_.view : VK_NULL_HANDLE; }
+    VkSampler gridSampler() const { return sampler_; }
+
     double barAngle(double years) const { return phys::galaxie::barAngleAt(years * 1e-9); }
 
     // Dans la passe en grande dynamique, avant les étoiles. exposure : la même que pour les étoiles.

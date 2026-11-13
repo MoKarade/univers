@@ -9,6 +9,7 @@ layout(std430, set = 0, binding = 1) readonly buffer Vel { uvec2 vel[]; };      
 layout(std430, set = 0, binding = 2) readonly buffer Col { vec4 colorOf[]; };          /* 256 pas de BP-RP -> couleur du corps noir */
 struct Etat { vec4 p; vec4 v; };
 layout(std430, set = 0, binding = 3) readonly buffer Orb { Etat orb[]; };        /* orbites exactes (gaia_orbites.h, orbites_pas.comp), le Soleil en dernier */
+layout(set = 0, binding = 4) uniform sampler3D dust;      /* poussière 3D (voie_lactee.bin, canal g : A_V par pc), seulement si GF_POUSSIERE */
 layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; uint sun; float frac; float exact; uint cellBase; } pc;   /* par : exposition, hauteur en pixels, temps en al par (km/s), temps en Ga */
 layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
@@ -50,6 +51,20 @@ void main() {
     float flux = pc.par.x * pow(10.0, -0.4 * m) * garde;
     float size = clamp(1.5 + 1.2 * log2(1.0 + flux), 1.5, 14.0) * pc.par.y / 1080.0;
     vCol = colorOf[pas].rgb * min(flux, 3.0e4) / (size * size);
+    /* étoile du MODÈLE (drapeau 16) : poussière entre la caméra et l'étoile, dans la carte 3D (repère galactocentrique,
+       ±16 kpc, ±2 kpc ; hors de la carte : rien). Rougissement : A_R = 0,75 A_V, A_B = 1,32 A_V (loi de Cardelli et al.
+       1989, R_V = 3,1, aux longueurs d'onde moyennes des trois couleurs de l'écran) [approché]. */
+    if ((flags & 16u) != 0u && (pc.cellBase & GF_POUSSIERE) != 0u) {
+        vec3 ga = transpose(OG_M) * (pc.camHi.xyz + pc.camLo.xyz) / OG_KPC_LY + OG_SOLEIL_POS;
+        vec3 gb = transpose(OG_M) * (pos + move) / OG_KPC_LY + OG_SOLEIL_POS;
+        const vec3 lo = vec3(-16.0, -16.0, -2.0), span = vec3(32.0, 32.0, 4.0);
+        float av = 0.0, segPc = length(gb - ga) * 1000.0 / 16.0;
+        for (int i = 0; i < 16; ++i) {
+            vec3 uvw = (mix(ga, gb, (float(i) + 0.5) / 16.0) - lo) / span;
+            av += texture(dust, uvw).g * segPc;      /* bord transparent : hors de la carte, pas de poussière */
+        }
+        vCol *= pow(vec3(10.0), -0.4 * av * vec3(0.75, 1.0, 1.32));
+    }
     gl_Position = pc.viewProj * vec4(p, 1.0);
     gl_PointSize = size;
 }

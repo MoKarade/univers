@@ -274,6 +274,11 @@ int runWindow(const WindowOptions& opt) {
     // (Sim::bestLook), éteint en vue « 100 % mesuré ».
     MilkyWayRenderer milkyWay;
     milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
+    // Poussière 3D pour les étoiles du modèle ; liée aussi aux jeux Gaia pour que tous les jeux de ressources soient
+    // complets (leurs étoiles mesurées n'ont pas le drapeau 16 : elles ne la lisent pas).
+    if (milkyWayStarsOk) milkyWayStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
+    if (gaiaOk) gaia.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
+    if (gaiaBOk) gaiaB.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     // Andromède, Triangle, Nuages de Magellan : leurs vraies photos posées sur le plan mesuré de leur disque (galaxies_images.h).
     GalaxyImages galaxyImages;
     galaxyImages.create(g, HdrTarget::kFormat, dataDir, sim);

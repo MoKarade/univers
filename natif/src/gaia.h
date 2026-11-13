@@ -49,6 +49,7 @@ namespace GaiaFiable {
 constexpr uint8_t kVitesseRadiale = 1, kOrbiteFiable = 2, kReequilibre = 4;      // drapeaux d'une étoile (gaia.bin)
 constexpr double kTauAns = 3.0e6;      // sources sans orbite fiable : lumière × exp(-(t / kTauAns)²) loin d'aujourd'hui
 constexpr uint32_t kModeRendu = 0x80000000u;      // bit haut de GaiaPush::cellBase : vue « meilleur rendu » (sinon 100 % mesuré)
+constexpr uint32_t kPoussiere = 0x40000000u;      // bit suivant : carte de poussière 3D liée (attachDust) ; les étoiles du modèle (drapeau 16) s'y éteignent
 inline double effacement(double ans) { const double u = ans / kTauAns; return std::exp(-u * u); }
 // Part du rééquilibrage d'éclat appliquée (HYPOTHÈSE, gaia_reequilibre.py) : 0 vu du Soleil, 1 vu de loin.
 inline double poidsLoin(double camDist, double starDist) { return std::clamp(camDist / std::max(starDist, 1.0), 0.0, 1.0); }
@@ -213,7 +214,8 @@ public:
         const double since = years - (static_cast<double>(file_.epoch) - 2000.0);      // années depuis les mesures de Gaia
         PushConstants pc = pushConstants(cam, exposure, height, since);
         pc.par[3] = static_cast<float>(since / 1.0e9);      // orbite autour de la Galaxie (gaia.vert)
-        const GaiaPush gp{pc, orbits_.count - 1, orbits_.fraction(since), orbits_.readyToDraw() ? 1.0f : 0.0f, static_cast<uint32_t>(file_.n) | (improved ? GaiaFiable::kModeRendu : 0u)};
+        const GaiaPush gp{pc, orbits_.count - 1, orbits_.fraction(since), orbits_.readyToDraw() ? 1.0f : 0.0f,
+                          static_cast<uint32_t>(file_.n) | (improved ? GaiaFiable::kModeRendu : 0u) | (dustReady_ ? GaiaFiable::kPoussiere : 0u)};
         const uint32_t n = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
                                         file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
@@ -258,6 +260,23 @@ public:
             }
         }
         ring_ = (ring_ + 1) % kRing;
+    }
+
+    // Carte de poussière 3D (voie_lactee.bin, canal g : A_V par pc, repère galactocentrique ±16 kpc, ±2 kpc) : les étoiles
+    // du modèle (drapeau 16) s'éteignent et rougissent le long du trajet de la caméra jusqu'à elles. Les étoiles mesurées
+    // n'en ont pas besoin : leur magnitude mesurée contient déjà la poussière vue du Soleil.
+    void attachDust(const Gpu& g, VkImageView view, VkSampler sampler) {
+        if (!ready || !view) return;
+        const VkDescriptorImageInfo im{sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        w.dstSet = set_;
+        w.dstBinding = 4;
+        w.descriptorCount = 1;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w.pImageInfo = &im;
+        vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
+        if (aggSet_) { w.dstSet = aggSet_; vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr); }
+        dustReady_ = true;
     }
 
     // Avance les orbites exactes vers la date montrée (budget : pas d'un million d'années au plus). Hors d'une passe de dessin,
@@ -356,6 +375,7 @@ private:
     double shiftYears_ = 0;
     GaiaFile file_;
     GaiaOrbits orbits_;
+    bool dustReady_ = false;
     std::vector<uint32_t> visible_;      // feuilles dessinées à la dernière image : ce sont elles que les orbites exactes avancent
     uint32_t epicycleLeaves_ = 0;        // feuilles dessinées en épicycles à la dernière image (orbite exacte pas encore rattrapée)
     Buffer stars_, velocities_, colors_, indirect_[kRing];
@@ -512,17 +532,18 @@ private:
     }
 
     void createPipeline(const Gpu& g, VkFormat fmt) {
-        VkDescriptorSetLayoutBinding binds[4];      // 3 : états des orbites exactes
+        VkDescriptorSetLayoutBinding binds[5];      // 3 : états des orbites exactes ; 4 : poussière 3D (attachDust)
         for (uint32_t i = 0; i < 4; ++i) binds[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+        binds[4] = {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        dl.bindingCount = 4;
+        dl.bindingCount = 5;
         dl.pBindings = binds;
         check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &setLayout_), "agencement Gaia");
-        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8};
+        const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}};
         VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         dp.maxSets = 2;
-        dp.poolSizeCount = 1;
-        dp.pPoolSizes = &ps;
+        dp.poolSizeCount = 2;
+        dp.pPoolSizes = ps;
         check(vkCreateDescriptorPool(g.dev, &dp, nullptr, &pool_), "réserve Gaia");
         VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
         da.descriptorPool = pool_;

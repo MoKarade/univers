@@ -10,6 +10,7 @@
       proportion de l'écart caméra-Soleil rapporté à la distance de la source : rien vu du Soleil (le ciel reste celui mesuré),
       tout vu de loin. */
 const float GF_TAU_ANS = 3.0e6;
+const uint GF_POUSSIERE = 0x40000000u;       /* bit suivant : carte de poussière 3D liée (gaia.h, attachDust) */
 const uint GF_MODE_RENDU = 0x80000000u;      /* bit haut de cellBase : vue « meilleur rendu » (Sim::bestLook) ; sinon 100 % mesuré */
 float gfEffacement(float tGa) {
     float u = tGa * 1.0e9 / GF_TAU_ANS;
