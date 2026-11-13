@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["andromede","triangle","grand_nuage"]') }}
+        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["voie_lactee --rsig=3","voie_lactee --rsig=4","andromede --rsig=3","andromede --rsig=4"]') }}
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
@@ -42,7 +42,10 @@ jobs:
         working-directory: pipeline/fusion
         env:
           GALAXIE: ${{ matrix.galaxie }}
-          N: ${{ inputs.n || (matrix.galaxie == 'triangle' && '1000000') || (matrix.galaxie == 'grand_nuage' && '1000000') || '2000000' }}
-        run: python modeles_v2.py "$GALAXIE" "$N" "$GALAXIE.npz"
+          N: ${{ inputs.n || '2000000' }}
+        run: |
+          set -- $GALAXIE
+          nom=$1; shift
+          python modeles_v2.py "$nom" "$N" "$(echo "$GALAXIE" | tr -d ' =' | tr -- '-' '_').npz" "$@"
       - uses: actions/upload-artifact@v4
-        with: { name: "galaxie-seule-${{ matrix.galaxie }}", path: pipeline/fusion/*.npz, retention-days: 14 }
+        with: { name: "galaxie-seule-${{ strategy.job-index }}", path: pipeline/fusion/*.npz, retention-days: 14 }

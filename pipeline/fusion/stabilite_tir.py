@@ -12,7 +12,8 @@ reste calme ou forme une barre :
 Même schéma que calcul.py (saute-mouton, pas fixe). La carte est rendue à Marc de la même façon : pause si un autre
 programme l'occupe.
 
-Usage : python stabilite_tir.py <depart.npz> <durée en Ga> <sortie.json> [--pas-ma=0.25] [--theta=0.7]
+Usage : python stabilite_tir.py <depart.npz> <durée en Ga> <sortie.json> [--pas-ma=0.25] [--theta=0.7] [--releve-ma=50]
+  --releve-ma=10 pour lire la vitesse de rotation d'une barre (son angle doit tourner de moins d'un quart de tour entre deux relevés).
 """
 import json
 import math
@@ -84,7 +85,7 @@ def main():
     pos = cp.asarray(p['pos'], dtype=cp.float64); vel = cp.asarray(p['vel'], dtype=cp.float64)
     m = cp.asarray(p['m'], dtype=cp.float64); eps = cp.asarray(p['eps'], dtype=cp.float64); mg = m * G
     dt = dt_ma * 1e-3 / T_UNIT
-    steps = int(round(duree * 1000 / dt_ma)); every = int(round(50.0 / dt_ma))
+    steps = int(round(duree * 1000 / dt_ma)); every = int(round(float(opts.get('releve-ma', 50.0)) / dt_ma))
     acc, phi = gravite_gpu.gravity(pos, mg, eps, theta=theta, quad=True)
 
     def energie(phi):

@@ -18,7 +18,9 @@ Ce qui est mesuré, et ce qui ne l'est pas :
 - la barre n'est PAS posée ici : elle doit naître en laissant vieillir la galaxie seule, puis être comparée aux mesures
   (Voie lactée : 5,0 kpc, 39 km/s/kpc ; Andromède : 4,0 kpc, 40 km/s/kpc).
 
-Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz>
+Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7]
+  --rsig : longueur de décroissance de l'agitation des étoiles, en longueurs de disque (2 : disque très calme, sans barre ;
+           3 ou 4 : centre plus froid, où une barre peut naître) ; --halo : part des particules donnée à la matière noire.
 """
 import json
 import math
@@ -68,7 +70,7 @@ GALAXIES = {
 }
 
 
-def construire(nom, n_total, adoucissement=None):
+def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None):
     import agama
     agama.setUnits(mass=1, length=1, velocity=1)
     g = GALAXIES[nom]
@@ -109,7 +111,7 @@ def construire(nom, n_total, adoucissement=None):
     # Particules : PART_HALO pour la matière noire, le reste au prorata des masses. Les particules de
     # matière noire sont donc plus lourdes ; le rapport est écrit dans le résumé (à garder sous 10 : au-delà, elles
     # chauffent artificiellement le disque).
-    n_halo = int(n_total * PART_HALO)
+    n_halo = int(n_total * (part_halo or PART_HALO))
     n_reste = n_total - n_halo
     out = []
     dfh = agama.DistributionFunction(type='QuasiSpherical', potential=pot, density=ph)
@@ -126,7 +128,7 @@ def construire(nom, n_total, adoucissement=None):
     for d in g['disques']:
         nd = max(1, round(n_reste * d['masse'] / m_etoiles))
         sig = d['sigma0'] * np.exp(-R / d['rd'])
-        rsig = 2 * d['rd']
+        rsig = rsig_facteur * d['rd']      # longueur sur laquelle l'agitation décroît : 2 Rd par défaut ; plus grand = centre plus froid (barre)
         if 'sigma_soleil' in d:      # agitation mesurée au Soleil, profil exponentiel de longueur 2 Rd
             s0 = d['sigma_soleil'] * math.exp(d['r_soleil'] / rsig)
         else:                        # non mesurée : la plus petite agitation qui donne Q >= q_min entre 1 et 4 Rd [modèle]
@@ -154,7 +156,9 @@ def construire(nom, n_total, adoucissement=None):
 
 def main():
     nom, n, sortie = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-    p, resume = construire(nom, n)
+    opts = dict(a[2:].split('=', 1) for a in sys.argv[4:] if a.startswith('--') and '=' in a)
+    p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None)
+    resume['options'] = opts
     np.savez_compressed(sortie, meta=json.dumps(resume, ensure_ascii=False), **p)
     print(json.dumps(resume, ensure_ascii=False, indent=1))
 

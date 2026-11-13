@@ -138,3 +138,23 @@ La masse totale n'a pas été trouvée (l'article visé n'était pas à l'adress
 - Petit Nuage : masse totale.
 - Trancher la distance d'Andromède (761 ou 785 kpc) et la masse de son halo, et utiliser les mêmes partout, scénarios compris.
 - Relire les valeurs marquées [résumé].
+
+## 9. Résultats des nouveaux modèles (`pipeline/fusion/modeles_v2.py`), 13 novembre 2026 [mesuré sur la carte graphique]
+
+Chaque galaxie seule, toutes ses particules s'attirant, pendant 2 milliards d'années (`stabilite_tir.py`).
+« Déformation » : force du motif à deux bras (0 = disque rond, 0,3 et plus = barre). Ancien modèle : 0,4 à 0,5.
+
+| Galaxie | Particules | Déformation maximale en 2 Ga | Rotation (km/s) | Épaisseur (début → fin) | Énergie | Durée du tir |
+|---|---|---|---|---|---|---|
+| Voie lactée | 2 M | 0,036 | 234 au Soleil (publié 233) | 0,46 → 0,52 kpc | −0,001 % | 19 min |
+| Andromède | 2 M | 0,023 | 232 à 237 de 8 à 15 kpc (mesuré 230 à 275) | 0,69 → 0,74 kpc | −0,02 % | 25 min |
+| Triangle | 1 M | 0,06 | 108 à 4 kpc, 123 à 8 kpc, 130 à 15 kpc (mesuré 100, puis 120 à 130) | 0,36 → 0,39 kpc | +0,001 % | 8 min |
+| Grand Nuage | 1 M | 0,046 | 92 à 100 (mesuré 92 ± 19) | 0,33 → 0,34 kpc | 0,000 % | 10 min |
+
+Les quatre disques restent calmes. Ce qui n'est pas encore bon :
+- **aucune barre ne naît**, alors que la Voie lactée, Andromède et le Grand Nuage en ont une : le centre des disques est
+  trop agité au départ. Essais en cours avec un centre plus froid (`--rsig=3` et `--rsig=4`) ;
+- Andromède tourne un peu trop lentement vers 10 à 17 kpc (disque pris à sa borne basse de masse) ;
+- le disque de la Voie lactée s'épaissit de 13 % dans les 100 premiers millions d'années : léger défaut d'équilibre vertical ;
+- Triangle et Grand Nuage : particules de matière noire 15 à 22 fois plus lourdes que les étoiles (il en faut moins de 10) ;
+- le gaz est pris comme des étoiles froides ; le Petit Nuage manque.
