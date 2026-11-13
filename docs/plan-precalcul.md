@@ -77,3 +77,21 @@ Conséquence pour l'affichage : au-delà de l'horizon, l'appli montre le nuage d
 - Soleil à 10 Ga : à 67 kpc du centre du reste. Cox & Loeb 2008 le trouvent le plus souvent au-delà de 20 kpc.
 - Défaut réel : seules 30 000 étoiles sur 3 M de particules (1 %) étaient gardées dans les images. Calcul relancé avec --toutes (1 M d'étoiles, ~3 Go), θ 0,7 comme le calcul du fil natif, et la composante de chaque étoile (disque ou bulbe) dans composantes.bin.
 - Limites : disques de départ lisses (modèle d'équilibre AGAMA, sans bras mesurés) ; un seul scénario (mouvement propre central). La fourchette des dates vient des clones.
+
+## Résultat : chaos du système solaire, futur (12/11/2026)
+
+[Calculé ici] Le run part de l'état JPL du 10/11/2026 avec 32 copies du barycentre Terre-Lune écartées de 15 m, intégrées sur 60 Ma (`chaos_futur_60ma.bin`, UNIVCHA1, un échantillon tous les 10 000 ans). Les écarts sont des médianes sur les 31 copies, mesurés par rapport au départ exact.
+
+| Âge | Écart sur la position de la Terre sur son orbite (λ) | Écart sur l'excentricité |
+|---|---|---|
+| 1 Ma | 0,001 rad | 6e-8 |
+| 10 Ma | 0,18 rad | 6e-6 |
+| 30 Ma | 0,57 rad | 4e-5 |
+| 45 Ma | 1,0 rad | 1e-5 |
+| 60 Ma | 0,9 rad | 2e-4 |
+
+- [Calculé ici] Au-delà d'environ 45 Ma, on ne sait plus où se trouve la Terre sur son orbite : l'écart atteint 1 rad. Pas encore saturé (une position au hasard donnerait 1,57 rad).
+- [Calculé ici] L'excentricité reste encore prévisible à 60 Ma : l'écart vaut 2e-4, pour une excentricité d'environ 0,03, et il croît vite sur la fin.
+- [Publié, Laskar et al. 2011] La2010 situe l'horizon de l'excentricité vers 50-60 Ma pour le même écart de départ. C'est cohérent avec ce run.
+- [Probable] Le temps de Lyapunov sort de l'ajustement de l'écart d'excentricité : environ 19 Ma. C'est peu fiable : la courbe est bruitée et ne couvre que 60 Ma. Le chiffre publié est d'environ 5 Ma ; un run plus long trancherait.
+- [Certain] À afficher dans l'appli : au-delà de 45 Ma, la position de la Terre est « inconnue » ; au-delà d'environ 60 Ma, son orbite l'est aussi.
