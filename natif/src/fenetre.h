@@ -10,6 +10,7 @@ struct WindowOptions {
     double dist = 0;            // distance de départ à l'astre suivi, en années-lumière (0 : défaut)
     double years = 0;           // date de départ, en années depuis J2000,0
     bool hasYears = false;
+    double fovDeg = 0;      // --champ : champ de vision de départ (degrés), 0 = 60°
     double yawDeg = 0, pitchDeg = 0;      // contrôle : direction d'où l'on regarde l'astre suivi (longitude et latitude écliptiques, degrés)
     bool hasView = false;
     // contrôle : au lieu de sauter à la date, y aller en laissant défiler le temps depuis pathStart (années depuis J2000) à

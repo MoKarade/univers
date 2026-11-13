@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
         else if (k == "--verifie") { verify = parseList(v); ++i; }
         else if (k == "--images") { frames = std::max(1, std::atoi(v)); ++i; }
         else if (k == "--taille") { std::sscanf(v, "%ux%u", &width, &height); ++i; }
-        else if (k == "--champ") { fovDeg = std::atof(v); ++i; }
+        else if (k == "--champ") { fovDeg = std::atof(v); wopt.fovDeg = fovDeg; ++i; }
         else if (k.rfind("--", 0) == 0) fail("option inconnue : " + k);
         else imagePath = argv[i];
     }

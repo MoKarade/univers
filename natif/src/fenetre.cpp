@@ -32,7 +32,7 @@ namespace {
 struct Input {
     bool dragging = false, resized = false, quit = false, home = false, space = false;
     int lastX = 0, lastY = 0;
-    double dragX = 0, dragY = 0, wheel = 0;
+    double dragX = 0, dragY = 0, wheel = 0, wheelField = 0;      // wheelField : Ctrl + molette (champ de vision)
     bool touched = false;
 };
 
@@ -75,7 +75,7 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_MOUSEWHEEL:
             if (!uiMouse) {
-                in->wheel += GET_WHEEL_DELTA_WPARAM(wp) / 120.0;
+                (GET_KEYSTATE_WPARAM(wp) & MK_CONTROL ? in->wheelField : in->wheel) += GET_WHEEL_DELTA_WPARAM(wp) / 120.0;
                 in->touched = true;
             }
             return 0;
@@ -192,6 +192,7 @@ int runWindow(const WindowOptions& opt) {
     const bool hasReplay = replay.charger(fusionDir + "/fusion_centres.bin", "");      // centres et traceurs ; les étoiles : fusion_nuage.h
     sim.linkReplay(hasReplay ? &replay : nullptr, fusionDir + "/fusion_noms.tsv");
     if (opt.hasYears) sim.years = opt.years;
+    if (opt.fovDeg > 0) sim.fovDeg = std::clamp(opt.fovDeg, Sim::kFovMin, Sim::kFovMax);
     sim.refreshEphemeris();
     if (sim.focus != 0) sim.follow(sim.focus);
     if (opt.dist > 0) sim.dist = opt.dist;
@@ -440,7 +441,8 @@ int runWindow(const WindowOptions& opt) {
         if (input.touched) sim.touched = true;
         sim.orbit(input.dragX, input.dragY);
         sim.zoom(input.wheel);
-        input.dragX = input.dragY = input.wheel = 0;
+        sim.zoomField(input.wheelField);
+        input.dragX = input.dragY = input.wheel = input.wheelField = 0;
         if (input.space) sim.paused = !sim.paused;
         if (input.home) sim.follow(0);
         input.space = input.home = false;

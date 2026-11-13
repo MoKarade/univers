@@ -3,7 +3,7 @@
 //   interface_base.h (style, état, échelle, orbites et noms, clavier), interface_recherche.h (recherche, « Aller à »),
 //   interface_temps.h (barre du temps, fiche), interface_bas.h (bas de l'écran, accueil, visite, aide, complétude).
 #pragma once
-#include "interface_ondes.h"
+#include "interface_champ.h"
 
 namespace {
 
@@ -47,6 +47,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     drawWelcome(sim, ui, w, h, fixed);
     drawHelp(ui, w, h);
     drawGravWaves(ui, w, h);
+    drawFieldChip(sim, ui, w, h, fixed);
     return -1;
 }
 

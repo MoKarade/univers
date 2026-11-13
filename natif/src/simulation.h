@@ -701,7 +701,7 @@ struct Sim {
     Camera camera(double aspect) const {
         const Vec3 t = target();
         const Vec3 dir{std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch)};
-        return lookAt({t.x + dist * dir.x, t.y + dist * dir.y, t.z + dist * dir.z}, t, 60.0, aspect);
+        return lookAt({t.x + dist * dir.x, t.y + dist * dir.y, t.z + dist * dir.z}, t, fovDeg, aspect);
     }
     // Distance d'arrivée près d'un astre : de quoi le voir dans son voisinage.
     double arriveDist(int i, double from) const {
@@ -817,6 +817,13 @@ struct Sim {
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }
     static constexpr double kMaxDist = 9.0e10;      // un peu plus que la distance des objets les plus lointains (z = 7)
+    // Champ de vision (Ctrl + molette) : de 60° à 0,5°. Grossit ce qui n'a pas de profondeur (cartes du ciel « Lumière »,
+    // ciel lointain), comme une lunette ; la molette seule rapproche la caméra.
+    static constexpr double kFovMax = 60.0, kFovMin = 0.5;
+    double fovDeg = kFovMax;
+    void zoomField(double notches) {
+        if (notches != 0) fovDeg = std::clamp(fovDeg * std::pow(0.8, notches), kFovMin, kFovMax);
+    }
     void zoom(double notches) {
         if (notches == 0) return;
         if (flying) {      // molette pendant un vol : on corrige la distance d'arrivée, sans casser le vol
