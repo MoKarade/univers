@@ -304,6 +304,7 @@ struct Echelle {
     const char* nom;
     double part = -1;                 // part des objets connus présents (0 à 1) ; -1 : rapportée à une estimation seulement
     std::string complet, precision, mesure;      // les trois chiffres, en une ligne chacun
+    std::string court;                // ligne du coin en affichage réduit ; vide : début de `complet`
     std::vector<Ligne> lignes;
     std::vector<std::string> manques;
 };
@@ -475,6 +476,12 @@ inline Echelle voieLactee(const Comptes& c) {
                     entier(additionnees - double(c.additionneesPlacees)) + " sans distance mesurée (ciel d'aujourd'hui seulement)";
     else
         e.complet = pourcent(e.part) + " des sources de Gaia DR3 (" + entier(n) + " étoiles)";
+    // Ligne réduite : la part des ÉTOILES DE LA GALAXIE (estimation), pas la part du catalogue Gaia. « 99,6 % de ce qui
+    // est connu » laissait croire que presque toute la Galaxie est là, alors que Gaia en voit environ 1 %.
+    {
+        const double montrees = e.part * kSourcesGaiaDr3;
+        e.court = pourcent(montrees / kEtoilesVoieLacteeMax) + " à " + pourcent(montrees / kEtoilesVoieLacteeMin) + " des étoiles de la Galaxie (estimation)";
+    }
     e.precision = c.agrege ? "une à une : distance à mieux que 10 % ; additionnées : " + pourcent(c.lumiereSansDistance) +
                                  " de leur lumière sans distance mesurée"
                 : c.etoilesGaia ? "distance à mieux que 10 % (Gaia : parallaxe 10 fois son erreur)"
@@ -608,6 +615,14 @@ inline int echellePour(double distLy) {
 #ifdef IMGUI_VERSION
 // Une ligne pour le coin de l'écran.
 inline std::string ligneCourte(const Echelle& e) { return std::string(e.nom) + " : " + e.complet; }
+// Affichage réduit : la même phrase, coupée avant ses précisions (parenthèse, deux-points, point-virgule), jamais
+// reformulée. Une échelle peut fournir sa propre ligne (`court`).
+inline std::string ligneReduite(const Echelle& e) {
+    if (!e.court.empty()) return std::string(e.nom) + " : " + e.court;
+    size_t cut = e.complet.size();
+    for (const char* sep : {" (", " : ", " ; "}) cut = std::min(cut, e.complet.find(sep));
+    return std::string(e.nom) + " : " + e.complet.substr(0, cut);
+}
 
 // Le détail, dans la fenêtre ImGui déjà ouverte par l'interface.
 inline void detail(const Echelle& e) {
