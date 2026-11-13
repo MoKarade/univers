@@ -62,6 +62,11 @@ inline Frequences frequences(double R) {
     return {std::sqrt(R * d1), std::sqrt(om2), std::sqrt(d2 + 3 * om2), std::sqrt(nu2)};
 }
 
+// Énergie noire (constante cosmologique) : poussée H0² Ω_Λ r depuis le centre de la Galaxie, (km/s)²/kpc² ; même
+// cosmologie que natif/src/cosmologie.h (H0 = 67,4 km/s/Mpc, Ω_Λ = 0,685) et pipeline/fusion/energie_noire.py. Au Soleil
+// (8 kpc), 2e-6 de l'attraction de la Galaxie : gardée quand même (Marc, 13/11/2026 : « jamais négliger l'énergie noire »).
+constexpr double kLambdaKmsKpc2 = 0.0674 * 0.0674 * 0.685;
+
 struct Potentiel {
     double GMs = gmHalo(), Rb = kBarHalfLengthKpc, Ab = kBarAlpha * kV0 * kV0 * std::pow(kR0 / kBarHalfLengthKpc, 3) / 3;
     double omegaBarre = kBarOmegaKmsKpc;      // km/s/kpc ; modifiable pour mesurer l'effet de son incertitude (33 à 41)
@@ -73,6 +78,7 @@ struct Potentiel {
         const double ar = -kG * kMb / ((r + kAb) * (r + kAb)) - GMs * (std::log(1 + xs) - xs / (1 + xs)) / (r * r);
         const double B = std::sqrt(z * z + kBd * kBd), D2 = R2 + (kAd + B) * (kAd + B), D3 = D2 * std::sqrt(D2), gm = kG * kMd;
         a[0] = ar * x / r - gm * x / D3; a[1] = ar * y / r - gm * y / D3; a[2] = ar * z / r - gm * z * (kAd + B) / (B * D3);
+        a[0] += kLambdaKmsKpc2 * x; a[1] += kLambdaKmsKpc2 * y; a[2] += kLambdaKmsKpc2 * z;      /* énergie noire */
         if (barre && R2 > 1e-8) {      // Dehnen 2000 : a_R = −A cos2ψ U'(R), a_φ = 2A sin2ψ U(R) / R
             const double R = std::sqrt(R2), c = x / R, s = y / R, psi = std::atan2(y, x) - angleBarre(t), c2 = std::cos(2 * psi), s2 = std::sin(2 * psi), q = R / Rb;
             const double U = R < Rb ? q * q * q - 2 : -1 / (q * q * q), dU = R < Rb ? 3 * q * q / Rb : 3 / (q * q * q * q * Rb);
@@ -83,7 +89,7 @@ struct Potentiel {
     // Énergie sans la barre (sert au choix des sous-pas et aux contrôles), (km/s)².
     double energie(double x, double y, double z, double vx, double vy, double vz) const {
         const double r = std::sqrt(x * x + y * y + z * z) + 1e-12, R2 = x * x + y * y, B = std::sqrt(z * z + kBd * kBd);
-        const double phi = -kG * kMb / (r + kAb) - kG * kMd / std::sqrt(R2 + (kAd + B) * (kAd + B)) - GMs * std::log(1 + r / kRs) / r;
+        const double phi = -kG * kMb / (r + kAb) - kG * kMd / std::sqrt(R2 + (kAd + B) * (kAd + B)) - GMs * std::log(1 + r / kRs) / r - 0.5 * kLambdaKmsKpc2 * r * r;
         return 0.5 * (vx * vx + vy * vy + vz * vz) + phi;
     }
     double phiBarre(double x, double y, double t) const {
