@@ -65,6 +65,10 @@ if (Test-Path "$Donnees\centres_reference.bin") { Copier-SiChange "$Donnees\cent
 # Étoiles visibles du modèle de la Voie lactée (pipeline/natif/etoiles_visibles.py), si elles ont été préparées.
 if (Test-Path "$Donnees\etoiles-visibles\voisines_etoiles.bin") { Copier-SiChange "$Donnees\etoiles-visibles\voisines_etoiles.bin" "$Cible\voisines_etoiles.bin" }
 if (Test-Path "$Donnees\etoiles-visibles\vl_etoiles.bin") { Copier-SiChange "$Donnees\etoiles-visibles\vl_etoiles.bin" "$Cible\vl_etoiles.bin" }
+# Film du Groupe local (natif/src/film_etoiles.h) : l'ordre des étoiles de l'appli dans le film, et le dossier du film
+# (une ligne ; le film lui-même, des dizaines de Go, reste où le calcul l'écrit).
+if (Test-Path "$Donnees\etoiles-visibles\vl_etoiles.ordre") { Copier-SiChange "$Donnees\etoiles-visibles\vl_etoiles.ordre" "$Cible\vl_etoiles.ordre" }
+if (Test-Path "$Donnees\film_dossier.txt") { Copy-Item "$Donnees\film_dossier.txt" "$Cible\film_dossier.txt" -Force }
 foreach ($f in 'gaia.bin', 'gaia_b.bin', 'gaia_agrege.bin', 'voie_lactee.bin') { if (Test-Path "$Gaia\$f") { Copier-SiChange "$Gaia\$f" "$Cible\$f" } }
 # Vue de départ : la ceinture d'Orion (étoile nommée de la page), si elle est dans le catalogue.
 $meta = Get-Content "$Cible\etoiles.json" -Raw -Encoding UTF8 | ConvertFrom-Json
