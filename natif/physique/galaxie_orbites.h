@@ -42,6 +42,11 @@ inline double v2Baryons(double r) { return kG * kMb * r / ((r + kAb) * (r + kAb)
 inline double nfwShape(double r) { const double x = r / kRs; return (std::log(1 + x) - x / (1 + x)) / r; }
 inline double gmHalo() { return (kV0 * kV0 - v2Baryons(kR0)) / nfwShape(kR0); }      // calé sur 230 km/s au Soleil
 
+// Énergie noire (constante cosmologique) : poussée H0² Ω_Λ r depuis le centre de la Galaxie, (km/s)²/kpc² ; même
+// cosmologie que natif/src/cosmologie.h (H0 = 67,4 km/s/Mpc, Ω_Λ = 0,685) et pipeline/fusion/energie_noire.py. Au Soleil
+// (8 kpc), 2e-6 de l'attraction de la Galaxie : gardée quand même (Marc, 13/11/2026 : « jamais négliger l'énergie noire »).
+constexpr double kLambdaKmsKpc2 = 0.0674 * 0.0674 * 0.685;
+
 // Fréquences du potentiel SANS la barre, dans le plan (z = 0), à R kpc ; en km/s/kpc (× kKmsKpcToRadGa pour des rad/Ga).
 // Formules exactes (dérivées analytiques du même potentiel que Potentiel::acc) ; contrôlées dans essai_galaxie contre des
 // différences finies de acc. Approximation des épicycles valable pour les orbites presque circulaires du disque seulement :
@@ -58,14 +63,11 @@ inline Frequences frequences(double R) {
     const double d1 = gb / ((R + kAb) * (R + kAb)) + gd * R / (D2 * D) + gh * m / (R * R);                                   // Φ'(R)
     const double d2 = -2 * gb / std::pow(R + kAb, 3) + gd * (c2 - 2 * R * R) / (D2 * D2 * D) + gh * (x / ((1 + x) * (1 + x) * kRs * R * R) - 2 * m / (R * R * R));      // Φ''(R)
     const double nu2 = gb / (R * (R + kAb) * (R + kAb)) + gd * (kAd + kBd) / (kBd * D2 * D) + gh * m / (R * R * R);
-    const double om2 = d1 / R;
-    return {std::sqrt(R * d1), std::sqrt(om2), std::sqrt(d2 + 3 * om2), std::sqrt(nu2)};
+    /* Énergie noire : potentiel -K r²/2, donc Φ' -= K R, Φ'' -= K, ∂²Φ/∂z² -= K (mêmes termes que Potentiel::acc). */
+    const double d1L = d1 - kLambdaKmsKpc2 * R, om2 = d1L / R;
+    return {std::sqrt(R * d1L), std::sqrt(om2), std::sqrt(d2 - kLambdaKmsKpc2 + 3 * om2), std::sqrt(nu2 - kLambdaKmsKpc2)};
 }
 
-// Énergie noire (constante cosmologique) : poussée H0² Ω_Λ r depuis le centre de la Galaxie, (km/s)²/kpc² ; même
-// cosmologie que natif/src/cosmologie.h (H0 = 67,4 km/s/Mpc, Ω_Λ = 0,685) et pipeline/fusion/energie_noire.py. Au Soleil
-// (8 kpc), 2e-6 de l'attraction de la Galaxie : gardée quand même (Marc, 13/11/2026 : « jamais négliger l'énergie noire »).
-constexpr double kLambdaKmsKpc2 = 0.0674 * 0.0674 * 0.685;
 
 struct Potentiel {
     double GMs = gmHalo(), Rb = kBarHalfLengthKpc, Ab = kBarAlpha * kV0 * kV0 * std::pow(kR0 / kBarHalfLengthKpc, 3) / 3;

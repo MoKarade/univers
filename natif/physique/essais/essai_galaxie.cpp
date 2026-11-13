@@ -20,10 +20,11 @@ int main() {
     {
         Orbites o(sp, sv); o.avance(0.2); const auto p = o.position(0);
         const double d = std::sqrt(std::pow(p.x + 5.078895720, 2) + std::pow(p.y + 6.208048454, 2) + std::pow(p.z - 0.085053558, 2));
-        ok(d < 1e-6, "Soleil à +200 Ma : écart à la page %.2g kpc", d);
+        /* La page web n'a pas l'énergie noire ; ici elle y est (2e-6 de l'attraction au Soleil) : 0,24 pc d'écart attendu à 200 Ma. */
+        ok(d < 5e-4, "Soleil à +200 Ma : écart à la page %.2g kpc (énergie noire en plus ici)", d);
         Potentiel P; P.barre = false; Orbites q(sp, sv, P); q.avance(0.2); const auto r = q.position(0);
         const double e = std::sqrt(std::pow(r.x + 5.710272466, 2) + std::pow(r.y + 5.915890796, 2) + std::pow(r.z - 0.095103441, 2));
-        ok(e < 1e-6, "Soleil à +200 Ma sans barre : écart à la page %.2g kpc", e);
+        ok(e < 5e-4, "Soleil à +200 Ma sans barre : écart à la page %.2g kpc (énergie noire en plus ici)", e);
     }
     {      // tour du Soleil autour du centre
         Orbites o(sp, sv); double turn = 0, a0 = std::atan2(sp[0].y, sp[0].x), tTurn = 0;
@@ -58,7 +59,7 @@ int main() {
         }
         ok(worst < 1e-5, "fréquences (vc, Ω, κ, ν) : écart relatif %.1e aux dérivées de acc", worst);
         const auto s = frequences(kR0);
-        ok(std::fabs(s.vc - kV0) < 1e-9, "au Soleil : vc %.3f km/s, κ %.2f, ν %.1f km/s/kpc", s.vc, s.kappa, s.nu);
+        /* halo calé sur 230 km/s sans l'énergie noire, qui en retire 0,0003 km/s au Soleil */ ok(std::fabs(s.vc - kV0) < 1e-3, "au Soleil : vc %.3f km/s, κ %.2f, ν %.1f km/s/kpc", s.vc, s.kappa, s.nu);
     }
     std::printf(g_fail ? "ECHEC (%d)\n" : "PASSE\n", g_fail);
     return g_fail ? 1 : 0;
