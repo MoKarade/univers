@@ -14,8 +14,13 @@ Lumière (bande V, en luminosités solaires par pc³) :
   [Supposition : même rapport masse sur lumière pour toutes les composantes] ;
 - disque mince : exp(-R / 2,6 kpc) exp(-|z| / 300 pc) ; disque épais : exp(-R / 2,0 kpc) exp(-|z| / 900 pc) (même source) ;
 - bras spiraux : tracés mesurés de Reid et al. 2019 (ApJ 885, 131, table 2 : spirales logarithmiques par parallaxes de
-  masers), sur l'étendue d'azimut mesurée seulement, largeur de la table. Ce que les bras ajoutent en lumière n'est pas mesuré
-  ici : le disque mince y est doublé [Supposition, dite à l'écran] ;
+  masers), largeur de la table. Les quatre grands bras (Norma, Écu-Centaure, Sagittaire-Carène, Persée) sont PROLONGÉS
+  au-delà des portions mesurées avec l'angle d'enroulement moyen (~12°), jusqu'à 180° d'azimut, du bout de la barre au
+  bord du disque : modèle, atténué (PART_PROLONGE) et dit « extrapolé » à l'écran. Les bouts des autres bras sont adoucis
+  (aucun bord net). Les bras rassemblent une part du disque mince (PART_BRAS, étoiles jeunes, rangées à part pour leur
+  couleur) [Supposition dans la fourchette publiée] ; bandes de poussière sur leur bord intérieur [modèle] ;
+- régions HII : catalogue WISE (Anderson et al. 2014, ApJS 212, 1), celles qui ont une distance publiée, à leur place et
+  à leur taille mesurées ; leur éclat n'est pas mesuré ici [modèle] ; pas en lueur à moins de 1 à 2 kpc du Soleil ;
 - les étoiles déjà dessinées une à une (Gaia DR3 et catalogue principal) et la lumière additionnée des autres sources
   Gaia placées à leur distance (gaia_agrege.bin) sont retirées case par case : la grille ne garde que
   la lumière qui manque (jamais négative).
@@ -29,10 +34,11 @@ Poussière (extinction visuelle A_V par pc) :
   h_d = 134,4 pc + 14,8 pc/kpc au-delà de 4,4 kpc, creux central sous 0,5 R0), dont l'amplitude est fixée par la carte
   mesurée : même extinction moyenne dans le plan jusqu'à 1,25 kpc, sur toutes les longitudes.
 
-Usage : python voie_lactee.py <gaia.bin> <etoiles.bin> <dossier de sortie> [gaia_agrege.bin]
-Format voie_lactee.bin (petit-boutiste) : en-tête de 1024 octets (« UNIVMW01 » puis valeurs f32 décrites dans ENTETE),
-puis la grande grille NX×NY×NZ de paires f16 (lumière manquante, poussière), x le plus rapide, puis la grille locale de
-poussière 160×160×52 en f16 (A_V par pc).
+Usage : python voie_lactee.py <gaia.bin[,gaia_b.bin]> <etoiles.bin> <dossier de sortie> [gaia_agrege.bin] [wise_hii.tsv]
+Format voie_lactee.bin (petit-boutiste) : en-tête de 1024 octets (« UNIVMW02 » puis valeurs f32 décrites dans ENTETE),
+puis la grande grille NX×NY×NZ de quatre f16 par case (lumière manquante des vieilles étoiles, poussière, lumière
+manquante des jeunes étoiles des bras, régions HII), x le plus rapide, puis la grille locale de poussière 160×160×52 en
+f16 (A_V par pc). (« UNIVMW01 » : deux valeurs par case, lumière et poussière ; toujours lu par l'appli.)
 """
 import sys as _sys
 _sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
@@ -80,21 +86,89 @@ def disque(R, z):
     return mince, epais
 
 
+PROLONGES = {'Norma', 'Sct-Cen', 'Sgr-Car', 'Perseus'}      # les quatre grands bras de Reid et al. 2019, prolongés (modèle)
+PSI_PROLONGE = 12.0          # ° : angle d'enroulement des prolongements (Reid et al. 2019, valeur moyenne des grands bras) [modèle]
+R_PROLONGE = (3.5, 16.0)
+ECART_PROLONGE = (120.0, 180.0)      # ° : un prolongement s'éteint entre 120 et 180° d'azimut au-delà du bout mesuré (pas d'enroulement sans fin) [modèle]      # kpc : du bout de la barre longue au bord de la grille [modèle]
+PART_BRAS = 0.5               # part de la lumière du disque mince portée par les bras : contraste bras / inter-bras ~4
+                              # [Supposition dans la fourchette publiée en bande bleue, 2 à 5 : Elmegreen et al. 2011, ApJ 737, 32]
+PART_PROLONGE = 0.4           # éclat des bras prolongés (non mesurés) rapporté aux portions mesurées : atténués, dits « extrapolés »
+HII_ECLAT = 6.0               # éclat au centre d'une région HII rapporté aux étoiles jeunes d'un bras au même rayon [modèle]
+HII_SIGMA_MIN = 0.05          # kpc : plus petit rayon dessiné (la grille a des cases de 100 pc)
+HII_LOIN_DU_SOLEIL = (1.0, 2.0)      # kpc : les régions HII proches ne sont pas en lueur (vues du Soleil elles couvriraient le ciel)
+WISE_HII = 'https://vizier.cfa.harvard.edu/viz-bin/asu-tsv?-source=J/ApJS/212/1/wisecat&-out.max=unlimited&-out.all'
+
+
+
+def _rampe(a, lo, hi):
+    t = np.clip((a - lo) / (hi - lo), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def bras_geometrie(nom, bmin, bmax, bk, rk, pin, pout, w, beta):
+    """Rayon de l'axe du bras, angle d'enroulement, largeur et poids (0 à 1) pour des azimuts beta de Reid (°).
+    Portion mesurée : poids 1, bouts adoucis sur 8° pour les bras non prolongés. Prolongements : poids qui s'éteint en
+    douceur aux bornes R_PROLONGE (aucun bord net)."""
+    def axe(b):
+        ps = np.radians(np.where(b <= bk, pin, pout))
+        return rk * np.exp(-np.radians(b - bk) * np.tan(ps)), ps
+    mesure = (beta >= bmin) & (beta <= bmax)
+    Rb, psi = axe(np.clip(beta, bmin, bmax))
+    if nom in PROLONGES:      # au-delà des bouts mesurés : même bras, angle d'enroulement moyen de Reid et al. 2019 (~12°) [modèle]
+        Rb = Rb * np.exp(-np.radians(beta - np.clip(beta, bmin, bmax)) * np.tan(np.radians(PSI_PROLONGE)))
+        psi = np.where(mesure, psi, np.radians(PSI_PROLONGE))
+    if nom in PROLONGES:
+        ecart = np.abs(beta - np.clip(beta, bmin, bmax))      # degrés d'azimut au-delà du bout mesuré
+        poids = np.where(mesure, 1.0, _rampe(Rb, R_PROLONGE[0] - 0.5, R_PROLONGE[0] + 0.5) * (1 - _rampe(Rb, R_PROLONGE[1] - 1.5, R_PROLONGE[1]))
+                         * (1 - _rampe(ecart, *ECART_PROLONGE)))
+        larg = np.where(mesure, w, np.clip(w * Rb / rk, w, 0.45))
+    else:
+        poids = _rampe(beta, bmin, bmin + 8) * (1 - _rampe(beta, bmax - 8, bmax))
+        larg = np.full_like(Rb, w)
+    return Rb, psi, larg, poids, mesure
+
+
 def bras(x, y):
-    """Somme des profils gaussiens des bras mesurés (0 à 1 sur l'axe d'un bras)."""
+    """Bras spiraux (0 à 1 sur l'axe), bande de poussière (0 à 1, bord intérieur des bras) et part prolongée (modèle)."""
     R = np.hypot(x, y)
-    theta = np.degrees(np.arctan2(y, x))
-    beta0 = (180.0 - theta) % 360.0                       # azimut de Reid : 0 vers le Soleil, croissant dans le sens de rotation
-    out = np.zeros_like(R)
-    for _, bmin, bmax, bk, rk, pin, pout, w in BRAS:
-        for tour in (-360.0, 0.0, 360.0):
+    beta0 = (180.0 - np.degrees(np.arctan2(y, x))) % 360.0     # azimut de Reid : 0 vers le Soleil, croissant dans le sens de rotation
+    prof = np.zeros_like(R); bande = np.zeros_like(R); prol = np.zeros_like(R)
+    for nom, bmin, bmax, bk, rk, pin, pout, w in BRAS:
+        for tour in (-720.0, -360.0, 0.0, 360.0, 720.0):
             beta = beta0 + tour
-            ok = (beta >= bmin) & (beta <= bmax)
-            if not ok.any(): continue
-            psi = np.radians(np.where(beta <= bk, pin, pout))
-            Rb = rk * np.exp(-np.radians(beta - bk) * np.tan(psi))
+            Rb, psi, larg, poids, mesure = bras_geometrie(nom, bmin, bmax, bk, rk, pin, pout, w, beta)
+            if not (poids > 1e-3).any(): continue
             d = (R - Rb) * np.cos(psi)
-            out = np.maximum(out, np.where(ok, np.exp(-0.5 * (d / w) ** 2), 0.0))
+            poids = np.where(mesure, poids, PART_PROLONGE * poids)      # non mesuré : atténué
+            g = poids * np.exp(-0.5 * (d / larg) ** 2)
+            prof = np.maximum(prof, g)
+            prol = np.maximum(prol, np.where(mesure, 0.0, g))
+            sl = np.maximum(0.45 * larg, 0.08)
+            bande = np.maximum(bande, poids * np.exp(-0.5 * ((d + 1.1 * larg) / sl) ** 2))
+    return prof, bande, prol
+
+
+def regions_hii(chemin, sun):
+    """Régions HII MESURÉES du catalogue WISE (Anderson et al. 2014, ApJS 212, 1 ; VizieR J/ApJS/212/1/wisecat) qui ont
+    une distance publiée : position (l, b, distance) et rayon angulaire mesurés -> (x, y, z, rayon en kpc) dans la grille.
+    L'éclat de chaque région n'est pas dans ce tableau : il est le même pour toutes, pondéré par la taille [modèle]."""
+    out = []
+    entete = None
+    with open(chemin, encoding='utf-8') as f:
+        for ligne in f:
+            if ligne.startswith('#') or not ligne.strip(): continue
+            r = ligne.rstrip(chr(10)).split(chr(9))
+            if entete is None:
+                entete = {k.strip(): i for i, k in enumerate(r)}
+                continue
+            if r[0].startswith('-') or not r[0].strip().isdigit(): continue
+            try:
+                l, b, rad, d = (float(r[entete[k]]) for k in ('GLON', 'GLAT', 'Rad', 'Dist'))
+            except (ValueError, IndexError):
+                continue
+            lr, br = math.radians(l), math.radians(b)
+            p = sun + d * np.array([math.cos(br) * math.cos(lr), math.cos(br) * math.sin(lr), math.sin(br)])
+            out.append((*p, max(rad / 206265.0 * d, HII_SIGMA_MIN)))
     return out
 
 
@@ -156,6 +230,7 @@ def lire_gaia(gaia_bin, ranger):
 def main():
     gaia_bin, etoiles_bin, sortie = sys.argv[1:4]
     agrege = sys.argv[4] if len(sys.argv) > 4 else None
+    wise = sys.argv[5] if len(sys.argv) > 5 else None      # catalogue WISE des régions HII (WISE_HII), téléchargé
     t0 = time.time()
     D = data_keys(['M_GAL2ECL', 'SGRA_GAL', 'DUST'])
     gal2ecl = np.array(D['M_GAL2ECL']); ecl2gal = gal2ecl.T
@@ -166,9 +241,26 @@ def main():
     R = np.hypot(X, Y)
 
     mince, epais = disque(R, Z)
-    b = bras(X, Y)
-    moy = np.sum(mince * b) / np.sum(mince)                 # les bras ajoutent de la lumière à masse de disque constante
-    lum = mince * (1 + CONTRASTE_BRAS * b) / (1 + CONTRASTE_BRAS * moy) + epais
+    b2, bande2, prol2 = bras(X[0], Y[0])                     # même motif à toutes les hauteurs
+    b, bande = b2[None], bande2[None]
+    moy = np.sum(mince[NZ // 2] * b2) / np.sum(mince[NZ // 2])      # les bras rassemblent la lumière, à masse de disque constante
+    jeunes = mince * PART_BRAS * b / moy                     # étoiles jeunes, bleues, concentrées dans les bras
+    vieilles = mince * (1 - PART_BRAS) + epais
+    # régions HII (lumière rose de l'hydrogène ionisé), à 100 pc près : la grille ne peut pas faire plus fin
+    hii = np.zeros_like(mince)
+    if wise:
+        regions = regions_hii(wise, sun)
+        for hx_, hy_, hz_, rk in regions:
+            i0, j0, k0 = (int((c + h) / (2 * h) * nn) for c, h, nn in ((hx_, HX, NX), (hy_, HX, NY), (hz_, HZ, NZ)))
+            m = max(2, int(3 * rk / 0.1) + 1)
+            sl = (slice(max(k0 - m, 0), k0 + m + 1), slice(max(j0 - m, 0), j0 + m + 1), slice(max(i0 - m, 0), i0 + m + 1))
+            r2 = (X[sl] - hx_) ** 2 + (Y[sl] - hy_) ** 2 + (Z[sl] - hz_) ** 2
+            hii[sl] += min(rk / 0.01, 3.0) * np.exp(-0.5 * r2 / rk ** 2)      # plus grande, plus lumineuse (jusqu'à x3) [modèle]
+        dsol = np.sqrt((X - sun[0]) ** 2 + (Y - sun[1]) ** 2 + (Z - sun[2]) ** 2)
+        hii *= HII_ECLAT * PART_BRAS / moy * mince[NZ // 2].max() * np.exp(-np.hypot(X, Y) / 2.6) * _rampe(dsol, *HII_LOIN_DU_SOLEIL)
+        print(f'régions HII WISE avec distance : {len(regions)}')
+    lum = vieilles + jeunes
+    print(f'bras : part moyenne {moy:.3f}, prolongés (modèle) {np.sum(prol2 > 0.5 * PART_PROLONGE) / np.sum(b2 > 0.5 * PART_PROLONGE):.0%} de leur surface')
 
     # poussière : forme de Drimmel et Spergel, amplitude fixée sur la carte mesurée (plan galactique, 0 à 1,25 kpc)
     loc = poussiere_locale(D['DUST'])
@@ -181,9 +273,10 @@ def main():
         i = np.floor(px / cl + nxl / 2).astype(int); j = np.floor(py / cl + nyl / 2).astype(int); k = int(nzl / 2)
         mes.append(np.sum(0.5 * (loc[k - 1, j, i] + loc[k, j, i])) * 5.0)
         g = sun[None, :] + np.stack([px, py, np.zeros_like(px)], 1) / 1e3
-        mod.append(np.sum(poussiere_drimmel(np.hypot(g[:, 0], g[:, 1]), g[:, 2])) * 5.0)
+        bg = bras(g[:, 0], g[:, 1])[1]
+        mod.append(np.sum(poussiere_drimmel(np.hypot(g[:, 0], g[:, 1]), g[:, 2]) * (1 + 3.0 * bg)) * 5.0)
     amp = np.mean(mes) / np.mean(mod)
-    pous = amp * poussiere_drimmel(R, Z)
+    pous = amp * poussiere_drimmel(R, Z) * (1 + 3.0 * bande)      # bandes sombres sur le bord intérieur des bras [modèle]
     print(f'poussière : A_V moyen mesuré dans le plan jusqu’à 1,25 kpc = {np.mean(mes):.3f} mag ; amplitude du modèle '
           f'{amp:.3e} mag/pc (au Soleil : {amp * poussiere_drimmel(np.hypot(*sun[:2]), sun[2]) * 1e3:.2f} mag/kpc)')
     # dans le volume de la carte mesurée, la grande grille prend la moyenne mesurée (pas le modèle)
@@ -195,6 +288,9 @@ def main():
 
     cat, ngaia = lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z, agrege)
     manque = np.maximum(lum - cat, 0.0)
+    part = np.where(lum > 0, manque / np.maximum(lum, 1e-30), 0.0)      # ce qui manque, partagé entre vieilles et jeunes étoiles
+    manque_v, manque_j = vieilles * part, jeunes * part
+    manque_h = hii      # lumière du gaz, pas des étoiles : rien à retirer pour Gaia
     ks, js, is_ = (int(np.floor((sun[a] + h) / (2 * h) * nn)) for a, h, nn in ((2, HZ, NZ), (1, HX, NY), (0, HX, NX)))
     print(f'case du Soleil : modèle {lum[ks, js, is_]:.4f} L_sol/pc³, étoiles cataloguées {cat[ks, js, is_]:.4f} ; '
           f'lumière du modèle {lum.sum() * 5e5:.3e} L_sol, cataloguée dans la grille {cat.sum() * 5e5:.3e}, manquante {manque.sum() * 5e5:.3e}')
@@ -206,9 +302,10 @@ def main():
     os.makedirs(sortie, exist_ok=True)
     chemin = os.path.join(sortie, 'voie_lactee.bin')
     with open(chemin, 'wb') as f:
-        h = b'UNIVMW01' + head.tobytes()
+        h = b'UNIVMW02' + head.tobytes()
         f.write(h + b'\0' * (1024 - len(h)))
-        f.write(np.stack([manque, pous], -1).astype('<f2').tobytes())
+        # v2 : quatre valeurs par case (vieilles étoiles, poussière, jeunes étoiles des bras, régions HII)
+        f.write(np.stack([manque_v, pous, manque_j, manque_h], -1).astype('<f2').tobytes())
         f.write(loc.astype('<f2').tobytes())
     print(f'-> {chemin} ({os.path.getsize(chemin) / 1e6:.1f} Mo, {time.time() - t0:.0f} s)')
 

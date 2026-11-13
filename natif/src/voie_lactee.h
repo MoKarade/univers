@@ -33,6 +33,9 @@ struct MilkyWayUbo {      // std140 : tout en vec4
     float bar[4];          // luminosité de la barre longue ; demi-longueur ; hauteur mince ; hauteur très mince
     float bar2[4];         // part très mince ; cos et sin de l'angle de la barre ; nombre de cases locales z
     float frame[4];        // hauteur de l'image en pixels ; tan(champ/2) ; aléa de l'image ; rien
+    float colorBulge[4];   // couleur du bulbe et de la barre ; w : nombre de valeurs par case de la grille (2 ou 4)
+    float colorYoung[4];   // couleur des jeunes étoiles des bras
+    float colorHii[4];     // couleur des régions HII
 };
 
 class MilkyWayRenderer {
@@ -45,16 +48,19 @@ public:
         if (!f) return false;
         char magic[8];
         f.read(magic, 8);
-        if (!f || std::memcmp(magic, "UNIVMW01", 8) != 0) return false;
+        // v1 : (lumière, poussière) par case ; v2 : (vieilles étoiles, poussière, jeunes étoiles des bras, régions HII).
+        if (!f) return false;
+        channels_ = std::memcmp(magic, "UNIVMW02", 8) == 0 ? 4 : (std::memcmp(magic, "UNIVMW01", 8) == 0 ? 2 : 0);
+        if (!channels_) return false;
         f.read(reinterpret_cast<char*>(&par), sizeof(par));
         f.seekg(1024);
         const size_t nBig = static_cast<size_t>(par.nx) * static_cast<size_t>(par.ny) * static_cast<size_t>(par.nz);
         const size_t nLoc = static_cast<size_t>(par.lnx) * static_cast<size_t>(par.lny) * static_cast<size_t>(par.lnz);
-        std::vector<uint16_t> big(nBig * 2), loc(nLoc);
+        std::vector<uint16_t> big(nBig * channels_), loc(nLoc);
         f.read(reinterpret_cast<char*>(big.data()), static_cast<std::streamsize>(big.size() * 2));
         f.read(reinterpret_cast<char*>(loc.data()), static_cast<std::streamsize>(loc.size() * 2));
         if (!f) return false;
-        big_ = createVolume(g, VK_FORMAT_R16G16_SFLOAT, static_cast<uint32_t>(par.nx), static_cast<uint32_t>(par.ny), static_cast<uint32_t>(par.nz), big.data(), big.size() * 2);
+        big_ = createVolume(g, channels_ == 4 ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R16G16_SFLOAT, static_cast<uint32_t>(par.nx), static_cast<uint32_t>(par.ny), static_cast<uint32_t>(par.nz), big.data(), big.size() * 2);
         local_ = createVolume(g, VK_FORMAT_R16_SFLOAT, static_cast<uint32_t>(par.lnx), static_cast<uint32_t>(par.lny), static_cast<uint32_t>(par.lnz), loc.data(), loc.size() * 2);
         for (auto& u : ubo_) {
             u = createBuffer(g, sizeof(MilkyWayUbo), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -63,6 +69,15 @@ public:
         // Couleur intégrée de la Galaxie : B-V = 0,744 (Licquia, Newman et Bershady 2015, table 3), même conversion que les étoiles.
         const auto c = colorOfBv(0.744);
         for (int k = 0; k < 3; ++k) color_[k] = c[k] / 255.0f;
+        if (channels_ == 4) {
+            // Couleurs d'affichage par population [modèle, saturation renforcée comme sur les photos en couleurs] : vieilles
+            // étoiles du disque (B-V ~0,85), bulbe et barre (B-V ~1,1, étoiles vieilles), jeunes étoiles des bras (B-V ~0),
+            // régions HII (raie Hα de l'hydrogène, 656 nm, rose).
+            const float old[3] = {1.0f, 0.86f, 0.68f}, bulge[3] = {1.0f, 0.74f, 0.46f}, young[3] = {0.62f, 0.75f, 1.0f}, hii[3] = {1.0f, 0.30f, 0.50f};
+            for (int k = 0; k < 3; ++k) { color_[k] = old[k]; colorBulge_[k] = bulge[k]; colorYoung_[k] = young[k]; colorHii_[k] = hii[k]; }
+        } else {
+            for (int k = 0; k < 3; ++k) colorBulge_[k] = colorYoung_[k] = colorHii_[k] = color_[k];
+        }
         createPipeline(g, hdrFormat);
         ready = true;
         return true;
@@ -102,6 +117,8 @@ public:
         const double k = exposure * std::pow(10.0, -0.4 * 4.83) * 100.0 * pix * pix;
         for (int i = 0; i < 3; ++i) u.color[i] = color_[i];
         u.color[3] = static_cast<float>(k);
+        for (int i = 0; i < 3; ++i) { u.colorBulge[i] = colorBulge_[i]; u.colorYoung[i] = colorYoung_[i]; u.colorHii[i] = colorHii_[i]; }
+        u.colorBulge[3] = static_cast<float>(channels_);
         u.grid[0] = par.halfXY;
         u.grid[1] = par.halfZ;
         u.grid[2] = par.sun[0];
@@ -170,7 +187,8 @@ private:
     VkDescriptorSet sets_[kRing]{};
     int ring_ = 0;
     uint32_t frame_ = 0;
-    float color_[3]{1, 1, 1};
+    float color_[3]{1, 1, 1}, colorBulge_[3]{1, 1, 1}, colorYoung_[3]{1, 1, 1}, colorHii_[3]{1, 1, 1};
+    int channels_ = 2;
     VkSampler sampler_{};
     VkPipeline pipeline_{};
     VkPipelineLayout layout_{};

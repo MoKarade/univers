@@ -24,6 +24,7 @@
 #include "spheres.h"
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
+#include "galaxies_images.h"
 #include "rendu_fenetre.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -267,6 +268,10 @@ int runWindow(const WindowOptions& opt) {
     // (Sim::bestLook), éteint en vue « 100 % mesuré ».
     MilkyWayRenderer milkyWay;
     milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
+    // Andromède, Triangle, Nuages de Magellan : leurs vraies photos posées sur le plan mesuré de leur disque (galaxies_images.h).
+    GalaxyImages galaxyImages;
+    galaxyImages.create(g, HdrTarget::kFormat, dataDir, sim);
+    sim.galaxyImageCount = galaxyImages.count;
     sim.hasGaia = gaiaOk;
     sim.gaiaCellDispersionKms = gaiaOk ? gaia.cellDispersionKms : 0;
     sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
@@ -644,6 +649,8 @@ int runWindow(const WindowOptions& opt) {
             // ne pas compter deux fois la même lumière.
             const double loneTime = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) : 0.0;
             sim.milkyWayModelShare = sim.bestLook ? sim.starShare() * (1.0 - loneTime) : 0.0;
+            sim.galaxyImageShare = sim.bestLook ? sim.starShare() : 0.0;      // vraies photos tant que les étoiles mesurées sont montrées
+            galaxyImages.draw(cmd, cam, sim, sc.extent.width, sc.extent.height, pc.par[0], sim.galaxyImageShare);
             if (sim.milkyWayModelShare > 0)
                 milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayModelShare), sim.years);
             gaia.improved = sim.bestLook;
@@ -670,7 +677,8 @@ int runWindow(const WindowOptions& opt) {
         if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0)
         {
             fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height);
-            fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, companionShare, sc.extent.width, sc.extent.height, fusionCloud.milkyWayPoints);
+            if (galaxyImages.count < 3)      // sans les photos : les points du calcul montrent les autres galaxies
+                fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, companionShare, sc.extent.width, sc.extent.height, fusionCloud.milkyWayPoints);
         }
         if (!skyOnly && (fusionPoints.count || clones.count || armTracers.count)) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
@@ -774,6 +782,7 @@ int runWindow(const WindowOptions& opt) {
     if (gaiaBOk) gaiaB.release(g);
     gaia.release(g);
     milkyWay.release(g);
+    galaxyImages.release(g);
     fusionPoints.release(g);
     fusionCloud.release(g);
     loneGalaxy.release(g);
