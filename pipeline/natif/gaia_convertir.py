@@ -24,14 +24,14 @@ Format gaia.bin (petit-boutiste), sections alignées sur 64 octets :
   feuilles (48 octets) : min x,y,z (f32), nombre (u32), max x,y,z (f32), réservé (u32), première étoile (u64), réservé (u64)
   étoiles (16 octets)  : x, y, z (f32, al), magnitude absolue G (f16), pas de couleur (u8), drapeaux (u8 : 1 = vitesse radiale
                          mesurée ; 2 = orbite fiable : vitesse radiale mesurée et vitesse 3D connue à mieux que --seuil-vitesse ;
-                         4 = poussière estimée par Gaia)
-  vitesses (8 octets)  : vx, vy, vz (i16, pas de 0,05 km/s), poussière (u16 : A_G en pas de 0,01 mag sur 10 bits, E(BP-RP)
-                         en pas de couleur sur 6 bits ; 0 sans drapeau 4)
+                         4 = éclat rééquilibré vu de loin, gaia_reequilibre.py)
+  vitesses (8 octets)  : vx, vy, vz (i16, pas de 0,05 km/s), décalage de magnitude vu de loin (i16, millièmes de magnitude,
+                         0 sans drapeau 4 ; hypothèse, voir gaia_reequilibre.py)
   résumés (528 octets par feuille) : centre de lumière x, y, z (f32), réservé (f32), lumière 10^(-0,4 M) par tranche (64 f32),
                         pas de couleur moyen par tranche (64 f32) ; tranches et bornes : en-tête, octets 1056 à 1067
 
 Usage : python gaia_convertir.py <dossier des parts> <etoiles.bin> <passband.dat> <zeropt.dat> <dossier de sortie>
-        [--erreurs <dossier du jeu erreurs>] [--poussiere <dossier du jeu poussière>] [--seuil-vitesse 10]
+        [--erreurs <dossier du jeu erreurs>] [--seuil-vitesse 10] [--reequilibre oui|non]
 """
 import sys as _sys
 _sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
@@ -39,6 +39,9 @@ import glob, math, os, sys, time
 import numpy as np
 from astropy.io import fits
 from scipy.spatial import cKDTree
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gaia_reequilibre as gr
 
 LY_PER_PC = 3.2615638
 EPS = math.radians(84381.448 / 3600.0)
@@ -49,9 +52,7 @@ ATTENDU = 98_346_986      # COUNT(*) WHERE parallax_over_error > 10, archive Gai
 BPRP0, BPRP_PAS = -0.6, 0.03      # pas 0 à 253 : -0,6 à 7,0 ; 254 : au-delà ; 255 : non mesuré
 V_PAS = 0.05
 ERREURS = ['parallax_error', 'pmra_error', 'pmdec_error', 'radial_velocity_error']
-POUSSIERE = ['ag_gspphot', 'ebpminrp_gspphot']
 SEUIL_VITESSE = 10.0      # km/s : incertitude de vitesse au-delà de laquelle l'orbite n'est pas fiable (docs/gaia-rayons.md)
-AG_PAS, AG_BITS = 0.01, 10      # absorption A_G rangée sur 10 bits (0 à 10,23 mag), décalage de couleur sur 6 bits (pas BPRP_PAS)
 
 
 def _aligne(ids, autre, cols):
@@ -62,18 +63,17 @@ def _aligne(ids, autre, cols):
     return {k: np.asarray(autre[k])[j] for k in cols}
 
 
-def lire_parts(dossier, erreurs=None, poussiere=None):
+def lire_parts(dossier, erreurs=None):
     parts = sorted(glob.glob(os.path.join(dossier, 'part_*.fits')))
     if len(parts) != 1024: sys.exit(f'{len(parts)} parts sur 1024 : finir le téléchargement')
     noms = ['source_id', 'ra', 'dec', 'parallax', 'pmra', 'pmdec', 'radial_velocity', 'phot_g_mean_mag', 'bp_rp']
     if erreurs: noms += ERREURS
-    if poussiere: noms += POUSSIERE
     cols = {k: [] for k in noms}
     for p in parts:
         with fits.open(p, memmap=False) as h:
             d = h[1].data
             for k in noms[:9]: cols[k].append(np.asarray(d[k]))
-            for extra, liste in ((erreurs, ERREURS), (poussiere, POUSSIERE)):
+            for extra, liste in ((erreurs, ERREURS),):
                 if not extra: continue
                 with fits.open(os.path.join(extra, os.path.basename(p)), memmap=False) as he:
                     for k, v in _aligne(np.asarray(d['source_id']), he[1].data, liste).items(): cols[k].append(v)
@@ -160,10 +160,10 @@ def feuilles(cles):
 def main():
     dossier, etoiles_bin, passband, zeropt, sortie = sys.argv[1:6]
     opt = dict(zip(sys.argv[6::2], sys.argv[7::2]))
-    erreurs, poussiere = opt.get('--erreurs'), opt.get('--poussiere')
+    erreurs, reequilibre = opt.get('--erreurs'), opt.get('--reequilibre', 'oui') == 'oui'
     seuil = float(opt.get('--seuil-vitesse', SEUIL_VITESSE))
     t0 = time.time()
-    G = lire_parts(dossier, erreurs, poussiere)
+    G = lire_parts(dossier, erreurs)
     n_total = len(G['ra'])
     print(f'{n_total} étoiles lues ({time.time() - t0:.0f} s)')
     if n_total != ATTENDU: sys.exit(f'{n_total} étoiles lues, {ATTENDU} attendues (compte du 12 novembre 2026) : téléchargement incomplet')
@@ -197,18 +197,6 @@ def main():
         s_vt2 = (KAPPA / plx) ** 2 * (G['pmra_error'].astype(np.float64) ** 2 + G['pmdec_error'].astype(np.float64) ** 2) + (vt * G['parallax_error'] / plx) ** 2
         s_v = np.sqrt(s_vt2 + np.where(a_rv, G['radial_velocity_error'].astype(np.float64), np.inf) ** 2)
         fiable = a_rv & (s_v < seuil)
-    # Poussière entre l'étoile et le Soleil (drapeau 4) : A_G et E(BP-RP) estimés par Gaia (GSP-Phot) depuis le spectre
-    # mesuré de l'étoile. Rangés à part : la magnitude du fichier reste celle mesurée depuis la Terre.
-    a_g = np.full(len(plx), np.nan)
-    ebr = np.full(len(plx), np.nan)
-    if poussiere:
-        a_g = G['ag_gspphot'].astype(np.float64)
-        ebr = G['ebpminrp_gspphot'].astype(np.float64)
-    a_pous = np.isfinite(a_g) & np.isfinite(ebr)
-    pous = np.where(a_pous, np.clip(np.rint(a_g / AG_PAS), 0, (1 << AG_BITS) - 1), 0).astype(np.int64)
-    pous |= np.where(a_pous, np.clip(np.rint(ebr / BPRP_PAS), 0, 63), 0).astype(np.int64) << AG_BITS
-    pous = pous.astype(np.uint16).view(np.int16)
-
     bprp = G['bp_rp'].astype(np.float64)
     pas = np.where(np.isfinite(bprp), np.clip(np.floor((bprp - BPRP0) / BPRP_PAS), 0, 254), 255).astype(np.uint8)
 
@@ -228,10 +216,13 @@ def main():
     rec = np.zeros(len(k), np.dtype([('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('m', '<f2'), ('c', 'u1'), ('f', 'u1')]))
     rec['x'], rec['y'], rec['z'] = p[:, 0], p[:, 1], p[:, 2]
     rec['m'], rec['c'] = M[k], pas[k]
-    rec['f'] = a_rv[k].astype(np.uint8) | (fiable[k].astype(np.uint8) << 1) | (a_pous[k].astype(np.uint8) << 2)
+    # Éclat rééquilibré vu de loin (drapeau 4, gaia_reequilibre.py) : HYPOTHÈSE dite à l'écran, aucune étoile ajoutée.
+    uk = np.stack([cd[k] * ca[k], cd[k] * sa[k], sd[k]], 1)
+    dm = gr.decalage_mmag(gr.poids(gr.cles(uk, 1000.0 / plx[k], M[k]))) if reequilibre else np.zeros(len(k), np.int16)
+    rec['f'] = a_rv[k].astype(np.uint8) | (fiable[k].astype(np.uint8) << 1) | ((dm != 0).astype(np.uint8) << 2)
     vel = np.zeros((len(k), 4), '<i2')
     vel[:, :3] = np.clip(np.rint(v[k] / V_PAS), -32767, 32767)
-    vel[:, 3] = pous[k]
+    vel[:, 3] = dm
     fe = np.zeros(len(fs), np.dtype([('min', '<f4', 3), ('n', '<u4'), ('max', '<f4', 3), ('r0', '<u4'), ('premier', '<u8'), ('r1', '<u8')]))
     for i, (lo, hi) in enumerate(fs):
         fe['min'][i], fe['max'][i] = p[lo:hi].min(0), p[lo:hi].max(0)
@@ -259,7 +250,7 @@ def main():
     os.replace(chemin + '.partiel', chemin)
     print(f'-> {chemin} ({os.path.getsize(chemin) / 1e9:.2f} Go, {time.time() - t0:.0f} s) ; '
           f'vitesse radiale mesurée : {int(a_rv[k].sum())} ; orbite fiable (< {seuil:g} km/s) : {int(fiable[k].sum())} ; '
-          f'poussière estimée : {int(a_pous[k].sum())} ; couleur non mesurée : {int((pas[k] == 255).sum())}')
+          f'éclat rééquilibré : {int((dm != 0).sum())} (lumière déplacée {np.abs(10 ** (-0.4 * dm / 1000.0) - 1) @ (10 ** (-0.4 * M[k])) / (10 ** (-0.4 * M[k])).sum():.1%}) ; couleur non mesurée : {int((pas[k] == 255).sum())}')
 
 
 if __name__ == '__main__':

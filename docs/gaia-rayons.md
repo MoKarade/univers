@@ -45,6 +45,38 @@ plus larges que 15°. Référence sans rayons (mêmes étoiles, directions méla
    géométrie : la poussière caméra-étoile n'est pas ajoutée]. Même chose pour les cases de lumière additionnée (`gaia_agreger.py` :
    flux sans poussière des sources estimées, case par case).
 
-## Résultats
+## Résultats [Certain, captures du 12/11/2026 à 58 000 al, carte RTX 5080 partagée]
 
-Voir la section « Avant / après » (captures) ajoutée à la fin du travail.
+- +44,6 Ma : la bande diffuse (lumière additionnée et étoiles sans vitesse sûre) disparaît ; reste le disque des étoiles à orbite
+  fiable, cisaillé par la rotation différentielle (calculé, réel pour ces étoiles).
+- Aujourd'hui : rien ne change sans la poussière (contraste des rayons à l'écran 0,017 dex avant et après).
+- Poussière retirée (86,2 M étoiles estimées, 58,5 % de la lumière ; A_G médiane 0,39 mag) : **n'enlève pas les rayons** (à l'écran
+  0,017 -> 0,016 dex ; vue de dessus 2-4 kpc 0,046 -> 0,043, 1-2 kpc 0,025 -> 0,065), multiplie la lumière totale par 2,5, dont
+  10 % par 30 000 étoiles à A_G > 5 mag (facteur > 100), et ajoute des grains (7,0 % -> 10,8 % de la lumière dans des pixels isolés).
+  Les bornes publiées de A_G (demi-largeur médiane 0,02 mag) ne permettent pas de trier les estimations douteuses.
+  Conclusion : les rayons sont des étoiles manquantes (Gaia ne mesure pas la distance des étoiles trop faibles derrière la
+  poussière), pas des étoiles assombries. Les retirer demanderait d'ajouter des étoiles non mesurées : contraire à la règle de Marc.
+- Le code de la poussière reste (drapeau 4, bits 16-31 des cases) mais n'agit que si gaia.bin est converti avec `--poussiere` ;
+  le fichier livré ne l'est pas (choix soumis à Marc).
+
+## Vue « meilleur rendu » (demande de Marc, 12/11/2026 : « je veux que tu corriges mieux », avec un sélecteur)
+
+Réglage global `Sim::bestLook` (bouton « Vue », touche F4, du fil appli PC). En « 100 % mesuré », rien ne change. En « meilleur
+rendu », vu de loin seulement (poids = écart caméra-Soleil / distance de la source, 0 au Soleil) :
+1. **Éclat rééquilibré** (`pipeline/natif/gaia_reequilibre.py`, drapeau 4 de gaia.bin, bits 16-31 des cases de gaia_agrege.bin) :
+   par tranche de magnitude absolue, coquille de 250 pc et degré de longitude galactique, le nombre de sources est ramené à sa
+   moyenne sur 61° de longitude. Hypothèse : à même distance, le nombre d'étoiles varie lentement d'une direction à l'autre.
+   17,7 % de la lumière des étoiles change de place (moitié en plus, moitié en moins), 12,5 % pour les cases.
+2. **Flou angulaire de 3°** (`shaders/gaia_fiable.glsl`, `gfFlou`) : chaque source est décalée en travers de la ligne de visée
+   d'un angle fixe tiré au hasard (écart type 3°, l'incertitude de distance médiane de 5 %). Aucune étoile ajoutée.
+
+Mesures :
+| | 100 % mesuré | meilleur rendu |
+|---|---|---|
+| Rayons fins, vue de dessus galactique 2-4 kpc (données, dex) | 0,046 | 0,007 (rééquilibrage) ; 0,016 (flou seul) |
+| Rayons larges 15-90°, même vue | 0,072 | 0,030 |
+| Rayons à l'écran, appli, 58 000 al (dex, anneau 60-250 px) | 0,017 | 0,009 |
+
+Écartés, mesurés : rééquilibrage découpé aussi en latitude (45 % de la lumière bougerait, gain moindre) ; fenêtre de 15° (rayons
+larges restants). Captures : `captures/gaia_meilleur_rendu_oblique.png`, `captures/gaia_meilleur_rendu_dessus.png`
+(gauche : 100 % mesuré ; droite : meilleur rendu). Contrôle : `UNIVERS_VUE=meilleur` au lancement.

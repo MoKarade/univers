@@ -44,12 +44,14 @@ void main() {
         vec3 t2 = cross(n, t1);
         float d0 = length(c.pm.xyz) * s;
         vec3 q = (n + (2.0 * h.y - 1.0) * c.rest.x / length(c.pm.xyz) * t1 + (2.0 * h.z - 1.0) * c.rest.x / length(c.pm.xyz) * t2) * d0;
+        /* meilleur rendu, vu de loin : flou angulaire (gaia_fiable.glsl) */
+        if ((pc.cellBase & GF_MODE_RENDU) != 0u) q = gfFlou(q, uint(gl_VertexIndex) * 8u + uint(gl_InstanceIndex), gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, c.pm.xyz));
         vec3 dep = vec3(0.0), v = c.vel.xyz;
         if (pc.par.w == 0.0) dep = v * pc.par.z;
         else if (pc.exact > 0.5) {
             float u = pc.par.w * 1.0e9 / OG_RACCORD_ANS, w = 1.0 - exp(-u * u);
             float tEtat = pc.par.w - pc.frac * 1.0e-3, hh = pc.frac * 1.0e-3 * OP_K;
-            Etat a = orb[pc.cellBase + uint(gl_VertexIndex)], so = orb[pc.sun];
+            Etat a = orb[(pc.cellBase & ~GF_MODE_RENDU) + uint(gl_VertexIndex)], so = orb[pc.sun];
             vec3 xa = a.p.xyz + hh * a.v.xyz + 0.5 * hh * hh * accGal(a.p.xyz, tEtat);
             vec3 xs = so.p.xyz + hh * so.v.xyz + 0.5 * hh * hh * accGal(so.p.xyz, tEtat);
             dep = mix(v * pc.par.z, OG_M * (xa - xs) * OG_KPC_LY - c.pm.xyz, w);
@@ -57,8 +59,9 @@ void main() {
         p = ((q - pc.camHi.xyz) + dep) - pc.camLo.xyz;
         float d = max(length(p), 1e-12);
         flux = pc.par.x * pow(10.0, -0.4 * (c.pm.w + 2.5 * log(float(SPREAD)) / log(10.0) + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0));
-        /* poussière Soleil-case estimée par Gaia (bits 16-31 du mot de couleur), retirée vue d'ailleurs (gaia_fiable.glsl) */
-        flux *= pow(10.0, 0.4 * 0.01 * float(floatBitsToUint(c.rest.z) >> 16) * gfPoidsPoussiere(pc.camHi.xyz + pc.camLo.xyz, c.pm.xyz));
+        /* éclat rééquilibré vu de loin (bits 16-31 du mot de couleur, millièmes de magnitude signés) : HYPOTHÈSE (gaia_fiable.glsl) */
+        if ((pc.cellBase & GF_MODE_RENDU) != 0u)
+            flux *= pow(10.0, -0.4 * 0.001 * float(int(floatBitsToUint(c.rest.z)) >> 16) * gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, c.pm.xyz));
         /* tache : assez large pour que les points d'une case se recouvrent (côté de la case, ou épaisseur partagée entre les points) */
         /* l'épaisseur ne compte que vue de côté : projetée sur l'écran (sinus de l'angle entre le rayon de vue et la direction du Soleil) */
         float r = max(OVERLAP * c.rest.x * s, 0.23 * d0 / float(SPREAD) * length(cross(n, p / d)));

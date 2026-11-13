@@ -194,6 +194,7 @@ int runWindow(const WindowOptions& opt) {
     sim.refreshEphemeris();
     if (sim.focus != 0) sim.follow(sim.focus);
     if (opt.dist > 0) sim.dist = opt.dist;
+    if (const char* vue = std::getenv("UNIVERS_VUE")) sim.bestLook = std::string(vue) == "meilleur";      // contrôle : vue choisie au départ
     if (test) {
         sim.paused = true;
         sim.touched = true;      // contrôle : image fixe, reproductible
@@ -264,7 +265,8 @@ int runWindow(const WindowOptions& opt) {
     sim.gaiaCount = gaiaOk ? gaia.count : 0;
     sim.gaiaReliableCount = gaiaOk ? gaia.reliableCount : 0;
     sim.gaiaReliableLight = gaiaOk ? gaia.reliableLight : 0;
-    sim.gaiaDustCount = gaiaOk ? gaia.dustCount : 0;
+    sim.gaiaRebalancedCount = gaiaOk ? gaia.rebalancedCount : 0;
+    sim.gaiaRebalancedShift = gaiaOk ? gaia.rebalancedShift : 0;
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
     sr.create(g, stars, HdrTarget::kFormat, gaiaOk);
@@ -601,6 +603,7 @@ int runWindow(const WindowOptions& opt) {
             // Même facteur d'éclat pour la lueur de la Galaxie et pour les étoiles : la lueur est le complément exact des
             // étoiles dessinées (fil Gaia) ; le facteur revient à 1 entre 3 000 et 30 000 années-lumière (Sim::brightnessBoost).
             milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
+            gaia.improved = sim.bestLook;
             gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
         }
         if (!skyOnly && sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)

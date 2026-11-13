@@ -14,7 +14,7 @@ Format gaia_agrege.bin (petit-boutiste) : en-tête 64 octets (« UNIVGAG2 », no
 ciel (u32), niveau HEALPix (u32), lumière totale 3D et ciel seul (f64, en 10^(-0,4 G) vu du Soleil)), puis cases 3D de
 48 octets : x, y, z (f32, al), magnitude absolue G (f32, mesurée depuis la Terre), rayon (f32, al), erreur relative de distance
 (f32), pas de couleur (u32 : bits 0-7 pas de couleur, même table que gaia.bin ; bit 8 vitesse radiale mesurée ; bits 16-31
-poussière Soleil-case retirable, en pas de 0,01 mag), nombre de sources (u32), vitesse moyenne x, y, z (f32, km/s),
+décalage d'éclat vu de loin, entier signé en millièmes de magnitude, gaia_reequilibre.py), nombre de sources (u32), vitesse moyenne x, y, z (f32, km/s),
 dispersion (f32, km/s) ; puis pixels du ciel de 16 octets : direction x, y, z
 (f32, unité), flux G vu du Soleil (f32) ; puis le pas de couleur des pixels du ciel (u8).
 
@@ -28,6 +28,7 @@ import sys as _sys
 _sys.stdout.reconfigure(encoding='utf-8')      # accents lisibles dans la console Windows
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gaia_convertir as gc
+import gaia_reequilibre as gr
 
 NIVEAU = 7
 ERREUR_MAX = 0.2      # par construction (gaia_agreger.py : parallaxe > 5 erreurs) ; garde-fou
@@ -102,16 +103,14 @@ def main():
     cases['p'] = u * d_ly[:, None]
     cases['m'], cases['r'], cases['e'] = M, 0.5 * cote * d_ly, err[k]
     v, disp, a_rv = vitesses(D, k)
-    # poussière (docs/gaia-rayons.md) : absorption de la case = 2,5 log10(flux sans poussière / flux mesuré), où la poussière
-    # de chaque source estimée par Gaia (ag_gspphot) est retirée et les autres gardées telles quelles ; 0 si non demandée
-    if 'fd' in D:
-        f, fd, fdn = D['f'][k], np.nan_to_num(D['fd'][k]), np.nan_to_num(D['fdn'][k])
-        ag = 2.5 * np.log10(np.maximum(f - fdn + fd, f) / f)
-        print(f'poussière estimée pour {fdn.sum() / f.sum():.1%} de la lumière des cases ; absorption médiane (lumière) '
-              f'{np.median(ag):.2f} mag')
-    else:
-        ag = np.zeros(int(k.sum()))
-    ag_bits = np.clip(np.rint(ag / 0.01), 0, 65535).astype(np.uint32) << 16
+    # éclat rééquilibré vu de loin (gaia_reequilibre.py, HYPOTHÈSE dite à l'écran, vue « meilleur rendu » seulement) : la
+    # lumière de chaque case est comparée à celle de ses voisines sur le ciel (15°), à même distance
+    ra, de = radec(D['hp'][k])
+    ui = np.stack([np.cos(de) * np.cos(ra), np.cos(de) * np.sin(ra), np.sin(de)], 1)
+    w = gr.poids(gr.cles(ui, 1000.0 / plx, np.full(len(plx), -6.0)), D['n'][k])
+    dm = gr.decalage_mmag(w)
+    print(f'éclat rééquilibré : lumière déplacée {np.abs(w - 1) @ D["f"][k] / D["f"][k].sum():.1%}')
+    ag_bits = dm.view(np.uint16).astype(np.uint32) << 16
     cases['c'], cases['n'] = pas_couleur(D['fc'][k], D['fcn'][k]) | (a_rv.astype(np.uint32) << 8) | ag_bits, D['n'][k]
     cases['v'], cases['s'] = v, disp
     poids = D['f'][k]
