@@ -79,7 +79,8 @@ def assembler(dossier, etat, fraction=1.0, graine=20261113):
                 s = np.sort(rng.choice(n, size=int(n * fraction), replace=False))
                 p = {k: v[s] for k, v in p.items()}
                 p['m'] = p['m'] / fraction; p['eps'] = p['eps'] * fraction ** (-1 / 3)
-            R = rotation_vers(C.galaxie(nom)['disque']['axe_rotation'])
+            axe = (C.galaxie(nom).get('disque') or {}).get('axe_rotation') or [0.0, 0.0, 1.0]      # Petit Nuage : sens de rotation non mesuré
+            R = rotation_vers(axe)
             pos, vel = p['pos'] @ R.T, p['vel'] @ R.T
             m, eps, kind = p['m'], p['eps'], p['kind']
         else:      # Petit Nuage : masse adoptée de la table, sphère de Plummer de 1,5 kpc [modèle]

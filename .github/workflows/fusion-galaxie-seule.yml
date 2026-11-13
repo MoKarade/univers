@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["grand_nuage --halo=0.85","triangle --halo=0.85"]') }}
+        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["petit_nuage --halo=0.6"]') }}
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
@@ -42,7 +42,7 @@ jobs:
         working-directory: pipeline/fusion
         env:
           GALAXIE: ${{ matrix.galaxie }}
-          N: ${{ inputs.n || (startsWith(matrix.galaxie, 'triangle') && '1000000') || (startsWith(matrix.galaxie, 'grand_nuage') && '1000000') || '2000000' }}
+          N: ${{ inputs.n || (startsWith(matrix.galaxie, 'triangle') && '1000000') || (startsWith(matrix.galaxie, 'grand_nuage') && '1000000') || (startsWith(matrix.galaxie, 'petit_nuage') && '300000') || '2000000' }}
         run: |
           set -- $GALAXIE
           nom=$1; shift
