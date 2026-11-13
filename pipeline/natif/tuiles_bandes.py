@@ -161,6 +161,14 @@ def ecrire_idx(chemin, ordre, w, idx):
     os.replace(chemin + '.part', chemin)
 
 
+def ecrire_fiche(dossier_idx, fiche):
+    """fiche.json écrite d'un coup (.part puis renommage)."""
+    chemin = os.path.join(dossier_idx, 'fiche.json')
+    with open(chemin + '.part', 'w', encoding='utf-8') as f:
+        json.dump(fiche, f, ensure_ascii=False, indent=1)
+    os.replace(chemin + '.part', chemin)
+
+
 def lire_fiche(sortie, nom, r):
     """Fiche de la carte entière ciel_<nom>.bin si elle existe (mêmes textes et statistiques), sinon celle du relevé."""
     carte = os.path.join(sortie, f'ciel_{nom}.bin')
@@ -255,6 +263,10 @@ def main():
     print(f'{r["libelle"]} : serveur {adresse}, tuiles {w} px, ordres {ordres} (publié jusqu\'à {ordre_max}), '
           f'Nside {w << K_FIN}, facteur float16 {facteur:g}', flush=True)
 
+    # fiche écrite dès le départ avec le facteur : le moteur lit facteur_float16 et prendrait 1 sans elle
+    ecrire_fiche(dossier_idx, dict(fiche, ordre_max=K_FIN, largeur=w, ordres=ordres, groupe=G, serveur=adresse,
+                                   facteur_float16=facteur, format='UNIVTIL2', en_cours=True,
+                                   outil_tuiles='pipeline/natif/tuiles_bandes.py'))
     # état de reprise : index déjà remplis et morceaux faits
     etat = os.path.join(dossier_paq, 'etat.npz')
     idx = {k: np.zeros(12 * 4 ** k, dtype=np.uint32) for k in ordres}
@@ -301,9 +313,7 @@ def main():
                  depassements=depass, tuiles_presentes=comptes, tuiles_absentes_ordre_max=absentes,
                  source_archive=SOURCES.get(a.nom, a.nom), format='UNIVTIL2', date_tuiles=time.strftime('%Y-%m-%d'),
                  outil_tuiles='pipeline/natif/tuiles_bandes.py')
-    with open(os.path.join(dossier_idx, 'fiche.json.part'), 'w', encoding='utf-8') as f:
-        json.dump(fiche, f, ensure_ascii=False, indent=1)
-    os.replace(os.path.join(dossier_idx, 'fiche.json.part'), os.path.join(dossier_idx, 'fiche.json'))
+    ecrire_fiche(dossier_idx, fiche)
     taille = sum(os.path.getsize(os.path.join(d, x)) for d, _, fs in os.walk(dossier_paq) for x in fs if x.startswith('p'))
     print(f'Écrit {dossier_idx} (index) et {dossier_paq} (paquets, {taille / 1e9:.2f} Go) : tuiles présentes {comptes}, '
           f'{absentes} absentes à l\'ordre {K_FIN}, {depass} valeurs au-delà de float16', flush=True)
