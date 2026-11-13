@@ -254,6 +254,24 @@ def sensibilite(etat, g, T, prof):
     return J
 
 
+def corriger(etat, ecart, t_depart, prof, amorti=0.5):
+    """Départ corrigé pour le tir suivant (Newton amorti). Le changement de départ est celui qui annulerait l'écart
+    d'arrivée dans le modèle simple ; il est borné : pas plus de 1,5 fois l'écart lui-même en position et en vitesse.
+    (Sans borne, la matrice mal conditionnée des Nuages a fait diverger les tirs 12 à 16 du 13/11.)"""
+    T = -t_depart / T_UNIT
+    corrige = {}
+    for g, n in enumerate(ORDRE):
+        e = dict(pos=list(map(float, etat[n]['pos'])), vel=list(map(float, etat[n]['vel'])))
+        if n in ecart:
+            dx, dv = np.array(ecart[n]['dx'], float), np.array(ecart[n]['dv'], float)
+            J = sensibilite(etat, g, T, prof)
+            d = np.linalg.lstsq(J, -np.concatenate([dx, dv]), rcond=1e-3)[0] * amorti
+            f = min(1.0, 1.5 * np.linalg.norm(dx) / max(np.linalg.norm(d[:3]), 1e-9), 1.5 * np.linalg.norm(dv) / max(np.linalg.norm(d[3:]), 1e-9))
+            e['pos'] = (np.array(e['pos']) + f * d[:3]).tolist(); e['vel'] = (np.array(e['vel']) + f * d[3:]).tolist()
+        corrige[n] = e
+    return corrige
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
@@ -262,6 +280,11 @@ def main():
     t_depart = float(cible['debut_reference_ga'])
     ref = None
     if 'depart' in opts: t_depart = float(opts['depart'])
+    if mode == 'corrige':      # refait la correction d'un tir déjà fait : python rencontre.py corrige <dossier galaxies> <dossier du tir>
+        u = json.load(open(os.path.join(args[2], 'etat_utilise.json'), encoding='utf-8')); c0 = json.load(open(os.path.join(args[2], 'etat_corrige.json'), encoding='utf-8'))
+        c0['etat'] = corriger(u['etat'], c0['ecart_du_tir'], float(u['t_depart']), profils(args[1]), float(opts.get('amorti', 0.5)))
+        json.dump(c0, open(os.path.join(args[2], 'etat_corrige.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+        print('correction refaite'); return
     if mode in ('tir', 'passe'):
         dossier, sortie = args[1], args[2]
         os.makedirs(sortie, exist_ok=True)
@@ -282,19 +305,7 @@ def main():
         # Correction du départ : l'écart final de vitesse est retiré de la vitesse de départ ; l'écart final de position est
         # retiré de la position de départ, compte tenu de ce que le changement de vitesse déplace sur la durée du trajet
         # (mouvement libre : une approximation, d'où les tirs successifs). Amorti pour ne pas osciller.
-        amorti, T = float(opts.get('amorti', 0.8)), -t_depart / T_UNIT
-        prof = profils(dossier)
-        corrige = {}
-        for g, n in enumerate(ORDRE):
-            e = dict(pos=list(map(float, etat[n]['pos'])), vel=list(map(float, etat[n]['vel'])))
-            if n in ecart:
-                # Newton : on cherche le changement de départ qui annule l'écart d'arrivée, avec la matrice de l'orbite simple.
-                J = sensibilite(etat, g, T, prof)
-                d = np.linalg.lstsq(J, -np.concatenate([ecart[n]['dx'], ecart[n]['dv']]), rcond=1e-6)[0] * amorti
-                # garde-fou : jamais plus de 60 % de la distance ni de 150 km/s en un tir
-                fx = min(1.0, 0.6 * np.linalg.norm(e['pos']) / max(np.linalg.norm(d[:3]), 1e-9)); fv = min(1.0, 150.0 / max(np.linalg.norm(d[3:]), 1e-9)); f = min(fx, fv)
-                e['pos'] = (np.array(e['pos']) + f * d[:3]).tolist(); e['vel'] = (np.array(e['vel']) + f * d[3:]).tolist()
-            corrige[n] = e
+        corrige = corriger(etat, ecart, t_depart, profils(dossier), float(opts.get('amorti', 0.5)))
         json.dump(dict(t_depart=t_depart, etat=corrige, ecart_du_tir=ecart, particules=int(len(p['m']))), open(os.path.join(sortie, 'etat_corrige.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         json.dump(dict(t_depart=t_depart, etat=etat), open(os.path.join(sortie, 'etat_utilise.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         print('écart à la place mesurée aujourd\'hui :')
