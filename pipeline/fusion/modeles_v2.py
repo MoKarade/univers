@@ -92,6 +92,22 @@ GALAXIES = {
 }
 
 
+# Table unique du plan B+ (pipeline/constantes/univers.json) : quand elle est là, c'est ELLE qui donne les paramètres des
+# quatre galaxies ; le dictionnaire ci-dessus n'est que la copie de secours, et la base des variantes « barre ».
+try:
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'constantes'))
+    import constantes as _C
+    for _cle in ('voie_lactee', 'andromede', 'triangle', 'grand_nuage', 'petit_nuage'):
+        if _C.galaxie(_cle).get('modele'):
+            GALAXIES[_cle] = _C.modele_pour_modeles_v2(_cle)
+    for _cle in ('voie_lactee', 'andromede'):      # les variantes « barre » gardent le halo de la table
+        GALAXIES[_cle + '_barre']['halo'] = dict(GALAXIES[_cle]['halo'])
+    TABLE = _C.charger().get('date')
+except Exception as _e:      # table absente : on le dit dans le résumé du tirage
+    TABLE = None
+
+
 def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None):
     import agama
     agama.setUnits(mass=1, length=1, velocity=1)
@@ -181,6 +197,7 @@ def main():
     opts = dict(a[2:].split('=', 1) for a in sys.argv[4:] if a.startswith('--') and '=' in a)
     p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None)
     resume['options'] = opts
+    resume['table_unique'] = TABLE
     np.savez_compressed(sortie, meta=json.dumps(resume, ensure_ascii=False), **p)
     print(json.dumps(resume, ensure_ascii=False, indent=1))
 
