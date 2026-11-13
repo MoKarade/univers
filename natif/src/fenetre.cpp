@@ -259,6 +259,12 @@ int runWindow(const WindowOptions& opt) {
     const bool gaiaOk = gaia.create(g, dataDir + "/gaia.bin", HdrTarget::kFormat);
     GaiaRenderer gaiaB;      // 93,9 M étoiles à parallaxe entre 5 et 10 erreurs (gaia_b.bin), si le fichier est là
     const bool gaiaBOk = gaiaOk && gaiaB.create(g, dataDir + "/gaia_b.bin", HdrTarget::kFormat, false);
+    // Voie lactée faite d'étoiles (Marc, 13/11/2026 : « pas une image ») : 4 M étoiles visibles du modèle
+    // (pipeline/natif/etoiles_visibles.py, contrat docs/contrat-etoiles-visibles.md), au format de Gaia : niveaux de
+    // détail par l'arbre en huit, orbites exactes sur la carte graphique, sans lumière additionnée en double.
+    GaiaRenderer milkyWayStars;
+    const bool milkyWayStarsOk = milkyWayStars.create(g, dataDir + "/vl_etoiles.bin", HdrTarget::kFormat, true, false);
+    sim.milkyWayStarCount = milkyWayStarsOk ? milkyWayStars.count : 0;
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
     // Décision de Marc (13 novembre 2026, « je veux le plus proche possible de la réalité, pas seulement le mesuré ») : la
@@ -484,6 +490,7 @@ int runWindow(const WindowOptions& opt) {
                     const double lo = static_cast<double>(gaia.orbitStep()) * OrbitGpu::kStepYears + off;
                     shownYears = std::clamp(wanted, lo, lo + OrbitGpu::kStepYears - 1.0);
                     gaia.advance(g, once, shownYears, 0);      // retard recompté pour la date réellement montrée
+                    if (milkyWayStarsOk) milkyWayStars.advance(g, once, shownYears, test && !opt.hasPath ? 1000000 : 64);
                     // Les états de départ de Gaia se préparent pendant les premières secondes : d'ici là, la date reste à moins de
                     // 30 000 ans d'aujourd'hui, où le mouvement est la ligne droite mesurée (l'orbite y pèse moins de 1 %).
                     if (!gaia.orbitReady()) shownYears = std::clamp(shownYears, off - 3.0e4, off + 3.0e4);
@@ -648,7 +655,8 @@ int runWindow(const WindowOptions& opt) {
             // Lueur du modèle : cède la place à la Voie lactée calculée en entier quand celle-ci entre (200 à 400 Ma), pour
             // ne pas compter deux fois la même lumière.
             const double loneTime = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) : 0.0;
-            sim.milkyWayModelShare = sim.bestLook ? sim.starShare() * (1.0 - loneTime) : 0.0;
+            // Avec les étoiles visibles du modèle, plus de lueur : la Voie lactée est faite d'étoiles.
+            sim.milkyWayModelShare = sim.bestLook && !milkyWayStarsOk ? sim.starShare() * (1.0 - loneTime) : 0.0;
             sim.galaxyImageShare = sim.bestLook ? sim.starShare() : 0.0;      // vraies photos tant que les étoiles mesurées sont montrées
             galaxyImages.draw(cmd, cam, sim, sc.extent.width, sc.extent.height, pc.par[0], sim.galaxyImageShare);
             if (sim.milkyWayModelShare > 0)
@@ -666,6 +674,9 @@ int runWindow(const WindowOptions& opt) {
                 gaiaB.improved = sim.bestLook;
                 gaiaB.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
             }
+            sim.milkyWayStarShare = milkyWayStarsOk && sim.bestLook ? sim.starShare() : 0.0;
+            if (sim.milkyWayStarShare > 0)
+                milkyWayStars.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayStarShare), sim.years);
         }
         if (!skyOnly && sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
             PushConstants orbiting = pc;
@@ -780,6 +791,7 @@ int runWindow(const WindowOptions& opt) {
     planets.release(g);
     gaiaSky.destroy(g);
     if (gaiaBOk) gaiaB.release(g);
+    if (milkyWayStarsOk) milkyWayStars.release(g);
     gaia.release(g);
     milkyWay.release(g);
     galaxyImages.release(g);

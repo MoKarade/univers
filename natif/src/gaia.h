@@ -151,7 +151,8 @@ public:
     // full = false : jeu « B » (gaia_b.bin, étoiles à distance connue à 10-20 % près, docs/plan-gaia-complet.md) : ni
     // lumière additionnée (déjà chargée par le jeu principal), ni orbites exactes (aucune n'est fiable : elles s'effacent
     // loin d'aujourd'hui ; en attendant, épicycles) ; cela garde 3 Go de mémoire graphique.
-    bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat, bool full = true) {
+    // aggregate = false : orbites exactes mais pas de lumière additionnée (étoiles visibles du modèle, vl_etoiles.bin).
+    bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat, bool full = true, bool aggregate = true) {
         if (!openGaia(path, file_)) return false;
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(g.pd, &props);
@@ -196,7 +197,7 @@ public:
                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         }
         for (int i = 0; i < kRing; ++i) check(vkMapMemory(g.dev, indirect_[i].mem, 0, VK_WHOLE_SIZE, 0, &mapped_[i]), "dessins indirects");
-        if (full) loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
+        if (full && aggregate) loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
         std::vector<std::pair<uint32_t, uint32_t>> leafRanges(file_.leafCount);
         for (uint32_t i = 0; i < file_.leafCount; ++i) leafRanges[i] = {static_cast<uint32_t>(file_.leaves[i].first), file_.leaves[i].n};
         if (full) orbits_.create(g, file_.stars, file_.velocities, file_.n, std::move(leafRanges), cellPos_, cellVel_);

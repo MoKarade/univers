@@ -216,6 +216,8 @@ struct Sim {
     // fusion (16e, 50e, 84e centile, en milliards d'années) ; 0 scénario : fichier absent.
     uint32_t cloneCount = 0;
     double companionShare = 0;    // part montrée d'Andromède, du Triangle et du Grand Nuage du calcul aujourd'hui (fenetre.cpp)
+    uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
+    double milkyWayStarShare = 0;     // part montrée à cette image
     int galaxyImageCount = 0;     // galaxies voisines montrées par leur vraie photo (galaxies_images.h)
     double galaxyImageShare = 0;  // part montrée de ces photos à cette image
     bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
