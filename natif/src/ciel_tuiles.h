@@ -32,6 +32,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <array>
 #include <limits>
 #include <unordered_map>
 
@@ -160,6 +161,7 @@ public:
         slotKey_.assign(slots_, kNone);
         slotSeen_.assign(slots_, 0);
         slotHigh_.assign(slots_, 0.0f);
+        slotCover_.assign(slots_, std::array<uint8_t, 64>{});
         state_.clear();
         stop_ = false;
         for (auto& t : workers_) t = std::thread([this] { run(); });
@@ -242,7 +244,15 @@ public:
         shownOrder = 0;
         for (int k = std::min<int>(want, orderMax); k >= static_cast<int>(orderMin); --k) {
             auto it = state_.find(tileKey(static_cast<uint32_t>(k), center));
-            if (it != state_.end() && it->second >= 0) { shownOrder = static_cast<uint32_t>(k); break; }
+            if (it == state_.end() || it->second < 0) continue;
+            // la tuile est là ; le centre de l'écran y est-il mesuré ? (sous-carré de w/8 × w/8 pixels)
+            int face, ix, iy;
+            const double n = std::sqrt(center.x * center.x + center.y * center.y + center.z * center.z);
+            healpixFaceXY(width << k, center.x / n, center.y / n, center.z / n, face, ix, iy);
+            const uint64_t local = healpixInterleave(static_cast<uint32_t>(ix) & (width - 1), static_cast<uint32_t>(iy) & (width - 1));
+            if (!slotCover_[it->second][local >> (2 * logWidth - 6)]) continue;
+            shownOrder = static_cast<uint32_t>(k);
+            break;
         }
     }
 
@@ -293,6 +303,7 @@ private:
         uint64_t key;
         std::vector<uint16_t> data;      // vide : lecture ratée
         float high = 0;                  // 99,5e centile des valeurs mesurées de la tuile (valeur stockée, avant facteur)
+        std::array<uint8_t, 64> cover{}; // 1 si au moins un pixel mesuré dans chacun des 64 sous-carrés emboîtés de la tuile
     };
     static constexpr uint32_t kBatch = 32;              // tuiles envoyées au plus par image
     static constexpr int kAbsent = -2, kLoading = -1;
@@ -307,6 +318,7 @@ private:
     void* stagingMap_ = nullptr;
     std::vector<uint64_t> slotKey_, slotSeen_;
     std::vector<float> slotHigh_;
+    std::vector<std::array<uint8_t, 64>> slotCover_;
     std::unordered_map<uint64_t, int> state_;      // clé → emplacement (≥ 0), kLoading ou kAbsent
     uint64_t frame_ = 0;
 
@@ -359,7 +371,13 @@ private:
                 r.data.resize(static_cast<size_t>(width) * width);
                 f.read(reinterpret_cast<char*>(r.data.data()), static_cast<std::streamsize>(tileBytes_));
                 if (!f) r.data.clear();
-                else r.high = percentile995(r.data);
+                else {
+                    r.high = percentile995(r.data);
+                    const size_t per = r.data.size() / 64;      // ordre emboîté : chaque sous-carré est un morceau contigu
+                    for (size_t b = 0; b < 64; ++b)
+                        for (size_t i = b * per; i < (b + 1) * per; ++i)
+                            if ((r.data[i] & 0x7C00u) != 0x7C00u) { r.cover[b] = 1; break; }      // exposant plein = NaN ou infini
+                }
             }
             {
                 std::lock_guard<std::mutex> lk(mu_);
@@ -398,6 +416,7 @@ private:
             slotKey_[slot] = r.key;
             slotSeen_[slot] = frame_;
             slotHigh_[slot] = r.high;
+            slotCover_[slot] = r.cover;
             it->second = slot;
             std::memcpy(static_cast<char*>(stagingMap_) + used * tileBytes_, r.data.data(), tileBytes_);
             copies.push_back({used * tileBytes_, static_cast<VkDeviceSize>(slot) * tileBytes_, tileBytes_});
