@@ -41,7 +41,7 @@ std::string howSummary(const Sim& sim, bool& warn) {
     warn = !approx.empty() || lag > 0;
     if (!approx.empty()) return "Comment c'est obtenu : approximation pour " + approx;
     if (lag > 0) return "Comment c'est obtenu : calcul exact en retard de " + frInt(static_cast<double>(lag)) + " millions d'années";
-    return "Comment c'est obtenu : mesuré, lu ou calculé exactement";
+    return "Comment c'est obtenu : mesuré, lu ou calculé (détail au clic)";
 }
 
 // Durée en mots : « 40 s », « 3 min », « 1 h 20 », « 2,5 j ».

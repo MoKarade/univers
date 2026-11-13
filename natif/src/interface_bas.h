@@ -61,7 +61,7 @@ void whatYouSee(const Sim& sim) {
     if (sim.asteroidCount && sim.asteroidGain(sim.asteroidEpochJd) > 0 && sim.dist < 0.05)
         ImGui::TextDisabled("Les petits points sont %s astéroïdes, chacun sur son orbite mesurée (JPL), grossis pour être visibles%s",
                             frInt(static_cast<double>(sim.asteroidCount)).c_str(), sim.dist <= 8.0 * kAuInLy ? " ; clic sur l'un d'eux : sa fiche." : ".");
-    if (sim.replay && sim.starShare() < 1)
+    if (sim.replay && sim.starShare() < 1 && sim.years > kStartYears)
         ImGui::TextDisabled(sim.starShare() > 0 ? "Les points qui apparaissent sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure)."
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
     if (sim.starShare() <= 0) return;
@@ -165,7 +165,8 @@ void drawWelcome(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed
     ImGui::PushFont(ui.big);
     ImGui::TextUnformatted("Bienvenue dans Univers");
     ImGui::PopFont();
-    ImGui::TextUnformatted("Tout ce que tu vois est placé d'après des mesures réelles : planètes, étoiles, galaxies.");
+    ImGui::TextUnformatted("Aujourd'hui, planètes, étoiles et galaxies sont placées d'après des mesures réelles.");
+    ImGui::TextDisabled("Quand le temps avance ou recule, leur place est calculée : l'écran dit comment (Menu, Détails à l'écran).");
     ImGui::TextDisabled("Clique sur un astre pour y aller. Molette pour zoomer, glisser pour tourner, tape un nom pour chercher.");
     ImGui::Spacing();
     if (ImGui::Button("  Visite guidée (une minute et demie)  ")) startTour(sim, ui, 0);
@@ -271,8 +272,7 @@ void drawCompleteness(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fix
     const bool roomOnTop = ui.searchRight + ui.timeW + ui.completenessW + px(ui, 48) <= w;
     ImGui::SetNextWindowPos({w - px(ui, 16), roomOnTop ? px(ui, 16) : ui.timeBottom + px(ui, 12)}, 0, {1, 0});
     ImGui::Begin("completude-ligne", nullptr, fixed);
-    std::string line = completude::ligneCourte(e);
-    if (!ui.details && line.find('%') != std::string::npos) line = line.substr(0, line.find('%') + 1) + " de ce qui est connu";      // minimaliste : le chiffre, le détail au clic
+    const std::string line = ui.details ? completude::ligneCourte(e) : completude::ligneReduite(e);      // réduit : le début de la phrase, le détail au clic
     if (ImGui::Selectable(line.c_str(), ui.completeness)) ui.completeness = !ui.completeness;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic : ce qui est montré ici, comparé à ce qui est connu");
     ui.completenessBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
