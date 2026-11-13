@@ -124,9 +124,11 @@ def lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z, agrege=None
         grille.ravel()[:] += np.bincount((k[ok] * NY + j[ok]) * NX + i[ok], 10 ** (-0.4 * (M[ok] - M_SUN_V)), NX * NY * NZ)
     if gaia_bin == '-':      # essai sans Gaia : seulement le catalogue principal
         n = 0
-    else:
-        lire_gaia(gaia_bin, ranger)
-        n = int(np.fromfile(gaia_bin, np.uint8, 16)[8:16].view('<u8')[0])
+    else:      # plusieurs fichiers Gaia séparés par des virgules (gaia.bin,gaia_b.bin) : tous dessinés une à une dans l'appli
+        n = 0
+        for chemin in gaia_bin.split(','):
+            lire_gaia(chemin, ranger)
+            n += int(np.fromfile(chemin, np.uint8, 16)[8:16].view('<u8')[0])
     with open(etoiles_bin, 'rb') as f: h = f.read(64)
     ne = int(np.frombuffer(h, '<i8', 1, 8)[0]); n0 = int(np.frombuffer(h, '<i4', 1, 16)[0]); col = (ne * 4 + 63) // 64 * 64
     mm = np.memmap(etoiles_bin, '<f4', 'r', 64, (col // 4 * 4,))

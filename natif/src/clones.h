@@ -24,6 +24,7 @@ struct ClonePoints {
     uint32_t n = 0, galaxies = 0, images = 0;
     float stepGa = 0, quantumKpc = 0, probability = 0;
     const int16_t* positions = nullptr;      // images x n x galaxies x 3
+    const float* absorbed = nullptr;         // n x galaxies : date (Ga) où la galaxie est absorbée dans ce scénario, NaN sinon
     double t16 = 0, t50 = 0, t84 = 0;        // date de la fusion Voie lactée-Andromède : 16e, 50e, 84e centile (Ga), parmi les scénarios qui fusionnent
     bool ready = false;
 
@@ -34,16 +35,20 @@ struct ClonePoints {
         GetFileSizeEx(file, &size);
         mapping = CreateFileMappingA(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
         base = mapping ? static_cast<const uint8_t*>(MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0)) : nullptr;
-        if (!base || size.QuadPart < 64 || std::memcmp(base, "UNIVCLN1", 8) != 0) return false;
+        if (!base || size.QuadPart < 64) return false;
+        const bool v2 = std::memcmp(base, "UNIVCLN2", 8) == 0;      // v2 : dates d'absorption (clones_bin.py)
+        if (!v2 && std::memcmp(base, "UNIVCLN1", 8) != 0) return false;
         std::memcpy(&n, base + 8, 4);
         std::memcpy(&galaxies, base + 12, 4);
         std::memcpy(&images, base + 16, 4);
         std::memcpy(&stepGa, base + 20, 4);
         std::memcpy(&quantumKpc, base + 24, 4);
         std::memcpy(&probability, base + 28, 4);
-        const uint64_t head = 64 + 8ull * galaxies + 4ull * n + 4ull * n * galaxies;
+        const uint64_t absorbedAt = 64 + 8ull * galaxies + 4ull * n + 4ull * n * galaxies;
+        const uint64_t head = absorbedAt + (v2 ? 4ull * n * galaxies : 0);
         if (galaxies < 2 || !n || !images || static_cast<uint64_t>(size.QuadPart) < head + 6ull * images * n * galaxies) return false;
         positions = reinterpret_cast<const int16_t*>(base + head);
+        absorbed = v2 ? reinterpret_cast<const float*>(base + absorbedAt) : nullptr;
         std::vector<float> t;
         for (uint32_t k = 0; k < n; ++k) {
             float v;
@@ -104,7 +109,11 @@ struct ClonePoints {
                 cols[0][o] = static_cast<float>(w.x);
                 cols[1][o] = static_cast<float>(w.y);
                 cols[2][o] = static_cast<float>(w.z);
-                cols[3][o] = static_cast<float>(mApp - 5.0 * std::log10(dist / 3.2615638) + 5.0);
+                // Galaxie absorbée dans ce scénario (centres à moins de 20 kpc, règle de Sawala et al. 2025) : le point
+                // n'est plus montré, au lieu d'être recollé en ligne droite au centre de celle qui l'absorbe.
+                const float ta = absorbed ? absorbed[static_cast<size_t>(k) * galaxies + gal] : NAN;
+                const bool gone = std::isfinite(ta) && tGa >= static_cast<double>(ta) - stepGa;
+                cols[3][o] = gone ? 99.0f : static_cast<float>(mApp - 5.0 * std::log10(dist / 3.2615638) + 5.0);
             }
         }
         count = capacity;

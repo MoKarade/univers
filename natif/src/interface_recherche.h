@@ -273,6 +273,7 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
         }
         if (ImGui::MenuItem("Galaxie de face")) faceOnGalaxy(sim, ui);
         if (ImGui::MenuItem("Vue : meilleur rendu", "F4", sim.bestLook)) sim.bestLook = !sim.bestLook;
+        if (sim.cloneCount && ImGui::MenuItem("Incertitude : routes possibles des galaxies", nullptr, sim.showClones)) sim.showClones = !sim.showClones;
         if (ui.gwCount > 0 && ImGui::MenuItem("Ondes gravitationnelles détectées")) ui.gwOpen = true;
         ImGui::Separator();
         if (ImGui::MenuItem("Détails à l'écran", nullptr, ui.details)) ui.details = !ui.details;

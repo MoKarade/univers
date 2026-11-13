@@ -260,12 +260,13 @@ int runWindow(const WindowOptions& opt) {
     const bool gaiaBOk = gaiaOk && gaiaB.create(g, dataDir + "/gaia_b.bin", HdrTarget::kFormat, false);
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
-    // Décision de Marc (12 novembre 2026, « je veux full ce qu'il y a réellement ») : la lueur d'ensemble de la Voie lactée
-    // est un modèle ajusté sur des mesures, avec trois points supposés (docs/gaia-voie-lactee.md) ; elle n'est donc PAS
-    // montrée. Seules les étoiles mesurées le sont. Le code du fil Gaia reste en place (kShowModelledMilkyWay).
-    constexpr bool kShowModelledMilkyWay = false;
+    // Décision de Marc (13 novembre 2026, « je veux le plus proche possible de la réalité, pas seulement le mesuré ») : la
+    // Galaxie entière est montrée dès aujourd'hui. Gaia ne mesure les distances que sur quelques milliers d'années-lumière ;
+    // le reste de la lueur vient du modèle ajusté sur des mesures (docs/gaia-voie-lactee.md), qui ne garde que la lumière
+    // qui manque aux étoiles dessinées une à une (gaia.bin + gaia_b.bin, voie_lactee.py). Montré en vue « réaliste »
+    // (Sim::bestLook), éteint en vue « 100 % mesuré ».
     MilkyWayRenderer milkyWay;
-    if (kShowModelledMilkyWay) milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
+    milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
     sim.hasGaia = gaiaOk;
     sim.gaiaCellDispersionKms = gaiaOk ? gaia.cellDispersionKms : 0;
     sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
@@ -563,7 +564,8 @@ int runWindow(const WindowOptions& opt) {
                                   : 0.0;
         loneGalaxy.update(g, sim.replayGa(), loneShare);
         sim.loneGalaxyShare = loneGalaxy.count ? loneShare : 0.0;
-        if (milkyWayCentre >= 0) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
+        if (milkyWayCentre >= 0 && sim.showClones) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
+        else clones.count = 0;
         if (milkyWayCentre >= 0) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
         sim.armTracersShown = armTracers.count > 0;
         tasksTimer += dt;
@@ -610,7 +612,12 @@ int runWindow(const WindowOptions& opt) {
         if (!skyOnly && sim.starShare() > 0) {      // étoiles Gaia sur leur orbite calculée ; part qui baisse quand le calcul de la fusion prend le relais
             // Même facteur d'éclat pour la lueur de la Galaxie et pour les étoiles : la lueur est le complément exact des
             // étoiles dessinées (fil Gaia) ; le facteur revient à 1 entre 3 000 et 30 000 années-lumière (Sim::brightnessBoost).
-            milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
+            // Lueur du modèle : cède la place à la Voie lactée calculée en entier quand celle-ci entre (200 à 400 Ma), pour
+            // ne pas compter deux fois la même lumière.
+            const double loneTime = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) : 0.0;
+            sim.milkyWayModelShare = sim.bestLook ? sim.starShare() * (1.0 - loneTime) : 0.0;
+            if (sim.milkyWayModelShare > 0)
+                milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayModelShare), sim.years);
             gaia.improved = sim.bestLook;
             gaiaSky.update(cam, sim.fovDeg, !sim.deepTime());
             gaia.hideSkyOnly = gaiaSky.active && gaiaSky.shownStars > 0;
