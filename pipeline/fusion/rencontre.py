@@ -169,6 +169,25 @@ class Calcul:
         return dict(pos=cp.asnumpy(self.pos), vel=cp.asnumpy(self.vel), m=cp.asnumpy(self.m), eps=cp.asnumpy(self.eps), kind=self.kind, gid=self.gid)
 
 
+def avancement(t0, t1, t):
+    """Barre d'avancement lue par l'appli (dossier donné par UNIVERS_AVANCEMENT, format clé=valeur de pipeline/natif/avancement.py)."""
+    d = os.environ.get('UNIVERS_AVANCEMENT')
+    if not d: return
+    try:
+        fini = t >= t1 - 1e-9
+        lignes = ['nom=Groupe local : cinq galaxies, du passé à la fusion', f'fait={t - t0:.3f}', f'total={t1 - t0:.3f}', 'unite=milliards d’années',
+                  'debut=' + DEBUT, 'maj=' + time.strftime('%Y-%m-%dT%H:%M:%S'), 'etat=' + ('terminé' if fini else 'en cours'),
+                  'detail=Toutes les particules s’attirent, énergie noire comprise ; date atteinte : ' + f'{t:+.2f} milliards d’années']
+        nl = chr(10)
+        with open(os.path.join(d, 'groupe_local.txt.tmp'), 'w', encoding='utf-8', newline=nl) as f: f.write(nl.join(lignes) + nl)
+        os.replace(os.path.join(d, 'groupe_local.txt.tmp'), os.path.join(d, 'groupe_local.txt'))
+    except OSError:
+        pass
+
+
+DEBUT = time.strftime('%Y-%m-%dT%H:%M:%S')
+
+
 def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, journal=None, a_chaque_releve=None):
     """Avance de t0 à t1 (Ga). Écrit journal.json (centres relatifs à la Voie lactée, énergie) et des instantanés."""
     dt = dt_ma * 1e-3 / T_UNIT
@@ -184,6 +203,7 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
         print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % | {time.time() - debut:6.0f} s", flush=True)
         json.dump(journal, open(os.path.join(sortie, 'journal.json.tmp'), 'w', encoding='utf-8')); os.replace(os.path.join(sortie, 'journal.json.tmp'), os.path.join(sortie, 'journal.json'))
         if a_chaque_releve: a_chaque_releve(t, cp_, cv)
+        avancement(t0, t1, t)
 
     if not journal['t']: releve(t0)
     for s in range(steps):
