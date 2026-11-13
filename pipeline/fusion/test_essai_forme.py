@@ -109,8 +109,26 @@ def fabriquer_bruite(defaut=None, i_defaut=60, n=20000, graine=2):
     return E.Film(np.array(t), ['disque'], lambda i: images[i])
 
 
+def essai_lecteur_film_v2(dossier):
+    """Écrit le film propre au format v2 (float16) puis le relit : il doit passer, avec un nombre de points constant."""
+    import json as _j
+    os.makedirs(dossier, exist_ok=True)
+    film = fabriquer(None)
+    _j.dump(dict(version=2, ordre=film.noms, t=list(map(float, film.t)), traceurs=[len(g['pos']) for g in film.image(0)]),
+            open(os.path.join(dossier, 'film.json'), 'w'))
+    for i in range(len(film.t)):
+        im = film.image(i)
+        np.concatenate([g['pos'] - g['centre'] for g in im]).astype('<f2').tofile(os.path.join(dossier, f'img_{i:05d}.f16'))
+    rap = E.analyser(E.lire_film_v2(dossier), journal=lambda *a: None)
+    ok = rap['cassures'] == 0
+    print(f'{"conforme" if ok else "NON CONFORME":12s} film propre relu au format v2 (float16)  cassures {rap["cassures"]}')
+    return ok
+
+
 def main():
     silence = lambda *a: None
+    if not essai_lecteur_film_v2(os.path.join(os.environ.get('TMPDIR', '/tmp'), 'film_v2_essai')):
+        return 1
     for defaut, attendu in ((None, False), ('bascule', True)):
         rap = E.analyser(fabriquer_bruite(defaut), journal=silence)
         vu = rap['galaxies']['disque']['cassures']

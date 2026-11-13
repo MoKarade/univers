@@ -19,11 +19,12 @@ quand |r_i| dépasse À LA FOIS un plancher physique (table SEUILS) et K fois l'
 série (1,4826 × écart médian absolu). Plancher et K : [Supposition], réglés sur l'essai synthétique
 (test_essai_forme.py), à revoir sur le premier vrai film.
 
-Lecteurs : l'ancien film de fusion (fusion.json + kf_NNN.bin, sortie de calcul.py) et une suite d'instantanés .npz
-(pos, vel facultatif, m ou lum, gal, t). Le film v2 (fil des galaxies de départ) n'a pas encore de format écrit : son
-lecteur n'aura qu'à rendre un objet `Film` (voir plus bas).
+Lecteurs : film v2 (fil des galaxies de départ : film.json + img_NNNNN.f16, d'après sa description du 13/11 ; à
+recaler sur le premier vrai film), ancien film de fusion (fusion.json + kf_NNN.bin, sortie de calcul.py), suite
+d'instantanés .npz (pos, vel facultatif, m ou lum, gal, t). Tout autre lecteur n'a qu'à rendre un objet `Film`.
 
 Usage :
+  python essai_forme.py film2 <dossier film/> [--traceurs <dossier des etoiles_visibles_*.npz>] [--json sortie.json]
   python essai_forme.py ancien <dossier du calcul> [--rayon 20] [--json sortie.json]
   python essai_forme.py npz '<motif des fichiers>' [--rayon 20] [--json sortie.json]
 Rend 0 si aucune cassure, 1 sinon. La dernière ligne dit PASSE ou ECHEC.
@@ -83,6 +84,36 @@ def lire_ancien(dossier):
         a = cache[p][i - debut[p]]
         return [dict(pos=a[off[g]:off[g + 1]], vel=None, w=np.ones(nshow[g]), centre=C[i, g]) for g in range(len(nshow)) if nshow[g] > 0]
     return Film(m['t'], [n for n, k in zip(noms, nshow) if k > 0], image)
+
+
+def lire_film_v2(dossier, dossier_traceurs=None):
+    """Film v2 du fil des galaxies de départ (description du 13/11, rencontre.py, mode futur ; format pas encore figé) :
+    film.json (ordre des galaxies, t en Ga, nombre de traceurs par galaxie), img_NNNNN.f16 (3 × float16 par traceur, kpc,
+    relatif au centre de SA galaxie, dans l'ordre des fichiers etoiles_visibles_<galaxie>.npz). Poids : champ `lum` de ces
+    fichiers (sinon 1). Pas de vitesses dans le film : l'axe de rotation n'est pas suivi, le plan l'est (petit axe)."""
+    m = json.load(open(os.path.join(dossier, 'film.json'), encoding='utf-8'))
+    noms = m.get('ordre') or m.get('galaxies')
+    nb = m.get('traceurs') or m.get('n_traceurs') or m.get('traceurs_par_galaxie')
+    if isinstance(nb, dict):
+        nb = [nb[k] for k in noms]
+    off = np.cumsum([0] + list(nb))
+    images = sorted(glob.glob(os.path.join(dossier, 'img_*.f16')))
+    if len(images) != len(m['t']):
+        raise SystemExit(f'{len(images)} images pour {len(m["t"])} dates dans film.json')
+    poids = []
+    for k, nom in enumerate(noms):
+        f = os.path.join(dossier_traceurs or dossier, f'etoiles_visibles_{nom}.npz')
+        w = np.load(f)['lum'].astype(float) if os.path.exists(f) else np.ones(nb[k])
+        if len(w) != nb[k]:
+            raise SystemExit(f'{f} : {len(w)} traceurs, le film en annonce {nb[k]}')
+        poids.append(w)
+
+    def image(i):
+        a = np.fromfile(images[i], '<f2').astype(np.float64).reshape(-1, 3)
+        if len(a) != off[-1]:
+            raise SystemExit(f'{images[i]} : {len(a)} traceurs au lieu de {off[-1]}')
+        return [dict(pos=a[off[g]:off[g + 1]], vel=None, w=poids[g], centre=np.zeros(3)) for g in range(len(noms)) if nb[g] > 0]
+    return Film(m['t'], [n for n, k in zip(noms, nb) if k > 0], image)
 
 
 def lire_npz(motif):
@@ -287,13 +318,14 @@ def analyser(film, rayon=20.0, rayon_barre=5.0, journal=print):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('lecteur', choices=['ancien', 'npz'])
+    ap.add_argument('lecteur', choices=['film2', 'ancien', 'npz'])
     ap.add_argument('source')
     ap.add_argument('--rayon', type=float, default=20.0, help='rayon des mesures de forme, kpc')
     ap.add_argument('--rayon-barre', type=float, default=5.0, help='rayon de la zone de la barre, kpc')
     ap.add_argument('--json', help='rapport complet')
+    ap.add_argument('--traceurs', help='film2 : dossier des etoiles_visibles_<galaxie>.npz (poids lum)')
     a = ap.parse_args()
-    film = lire_ancien(a.source) if a.lecteur == 'ancien' else lire_npz(a.source)
+    film = {'film2': lambda: lire_film_v2(a.source, a.traceurs), 'ancien': lambda: lire_ancien(a.source), 'npz': lambda: lire_npz(a.source)}[a.lecteur]()
     print(f'{len(film.t)} images de {film.t[0]:+.3f} à {film.t[-1]:+.3f} Ga ; galaxies : {", ".join(film.noms)}')
     rap = analyser(film, a.rayon, a.rayon_barre)
     if a.json:

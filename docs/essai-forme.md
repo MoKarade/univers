@@ -47,9 +47,11 @@ c’est exactement le « souffle » qui se voit au Play.
 
 ## 3. Ce qui manque
 
-- Le **film v2** n’a pas encore de format écrit : son lecteur n’aura qu’à rendre un objet `Film` (positions, vitesses si
-  écrites, poids, centre par galaxie et par image ; voir l’en-tête du script). Les lecteurs écrits : ancien film de
-  fusion (`fusion.json` + `kf_NNN.bin`) et suite d’instantanés `.npz`.
+- **Film v2** : lecteur écrit d’après la description du fil des galaxies de départ (`film.json` + `img_NNNNN.f16`,
+  traceurs relatifs au centre de leur galaxie, poids `lum` des `etoiles_visibles_<galaxie>.npz`) et essayé sur le film
+  synthétique réécrit dans ce format (float16) : 0 cassure. À recaler sur le premier vrai film (noms de champs).
+  `python pipeline/fusion/essai_forme.py film2 <dossier film/> --traceurs <dossier des npz>`. Pas de vitesses dans ce
+  film : l’axe de rotation n’est pas suivi, le plan l’est (petit axe d’inertie).
 - **Pas encore passé sur un vrai film** : l’ancien film est sur le PC et dans les fichiers des tâches GitHub, que ce
   conteneur ne peut pas télécharger. Commande, à lancer par un fil qui a le PC :
   `python pipeline/fusion/essai_forme.py ancien <dossier du calcul> --json forme.json`.
