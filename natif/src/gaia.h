@@ -262,6 +262,10 @@ public:
         ring_ = (ring_ + 1) % kRing;
     }
 
+    // Sous-nuages : chaque étoile du MODÈLE (drapeau 16) est dessinée en GV_SOUS_NUAGE étoiles (gaia.vert), confondues vu de
+    // loin, écartées en s'approchant ; la somme de leur lumière est celle du traceur. Rien n'est stocké.
+    void enableSubClouds(uint32_t k) { subClouds_ = std::max(1u, k); }
+
     // Carte de poussière 3D (voie_lactee.bin, canal g : A_V par pc, repère galactocentrique ±16 kpc, ±2 kpc) : les étoiles
     // du modèle (drapeau 16) s'éteignent et rougissent le long du trajet de la caméra jusqu'à elles. Les étoiles mesurées
     // n'en ont pas besoin : leur magnitude mesurée contient déjà la poussière vue du Soleil.
@@ -376,6 +380,7 @@ private:
     GaiaFile file_;
     GaiaOrbits orbits_;
     bool dustReady_ = false;
+    uint32_t subClouds_ = 1;      // étoiles par sous-nuage (gaia.vert, GV_SOUS_NUAGE) ; 1 : pas de sous-nuage
     std::vector<uint32_t> visible_;      // feuilles dessinées à la dernière image : ce sont elles que les orbites exactes avancent
     uint32_t epicycleLeaves_ = 0;        // feuilles dessinées en épicycles à la dernière image (orbite exacte pas encore rattrapée)
     Buffer stars_, velocities_, colors_, indirect_[kRing];
@@ -482,7 +487,7 @@ private:
             }
             if (take == 0) continue;
             visible_.push_back(i);
-            const VkDrawIndirectCommand c{take, 1, static_cast<uint32_t>(L.first), 0};
+            const VkDrawIndirectCommand c{take, subClouds_, static_cast<uint32_t>(L.first), 0};      // une instance par étoile du sous-nuage
             if (!moved || orbits_.rangeReady(i)) out[k++] = c;      // à jour (ou temps proche : ligne droite)
             else out[file_.leafCount - 1 - kb++] = c;               // pas encore rattrapée : épicycles en attendant
             drawn += take;

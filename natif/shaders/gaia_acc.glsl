@@ -1,7 +1,7 @@
 /* Inclus par gaia.vert et gaia_agrege.vert. Accélération du potentiel de la Galaxie (bulbe, disque, halo, barre tournante) : COPIE de acc() de orbites_pas.comp
    (fil natif), à garder identique. Unités : kpc, km/s, milliards d'années. */
 const float OP_G = 4.30091e-6, OP_MB = 0.5e10, OP_AB = 0.5, OP_MD = 6.8e10, OP_AD = 3.0, OP_BD = 0.28, OP_RS = 16.0;
-const float OP_GMH = 2410361.25417129, OP_K = 1.0227121650456, OP_RB = 5.0, OP_ABAR = 777.79646, OP_BAR0 = 2.65290046, OP_BARW = 39.8857744, OP_KL = 0.00311179;  /* OP_KL : énergie noire, phys::galaxie::kLambdaKmsKpc2 */
+const float OP_GMH = 2552189.27458262, OP_K = 1.0227121650456, OP_RB = 5.0, OP_ABAR = 796.84938, OP_BAR0 = 2.65290046, OP_BARW = 39.8857744, OP_KL = 0.00311179;  /* OP_KL : énergie noire, phys::galaxie::kLambdaKmsKpc2 */
 vec3 accGal(vec3 x, float t) {
     float R2 = x.x * x.x + x.y * x.y, r = sqrt(R2 + x.z * x.z) + 1e-12, xs = r / OP_RS;
     float ar = -OP_G * OP_MB / ((r + OP_AB) * (r + OP_AB)) - OP_GMH * (log(1.0 + xs) - xs / (1.0 + xs)) / (r * r);

@@ -62,6 +62,7 @@ if (Test-Path "$Donnees\galaxies-images\galaxies_images.tsv") { Get-ChildItem "$
 # Centres de référence des galaxies du Groupe local (pipeline/natif/centres_bin.py), s'ils ont été préparés.
 if (Test-Path "$Donnees\centres_reference.bin") { Copier-SiChange "$Donnees\centres_reference.bin" "$Cible\centres_reference.bin" }
 # Étoiles visibles du modèle de la Voie lactée (pipeline/natif/etoiles_visibles.py), si elles ont été préparées.
+if (Test-Path "$Donnees\etoiles-visibles\voisines_etoiles.bin") { Copier-SiChange "$Donnees\etoiles-visibles\voisines_etoiles.bin" "$Cible\voisines_etoiles.bin" }
 if (Test-Path "$Donnees\etoiles-visibles\vl_etoiles.bin") { Copier-SiChange "$Donnees\etoiles-visibles\vl_etoiles.bin" "$Cible\vl_etoiles.bin" }
 foreach ($f in 'gaia.bin', 'gaia_b.bin', 'gaia_agrege.bin', 'voie_lactee.bin') { if (Test-Path "$Gaia\$f") { Copier-SiChange "$Gaia\$f" "$Cible\$f" } }
 # Vue de départ : la ceinture d'Orion (étoile nommée de la page), si elle est dans le catalogue.

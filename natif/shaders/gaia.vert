@@ -15,10 +15,23 @@ layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
 #include "gaia_acc.glsl"
 #include "gaia_fiable.glsl"
+/* Sous-nuage d'une étoile du MODÈLE (drapeau 16, traceur qui porte la lumière de nombreuses étoiles) : GV_SOUS_NUAGE étoiles,
+   une par instance du dessin (gaia.h, enableSubClouds), tirées de façon déterministe à partir du rang du traceur (sa graine).
+   Lumière : part fixe GV_PART[k] (loi de puissance d'indice -0,7, la plus brillante 20 %, somme = 1 : la lumière du traceur est conservée) ; la
+   table est décalée d'un traceur à l'autre. Place : boule aplatie de GV_RAYON années-lumière autour du traceur, ouverte
+   en douceur entre GV_LOIN et GV_PRES de la caméra (confondues vu de loin : aucun saut) [modèle]. */
+const uint GV_SOUS_NUAGE = 16u;
+const float GV_PART[16] = float[](0.201985, 0.124336, 0.093612, 0.076538, 0.065470, 0.057625, 0.051731, 0.047115,
+                                  0.043386, 0.040301, 0.037700, 0.035472, 0.033540, 0.031844, 0.030343, 0.029002);
+const float GV_RAYON = 60.0, GV_LOIN = 20000.0, GV_PRES = 2000.0;
+uint gvHash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+float gvUnif(uint x) { return (float(gvHash(x)) + 0.5) / 4294967296.0; }
 void main() {
     uvec4 r = star[gl_VertexIndex];
     vec3 pos = uintBitsToFloat(r.xyz), move = vec3(0.0);
     uint flags = r.w >> 24;
+    /* étoiles mesurées : une seule instance ; les autres instances du dessin (sous-nuages du modèle) ne les concernent pas */
+    if (gl_InstanceIndex > 0 && (flags & 16u) == 0u) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
     /* meilleur rendu, vu de loin : flou angulaire (gaia_fiable.glsl) */
     if ((pc.cellBase & GF_MODE_RENDU) != 0u) pos = gfFlou(pos, uint(gl_VertexIndex), gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, pos));
     /* orbite pas fiable (drapeau 2 absent) : montrée seulement autour d'aujourd'hui (gaia_fiable.glsl) */
@@ -43,13 +56,30 @@ void main() {
         } else move = ogDeplacement(pos, v, pc.par.z, pc.par.w);      /* épicycles, le temps que le calcul exact rattrape */
     }
     vec3 p = ((pos - pc.camHi.xyz) + move) - pc.camLo.xyz;
+    float part = 1.0;
+    if ((flags & 16u) != 0u) {
+        uint k = uint(gl_InstanceIndex) % GV_SOUS_NUAGE, graine = uint(gl_VertexIndex) * GV_SOUS_NUAGE + k;
+        part = GV_PART[(k + uint(gl_VertexIndex)) % GV_SOUS_NUAGE];
+        float ouvert = smoothstep(GV_LOIN, GV_PRES, length(p));
+        if (ouvert > 0.0) {
+            /* point dans une boule aplatie (disque : épaisseur moitié) : direction et rayon tirés de la graine */
+            float u1 = gvUnif(graine * 3u), u2 = gvUnif(graine * 3u + 1u), u3 = gvUnif(graine * 3u + 2u);
+            float cz = 2.0 * u1 - 1.0, phi = 6.2831853 * u2, rr = GV_RAYON * pow(u3, 1.0 / 3.0);
+            vec3 dir = vec3(sqrt(1.0 - cz * cz) * cos(phi), sqrt(1.0 - cz * cz) * sin(phi), 0.5 * cz);
+            p += ouvert * rr * dir;
+        }
+    }
     float d = max(length(p), 1e-12);
     float m = unpackHalf2x16(r.w).x + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0;
     uint pas = (r.w >> 16) & 255u;
     /* éclat rééquilibré vu de loin (gaia_fiable.glsl) : HYPOTHÈSE, décalage en millièmes de magnitude */
     if ((flags & 4u) != 0u && (pc.cellBase & GF_MODE_RENDU) != 0u) m += gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, pos) * 0.001 * float(int(q.y) >> 16);
-    float flux = pc.par.x * pow(10.0, -0.4 * m) * garde;
+    float flux = pc.par.x * pow(10.0, -0.4 * m) * garde * part;
     float size = clamp(1.5 + 1.2 * log2(1.0 + flux), 1.5, 14.0) * pc.par.y / 1080.0;
+    /* étoile du MODÈLE : tache bornée à 2,5 pixels (lumière inchangée : elle est divisée par la surface de la tache). Un
+       traceur porte la lumière de nombreuses étoiles : vu de loin avec l'éclat multiplié, il ne doit pas devenir une grosse
+       tache qu'aucune étoile réelle ne ferait. */
+    if ((flags & 16u) != 0u) size = min(size, 2.5 * pc.par.y / 1080.0);
     vCol = colorOf[pas].rgb * min(flux, 3.0e4) / (size * size);
     /* étoile du MODÈLE (drapeau 16) : poussière entre la caméra et l'étoile, dans la carte 3D (repère galactocentrique,
        ±16 kpc, ±2 kpc ; hors de la carte : rien). Rougissement : A_R = 0,75 A_V, A_B = 1,32 A_V (loi de Cardelli et al.

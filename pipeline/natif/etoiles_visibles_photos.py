@@ -14,19 +14,21 @@ le calcul fait évoluer. Ici, chaque traceur est un point de la photo :
   plus la rotation du disque (courbe de rotation publiée) et l'agitation ; sens de rotation : côté du grand axe qui
   s'approche [M31 : nord-est, certain ; les autres : à vérifier].
 Repère phys::galaxie de l'appli : centre de la Voie lactée à l'origine, Soleil à (-8,2 ; 0 ; 0) kpc, vitesse du Soleil
-(11,1 ; 242,24 ; 7,25) km/s (galaxie_orbites.h).
-Usage : python etoiles_visibles_photos.py <dossier galaxies-images> <dossier de sortie> [univers.json]
+(11,1 ; 245,04 ; 7,25) km/s (galaxie_orbites.h, table unique).
+Usage : python etoiles_visibles_photos.py <dossier galaxies-images> <dossier de sortie> [univers.json] [gaia.bin de référence (table des couleurs)]
 """
 import sys as _sys
 _sys.stdout.reconfigure(encoding='utf-8')
 import json, math, os, sys
 import numpy as np
+
+PARETO_MAX = 10.0      # un traceur porte au plus 10 fois la lumière du plus faible : pas de point démesuré [modèle]
 from PIL import Image
 import astropy.units as u
 from astropy.coordinates import SkyCoord, Galactocentric, CartesianDifferential, Distance
 
 SOLEIL_R0 = 8.2
-SOLEIL_V = (11.1, 242.24, 7.25)      # km/s, galaxie_orbites.h (kSunUvw) ; sert seulement au contrôle astropy
+SOLEIL_V = (11.1, 232.8 + 12.24, 7.25)      # km/s, galaxie_orbites.h (kSunUvw, table unique) ; sert seulement au contrôle astropy
 # Table unique (pipeline/constantes/univers.json, branche table-unique, PR 97) : source unique pour la place, la vitesse
 # d'ensemble et l'axe de rotation d'aujourd'hui (galaxies.<nom>.aujourdhui, galaxies.<nom>.disque.axe_rotation).
 TABLE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'constantes', 'univers.json')
@@ -66,6 +68,7 @@ def main():
     gc_frame = Galactocentric(galcen_distance=SOLEIL_R0 * u.kpc, z_sun=0 * u.pc,
                               galcen_v_sun=CartesianDifferential(list(SOLEIL_V) * u.km / u.s))
     os.makedirs(sortie, exist_ok=True)
+    tous = []
     for nom, (fic, n, dmod, pmra, pmdec, vr, vrot, rrot, sig, hz, rbulbe) in GALAXIES.items():
         if fic not in geo: print(f'{nom} : photo absente'); continue
         g = geo[fic]
@@ -140,7 +143,7 @@ def main():
         comp[rouge | (teff > 9000)] = 5
         teff[rouge] = 2400.0
         lv = 10 ** (-0.4 * (g['mv'] - 4.83))
-        wts = rng.pareto(1.5, n) + 1.0
+        wts = np.minimum(rng.pareto(1.5, n) + 1.0, PARETO_MAX)
         lum = (lv * wts / wts.sum()).astype(np.float32)
         graine = rng.integers(0, 2 ** 32, n, dtype=np.uint64).astype(np.uint32)
         meta = dict(galaxie=nom, date='2026-11-13', repere='phys::galaxie (galaxie_orbites.h), kpc, km/s, t = 0',
@@ -151,8 +154,21 @@ def main():
         np.savez_compressed(os.path.join(sortie, f'etoiles_visibles_{nom}.npz'), pos=pos, vel=vel, lum=lum, teff=teff.astype(np.float32),
                             comp=comp, graine=graine, meta=json.dumps(meta, ensure_ascii=False))
         sens = "s'éloigne" if v_cote > 0 else "s'approche"
+        tous.append((pos, vel, lum, teff))
         print(f"{nom} : {n} traceurs, centre {np.round(c_pos, 1)} kpc, vitesse {np.round(c_vel, 1)} km/s ({source_ens}) ; "
               f"axe {np.round(spin_g, 3)} (accord avec le plan de la photo {accord:.3f}) ; côté de l'angle de position : {v_cote:+.0f} km/s ({sens})")
+
+    # Pour l'appli : les mêmes traceurs au format gaia.bin (voisines_etoiles.bin), drapeau 16 (modèle) sans orbite exacte :
+    # montrés autour d'aujourd'hui (le potentiel de l'appli ne contient que la Voie lactée) ; au-delà, la photo déplacée
+    # en bloc le long des centres de référence prend le relais (fenetre.cpp).
+    if tous and len(sys.argv) > 4:
+        import voie_lactee as v
+        from etoiles_visibles import ecrire_gaia
+        D = v.data_keys(['M_GAL2ECL', 'SGRA_GAL'])
+        gal2ecl = np.array(D['M_GAL2ECL'])
+        sgra = np.array(D['SGRA_GAL']) / np.linalg.norm(D['SGRA_GAL']); sun = -v.R0 * sgra
+        P, V, L, T = (np.concatenate([t[k] for t in tous]) for k in range(4))
+        ecrire_gaia(os.path.join(sortie, 'voisines_etoiles.bin'), P, V, L, T, sun, gal2ecl, sys.argv[4], drapeaux=1 | 16)
 
 
 if __name__ == '__main__':

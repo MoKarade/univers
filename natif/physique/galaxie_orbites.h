@@ -4,7 +4,7 @@
 // Repère galactocentrique de la page : centre galactique à l'origine, Soleil en −R0 · SGRA_GAL (≈ (−8,2 ; 0 ; 0) kpc),
 // axe y vers la longitude galactique 90° (sens de rotation), z vers le nord galactique ; kpc et km/s ; temps en Ga.
 // Potentiel : bulbe de Hernquist + disque de Miyamoto-Nagai + halo NFW (inspiré de MWPotential2014, Bovy 2015, recalé sur
-// 230 km/s au Soleil) + barre centrale tournante (Dehnen 2000) :
+// 232,8 km/s au Soleil, table unique) + barre centrale tournante (Dehnen 2000) :
 //   mesuré : vitesse de la barre 39 km/s/kpc (Portail et al. 2017 ; fourchette récente 33 à 41), angle 28° devant la
 //   direction du centre, bout proche aux longitudes positives (Wegg et Gerhard 2013), demi-longueur 5,0 kpc (Wegg et al. 2015) ;
 //   modèle : force α = 0,01 (Dehnen 2000). Pas de bras spiraux (vitesse non établie).
@@ -21,7 +21,7 @@
 namespace phys::galaxie {
 
 constexpr double kG = 4.30091e-6;      // kpc·(km/s)²/masse solaire
-constexpr double kR0 = 8.2, kV0 = 230;
+constexpr double kR0 = 8.2, kV0 = 232.8;      // McMillan 2017 (table unique pipeline/constantes/univers.json, repere.v0)
 constexpr double kMb = 0.5e10, kAb = 0.5, kMd = 6.8e10, kAd = 3.0, kBd = 0.28, kRs = 16;
 constexpr double kKmsKpcToRadGa = 1.0227121650456;      // km/s/kpc -> rad/Ga ; aussi km/s -> kpc/Ga
 constexpr double kPi = 3.14159265358979323846;
@@ -33,14 +33,14 @@ constexpr double kBarAlpha = 0.01;
 constexpr double kDtGa = 0.001;
 // Direction du centre galactique vue du Soleil dans le repère de la page (DATA.SGRA_GAL) et vitesse du Soleil (km/s).
 constexpr double kSgra[3] = {0.9999992, -0.00097327, -0.00080564};
-constexpr double kSunUvw[3] = {11.1, 242.24, 7.25};
+constexpr double kSunUvw[3] = {11.1, 232.8 + 12.24, 7.25};      // v0 + mouvement propre du Soleil (Schönrich et al. 2010), table unique
 
 // Angle de l'axe de la barre (rad, depuis l'axe x) à tGa : φ_b(t) = π − 28° − Ω_b t.
 inline double barAngleAt(double tGa) { return kPi - kBarAngleRad - kBarOmegaKmsKpc * kKmsKpcToRadGa * tGa; }
 
 inline double v2Baryons(double r) { return kG * kMb * r / ((r + kAb) * (r + kAb)) + kG * kMd * r * r / std::pow(r * r + (kAd + kBd) * (kAd + kBd), 1.5); }
 inline double nfwShape(double r) { const double x = r / kRs; return (std::log(1 + x) - x / (1 + x)) / r; }
-inline double gmHalo() { return (kV0 * kV0 - v2Baryons(kR0)) / nfwShape(kR0); }      // calé sur 230 km/s au Soleil
+inline double gmHalo() { return (kV0 * kV0 - v2Baryons(kR0)) / nfwShape(kR0); }      // calé sur kV0 au Soleil
 
 // Énergie noire (constante cosmologique) : poussée H0² Ω_Λ r depuis le centre de la Galaxie, (km/s)²/kpc² ; même
 // cosmologie que natif/src/cosmologie.h (H0 = 67,4 km/s/Mpc, Ω_Λ = 0,685) et pipeline/fusion/energie_noire.py. Au Soleil

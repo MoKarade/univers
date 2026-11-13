@@ -28,9 +28,9 @@ KPC_LY = 3261.5637769      # orbite::kKpcLy
 # orbite::kM (repère galactocentrique -> écliptique) ; versGalactique applique la transposée
 KM = np.array([[-0.0548756577, 0.4941094372, -0.8676661376], [-0.993821367, -0.1109908412, -0.0003515418], [-0.0964766946, 0.8622858559, 0.4971472117]])
 SGRA = np.array([0.9999992, -0.00097327, -0.00080564]); R0 = 8.2
-SOLEIL_POS = -SGRA * R0; SOLEIL_VIT = np.array([11.1, 242.24, 7.25])
+SOLEIL_POS = -SGRA * R0; SOLEIL_VIT = np.array([11.1, 232.8 + 12.24, 7.25])      # table unique (galaxie_orbites.h)
 # Potentiel (galaxie_orbites.h), pour la règle des sous-pas
-G_ = 4.30091e-6; MB, AB, MD, AD, BD, RS, V0 = 0.5e10, 0.5, 6.8e10, 3.0, 0.28, 16.0, 230.0
+G_ = 4.30091e-6; MB, AB, MD, AD, BD, RS, V0 = 0.5e10, 0.5, 6.8e10, 3.0, 0.28, 16.0, 232.8
 
 
 def gm_halo():

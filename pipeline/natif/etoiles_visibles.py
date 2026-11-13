@@ -35,6 +35,8 @@ _sys.stdout.reconfigure(encoding='utf-8')
 import json, math, os, sys, time
 import numpy as np
 
+PARETO_MAX = 10.0      # un traceur porte au plus 10 fois la lumière du plus faible : pas de point démesuré [modèle]
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import voie_lactee as v
 import voie_lactee_jeunes as vj
@@ -48,7 +50,7 @@ MASSE = {1: 2 * math.pi * 896 * 2500.0 ** 2, 4: 2 * math.pi * 183 * 3020.0 ** 2,
 ML_V = {1: 1.2, 4: 2.5, 2: 3.0, 6: 3.0}      # M☉/L☉ en V par population (vieilles plus sombres) [Supposition, ordres publiés]
 PART_JEUNES = 0.30            # part de la lumière du disque mince portée par les jeunes et les bras [Supposition : 20 à 40 % en bleu, moins en V]
 VC = ([0.0, 2.0, 4.0, 8.21, 15.0, 25.0, 60.0], [0.0, 198.0, 222.0, 234.0, 227.0, 221.0, 200.0])      # McMillan 2017
-SUN_UVW = np.array([11.1, 242.24, 7.25])        # galaxie_orbites.h, kSunUvw
+SUN_UVW = np.array([11.1, 232.8 + 12.24, 7.25])        # galaxie_orbites.h, kSunUvw (table unique : v0 + mouvement propre)
 OMEGA_BARRE = 39.0            # km/s/kpc
 ANGLE_BARRE = math.radians(180.0 - 28.0)        # axe de la barre depuis +x (bout proche du côté l > 0)
 KPC_LY = 3261.5637769
@@ -150,7 +152,7 @@ def main():
     lum = np.zeros(len(pos))
     for c, Lc in L_comp.items():
         m = comp == c
-        w = rng.pareto(1.5, m.sum()) + 1.0
+        w = np.minimum(rng.pareto(1.5, m.sum()) + 1.0, PARETO_MAX)
         lum[m] = Lc * w / w.sum()
     print(f'{len(pos)} traceurs tirés ({time.time() - t0:.0f} s) ; lumière par composante : ' +
           ', '.join(f'{c}: {L_comp[c]:.2e}' for c in sorted(L_comp)))
@@ -187,7 +189,7 @@ def main():
     print(f'-> {sortie} ({time.time() - t0:.0f} s)')
 
 
-def ecrire_gaia(chemin, pos, vel, lum, teff, sun, gal2ecl, gaia_ref):
+def ecrire_gaia(chemin, pos, vel, lum, teff, sun, gal2ecl, gaia_ref, drapeaux=1 | 2 | 16):
     """Au format gaia.bin (gaia_convertir.py) : écliptique héliocentrique en al, vitesse héliocentrique en km/s."""
     T = np.fromfile(gaia_ref, np.float32, 256, offset=32)          # même table de couleurs que gaia.bin
     ok = np.isfinite(T)
@@ -207,7 +209,7 @@ def ecrire_gaia(chemin, pos, vel, lum, teff, sun, gal2ecl, gaia_ref):
     o = np.lexsort((M, num)); p, u, M, pas = p[o], u[o], M[o], pas[o]
     rec = np.zeros(len(p), np.dtype([('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('m', '<f2'), ('c', 'u1'), ('f', 'u1')]))
     rec['x'], rec['y'], rec['z'], rec['m'], rec['c'] = p[:, 0], p[:, 1], p[:, 2], M, pas
-    rec['f'] = 1 | 2 | 16      # vitesse complète, orbite exacte ; 16 = étoile du MODÈLE (pas mesurée)
+    rec['f'] = drapeaux      # 1 vitesse complète, 2 orbite exacte, 16 étoile du MODÈLE (pas mesurée)
     vel16 = np.zeros((len(p), 4), '<i2'); vel16[:, :3] = np.clip(np.rint(u / V_PAS), -32767, 32767)
     fe = np.zeros(len(fs), np.dtype([('min', '<f4', 3), ('n', '<u4'), ('max', '<f4', 3), ('r0', '<u4'), ('premier', '<u8'), ('r1', '<u8')]))
     for i, (lo, hi) in enumerate(fs):

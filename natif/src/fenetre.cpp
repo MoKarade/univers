@@ -278,6 +278,13 @@ int runWindow(const WindowOptions& opt) {
     GaiaRenderer milkyWayStars;
     const bool milkyWayStarsOk = milkyWayStars.create(g, dataDir + "/vl_etoiles.bin", HdrTarget::kFormat, true, false);
     sim.milkyWayStarCount = milkyWayStarsOk ? milkyWayStars.count : 0;
+    if (milkyWayStarsOk) milkyWayStars.enableSubClouds(16);      // chaque traceur : 16 étoiles en s'approchant (gaia.vert)
+    // Andromède, Triangle, Nuages faits de leurs étoiles visibles (tirées des vraies photos, pipeline/natif/etoiles_visibles_photos.py),
+    // autour d'aujourd'hui : sans orbite exacte (le potentiel de l'appli ne contient que la Voie lactée), elles s'effacent en
+    // quelques millions d'années (gaia_fiable.glsl) et la photo déplacée en bloc prend le relais, sans double lumière.
+    GaiaRenderer neighbourStars;
+    const bool neighbourStarsOk = neighbourStars.create(g, dataDir + "/voisines_etoiles.bin", HdrTarget::kFormat, false, false);
+    if (neighbourStarsOk) neighbourStars.enableSubClouds(16);
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
     // Décision de Marc (13 novembre 2026, « je veux le plus proche possible de la réalité, pas seulement le mesuré ») : la
@@ -292,6 +299,7 @@ int runWindow(const WindowOptions& opt) {
     if (milkyWayStarsOk) milkyWayStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     if (gaiaOk) gaia.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     if (gaiaBOk) gaiaB.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
+    if (neighbourStarsOk) neighbourStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     // Andromède, Triangle, Nuages de Magellan : leurs vraies photos posées sur le plan mesuré de leur disque (galaxies_images.h).
     GalaxyImages galaxyImages;
     galaxyImages.create(g, HdrTarget::kFormat, dataDir, sim);
@@ -676,7 +684,11 @@ int runWindow(const WindowOptions& opt) {
             // Avec les étoiles visibles du modèle, plus de lueur : la Voie lactée est faite d'étoiles.
             sim.milkyWayModelShare = sim.bestLook && !milkyWayStarsOk ? sim.starShare() * (1.0 - loneTime) : 0.0;
             // vraies photos : tant que les étoiles mesurées sont montrées ; à toute date si les centres de référence les déplacent
-            sim.galaxyImageShare = sim.bestLook ? (sim.centres ? 1.0 : sim.starShare()) : 0.0;
+            // avec leurs étoiles visibles (autour d'aujourd'hui), la photo n'a que la part qu'elles laissent
+            const double neighbourStarShare = neighbourStarsOk && sim.bestLook ? GaiaFiable::effacement(sim.years - (2016.0 - 2000.0)) : 0.0;
+            sim.galaxyImageShare = sim.bestLook ? (sim.centres ? 1.0 : sim.starShare()) * (1.0 - neighbourStarShare) : 0.0;
+            if (neighbourStarShare > 1e-4)
+                neighbourStars.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
             galaxyImages.draw(cmd, cam, sim, sc.extent.width, sc.extent.height, pc.par[0], sim.galaxyImageShare);
             if (sim.milkyWayModelShare > 0)
                 milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayModelShare), sim.years);
@@ -813,6 +825,7 @@ int runWindow(const WindowOptions& opt) {
     gaiaSky.destroy(g);
     if (gaiaBOk) gaiaB.release(g);
     if (milkyWayStarsOk) milkyWayStars.release(g);
+    if (neighbourStarsOk) neighbourStars.release(g);
     gaia.release(g);
     milkyWay.release(g);
     galaxyImages.release(g);
