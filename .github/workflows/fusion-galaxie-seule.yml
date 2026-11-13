@@ -1,0 +1,44 @@
+# Galaxie seule à l'équilibre (pipeline/fusion/modeles_v2.py), tirée avec AGAMA, qui ne s'installe pas sans compilateur
+# sur le PC. Le tir de stabilité tourne ensuite sur la carte graphique du PC (stabilite_tir.py).
+# Sortie : <galaxie>.npz, gardé 14 jours comme fichier de la tâche.
+name: Fusion - galaxie seule
+
+on:
+  workflow_dispatch:
+    inputs:
+      galaxie: { description: "voie_lactee, andromede, triangle ou grand_nuage", default: "voie_lactee" }
+      n: { description: "particules en tout", default: "2000000" }
+  push:
+    branches: ["modeles-depart"]
+    paths: ["pipeline/fusion/modeles_v2.py", ".github/workflows/fusion-galaxie-seule.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: galaxie-seule-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tirage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Logiciels (AGAMA)
+        run: |
+          sudo apt-get install -y -qq libgsl-dev > /dev/null
+          python -m pip install --quiet numpy scipy setuptools wheel
+          git clone --depth 1 https://github.com/GalacticDynamics-Oxford/Agama.git /tmp/agama
+          (cd /tmp/agama && python setup.py install --yes > /tmp/agama.log 2>&1 || (tail -40 /tmp/agama.log; exit 1))
+      - name: Tirage
+        working-directory: pipeline/fusion
+        env:
+          GALAXIE: ${{ inputs.galaxie || 'voie_lactee' }}
+          N: ${{ inputs.n || '2000000' }}
+        run: python modeles_v2.py "$GALAXIE" "$N" "$GALAXIE.npz"
+      - uses: actions/upload-artifact@v4
+        with: { name: galaxie-seule, path: pipeline/fusion/*.npz, retention-days: 14 }
