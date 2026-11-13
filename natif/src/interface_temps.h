@@ -322,6 +322,16 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : départ mesuré, orbite calculée autour de la Galaxie", s);
         row("Éclat vu de la Terre", "magnitude " + frNum(sim.apparentMag(f, {0, 0, 0})), "calculé", s);
         row(today ? "Vitesse" : "Vitesse aujourd'hui", frNum(sim.speedKms(f)) + " km/s par rapport au Soleil", "mesuré", s);
+    } else if (fb.kind == Kind::Hole) {
+        row("Distance au Soleil", frDistance(dSun), "mesuré", s);
+        row("Masse", fb.massSun >= 1e6 ? frNum(fb.massSun / 1e6) + " millions de fois le Soleil" : frNum(fb.massSun) + " fois le Soleil", "mesuré", s);
+        const double rsKm = 2.0 * fb.massSun * 1.4766250;      // rayon de l'horizon : 2 G M / c²
+        row("Rayon de l'horizon", rsKm >= 1e6 ? frNum(rsKm / 1.495978707e8) + " fois la distance Terre-Soleil" : frNum(rsKm) + " km", "calculé (relativité générale)", s);
+        const double camKm = distBetween(p, cam.pos) * kLyInKm;
+        if (camKm < 1e5 * rsKm) row("Distance à la caméra", frNum(camKm / rsKm) + " fois le rayon de l'horizon", "", s);
+        ImGui::TextDisabled("Lumière des étoiles derrière lui : déviée (relativité générale, trou noir sans rotation) ; ombre noire là où elle est capturée.");
+        ImGui::TextDisabled("Pas dessiné : son disque de gaz chaud (là où il existe) et l'effet de sa rotation.");
+        ImGui::TextDisabled("%s", (std::string("Source : ") + fb.source + ".").c_str());
     } else if (fb.kind == Kind::Galaxy) {
         // En temps profond, la place vient du calcul de la rencontre avec Andromède (sauf le centre de la Voie lactée, origine du repère).
         const bool deepCalc = sim.deepTime() && fb.name != "Centre de la Voie lactée";
@@ -339,7 +349,7 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
             today ? "calculé d'après la couleur mesurée" : "calculé d'après la couleur (mesurée, puis vie de l'étoile calculée)", s);
         lifeRows(sim, fb, today, s);
     }
-    if (fb.kind != Kind::Galaxy && fb.kind != Kind::Probe && fb.kind != Kind::Asteroid && (fb.kind != Kind::Planet || fb.hasPhotometry)) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé", s);
+    if (fb.kind != Kind::Galaxy && fb.kind != Kind::Hole && fb.kind != Kind::Probe && fb.kind != Kind::Asteroid && (fb.kind != Kind::Planet || fb.hasPhotometry)) row("Vue d'ici", "magnitude " + frNum(sim.apparentMag(f, cam.pos)), "calculé", s);
     ImGui::Separator();
     if (fb.kind == Kind::Planet && computed) ImGui::TextDisabled("Position : calculée ici (gravité mutuelle, partie des éphémérides JPL DE440 de la NASA).");
     else if (fb.kind == Kind::Planet && fb.parent > 0 && fb.naif != eph::kMoon)      // lunes des autres planètes : fichiers de satellites du JPL
@@ -353,7 +363,7 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         ImGui::TextDisabled("Position : calcul complet de la rencontre avec Andromède (scénario), parti des mesures de McConnachie 2012.");
     else if (fb.kind == Kind::Galaxy && fb.priority >= 9) ImGui::TextDisabled("Sources : Cosmicflows-4 (Tully et al. 2023, distances) ; OpenNGC (noms).");
     else if (fb.kind == Kind::Galaxy) ImGui::TextDisabled("Sources : Karachentsev et al. 2013 ; McConnachie 2012.");
-    else ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
+    else if (fb.kind != Kind::Hole) ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
 }
 
 void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlags fixed) {

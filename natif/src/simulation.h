@@ -16,6 +16,7 @@
 #include "systeme_solaire.h"
 #include "chaos.h"
 #include "vie_etoiles.h"
+#include "trous_noirs.h"
 
 namespace {
 
@@ -36,7 +37,7 @@ constexpr double kLinearLimitYears = 3.0e6;      // au-delà, la ligne droite ne
 // [Approximation assumée : appliquée à toute date ; l'écart réel a varié de quelques dizaines de secondes par siècle.]
 constexpr double kTdbMinusUtc = 69.184;
 
-enum class Kind { Sun, Star, Planet, Galaxy, Probe, Asteroid };
+enum class Kind { Sun, Star, Planet, Galaxy, Probe, Asteroid, Hole };      // Hole : trou noir à masse mesurée (trous_noirs.h)
 
 // Un astre que l'on peut suivre, chercher, nommer à l'écran.
 struct Body {
@@ -55,7 +56,9 @@ struct Body {
     double radiusKm = 0;        // rayon moyen
     const char* nature = "";
     std::string natureText;     // galaxie : genre lu dans le fichier
-    Vec3 fixedPos{0, 0, 0};     // galaxie : position mesurée (années-lumière), immobile pour l'instant
+    Vec3 fixedPos{0, 0, 0};     // galaxie ou trou noir : position mesurée (années-lumière), immobile pour l'instant
+    double massSun = 0;         // trou noir : masse mesurée (masses solaires)
+    const char* source = "";    // trou noir : source de la masse et de la distance
     int priority = 1;           // galaxie : 1 = nom montré dès qu'on sort de la Voie lactée
     const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
 };
@@ -411,6 +414,17 @@ struct Sim {
         centre.fixedPos = fromGalactocentric({0, 0, 0});
         centre.natureText = "centre de notre galaxie (Sagittarius A*)";
         bodies.push_back(centre);
+        // Trous noirs à masse mesurée (trous_noirs.h) : on peut les chercher et s'en approcher (lumière déviée : lentille.h).
+        for (const lentille::Hole& h : lentille::kHoles) {
+            Body b;
+            b.name = h.name;
+            b.kind = Kind::Hole;
+            b.fixedPos = lentille::icrsToEcl(h.raDeg, h.decDeg, h.distPc * lentille::kPcLy);
+            b.natureText = "trou noir";
+            b.massSun = h.massSun;
+            b.source = h.source;
+            bodies.push_back(b);
+        }
         planetPos.assign(bodies.size(), {0, 0, 0});
         replayRef.assign(bodies.size(), -1);
         replayRef.back() = -2;
@@ -524,7 +538,8 @@ struct Sim {
     const vie::Engine* lifeEngine = nullptr;
     const vie::Rec* lifeMainRec = nullptr;                                 // place de chaque étoile du catalogue principal
     const std::vector<float>* lifeMag = nullptr, * lifeBv = nullptr;      // magnitudes V et B-V montrées (catalogue principal)
-    double sunLifeDMag = 0, sunLifeDBv = 0;                               // Soleil : écart calculé à la date montrée
+    double sunLifeDMag = 0, sunLifeDBv = 0;
+    std::string lensNames;      // masses dont la déviation de la lumière est appliquée à l'image (lentille.h), vide sinon                               // Soleil : écart calculé à la date montrée
     uint64_t lifeSourceCount[4]{}, lifeChanged = 0, lifeHidden = 0;
     double lifeDt = 0, lifeMs = 0;
     bool hasGaia = false, hasGaiaAggregate = false, hasMilkyWay = false;      // catalogue Gaia et Voie lactée en volume chargés (pour les textes de l'interface)
@@ -641,6 +656,7 @@ struct Sim {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
+        if (b.kind == Kind::Hole) return starShare() > 0;
         if (b.kind == Kind::Sun) return starShare() > 0;      // suivi sur son orbite autour de la Galaxie, comme les étoiles
         return starShare() > 0;      // étoile : suivie sur son orbite calculée, tant que cette orbite a un sens
     }
@@ -649,6 +665,7 @@ struct Sim {
     Vec3 position(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return {0, 0, 0};
+        if (b.kind == Kind::Hole) return b.fixedPos;
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetPos[static_cast<size_t>(i)];
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galPos.size() && galValid[static_cast<size_t>(i)] ? galPos[static_cast<size_t>(i)] : b.fixedPos;
         // Étoile : ligne droite à la vitesse mesurée, raccordée à son orbite calculée autour de la Galaxie.
@@ -675,7 +692,7 @@ struct Sim {
     // en UA et la phase d'une sphère mate (loi de Lambert) [approximation assumée de la vraie courbe de phase].
     double apparentMag(int i, Vec3 from) const {
         const Body& b = bodies[static_cast<size_t>(i)];
-        if (b.kind == Kind::Galaxy || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return 99.0;      // éclat des galaxies et des sondes : pas dans les données
+        if (b.kind == Kind::Galaxy || b.kind == Kind::Probe || b.kind == Kind::Asteroid || b.kind == Kind::Hole) return 99.0;      // éclat des galaxies et des sondes : pas dans les données
         const Vec3 p = position(i), d = p - from;
         const double dist = std::max(std::sqrt(dot(d, d)), 1e-15);
         if (b.kind == Kind::Planet) {
@@ -730,6 +747,7 @@ struct Sim {
         if (b.kind == Kind::Probe) arrive = 3.0e6 / kLyInKm;                  // sonde (un point) : on voit son voisinage, à 3 millions de km
         double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
+        if (b.kind == Kind::Hole) d = std::max(40.0 * b.massSun * 1476.625 / kLyInMeters, minDist(i));      // trou noir : à 40 G M / c², le ciel y est déjà tordu
         return d;
     }
     void remember() {
@@ -829,6 +847,7 @@ struct Sim {
     }
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
         if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return 1.0e3;
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Hole) return 6.0 * bodies[static_cast<size_t>(i)].massSun * 1476.625 / kLyInMeters;      // dernière orbite stable
         if (bodies[static_cast<size_t>(i)].kind == Kind::Probe || bodies[static_cast<size_t>(i)].kind == Kind::Asteroid) return 1.0e-10;      // environ 1 000 km
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }

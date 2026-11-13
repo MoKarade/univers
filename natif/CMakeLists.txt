@@ -38,7 +38,7 @@ find_program(GLSLANG glslang REQUIRED)
 set(SPV_DIR ${CMAKE_BINARY_DIR}/spv)
 file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
-foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp ciel_bandes.frag fusion_nuage.vert ciel_sources.vert ciel_sources.frag gaia_ciel.vert vie_ecrire.comp)
+foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp ciel_bandes.frag fusion_nuage.vert ciel_sources.vert ciel_sources.frag gaia_ciel.vert vie_ecrire.comp lentille.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet -I${CMAKE_SOURCE_DIR}/shaders ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
     DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_acc.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_fiable.glsl VERBATIM)
@@ -85,6 +85,11 @@ target_link_options(essai_orientation PRIVATE -static)
 add_executable(essai_eclipse src/essai_eclipse.cpp)
 target_compile_options(essai_eclipse PRIVATE -Wall -Wextra)
 target_link_options(essai_eclipse PRIVATE -static)
+
+# Contrôle de la lumière déviée par la gravité (deviation.h) : Soleil, champ faible, ombres de Sgr A* et M87*.
+add_executable(essai_lentille src/essai_lentille.cpp)
+target_compile_options(essai_lentille PRIVATE -Wall -Wextra)
+target_link_options(essai_lentille PRIVATE -static)
 
 # Contrôle des distances cosmologiques contre astropy.
 add_executable(essai_cosmologie src/essai_cosmologie.cpp)

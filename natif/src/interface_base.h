@@ -416,6 +416,7 @@ bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, fl
     if (b.kind == Kind::Planet && sim.dist > 0.05) return false;
     if (b.kind == Kind::Planet && b.parent > 0 && b.naif != eph::kMoon && b.radiusKm < 100 && !ui.details) return false;      // minimaliste : petites lunes nommées au survol
     if (b.kind == Kind::Probe) return sim.dist < 0.3;
+    if (b.kind == Kind::Hole) return sim.dist < 3000.0 || b.massSun > 1.0e6;      // trous noirs d'étoiles : nommés de près ; Sgr A*, M87* : comme les galaxies
     if (b.kind == Kind::Asteroid) return sim.dist < 0.05;
     if (b.kind == Kind::Galaxy && b.priority >= 9) {      // Cosmicflows-4 (55 637) : seulement quand on est tout près
         const Vec3 p = sim.position(i);

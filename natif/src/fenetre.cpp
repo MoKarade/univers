@@ -23,6 +23,7 @@
 #include "points_planetes.h"
 #include "spheres.h"
 #include "traceurs_bras.h"
+#include "lentille.h"
 #include "vie_etoiles.h"
 #include "voie_lactee.h"
 #include "rendu_fenetre.h"
@@ -383,6 +384,34 @@ int runWindow(const WindowOptions& opt) {
     ScreenPass screen;
     screen.create(g);
     screen.bindSource(g, hdr.view);
+    // Lumière déviée par la gravité (lentille.h) : passe sur l'image des étoiles avant le dessin des planètes et du Soleil.
+    lentille::LensPass lens;
+    lens.create(g, sc.extent);
+    lens.bindSource(g, hdr.view);
+    ScreenPass screenLens;      // même conversion pour l'écran, lue dans l'image déviée
+    screenLens.create(g);
+    screenLens.bindSource(g, lens.target.view);
+    {
+        const double kmLy = 1.0 / 9.4607304725808e12;
+        auto addBody = [&](const char* name, double massSun, double radiusKm) {
+            for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
+                if (sim.bodies[static_cast<size_t>(i)].name == name) {
+                    lens.masses.push_back({{0, 0, 0}, massSun, radiusKm * kmLy, false, i});
+                    lens.bodyNames.push_back(name);
+                    return;
+                }
+        };
+        // Masses : IAU 2015 B3 (Soleil, rayon nominal 695 700 km) ; Jupiter et Saturne : GM du JPL (DE440) divisé par GM du Soleil.
+        lens.masses.push_back({{0, 0, 0}, 1.0, 695700.0 * kmLy, false, 0});
+        lens.bodyNames.push_back("Soleil");
+        addBody("Jupiter", 9.547919e-4, 69911.0);
+        addBody("Saturne", 2.858860e-4, 58232.0);
+        for (int h = 0; h < static_cast<int>(std::size(lentille::kHoles)); ++h) {
+            const lentille::Hole& H = lentille::kHoles[h];
+            lens.masses.push_back({lentille::icrsToEcl(H.raDeg, H.decDeg, H.distPc * lentille::kPcLy), H.massSun, 0.0, true, h});
+            lens.bodyNames.push_back(H.name);
+        }
+    }
 
     // Interface.
     IMGUI_CHECKVERSION();
@@ -440,6 +469,9 @@ int runWindow(const WindowOptions& opt) {
         if (!createSwapchain(g, surface, test, sc)) return false;
         createTargets();
         screen.bindSource(g, hdr.view);
+        lens.resize(g, sc.extent);
+        lens.bindSource(g, hdr.view);
+        screenLens.bindSource(g, lens.target.view);
         return true;
     };
 
@@ -554,7 +586,9 @@ int runWindow(const WindowOptions& opt) {
                                           lifeToday ? "mesurés (Gaia DR3, Hipparcos)"
                                                     : sim.lifePending ? "calcul de la vie des étoiles en cours : éclats d'une date voisine"
                                                                       : "mesurés aujourd'hui + changement calculé : naissance, vieillissement, supernova ou naine blanche [modèles MIST et Montréal]"});
-            }            if (sim.hasGaiaAggregate)
+            }            if (!sim.lensNames.empty())
+                sim.calcStates.push_back({"Lumière déviée par la gravité", CalcMode::Exact, 0,
+                                          "calculée (relativité générale) autour de : " + sim.lensNames + " ; masses et distances mesurées"});            if (sim.hasGaiaAggregate)
                 sim.calcStates.push_back({"Lumière additionnée des autres sources Gaia", share <= 0 ? CalcMode::Hidden : w < 0.01 ? CalcMode::Measured : gaia.orbitReady() ? CalcMode::Exact : CalcMode::Approx,
                                           sim.gaiaOrbitLagSteps > 0 ? sim.gaiaOrbitLagSteps : 0,
                                           "somme de sources mesurées, rangée par cases ; chaque case suit l'orbite de la vitesse moyenne mesurée de ses sources"});
@@ -671,6 +705,10 @@ int runWindow(const WindowOptions& opt) {
                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         // Orbites exactes : la carte rattrape la date montrée (tout d'un coup pendant un contrôle, 64 pas par image sinon).
         const bool skyOnly = sim.skyBand >= 0 && sky.loaded;
+        for (lentille::Mass& m : lens.masses)      // planètes et Soleil : à leur place du moment
+            if (!m.hole) m.pos = sim.position(m.holeIndex);
+        const bool lensOn = !skyOnly && lens.prepare(cam, sc.extent.height);
+        sim.lensNames = lensOn ? lens.activeNames : std::string();
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
         if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
@@ -711,18 +749,29 @@ int runWindow(const WindowOptions& opt) {
         }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
                        sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // cachés dans une autre lumière : on ne les voit qu'en lumière visible
+        // Lumière déviée par la gravité (lentille.h) : l'image des étoiles, galaxies et astéroïdes est déviée, puis les
+        // planètes et le Soleil (les masses elles-mêmes) sont dessinés par-dessus, sans déviation.
+        if (lensOn) {
+            vkCmdEndRendering(cmd);
+            transition(cmd, hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                       VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            transition(cmd, lens.target.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+            beginPass(cmd, lens.target.view, sc.extent);
+            lens.draw(cmd, sc.extent);
+        }
         // (l'ordre compte : après les astéroïdes, le dessin des étoiles n'est plus lié ; les planètes le relient)
         sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
         planets.draw(cmd);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
         vkCmdEndRendering(cmd);
-        transition(cmd, hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        transition(cmd, lensOn ? lens.target.image : hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
         // 2. Conversion pour l'écran, puis l'interface par-dessus.
         transition(cmd, final.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, final.view, sc.extent);
-        screen.draw(cmd, sc.extent);
+        (lensOn ? screenLens : screen).draw(cmd, sc.extent);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
         vkCmdEndRendering(cmd);
         // 3. Copie dans la fenêtre.
@@ -801,6 +850,8 @@ int runWindow(const WindowOptions& opt) {
     planets.release(g);
     gaiaSky.destroy(g);
     lifeWriter.release(g);
+    lens.release(g);
+    screenLens.release(g);
     if (gaiaBOk) gaiaB.release(g);
     gaia.release(g);
     milkyWay.release(g);
