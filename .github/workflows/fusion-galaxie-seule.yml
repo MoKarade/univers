@@ -23,6 +23,10 @@ jobs:
   tirage:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["andromede","triangle","grand_nuage"]') }}
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
@@ -37,8 +41,8 @@ jobs:
       - name: Tirage
         working-directory: pipeline/fusion
         env:
-          GALAXIE: ${{ inputs.galaxie || 'voie_lactee' }}
-          N: ${{ inputs.n || '2000000' }}
+          GALAXIE: ${{ matrix.galaxie }}
+          N: ${{ inputs.n || (matrix.galaxie == 'triangle' && '1000000') || (matrix.galaxie == 'grand_nuage' && '1000000') || '2000000' }}
         run: python modeles_v2.py "$GALAXIE" "$N" "$GALAXIE.npz"
       - uses: actions/upload-artifact@v4
-        with: { name: galaxie-seule, path: pipeline/fusion/*.npz, retention-days: 14 }
+        with: { name: "galaxie-seule-${{ matrix.galaxie }}", path: pipeline/fusion/*.npz, retention-days: 14 }
