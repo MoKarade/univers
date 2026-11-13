@@ -195,7 +195,7 @@ def main():
         print('départ écrit :', len(p['m']), 'particules'); return
     reprise = args[0] == 'reprise'      # python calcul.py reprise <a_Ga> : repart du dernier instantané
     t_to = float(args[1])
-    if not reprise and float(args[0]) == 0:
+    if not reprise and float(args[0]) <= 0:      # départ : aujourd'hui (0) ou dans le passé (depart_passe.py, meta['debut_ga'])
         if os.path.exists(dpath):
             with np.load(dpath) as z:
                 p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; meta = json.loads(str(z['meta']))
@@ -214,7 +214,8 @@ def main():
             meta['composantes'] = 'kind de chaque étoile affichée : composantes.bin (int8, 1 disque, 2 bulbe)'
             p['kind'][show].astype(np.int8).tofile(os.path.join(OUT, 'composantes.bin'))
         meta.update(t=[], centres=[], traceurs_pos=[], energie=[], e0=None, fusion_ga=None, fichiers=[])
-        t = 0.0; debut = True
+        t = float(meta.get('debut_ga', 0.0)); debut = True
+        assert abs(t - float(args[0])) < 1e-6, ('le départ est à', t, 'Ga, pas', args[0])
     else:
         with np.load(spath) as z:      # fermé tout de suite : sous Windows, un fichier ouvert ne peut pas être remplacé
             p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; t = float(z['t'])
