@@ -64,12 +64,33 @@ void whatYouSee(const Sim& sim) {
     if (sim.replay && sim.starShare() < 1 && sim.years > kStartYears)
         ImGui::TextDisabled(sim.starShare() > 0 ? "Les points qui apparaissent sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure)."
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
+    if (sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv != 0))
+        ImGui::TextDisabled("Exposition photo : pose ×%s (automatique%s), étirement asinh ; l'éclat réel n'est pas changé (Menu : « œil nu »).",
+                            frInt(sim.photoGain * std::pow(2.0, sim.exposureEv)).c_str(), sim.exposureEv != 0 ? (", " + frNum(sim.exposureEv, 0) + " IL").c_str() : "");
+    else if (!sim.photoExposure && sim.exposureEv != 0)
+        ImGui::TextDisabled("Œil nu, pose réglée à %s IL.", frNum(sim.exposureEv, 0).c_str());
+    if (sim.dist > 3.0e6)
+        ImGui::TextDisabled("Galaxies lointaines (points) : direction et décalage vers le rouge mesurés ; éclat et taille SUPPOSÉS (fonction de luminosité, Blanton 2003).");
+    if (sim.ageingShown)
+        ImGui::TextDisabled("Lumière des étoiles du modèle vieillie à cette date : modèle (MIST v1.2, Kroupa, histoires de formation supposées, naines blanches non comptées).");
+    if (sim.galaxyShapesShown)
+        ImGui::TextDisabled("%u galaxies faites de particules : taille, forme, orientation et éclat MESURÉS (SGA-2020, HyperLEDA) ; bras, côté proche, type manquant : modèle.", sim.galaxyShapesShown);
     if (sim.starShare() <= 0) return;
+    // Andromède, Triangle, Grand Nuage dès aujourd'hui (fenetre.cpp, companionShare) : galaxies modèles, dites comme telles.
+    if (sim.neighbourStarCount && sim.bestLook && sim.dist > 3000.0)
+        ImGui::TextDisabled("Andromède, Triangle, Nuages : étoiles du MODÈLE tirées de leurs vraies photos, galaxie déplacée en bloc, rotation mesurée (sans marées).");
+    else if (sim.companionShare > 0 && sim.dist > 3000.0)
+        ImGui::TextDisabled("Andromède, Triangle, Grand Nuage : galaxies modèles (paramètres publiés) à leur place mesurée ; leurs routes possibles : Menu, « Incertitude ».");
+    if (sim.milkyWayStarShare > 0 && sim.dist > 3000.0) {
+        ImGui::TextDisabled("Voie lactée : étoiles Gaia MESURÉES près du Soleil ; au-delà, %s étoiles du MODÈLE (masses et formes publiées,", frInt(static_cast<double>(sim.milkyWayStarCount)).c_str());
+        ImGui::TextDisabled("bras mesurés par les masers, régions HII WISE ; bras EXTRAPOLÉS au-delà des mesures).");
+    }
     // Voie lactée en volume (fil Gaia, docs/gaia-voie-lactee.md) : un modèle, dit comme tel dès qu'on la voit de loin.
-    // Choix de Marc (12/11) : pour l'état présent, seulement du mesuré. Sans la lueur d'ensemble, l'écran le dit.
-    if (sim.hasMilkyWay && sim.dist > 3000.0) {
-        ImGui::TextDisabled("La Voie lactée : modèle ajusté sur des mesures ; supposés : partage de la lumière au prorata des masses,");
-        ImGui::TextDisabled("lumière ajoutée par les bras, largeur de la barre longue.");
+    // Choix de Marc (13/11) : la Galaxie entière dès aujourd'hui en vue réaliste ; en « 100 % mesuré », seulement les étoiles mesurées.
+    if (sim.hasMilkyWay && sim.milkyWayModelShare > 0 && sim.dist > 3000.0) {
+        ImGui::TextDisabled("Voie lactée : étoiles Gaia mesurées une à une près du Soleil ; au-delà (pas de distance mesurée), lueur d'un modèle ajusté sur des mesures.");
+        ImGui::TextDisabled("Bras : tracés mesurés par les masers (Reid et al. 2019) ; au-delà, bras EXTRAPOLÉS (modèle, atténués). Taches roses : régions HII mesurées (WISE).");
+        ImGui::TextDisabled("Supposés : partage de la lumière au prorata des masses, éclat des bras et des régions HII, largeur de la barre longue.");
     } else if (sim.dist > 3000.0) {
         // gaia_agrege.bin (fil Gaia, docs/gaia-voie-lactee.md) : la lumière des autres sources Gaia, additionnée par case.
         if (sim.hasGaia && sim.gaiaCount) {

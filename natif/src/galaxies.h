@@ -143,12 +143,23 @@ public:
         ready = true;
     }
 
+    // Distance (années-lumière) d'un décalage vers le rouge, par la même table que le shader (galaxies_formes.h) ; version :
+    // change à chaque nouvelle table.
+    double distanceLy(double z) const {
+        if (!mapped_) return 0;
+        const double u = std::clamp(std::log(1.0 + z) / std::log(1.0 + kGalaxyZMax), 0.0, 1.0) * 256.0;
+        const int k = std::min(static_cast<int>(u), 255);
+        return mapped_[k] + (mapped_[k + 1] - mapped_[k]) * (u - k);
+    }
+    uint64_t tableVersion = 0;
+
     // Recalcule la table des distances pour une cosmologie : toutes les galaxies sont replacées à l'image suivante.
     // scale : facteur d'échelle de l'univers à la date montrée (1 aujourd'hui) : les distances grandissent avec lui.
     void setCosmology(const cosmo::Params& p, double scale = 1.0) {
         if (!ready) return;
         const auto t = cosmo::distanceTable(p, kGalaxyZMax, 256);
         for (int k = 0; k < 260; ++k) mapped_[k] = static_cast<float>(t[static_cast<size_t>(std::min(k, 256))] * cosmo::kMpcInLy * scale);
+        ++tableVersion;
     }
 
     // À appeler dans la passe en grande dynamique. gain : éclat de chaque point (0 : rien n'est dessiné).

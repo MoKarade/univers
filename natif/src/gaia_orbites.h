@@ -38,11 +38,12 @@ public:
     bool initialReady() const { return initDone_.load(); }
     const std::vector<float>& initial() const { return initial_; }
     // Contrôle : relit les n premiers états (8 flottants par étoile).
-    std::vector<float> readBack(const Gpu& g, uint32_t n) const {
+    // Contrôle : relit n états à partir du rang first (8 flottants chacun : position kpc, réservé, vitesse km/s, réservé).
+    std::vector<float> readBack(const Gpu& g, uint32_t n, uint32_t first = 0) const {
         const VkDeviceSize bytes = static_cast<VkDeviceSize>(n) * 32;
         Buffer host = createBuffer(g, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         VkCommandBuffer c = beginOnce(g);
-        const VkBufferCopy region{0, 0, bytes};
+        const VkBufferCopy region{static_cast<VkDeviceSize>(first) * 32, 0, bytes};
         vkCmdCopyBuffer(c, state.buf, host.buf, 1, &region);
         endOnce(g, c);
         std::vector<float> out(static_cast<size_t>(n) * 8);

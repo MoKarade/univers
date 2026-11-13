@@ -21,6 +21,7 @@ from scipy.stats import truncnorm
 from scipy.special import erf
 import astropy.units as u
 from astropy.coordinates import SkyCoord, Distance, Galactocentric, galactocentric_frame_defaults
+import energie_noire as EN      # énergie noire (w = -1), ajoutée au carnet de Sawala : energie_noire.py
 
 sys.stdout.reconfigure(encoding='utf-8')
 G = 43007.0                       # kpc (km/s)² / 10^10 M☉ (valeur du carnet)
@@ -88,11 +89,18 @@ def nfw(m, c):
     return rs, r200, vmax
 
 
+ENERGIE_NOIRE = True      # --sans-energie-noire : reproduire le carnet de Sawala tel quel
+
+
 def acc(pos, m, soft):
     d = pos[:, None, :, :] - pos[:, :, None, :]           # d[s, i, j] = x_j − x_i
     r2 = (d * d).sum(-1) + soft * soft
     inv = r2 ** -1.5
-    return G * (d * inv[..., None] * m[:, None, :, None]).sum(2)
+    a = G * (d * inv[..., None] * m[:, None, :, None]).sum(2)
+    if ENERGIE_NOIRE:      # poussée de l'énergie noire depuis le centre de masse de chaque scénario
+        cm = (m[..., None] * pos).sum(1, keepdims=True) / m.sum(1)[:, None, None]
+        a = a + EN.acceleration(pos, cm)
+    return a
 
 
 def frottement(pos, vel, m, c, rs, r200, vmax):
@@ -133,6 +141,7 @@ def integre(m, c, pos, vel, t_fin=10.0, dt=0.001, soft=20.0, seuil=20.0, garder=
     existe = np.ones((n, N), bool)
     fusion = np.full((n, N, N), np.inf)          # fusion[s, i, j] : date où i ou j a disparu dans un regroupement de i et j
     absorbe = np.full((n, N), -1)                # qui a absorbé chaque galaxie
+    t_absorbee = np.full((n, N), np.inf)         # date (unités du carnet) où chaque galaxie a été absorbée
     Nt = int(math.ceil(t_fin / dt))
     traj = np.zeros((Nt // garder + 1, n, N, 3), np.float32); traj[0] = pos
     for k in range(Nt):
@@ -151,7 +160,7 @@ def integre(m, c, pos, vel, t_fin=10.0, dt=0.001, soft=20.0, seuil=20.0, garder=
                 mk, mr = m[s, keep], m[s, rem]
                 pos[s, keep] = (mk[:, None] * pos[s, keep] + mr[:, None] * pos[s, rem]) / (mk + mr)[:, None]
                 vel[s, keep] = (mk[:, None] * vel[s, keep] + mr[:, None] * vel[s, rem]) / (mk + mr)[:, None]
-                m[s, keep] = mk + mr; m[s, rem] = 0; existe[s, rem] = False; absorbe[s, rem] = keep
+                m[s, keep] = mk + mr; m[s, rem] = 0; existe[s, rem] = False; absorbe[s, rem] = keep; t_absorbee[s, rem] = (k + 1) * dt
                 fusion[s, l, q] = np.minimum(fusion[s, l, q], k * dt); fusion[s, q, l] = fusion[s, l, q]
         # la galaxie absorbée suit celle qui l'a absorbée (pour les trajectoires)
         for i in range(N):
@@ -159,7 +168,7 @@ def integre(m, c, pos, vel, t_fin=10.0, dt=0.001, soft=20.0, seuil=20.0, garder=
             if gone.any():
                 s = np.nonzero(gone)[0]; pos[s, i] = pos[s, absorbe[s, i]]; vel[s, i] = vel[s, absorbe[s, i]]
         if (k + 1) % garder == 0: traj[(k + 1) // garder] = pos
-    return fusion, existe, traj
+    return fusion, existe, traj, t_absorbee
 
 
 def date_fusion_paire(fusion, existe_hist_idx, i, j):
@@ -173,11 +182,14 @@ def main():
     p.add_argument('--clip', type=float, default=2.0)
     p.add_argument('--sortie', default='')
     p.add_argument('--variante', default='wu2026', choices=sorted(VARIANTES))
+    p.add_argument('--sans-energie-noire', action='store_true')
     a = p.parse_args()
+    global ENERGIE_NOIRE
+    ENERGIE_NOIRE = not a.sans_energie_noire
     gals = a.galaxies.split(',')
     t0 = time.time()
     m, c, pos, vel = conditions_initiales(gals, a.n, a.clip, a.variante)
-    fusion, existe, traj = integre(m, c, pos, vel)
+    fusion, existe, traj, t_absorbee = integre(m, c, pos, vel)
     # Date de la fusion MW–M31 comme le carnet : premier pas où la Voie lactée OU Andromède n'existe plus.
     # (Une absorption de M31 par la Voie lactée, ou l'inverse ; M33 absorbée par M31 ne compte pas.)
     t_mw_m31 = fusion[:, 0, 1]
@@ -186,7 +198,7 @@ def main():
         t_mw_m31 = np.minimum(t_mw_m31, np.where(m[:, k] > m[:, 1], fusion[:, 1, k], np.inf))
     ok = np.isfinite(t_mw_m31)
     tg = t_mw_m31[ok] * UNITE_GA
-    res = dict(variante=a.variante, galaxies=gals, n=a.n, clip=a.clip, probabilite_fusion=float(ok.mean()),
+    res = dict(variante=a.variante, energie_noire=ENERGIE_NOIRE, galaxies=gals, n=a.n, clip=a.clip, probabilite_fusion=float(ok.mean()),
                mediane_unites_carnet=float(np.median(t_mw_m31[ok])) if ok.any() else None,
                mediane_ga=float(np.median(tg)) if ok.any() else None,
                quantiles_ga={q: float(np.quantile(tg, q)) for q in (0.05, 0.16, 0.5, 0.84, 0.95)} if ok.any() else None,
@@ -198,7 +210,7 @@ def main():
     if a.sortie:
         os.makedirs(a.sortie, exist_ok=True)
         np.savez_compressed(os.path.join(a.sortie, 'clones_groupe_local.npz'), galaxies=gals, m=m, c=c, pos0=pos, vel0=vel,
-                            t_fusion=t_mw_m31 * UNITE_GA, fusion_paires=fusion * UNITE_GA, traj=traj, pas_traj_ga=10 * 0.001 * UNITE_GA)
+                            t_fusion=t_mw_m31 * UNITE_GA, t_absorbee=t_absorbee * UNITE_GA, fusion_paires=fusion * UNITE_GA, traj=traj, pas_traj_ga=10 * 0.001 * UNITE_GA)
         json.dump(res, open(os.path.join(a.sortie, 'clones_groupe_local.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 

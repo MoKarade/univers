@@ -4,7 +4,7 @@
 // Repère galactocentrique de la page : centre galactique à l'origine, Soleil en −R0 · SGRA_GAL (≈ (−8,2 ; 0 ; 0) kpc),
 // axe y vers la longitude galactique 90° (sens de rotation), z vers le nord galactique ; kpc et km/s ; temps en Ga.
 // Potentiel : bulbe de Hernquist + disque de Miyamoto-Nagai + halo NFW (inspiré de MWPotential2014, Bovy 2015, recalé sur
-// 230 km/s au Soleil) + barre centrale tournante (Dehnen 2000) :
+// 232,8 km/s au Soleil, table unique) + barre centrale tournante (Dehnen 2000) :
 //   mesuré : vitesse de la barre 39 km/s/kpc (Portail et al. 2017 ; fourchette récente 33 à 41), angle 28° devant la
 //   direction du centre, bout proche aux longitudes positives (Wegg et Gerhard 2013), demi-longueur 5,0 kpc (Wegg et al. 2015) ;
 //   modèle : force α = 0,01 (Dehnen 2000). Pas de bras spiraux (vitesse non établie).
@@ -21,7 +21,7 @@
 namespace phys::galaxie {
 
 constexpr double kG = 4.30091e-6;      // kpc·(km/s)²/masse solaire
-constexpr double kR0 = 8.2, kV0 = 230;
+constexpr double kR0 = 8.2, kV0 = 232.8;      // McMillan 2017 (table unique pipeline/constantes/univers.json, repere.v0)
 constexpr double kMb = 0.5e10, kAb = 0.5, kMd = 6.8e10, kAd = 3.0, kBd = 0.28, kRs = 16;
 constexpr double kKmsKpcToRadGa = 1.0227121650456;      // km/s/kpc -> rad/Ga ; aussi km/s -> kpc/Ga
 constexpr double kPi = 3.14159265358979323846;
@@ -33,14 +33,19 @@ constexpr double kBarAlpha = 0.01;
 constexpr double kDtGa = 0.001;
 // Direction du centre galactique vue du Soleil dans le repère de la page (DATA.SGRA_GAL) et vitesse du Soleil (km/s).
 constexpr double kSgra[3] = {0.9999992, -0.00097327, -0.00080564};
-constexpr double kSunUvw[3] = {11.1, 242.24, 7.25};
+constexpr double kSunUvw[3] = {11.1, 232.8 + 12.24, 7.25};      // v0 + mouvement propre du Soleil (Schönrich et al. 2010), table unique
 
 // Angle de l'axe de la barre (rad, depuis l'axe x) à tGa : φ_b(t) = π − 28° − Ω_b t.
 inline double barAngleAt(double tGa) { return kPi - kBarAngleRad - kBarOmegaKmsKpc * kKmsKpcToRadGa * tGa; }
 
 inline double v2Baryons(double r) { return kG * kMb * r / ((r + kAb) * (r + kAb)) + kG * kMd * r * r / std::pow(r * r + (kAd + kBd) * (kAd + kBd), 1.5); }
 inline double nfwShape(double r) { const double x = r / kRs; return (std::log(1 + x) - x / (1 + x)) / r; }
-inline double gmHalo() { return (kV0 * kV0 - v2Baryons(kR0)) / nfwShape(kR0); }      // calé sur 230 km/s au Soleil
+inline double gmHalo() { return (kV0 * kV0 - v2Baryons(kR0)) / nfwShape(kR0); }      // calé sur kV0 au Soleil
+
+// Énergie noire (constante cosmologique) : poussée H0² Ω_Λ r depuis le centre de la Galaxie, (km/s)²/kpc² ; même
+// cosmologie que natif/src/cosmologie.h (H0 = 67,4 km/s/Mpc, Ω_Λ = 0,685) et pipeline/fusion/energie_noire.py. Au Soleil
+// (8 kpc), 2e-6 de l'attraction de la Galaxie : gardée quand même (Marc, 13/11/2026 : « jamais négliger l'énergie noire »).
+constexpr double kLambdaKmsKpc2 = 0.0674 * 0.0674 * 0.685;
 
 // Fréquences du potentiel SANS la barre, dans le plan (z = 0), à R kpc ; en km/s/kpc (× kKmsKpcToRadGa pour des rad/Ga).
 // Formules exactes (dérivées analytiques du même potentiel que Potentiel::acc) ; contrôlées dans essai_galaxie contre des
@@ -58,9 +63,11 @@ inline Frequences frequences(double R) {
     const double d1 = gb / ((R + kAb) * (R + kAb)) + gd * R / (D2 * D) + gh * m / (R * R);                                   // Φ'(R)
     const double d2 = -2 * gb / std::pow(R + kAb, 3) + gd * (c2 - 2 * R * R) / (D2 * D2 * D) + gh * (x / ((1 + x) * (1 + x) * kRs * R * R) - 2 * m / (R * R * R));      // Φ''(R)
     const double nu2 = gb / (R * (R + kAb) * (R + kAb)) + gd * (kAd + kBd) / (kBd * D2 * D) + gh * m / (R * R * R);
-    const double om2 = d1 / R;
-    return {std::sqrt(R * d1), std::sqrt(om2), std::sqrt(d2 + 3 * om2), std::sqrt(nu2)};
+    /* Énergie noire : potentiel -K r²/2, donc Φ' -= K R, Φ'' -= K, ∂²Φ/∂z² -= K (mêmes termes que Potentiel::acc). */
+    const double d1L = d1 - kLambdaKmsKpc2 * R, om2 = d1L / R;
+    return {std::sqrt(R * d1L), std::sqrt(om2), std::sqrt(d2 - kLambdaKmsKpc2 + 3 * om2), std::sqrt(nu2 - kLambdaKmsKpc2)};
 }
+
 
 struct Potentiel {
     double GMs = gmHalo(), Rb = kBarHalfLengthKpc, Ab = kBarAlpha * kV0 * kV0 * std::pow(kR0 / kBarHalfLengthKpc, 3) / 3;
@@ -73,6 +80,7 @@ struct Potentiel {
         const double ar = -kG * kMb / ((r + kAb) * (r + kAb)) - GMs * (std::log(1 + xs) - xs / (1 + xs)) / (r * r);
         const double B = std::sqrt(z * z + kBd * kBd), D2 = R2 + (kAd + B) * (kAd + B), D3 = D2 * std::sqrt(D2), gm = kG * kMd;
         a[0] = ar * x / r - gm * x / D3; a[1] = ar * y / r - gm * y / D3; a[2] = ar * z / r - gm * z * (kAd + B) / (B * D3);
+        a[0] += kLambdaKmsKpc2 * x; a[1] += kLambdaKmsKpc2 * y; a[2] += kLambdaKmsKpc2 * z;      /* énergie noire */
         if (barre && R2 > 1e-8) {      // Dehnen 2000 : a_R = −A cos2ψ U'(R), a_φ = 2A sin2ψ U(R) / R
             const double R = std::sqrt(R2), c = x / R, s = y / R, psi = std::atan2(y, x) - angleBarre(t), c2 = std::cos(2 * psi), s2 = std::sin(2 * psi), q = R / Rb;
             const double U = R < Rb ? q * q * q - 2 : -1 / (q * q * q), dU = R < Rb ? 3 * q * q / Rb : 3 / (q * q * q * q * Rb);
@@ -83,7 +91,7 @@ struct Potentiel {
     // Énergie sans la barre (sert au choix des sous-pas et aux contrôles), (km/s)².
     double energie(double x, double y, double z, double vx, double vy, double vz) const {
         const double r = std::sqrt(x * x + y * y + z * z) + 1e-12, R2 = x * x + y * y, B = std::sqrt(z * z + kBd * kBd);
-        const double phi = -kG * kMb / (r + kAb) - kG * kMd / std::sqrt(R2 + (kAd + B) * (kAd + B)) - GMs * std::log(1 + r / kRs) / r;
+        const double phi = -kG * kMb / (r + kAb) - kG * kMd / std::sqrt(R2 + (kAd + B) * (kAd + B)) - GMs * std::log(1 + r / kRs) / r - 0.5 * kLambdaKmsKpc2 * r * r;
         return 0.5 * (vx * vx + vy * vy + vz * vz) + phi;
     }
     double phiBarre(double x, double y, double t) const {

@@ -71,7 +71,8 @@ int main(int argc, char** argv) {
                     proche(constante(comp, "OP_MD"), g::kMd) && proche(constante(comp, "OP_AD"), g::kAd) && proche(constante(comp, "OP_BD"), g::kBd) &&
                     proche(constante(comp, "OP_RS"), g::kRs) && proche(constante(comp, "OP_GMH"), P.GMs) && proche(constante(comp, "OP_K"), g::kKmsKpcToRadGa) &&
                     proche(constante(comp, "OP_RB"), P.Rb) && proche(constante(comp, "OP_ABAR"), P.Ab) && proche(constante(comp, "OP_BAR0"), g::barAngleAt(0)) &&
-                    proche(constante(comp, "OP_BARW"), g::kBarOmegaKmsKpc * g::kKmsKpcToRadGa),
+                    proche(constante(comp, "OP_BARW"), g::kBarOmegaKmsKpc * g::kKmsKpcToRadGa) &&
+                    proche(constante(comp, "OP_KL"), g::kLambdaKmsKpc2),
                 std::string("constantes du calcul exact de la carte graphique (") + fichier + ") = bibliothèque de physique");
         }
     }

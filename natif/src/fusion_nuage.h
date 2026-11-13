@@ -28,6 +28,7 @@ struct FusionCloud {
     long frames = 0;
     double stepGa = 0, quantumKpc = 0;
     uint32_t count = 0;      // points à dessiner à cette image (0 : rien)
+    uint32_t milkyWayPoints = 0;      // les premiers points du fichier sont ceux de la Voie lactée
 
     bool create(const Gpu& g, const std::string& dir, VkFormat fmt) {
         std::ifstream f(dir + "/fusion_centres.bin", std::ios::binary | std::ios::ate);
@@ -42,6 +43,7 @@ struct FusionCloud {
         const int tracers = static_cast<int>(h[4]);
         quantumKpc = h[5];
         n = static_cast<uint32_t>(h[8] + h[9] + h[10] + h[11]);
+        milkyWayPoints = static_cast<uint32_t>(h[8]);      // points rangés par galaxie : Voie lactée d'abord, puis M31, M33, LMC
         size_t o = 12 * 8;
         if (!n || frames < 2 || b.size() < o + (static_cast<size_t>(frames) * 12 + static_cast<size_t>(frames) * tracers * 3 + 1) * 8) return false;
         centres_.assign(reinterpret_cast<const double*>(b.data() + o), reinterpret_cast<const double*>(b.data() + o) + static_cast<size_t>(frames) * 12);
@@ -128,8 +130,11 @@ struct FusionCloud {
 
     // Dans la passe en grande dynamique. centre : place du centre de la Voie lactée à l'écran (années-lumière) ;
     // exposure : celle des étoiles (éclat multiplié compris) ; fixedFlux : éclat d'affichage sans rapport masse/lumière.
-    void draw(VkCommandBuffer cmd, const Camera& cam, Vec3 centre, float exposure, float fixedFlux, double share, uint32_t width, uint32_t height) const {
-        if (!count) return;
+    // first : premier point dessiné (milkyWayPoints : seulement les autres galaxies, la Voie lactée étant montrée autrement).
+    void draw(VkCommandBuffer cmd, const Camera& cam, Vec3 centre, float exposure, float fixedFlux, double share, uint32_t width, uint32_t height,
+              uint32_t first = 0, uint32_t last = 0) const {      // last : premier point NON dessiné (0 : jusqu'au bout)
+        const uint32_t end = last ? std::min(last, count) : count;
+        if (!count || first >= end || share <= 0) return;
         Push p{};
         const PushConstants base = pushConstants(cam, exposure, height);
         std::memcpy(p.viewProj, base.viewProj, sizeof(p.viewProj));
@@ -150,7 +155,7 @@ struct FusionCloud {
         const VkDeviceSize offs[4] = {0, 0, 0, 0};
         vkCmdBindVertexBuffers(cmd, 0, 4, bufs, offs);
         vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(p), &p);
-        vkCmdDraw(cmd, count, 1, 0, 0);
+        vkCmdDraw(cmd, end - first, 1, first, 0);
     }
 
     void release(const Gpu& g) {

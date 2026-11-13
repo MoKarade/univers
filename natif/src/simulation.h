@@ -3,6 +3,7 @@
 #include "asteroides_catalogue.h"
 #include <thread>
 #include "avancement.h"
+#include "centres_reference.h"
 #include "ciel_bandes.h"
 #include "commun.h"
 #include "completude.h"
@@ -192,9 +193,10 @@ struct Sim {
     // Lumière choisie pour le ciel : -1 = visible (étoiles et galaxies mesurées) ; sinon rang dans skyBandLabels (cartes du
     // ciel mesurées dans une autre lumière, fenetre.cpp). skyLegend : texte de la carte montrée, à afficher en permanence.
     int skyBand = -1;
-    // Choix de Marc (12/11/2026) : « 100 % mesuré » (par défaut) ou « meilleur rendu ». En meilleur rendu, des corrections
-    // NON mesurées peuvent s'appliquer (ex. éclat Gaia rééquilibré par direction) ; chacune le dit à l'écran.
-    bool bestLook = false;
+    // Choix de Marc (12/11/2026) : « 100 % mesuré » ou « meilleur rendu ». En meilleur rendu, des corrections NON mesurées
+    // peuvent s'appliquer (éclat Gaia rééquilibré, lueur de la Galaxie au-delà de Gaia) ; chacune le dit à l'écran.
+    bool bestLook = true;      // vue réaliste par défaut (Marc, 13/11/2026) : « 100 % mesuré » reste au menu (F4)
+    double milkyWayModelShare = 0;      // part de la lueur du modèle de la Voie lactée montrée à cette image (fenetre.cpp)
     // Sources Gaia sans distance, une à une à la lunette (gaia_ciel.h) : état pour l'écran.
     bool gaiaSkyActive = false;
     uint32_t gaiaSkyStars = 0, gaiaSkyPending = 0;
@@ -214,6 +216,19 @@ struct Sim {
     // Scénarios du Groupe local (clones.h) : nombre, part qui finit par une fusion Voie lactée-Andromède, et date de cette
     // fusion (16e, 50e, 84e centile, en milliards d'années) ; 0 scénario : fichier absent.
     uint32_t cloneCount = 0;
+    double companionShare = 0;    // part montrée d'Andromède, du Triangle et du Grand Nuage du calcul aujourd'hui (fenetre.cpp)
+    const CentresReference* centres = nullptr;      // centres de référence des galaxies (fenetre.cpp), sinon le calcul de la fusion
+    uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
+    double milkyWayStarShare = 0;     // part montrée à cette image
+    // Exposition (Marc, 13/11/2026) : « photo » (meilleur rendu) = exposition automatique sur la galaxie la plus brillante
+    // à l'écran + étirement asinh ; « œil nu » = éclat physique, compression de Reinhard. exposureEv : réglage à la main
+    // (crans de 1 IL = ×2). photoGain : gain calculé à cette image.
+    bool ageingShown = false;      // vieillissement de la lumière du modèle appliqué à cette date (vieillissement.h)
+    bool photoExposure = true;
+    double exposureEv = 0, photoGain = 1;
+    uint32_t galaxyShapeCount = 0, galaxyShapesShown = 0;      // galaxies de forme mesurée (galaxies_formes.h), montrées en particules
+    uint64_t neighbourStarCount = 0;   // étoiles des galaxies voisines (voisines_etoiles.bin), montrées à toute date
+    bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
     double cloneMergeProbability = 0, cloneMergeGa[3] = {0, 0, 0};
     std::vector<CalcState> calcStates;
     double gaiaCellDispersionKms = 0;    // dispersion médiane des vitesses dans une case de lumière additionnée (fil Gaia), à dire à l'écran
@@ -388,7 +403,9 @@ struct Sim {
         // Puis, s'il est à côté, galaxies_cf4.tsv : 55 637 galaxies à distance mesurée (Cosmicflows-4, noms OpenNGC),
         // écrit par pipeline/natif/galaxies_cf4.py ; priorité 9 : nom montré seulement de près ou au survol.
         const std::string cf4Path = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "galaxies_cf4.tsv";
-        for (const std::string& path : {galaxiesPath, cf4Path})
+        // Puis galaxies_formes_noms.tsv : Messier, NGC et IC de forme mesurée (pipeline/natif/galaxies_formes.py), cherchables.
+        const std::string formesPath = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "galaxies_formes_noms.tsv";
+        for (const std::string& path : {galaxiesPath, cf4Path, formesPath})
         for (std::ifstream gf(path); std::getline(gf, line);) {
             std::vector<std::string> cols;
             size_t from = 0;
@@ -542,6 +559,9 @@ struct Sim {
         return std::clamp((starEraEndYears - t) / (starEraEndYears - starEraFadeYears), 0.0, 1.0);
     }
     // Déplacement de ce qui est fixe par rapport au centre de la Galaxie : le Soleil tourne, le monde reste centré sur lui.
+    // Place du Soleil (galactocentrique, kpc) à la date montrée, par le calcul de l'appli (origine du monde affiché).
+    phys::Vec3 sunGalacto() const { ensureExact(); return exact.position(0, years); }
+
     Vec3 sunShift() const {
         ensureExact();
         const phys::Vec3 s = exact.position(0, years), s0 = phys::galaxie::soleilPos();
@@ -609,6 +629,18 @@ struct Sim {
         for (size_t i = 0; i < bodies.size(); ++i) {
             const Body& b = bodies[i];
             if (b.kind != Kind::Galaxy) continue;
+            // Centres de référence (centres_reference.h) : Andromède, Triangle, Nuages de Magellan, en bloc le long de leur
+            // centre, à toute date calculée, aujourd'hui compris (mêmes valeurs que la table unique et que leurs étoiles).
+            const int ci = centres && centres->ready ? CentresReference::indexOf(b.name) : -1;
+            if (ci >= 0) {
+                phys::Vec3 g;
+                if (centres->centre(ci, tGa, g)) {
+                    const Vec3 w = fromGalactocentric(g);
+                    galPos[i] = {w.x + shift.x, w.y + shift.y, w.z + shift.z};
+                    galValid[i] = 1;
+                }
+                continue;
+            }
             const int ref = i < replayRef.size() ? replayRef[i] : -1;
             if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
                 galPos[i] = {b.fixedPos.x + shift.x, b.fixedPos.y + shift.y, b.fixedPos.z + shift.z};

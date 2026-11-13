@@ -57,6 +57,7 @@ int main(int argc, char** argv) {
         else if (k == "--controle-orbites") wopt.checkOrbits = true;
         else if (k == "--trajet") { std::sscanf(v, "%lf,%d", &wopt.pathStart, &wopt.pathRate); wopt.hasPath = true; ++i; }
         else if (k == "--galaxie-entiere") wopt.wholeGalaxy = true;
+        else if (k == "--incertitude") wopt.uncertainty = true;
         else if (k == "--arret") { wopt.stopAfter = std::atoi(v); ++i; }
         else if (k == "--bande") { wopt.skyBand = std::atoi(v); ++i; }
         else if (k == "--regarde") { lookIndex = std::strtoull(v, nullptr, 10); ++i; }

@@ -11,13 +11,13 @@ const float OG_MD = 6.8e10;
 const float OG_AD = 3.0;
 const float OG_BD = 0.28;
 const float OG_RS = 16.0;
-const float OG_GMH = 2410361.25417129;      /* halo calé sur 230 km/s au Soleil (phys::galaxie::gmHalo) */
+const float OG_GMH = 2552189.27458262;      /* halo calé sur 232,8 km/s au Soleil (phys::galaxie::gmHalo) */
 const float OG_K = 1.0227121650456;         /* km/s/kpc -> radians par milliard d'années */
 const float OG_KPC_LY = 3261.5637769;
 const float OG_RACCORD_ANS = 3.0e5;
 const float OG_AMP_MAX = 0.8;
 const vec3 OG_SOLEIL_POS = vec3(-8.19999344, 0.007980814, 0.006606248);      /* kpc : -R0 x direction du centre */
-const vec3 OG_SOLEIL_VIT = vec3(11.1, 242.24, 7.25);                          /* km/s */
+const vec3 OG_SOLEIL_VIT = vec3(11.1, 245.04, 7.25);                          /* km/s */
 /* Repère galactocentrique -> écliptique (colonnes de la matrice M_GAL2ECL de la page). */
 const mat3 OG_M = mat3(-0.0548756577, -0.993821367, -0.0964766946,
                        0.4941094372, -0.1109908412, 0.8622858559,

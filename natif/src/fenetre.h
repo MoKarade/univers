@@ -16,6 +16,7 @@ struct WindowOptions {
     // contrôle : au lieu de sauter à la date, y aller en laissant défiler le temps depuis pathStart (années depuis J2000) à
     // la vitesse de rang pathRate (kRates), comme le ferait Marc ; l'image finale doit être la même qu'en sautant.
     bool wholeGalaxy = false;   // contrôle : montrer la Galaxie entière du calcul à toute date (Sim::wholeGalaxy)
+    bool uncertainty = false;   // contrôle : montrer le nuage des scénarios d'orbite (Sim::showClones, menu « Incertitude »)
     int stopAfter = 0;          // contrôle : s'arrêter après ce nombre de tours de boucle, même si la date n'est pas encore atteinte
     bool hasPath = false;
     double pathStart = 0;

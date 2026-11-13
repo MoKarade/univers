@@ -49,6 +49,7 @@ namespace GaiaFiable {
 constexpr uint8_t kVitesseRadiale = 1, kOrbiteFiable = 2, kReequilibre = 4;      // drapeaux d'une étoile (gaia.bin)
 constexpr double kTauAns = 3.0e6;      // sources sans orbite fiable : lumière × exp(-(t / kTauAns)²) loin d'aujourd'hui
 constexpr uint32_t kModeRendu = 0x80000000u;      // bit haut de GaiaPush::cellBase : vue « meilleur rendu » (sinon 100 % mesuré)
+constexpr uint32_t kPoussiere = 0x40000000u;      // bit suivant : carte de poussière 3D liée (attachDust) ; les étoiles du modèle (drapeau 16) s'y éteignent
 inline double effacement(double ans) { const double u = ans / kTauAns; return std::exp(-u * u); }
 // Part du rééquilibrage d'éclat appliquée (HYPOTHÈSE, gaia_reequilibre.py) : 0 vu du Soleil, 1 vu de loin.
 inline double poidsLoin(double camDist, double starDist) { return std::clamp(camDist / std::max(starDist, 1.0), 0.0, 1.0); }
@@ -151,7 +152,8 @@ public:
     // full = false : jeu « B » (gaia_b.bin, étoiles à distance connue à 10-20 % près, docs/plan-gaia-complet.md) : ni
     // lumière additionnée (déjà chargée par le jeu principal), ni orbites exactes (aucune n'est fiable : elles s'effacent
     // loin d'aujourd'hui ; en attendant, épicycles) ; cela garde 3 Go de mémoire graphique.
-    bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat, bool full = true) {
+    // aggregate = false : orbites exactes mais pas de lumière additionnée (étoiles visibles du modèle, vl_etoiles.bin).
+    bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat, bool full = true, bool aggregate = true) {
         if (!openGaia(path, file_)) return false;
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(g.pd, &props);
@@ -196,7 +198,7 @@ public:
                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         }
         for (int i = 0; i < kRing; ++i) check(vkMapMemory(g.dev, indirect_[i].mem, 0, VK_WHOLE_SIZE, 0, &mapped_[i]), "dessins indirects");
-        if (full) loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
+        if (full && aggregate) loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
         std::vector<std::pair<uint32_t, uint32_t>> leafRanges(file_.leafCount);
         for (uint32_t i = 0; i < file_.leafCount; ++i) leafRanges[i] = {static_cast<uint32_t>(file_.leaves[i].first), file_.leaves[i].n};
         if (full) orbits_.create(g, file_.stars, file_.velocities, file_.n, std::move(leafRanges), cellPos_, cellVel_);
@@ -212,7 +214,8 @@ public:
         const double since = years - (static_cast<double>(file_.epoch) - 2000.0);      // années depuis les mesures de Gaia
         PushConstants pc = pushConstants(cam, exposure, height, since);
         pc.par[3] = static_cast<float>(since / 1.0e9);      // orbite autour de la Galaxie (gaia.vert)
-        const GaiaPush gp{pc, orbits_.count - 1, orbits_.fraction(since), orbits_.readyToDraw() ? 1.0f : 0.0f, static_cast<uint32_t>(file_.n) | (improved ? GaiaFiable::kModeRendu : 0u)};
+        const GaiaPush gp{pc, orbits_.count - 1, orbits_.fraction(since), orbits_.readyToDraw() ? 1.0f : 0.0f,
+                          static_cast<uint32_t>(file_.n) | (improved ? GaiaFiable::kModeRendu : 0u) | (dustReady_ ? GaiaFiable::kPoussiere : 0u)};
         const uint32_t n = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
                                         file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
@@ -259,6 +262,73 @@ public:
         ring_ = (ring_ + 1) % kRing;
     }
 
+    // Sous-nuages : chaque étoile du MODÈLE (drapeau 16) est dessinée en GV_SOUS_NUAGE étoiles (gaia.vert), confondues vu de
+    // loin, écartées en s'approchant ; la somme de leur lumière est celle du traceur. Rien n'est stocké.
+    void enableSubClouds(uint32_t k) { subClouds_ = std::max(1u, k); }
+
+    // Galaxies voisines (étoiles au drapeau 32, voisines_etoiles.bin) : par galaxie, 4 vec4 = centre à t = 0 et centre à la date
+    // montrée (années-lumière, repère du simulateur), axe de rotation (écliptique) et vitesse de rotation (km/s), rayon où elle
+    // est atteinte (kpc). Chaque galaxie se déplace en bloc ; ses étoiles tournent autour de son centre (gaia.vert).
+    static constexpr int kMaxGalaxies = 8;
+    static constexpr VkDeviceSize kGalaxyBytes = kMaxGalaxies * 4 * 16;
+    // Vieillissement de la lumière des étoiles du MODÈLE (drapeau 16), par composante (0 à 15) : facteurs de lumière et de
+    // température à la date montrée (pipeline/etoiles/vieillissement_populations.json, docs/vieillissement-lumiere.md),
+    // rangés dans les cases 6 (lumière) et 7 (température) de la table lue par gaia.vert.
+    void setAgeing(const float lum[16], const float teff[16]) {
+        if (!galaxiesMapped_) return;
+        std::memcpy(static_cast<char*>(galaxiesMapped_) + 6 * 64, lum, 64);
+        std::memcpy(static_cast<char*>(galaxiesMapped_) + 7 * 64, teff, 64);
+    }
+
+    // Soleil de l'appli (galactocentrique, kpc), case 5 : les étoiles du MODÈLE sont placées par rapport à lui, comme tout
+    // le monde affiché ; sur des milliards d'années, le Soleil de la carte graphique s'en écarte (calcul en simple précision).
+    void setSunGalacto(phys::Vec3 s) {
+        if (!galaxiesMapped_) return;
+        const float v[4] = {static_cast<float>(s.x), static_cast<float>(s.y), static_cast<float>(s.z), 1.0f};
+        std::memcpy(static_cast<char*>(galaxiesMapped_) + 5 * 64, v, 16);
+    }
+
+    void setGalaxies(const float* data, int count) {
+        if (!galaxiesMapped_) return;
+        const int n = std::min(count, 5);      // case 5 : Soleil (setSunGalacto) ; 6 et 7 : vieillissement (setAgeing)
+        std::memcpy(galaxiesMapped_, data, static_cast<size_t>(n) * 64);
+        if (leafGalaxy_.empty()) {      // galaxie de chaque feuille : celle de sa première étoile (4e champ de la vitesse)
+            leafGalaxy_.resize(file_.leafCount);
+            leafRadius_.assign(file_.leafCount, 0.0);
+            for (uint32_t i = 0; i < file_.leafCount; ++i) {
+                int16_t r = 0;
+                std::memcpy(&r, file_.velocities + file_.leaves[i].first * 8 + 6, 2);
+                leafGalaxy_[i] = std::clamp<int>(r & 15, 0, n - 1);      // rang de la galaxie ; au-dessus : composante
+                // rayon où ses étoiles peuvent tourner : coin le plus loin du centre de sa galaxie à t = 0
+                const float* g = data + leafGalaxy_[i] * 16;
+                const GaiaLeaf& L = file_.leaves[i];
+                double r2 = 0;
+                for (int c = 0; c < 8; ++c) {
+                    const double x = ((c & 1) ? L.mx[0] : L.mn[0]) - g[0], y = ((c & 2) ? L.mx[1] : L.mn[1]) - g[1], z = ((c & 4) ? L.mx[2] : L.mn[2]) - g[2];
+                    r2 = std::max(r2, x * x + y * y + z * z);
+                }
+                leafRadius_[i] = std::sqrt(r2);
+            }
+        }
+    }
+
+    // Carte de poussière 3D (voie_lactee.bin, canal g : A_V par pc, repère galactocentrique ±16 kpc, ±2 kpc) : les étoiles
+    // du modèle (drapeau 16) s'éteignent et rougissent le long du trajet de la caméra jusqu'à elles. Les étoiles mesurées
+    // n'en ont pas besoin : leur magnitude mesurée contient déjà la poussière vue du Soleil.
+    void attachDust(const Gpu& g, VkImageView view, VkSampler sampler) {
+        if (!ready || !view) return;
+        const VkDescriptorImageInfo im{sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        w.dstSet = set_;
+        w.dstBinding = 4;
+        w.descriptorCount = 1;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w.pImageInfo = &im;
+        vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
+        if (aggSet_) { w.dstSet = aggSet_; vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr); }
+        dustReady_ = true;
+    }
+
     // Avance les orbites exactes vers la date montrée (budget : pas d'un million d'années au plus). Hors d'une passe de dessin,
     // avant draw. years : années depuis J2000,0. Sans cet appel, les étoiles suivent les épicycles (comme avant).
     void advance(const Gpu& g, VkCommandBuffer cmd, double years, long budget) {
@@ -272,10 +342,13 @@ public:
     // Contrôle : la prochaine avance porte sur toutes les feuilles, pas seulement les visibles.
     void wantAllLeaves() { visible_.resize(file_.leafCount); for (uint32_t i = 0; i < file_.leafCount; ++i) visible_[i] = i; }
     const GaiaOrbits& orbits() const { return orbits_; }
+    uint32_t epicycleLeaves() const { return epicycleLeaves_; }
+    uint32_t leafCount() const { return file_.leafCount; }
 
     void release(const Gpu& g) {
         if (!ready) return;
         orbits_.release(g);
+        if (galaxiesMapped_) { vkUnmapMemory(g.dev, galaxies_.mem); destroy(g, galaxies_); galaxiesMapped_ = nullptr; }
         vkDestroyPipeline(g.dev, pipeline_, nullptr);
         if (restPipeline_) vkDestroyPipeline(g.dev, restPipeline_, nullptr);
         if (aggPipeline_) vkDestroyPipeline(g.dev, aggPipeline_, nullptr);
@@ -355,6 +428,12 @@ private:
     double shiftYears_ = 0;
     GaiaFile file_;
     GaiaOrbits orbits_;
+    bool dustReady_ = false;
+    Buffer galaxies_;
+    std::vector<int> leafGalaxy_;
+    std::vector<double> leafRadius_;
+    void* galaxiesMapped_ = nullptr;
+    uint32_t subClouds_ = 1;      // étoiles par sous-nuage (gaia.vert, GV_SOUS_NUAGE) ; 1 : pas de sous-nuage
     std::vector<uint32_t> visible_;      // feuilles dessinées à la dernière image : ce sont elles que les orbites exactes avancent
     uint32_t epicycleLeaves_ = 0;        // feuilles dessinées en épicycles à la dernière image (orbite exacte pas encore rattrapée)
     Buffer stars_, velocities_, colors_, indirect_[kRing];
@@ -429,9 +508,15 @@ private:
         visible_.clear();
         for (uint32_t i = 0; i < file_.leafCount; ++i) {
             const GaiaLeaf& L = file_.leaves[i];
-            const Vec3 o = moved ? shift_[i] : Vec3{0, 0, 0};
-            const double lo[3] = {L.mn[0] + o.x - grow - cam.pos.x, L.mn[1] + o.y - grow - cam.pos.y, L.mn[2] + o.z - grow - cam.pos.z};
-            const double hi[3] = {L.mx[0] + o.x + grow - cam.pos.x, L.mx[1] + o.y + grow - cam.pos.y, L.mx[2] + o.z + grow - cam.pos.z};
+            Vec3 o = moved ? shift_[i] : Vec3{0, 0, 0};
+            double lo[3] = {L.mn[0] + o.x - grow - cam.pos.x, L.mn[1] + o.y - grow - cam.pos.y, L.mn[2] + o.z - grow - cam.pos.z};
+            double hi[3] = {L.mx[0] + o.x + grow - cam.pos.x, L.mx[1] + o.y + grow - cam.pos.y, L.mx[2] + o.z + grow - cam.pos.z};
+            if (!leafGalaxy_.empty()) {      // galaxie voisine : la feuille suit le centre de sa galaxie et peut tourner autour
+                const float* g = static_cast<const float*>(galaxiesMapped_) + leafGalaxy_[i] * 16;
+                o = {static_cast<double>(g[4]) - g[0], static_cast<double>(g[5]) - g[1], static_cast<double>(g[6]) - g[2]};
+                const double c[3] = {g[4] - cam.pos.x, g[5] - cam.pos.y, g[6] - cam.pos.z}, r = leafRadius_[i];
+                for (int a = 0; a < 3; ++a) { lo[a] = c[a] - r; hi[a] = c[a] + r; }
+            }
             bool inside = true;
             for (const Vec3& p : planes) {      // coin le plus avancé du côté intérieur du plan
                 const double s = (p.x > 0 ? hi[0] : lo[0]) * p.x + (p.y > 0 ? hi[1] : lo[1]) * p.y + (p.z > 0 ? hi[2] : lo[2]) * p.z;
@@ -461,8 +546,8 @@ private:
             }
             if (take == 0) continue;
             visible_.push_back(i);
-            const VkDrawIndirectCommand c{take, 1, static_cast<uint32_t>(L.first), 0};
-            if (!moved || orbits_.rangeReady(i)) out[k++] = c;      // à jour (ou temps proche : ligne droite)
+            const VkDrawIndirectCommand c{take, subClouds_, static_cast<uint32_t>(L.first), 0};      // une instance par étoile du sous-nuage
+            if (!moved || !leafGalaxy_.empty() || orbits_.rangeReady(i)) out[k++] = c;      // à jour, temps proche, ou galaxie voisine
             else out[file_.leafCount - 1 - kb++] = c;               // pas encore rattrapée : épicycles en attendant
             drawn += take;
         }
@@ -511,17 +596,19 @@ private:
     }
 
     void createPipeline(const Gpu& g, VkFormat fmt) {
-        VkDescriptorSetLayoutBinding binds[4];      // 3 : états des orbites exactes
+        VkDescriptorSetLayoutBinding binds[6];      // 3 : états des orbites exactes ; 4 : poussière 3D (attachDust) ; 5 : galaxies voisines
         for (uint32_t i = 0; i < 4; ++i) binds[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+        binds[4] = {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+        binds[5] = {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        dl.bindingCount = 4;
+        dl.bindingCount = 6;
         dl.pBindings = binds;
         check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &setLayout_), "agencement Gaia");
-        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8};
+        const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}};
         VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         dp.maxSets = 2;
-        dp.poolSizeCount = 1;
-        dp.pPoolSizes = &ps;
+        dp.poolSizeCount = 2;
+        dp.pPoolSizes = ps;
         check(vkCreateDescriptorPool(g.dev, &dp, nullptr, &pool_), "réserve Gaia");
         VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
         da.descriptorPool = pool_;
@@ -540,12 +627,26 @@ private:
             w[i].pBufferInfo = &infos[i];
         }
         vkUpdateDescriptorSets(g.dev, 4, w, 0, nullptr);
+        // 5 : table des galaxies voisines (setGalaxies), mise à jour à chaque image ; vide sauf pour leurs étoiles (drapeau 32)
+        galaxies_ = createBuffer(g, kGalaxyBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        check(vkMapMemory(g.dev, galaxies_.mem, 0, kGalaxyBytes, 0, &galaxiesMapped_), "galaxies voisines");
+        std::memset(galaxiesMapped_, 0, kGalaxyBytes);
+        const VkDescriptorBufferInfo gi{galaxies_.buf, 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet wg{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        wg.dstSet = set_;
+        wg.dstBinding = 5;
+        wg.descriptorCount = 1;
+        wg.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        wg.pBufferInfo = &gi;
+        vkUpdateDescriptorSets(g.dev, 1, &wg, 0, nullptr);
         if (cellCount + skyCount) {      // même agencement : 0 = cases, 1 = vitesses (inutiles), 2 = couleurs
             check(vkAllocateDescriptorSets(g.dev, &da, &aggSet_), "jeu Gaia (lumière additionnée)");
             const VkDescriptorBufferInfo agg{cells_.buf, 0, VK_WHOLE_SIZE};
             for (auto& x : w) x.dstSet = aggSet_;
             w[0].pBufferInfo = &agg;
             vkUpdateDescriptorSets(g.dev, 4, w, 0, nullptr);
+            wg.dstSet = aggSet_;
+            vkUpdateDescriptorSets(g.dev, 1, &wg, 0, nullptr);
         }
 
         vs_ = shader(g, "gaia.vert.spv");

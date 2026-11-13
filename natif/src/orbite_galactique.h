@@ -6,7 +6,7 @@
 //   - départ : la position et la vitesse MESURÉES de l'étoile ;
 //   - ensuite : son orbite CALCULÉE dans la Galaxie (méthode des épicycles : un cercle autour du centre, plus une petite
 //     oscillation en distance et en hauteur), avec les fréquences de phys::galaxie::frequences (potentiel [modèle] du fil
-//     physique : bulbe + disque + halo, 230 km/s au Soleil) ;
+//     physique : bulbe + disque + halo, 232,8 km/s au Soleil) ;
 //   - raccord sans seuil : poids 1 − exp(−(t / 300 000 ans)²) entre la ligne droite mesurée (exacte aux temps courts) et
 //     l'orbite (qui prend le relais ensuite). À aucune date le mouvement ne s'arrête ni ne saute.
 // Limites, dites à l'écran : la méthode vaut pour les étoiles du disque sur orbite presque ronde ; l'oscillation est bornée

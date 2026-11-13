@@ -24,6 +24,8 @@
 #include "spheres.h"
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
+#include "galaxies_formes.h"
+#include "vieillissement.h"
 #include "rendu_fenetre.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -191,7 +193,20 @@ int runWindow(const WindowOptions& opt) {
     const std::string fusionDir = dataDir + (std::filesystem::exists(dataDir + "/fusion-toutes/fusion_centres.bin") ? "/fusion-toutes"
                                              : std::filesystem::exists(dataDir + "/fusion-3m/fusion_centres.bin") ? "/fusion-3m" : "/fusion");
     const bool hasReplay = replay.charger(fusionDir + "/fusion_centres.bin", "");      // centres et traceurs ; les étoiles : fusion_nuage.h
+    // Centres de référence des galaxies du Groupe local (centres_reference.h, PR 97) : chaque galaxie se déplace en bloc.
+    CentresReference centresRef;
+    if (centresRef.load(dataDir + "/centres_reference.bin")) sim.centres = &centresRef;
     sim.linkReplay(hasReplay ? &replay : nullptr, fusionDir + "/fusion_noms.tsv");
+    if (sim.centres) {      // contrôle chiffré : place d'aujourd'hui des centres contre la place mesurée du catalogue
+        for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
+            const int ci = CentresReference::indexOf(sim.bodies[static_cast<size_t>(i)].name);
+            phys::Vec3 c;
+            if (ci < 0 || !centresRef.centre(ci, 0.0, c)) continue;
+            const Vec3 w = Sim::fromGalactocentric(c), f0 = sim.bodies[static_cast<size_t>(i)].fixedPos;
+            const Vec3 d = w - f0;
+            std::printf("centres de reference : %s a t = 0, ecart au catalogue %.3f kpc\n", sim.bodies[static_cast<size_t>(i)].name.c_str(), std::sqrt(dot(d, d)) / 3261.5637769);
+        }
+    }
     if (opt.hasYears) sim.years = opt.years;
     if (opt.fovDeg > 0) sim.fovDeg = std::clamp(opt.fovDeg, Sim::kFovMin, Sim::kFovMax);
     sim.refreshEphemeris();
@@ -258,14 +273,55 @@ int runWindow(const WindowOptions& opt) {
     const bool gaiaOk = gaia.create(g, dataDir + "/gaia.bin", HdrTarget::kFormat);
     GaiaRenderer gaiaB;      // 93,9 M étoiles à parallaxe entre 5 et 10 erreurs (gaia_b.bin), si le fichier est là
     const bool gaiaBOk = gaiaOk && gaiaB.create(g, dataDir + "/gaia_b.bin", HdrTarget::kFormat, false);
+    // Voie lactée faite d'étoiles (Marc, 13/11/2026 : « pas une image ») : 4 M étoiles visibles du modèle
+    // (pipeline/natif/etoiles_visibles.py, contrat docs/contrat-etoiles-visibles.md), au format de Gaia : niveaux de
+    // détail par l'arbre en huit, orbites exactes sur la carte graphique, sans lumière additionnée en double.
+    GaiaRenderer milkyWayStars;
+    const bool milkyWayStarsOk = milkyWayStars.create(g, dataDir + "/vl_etoiles.bin", HdrTarget::kFormat, true, false);
+    sim.milkyWayStarCount = milkyWayStarsOk ? milkyWayStars.count : 0;
+    // Vieillissement de la lumière des étoiles du modèle (vieillissement.h) : facteurs par composante, 1 aujourd'hui.
+    Vieillissement vieillissement;
+    vieillissement.load(dataDir + "/vieillissement.tsv");
+    if (milkyWayStarsOk) milkyWayStars.enableSubClouds(16);      // chaque traceur : 16 étoiles en s'approchant (gaia.vert)
+    // Andromède, Triangle, Nuages faits de leurs étoiles visibles (tirées des vraies photos, pipeline/natif/etoiles_visibles_photos.py),
+    // autour d'aujourd'hui : sans orbite exacte (le potentiel de l'appli ne contient que la Voie lactée), elles s'effacent en
+    // quelques millions d'années (gaia_fiable.glsl) et la photo déplacée en bloc prend le relais, sans double lumière.
+    GaiaRenderer neighbourStars;
+    const bool neighbourStarsOk = neighbourStars.create(g, dataDir + "/voisines_etoiles.bin", HdrTarget::kFormat, false, false);
+    if (neighbourStarsOk) neighbourStars.enableSubClouds(16);
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
-    // Décision de Marc (12 novembre 2026, « je veux full ce qu'il y a réellement ») : la lueur d'ensemble de la Voie lactée
-    // est un modèle ajusté sur des mesures, avec trois points supposés (docs/gaia-voie-lactee.md) ; elle n'est donc PAS
-    // montrée. Seules les étoiles mesurées le sont. Le code du fil Gaia reste en place (kShowModelledMilkyWay).
-    constexpr bool kShowModelledMilkyWay = false;
+    // Décision de Marc (13 novembre 2026, « je veux le plus proche possible de la réalité, pas seulement le mesuré ») : la
+    // Galaxie entière est montrée dès aujourd'hui. Gaia ne mesure les distances que sur quelques milliers d'années-lumière ;
+    // le reste de la lueur vient du modèle ajusté sur des mesures (docs/gaia-voie-lactee.md), qui ne garde que la lumière
+    // qui manque aux étoiles dessinées une à une (gaia.bin + gaia_b.bin, voie_lactee.py). Montré en vue « réaliste »
+    // (Sim::bestLook), éteint en vue « 100 % mesuré ».
     MilkyWayRenderer milkyWay;
-    if (kShowModelledMilkyWay) milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
+    milkyWay.create(g, dataDir + "/voie_lactee.bin", HdrTarget::kFormat);
+    // Poussière 3D pour les étoiles du modèle ; liée aussi aux jeux Gaia pour que tous les jeux de ressources soient
+    // complets (leurs étoiles mesurées n'ont pas le drapeau 16 : elles ne la lisent pas).
+    if (milkyWayStarsOk) milkyWayStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
+    if (gaiaOk) gaia.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
+    if (gaiaBOk) gaiaB.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
+    if (neighbourStarsOk) neighbourStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
+    // Galaxies voisines faites de leurs étoiles (Marc, 13/11/2026 : « plus aucune galaxie en image ») : table par galaxie pour
+    // gaia.vert (centre à t = 0 et à la date montrée, axe et vitesse de rotation) ; rang = ordre de etoiles_visibles_photos.py.
+    // Axes : table unique (pipeline/constantes/univers.json) ; Petit Nuage : ligne de visée (pas d'axe mesuré).
+    // vrot, rrot : courbe de rotation (km/s, kpc) ; agit : agitation / vitesse de rotation (mêmes valeurs que etoiles_visibles_photos.py)
+    struct Voisine { const char* nom; double axe[3]; float vrot, rrot, agit; int body; Vec3 c0; };
+    Voisine voisines[4] = {{"Andromède (M31)", {-0.4102, -0.7623, -0.5007}, 250.0f, 6.0f, 30.0f / 250.0f, -1, {}},
+                           {"Galaxie du Triangle (M33)", {0.1886, 0.968, -0.1654}, 120.0f, 8.0f, 15.0f / 120.0f, -1, {}},
+                           {"Grand Nuage de Magellan", {-0.2778, -0.949, -0.1489}, 92.0f, 4.0f, 20.0f / 92.0f, -1, {}},
+                           {"Petit Nuage de Magellan", {0.388, -0.602, -0.698}, 25.0f, 3.0f, 1.0f, -1, {}}};
+    sim.neighbourStarCount = neighbourStarsOk ? neighbourStars.count : 0;
+    for (Voisine& v : voisines) {
+        for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
+            if (sim.bodies[static_cast<size_t>(i)].name == v.nom) v.body = i;
+        const int ci = CentresReference::indexOf(v.nom);
+        phys::Vec3 c;
+        if (ci >= 0 && centresRef.centre(ci, 0.0, c)) v.c0 = Sim::fromGalactocentric(c);
+        else if (v.body >= 0) v.c0 = sim.bodies[static_cast<size_t>(v.body)].fixedPos;
+    }
     sim.hasGaia = gaiaOk;
     sim.gaiaCellDispersionKms = gaiaOk ? gaia.cellDispersionKms : 0;
     sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
@@ -286,6 +342,7 @@ int runWindow(const WindowOptions& opt) {
     int skyLoaded = -1;
     if (opt.skyBand >= 0) sim.skyBand = opt.skyBand;
     if (opt.wholeGalaxy) sim.wholeGalaxy = true;
+    if (opt.uncertainty) sim.showClones = true;
     OrbitGpu orbits;      // orbite exacte de chaque étoile, calculée sur la carte graphique
     orbits.create(g, stars, sr, HdrTarget::kFormat);
     PlanetPoints planets;
@@ -293,6 +350,10 @@ int runWindow(const WindowOptions& opt) {
     GalaxyFile galaxyFile;
     GalaxyRenderer galaxies;
     if (openGalaxies(dataDir + "/galaxies.bin", galaxyFile)) galaxies.create(g, galaxyFile, HdrTarget::kFormat);
+    // Galaxies de forme mesurée faites de particules (galaxies_formes.h) : 532 427 du SGA-2020 et d'HyperLEDA.
+    GalaxyShapes galaxyShapes;
+    galaxyShapes.create(g, dataDir + "/galaxies_formes.bin", HdrTarget::kFormat);
+    sim.galaxyShapeCount = galaxyShapes.count;
     AsteroidRenderer asteroids;
     asteroids.create(g, dataDir + "/asteroides.bin", HdrTarget::kFormat);
     sim.asteroidEpochJd = asteroids.ready ? asteroids.epochJd : 0;
@@ -306,6 +367,7 @@ int runWindow(const WindowOptions& opt) {
     FusionCloud fusionCloud;
     if (hasReplay) fusionCloud.create(g, fusionDir, HdrTarget::kFormat);
     double fusionShare = 0;
+    double companionShare = 0;      // Andromède, Triangle et Grand Nuage du calcul, montrés seuls dès aujourd'hui
     // Voie lactée seule, calculée en entier par le fil physique (toutes ses étoiles s'attirent : les bras naissent d'eux-mêmes).
     // Elle apparaît entre 200 et 400 millions d'années, quand le dessin mesuré des bras s'efface, et cède la place au calcul
     // de la rencontre avec Andromède en même temps que les étoiles mesurées (Sim::starShare). Bras calculés : leur place
@@ -468,7 +530,10 @@ int runWindow(const WindowOptions& opt) {
             double shownYears = wanted;
             const double off = gaiaOk ? gaia.orbitEpochYears() : 0.0;
             const bool need = static_cast<long>(std::floor(wanted / OrbitGpu::kStepYears)) != orbits.stepLo ||
-                              (gaiaOk && (static_cast<long>(std::floor((wanted - off) / OrbitGpu::kStepYears)) != gaia.orbitStep() || gaia.orbitLagSteps() != 0));
+                              (gaiaOk && (static_cast<long>(std::floor((wanted - off) / OrbitGpu::kStepYears)) != gaia.orbitStep() || gaia.orbitLagSteps() != 0)) ||
+                              // étoiles visibles du modèle : leurs orbites exactes rattrapent la date même quand Gaia est à jour
+                              (milkyWayStarsOk && (static_cast<long>(std::floor((wanted - off) / OrbitGpu::kStepYears)) != milkyWayStars.orbitStep() ||
+                                                   milkyWayStars.orbitLagSteps() != 0));
             if (need) {
                 VkCommandBuffer once = beginOnce(g);
                 if (gaiaOk) {
@@ -483,6 +548,14 @@ int runWindow(const WindowOptions& opt) {
                 orbits.advance(once, shownYears, gaiaOk || test ? 1000000 : 64);
                 const double lo = static_cast<double>(orbits.stepLo) * OrbitGpu::kStepYears;
                 if (orbits.lagSteps) shownYears = std::clamp(shownYears, lo, lo + OrbitGpu::kStepYears - 1.0);
+                endOnce(g, once);
+            }
+            // Étoiles visibles du modèle : leurs orbites exactes avancent à CHAQUE image (le calcul ne fait que les feuilles
+            // dessinées à l'image d'avant, et retombe à « à jour » dès qu'il n'en voit pas) ; tant qu'une feuille n'a pas
+            // rattrapé la date, elle est dessinée en épicycles, valables seulement près d'aujourd'hui.
+            if (milkyWayStarsOk) {
+                VkCommandBuffer once = beginOnce(g);
+                milkyWayStars.advance(g, once, shownYears, test && !opt.hasPath ? 1000000 : 64);
                 endOnce(g, once);
             }
             holdOn = shownYears != wanted;
@@ -557,7 +630,18 @@ int runWindow(const WindowOptions& opt) {
                                       "direction et décalage vers le rouge mesurés ; distance calculée d'après le modèle d'univers (réglable), agrandie avec l'expansion"});
         }
         const Camera cam = sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height);
-        const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain()), sc.extent.height, sim.years);
+        // Exposition « photo » : temps de pose choisi pour que la galaxie résolue la plus brillante à l'écran ait une brillance
+        // moyenne de 0,3 (avant l'étirement asinh) ; la même pose pour tout ce qui est à l'écran (les étoiles saturent, comme
+        // sur une photo). Aucune lumière n'est ajoutée ni retirée : seule la pose change. Réglable par crans (exposureEv).
+        {
+            const double base = kExposure * sim.brightnessBoost() * sim.fieldGain();
+            double want = 1.0;
+            if (sim.bestLook && sim.photoExposure && galaxyShapes.maxSurface > 0)
+                want = std::clamp(0.3 / (galaxyShapes.maxSurface * base), 1.0, 1.0e6);
+            sim.photoGain = test ? want : sim.photoGain + (want - sim.photoGain) * std::min(1.0, 4.0 * dt);      // sans à-coup
+            if (!(sim.bestLook && sim.photoExposure)) sim.photoGain = 1.0;
+        }
+        const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain() * sim.photoGain * std::pow(2.0, sim.exposureEv)), sc.extent.height, sim.years);
 
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
@@ -577,13 +661,20 @@ int runWindow(const WindowOptions& opt) {
         // Étoiles du calcul de la fusion : la part que les étoiles mesurées leur laissent (Sim::starShare), éteinte quand on
         // regarde de trop près (moins de 3 000 années-lumière : un point du calcul n'est pas une étoile).
         fusionShare = (sim.wholeGalaxy ? 1.0 : 1.0 - sim.starShare()) * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0);
-        fusionCloud.update(g, sim.replayGa(), fusionShare);
+        // Les autres galaxies du Groupe local dès aujourd'hui (Marc, 13/11/2026 : « une seule galaxie, sa vraie forme, à sa
+        // place la plus probable ») : les points de M31, M33 et du Grand Nuage, au départ du calcul (positions et vitesses
+        // mesurées, galaxies modèles tirées des paramètres publiés), pendant que la Voie lactée est montrée par Gaia et sa lueur.
+        // Vue « meilleur rendu » seulement : ce sont des galaxies modèles, pas des étoiles mesurées une à une.
+        companionShare = sim.bestLook && !sim.wholeGalaxy ? sim.starShare() * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0) : 0.0;
+        sim.companionShare = companionShare;
+        fusionCloud.update(g, sim.replayGa(), std::max(fusionShare, companionShare));
         loneShare = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) *
                                         sim.starShare() * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0)
                                   : 0.0;
         loneGalaxy.update(g, sim.replayGa(), loneShare);
         sim.loneGalaxyShare = loneGalaxy.count ? loneShare : 0.0;
-        if (milkyWayCentre >= 0) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
+        if (milkyWayCentre >= 0 && sim.showClones) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
+        else clones.count = 0;
         if (milkyWayCentre >= 0) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
         sim.armTracersShown = armTracers.count > 0;
         tasksTimer += dt;
@@ -627,10 +718,46 @@ int runWindow(const WindowOptions& opt) {
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
         if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
+        if (!skyOnly && galaxyShapes.ready) {
+            galaxyShapes.prepare(cam, galaxies, sc.extent.height);
+            float aL[16], aT[16];
+            vieillissement.factors(sim.replayGa(), aL, aT);
+            galaxyShapes.ageing[0] = aL[1]; galaxyShapes.ageing[1] = aL[2]; galaxyShapes.ageing[2] = aT[1]; galaxyShapes.ageing[3] = aT[2];
+            galaxyShapes.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);
+            sim.galaxyShapesShown = galaxyShapes.shown;
+        }
+        float ageLum[16], ageTeff[16];
+        vieillissement.factors(sim.replayGa(), ageLum, ageTeff);
+        sim.ageingShown = vieillissement.ready && std::fabs(sim.replayGa()) > 0.05;
+        if (milkyWayStarsOk) { milkyWayStars.setAgeing(ageLum, ageTeff); milkyWayStars.setSunGalacto(sim.sunGalacto()); }
+        if (neighbourStarsOk) neighbourStars.setAgeing(ageLum, ageTeff);
+        if (!skyOnly && neighbourStarsOk && sim.bestLook) {      // galaxies voisines faites d'étoiles, à toute date (gaia.vert, drapeau 32)
+            float table[4 * 16] = {};
+            for (int k = 0; k < 4; ++k) {
+                const Voisine& v = voisines[k];
+                const Vec3 ct = v.body >= 0 && sim.visible(v.body) ? sim.position(v.body) : v.c0;
+                const Vec3 a = orbite::versEcliptique({v.axe[0], v.axe[1], v.axe[2]});      // axe galactique -> écliptique
+                const float row[16] = {static_cast<float>(v.c0.x), static_cast<float>(v.c0.y), static_cast<float>(v.c0.z), 0,
+                                       static_cast<float>(ct.x), static_cast<float>(ct.y), static_cast<float>(ct.z), 0,
+                                       static_cast<float>(a.x), static_cast<float>(a.y), static_cast<float>(a.z), v.vrot,
+                                       v.rrot, v.agit, 0, 0};
+                std::memcpy(table + k * 16, row, sizeof(row));
+            }
+            neighbourStars.setGalaxies(table, 4);
+            neighbourStars.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
+        }
         if (!skyOnly && sim.starShare() > 0) {      // étoiles Gaia sur leur orbite calculée ; part qui baisse quand le calcul de la fusion prend le relais
             // Même facteur d'éclat pour la lueur de la Galaxie et pour les étoiles : la lueur est le complément exact des
             // étoiles dessinées (fil Gaia) ; le facteur revient à 1 entre 3 000 et 30 000 années-lumière (Sim::brightnessBoost).
-            milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
+            // Lueur du modèle : cède la place à la Voie lactée calculée en entier quand celle-ci entre (200 à 400 Ma), pour
+            // ne pas compter deux fois la même lumière.
+            const double loneTime = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) : 0.0;
+            // Avec les étoiles visibles du modèle, plus de lueur : la Voie lactée est faite d'étoiles.
+            sim.milkyWayModelShare = sim.bestLook && !milkyWayStarsOk ? sim.starShare() * (1.0 - loneTime) : 0.0;
+            // vraies photos : tant que les étoiles mesurées sont montrées ; à toute date si les centres de référence les déplacent
+            // avec leurs étoiles visibles (autour d'aujourd'hui), la photo n'a que la part qu'elles laissent
+            if (sim.milkyWayModelShare > 0)
+                milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayModelShare), sim.years);
             gaia.improved = sim.bestLook;
             gaiaSky.update(cam, sim.fovDeg, !sim.deepTime());
             gaia.hideSkyOnly = gaiaSky.active && gaiaSky.shownStars > 0;
@@ -645,15 +772,27 @@ int runWindow(const WindowOptions& opt) {
                 gaiaB.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
             }
         }
+        // Étoiles visibles de la Voie lactée (contrat docs/contrat-etoiles-visibles.md : toujours dessinées, à toute date) : sur
+        // leur orbite exacte, leur lumière vieillie (vieillissement.h). Elles remplacent alors les points du calcul de la fusion
+        // et de la « Voie lactée seule » pour la Voie lactée (aucune lumière comptée deux fois).
+        sim.milkyWayStarShare = milkyWayStarsOk && sim.bestLook ? 1.0 : 0.0;
+        if (!skyOnly && sim.milkyWayStarShare > 0)
+            milkyWayStars.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayStarShare), sim.years);
         if (!skyOnly && sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
             PushConstants orbiting = pc;
             orbiting.par[0] *= static_cast<float>(sim.starShare());
             orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years));      // années depuis J2000, date des positions
         }
-        if (!skyOnly && loneGalaxy.count && milkyWayCentre >= 0)
+        if (!skyOnly && loneGalaxy.count && milkyWayCentre >= 0 && sim.milkyWayStarShare <= 0)
             loneGalaxy.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, loneShare, sc.extent.width, sc.extent.height);
-        if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0)
-            fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height);
+        if (!skyOnly && fusionCloud.count && milkyWayCentre >= 0 && !(sim.milkyWayStarShare > 0 && neighbourStarsOk))
+        {
+            // avec les centres de référence, les autres galaxies sont leurs photos déplacées en bloc : seuls les points de la Voie lactée
+            fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, fusionShare, sc.extent.width, sc.extent.height, 0,
+                             sim.centres && neighbourStarsOk ? fusionCloud.milkyWayPoints : 0u);
+            if (!neighbourStarsOk)      // sans les étoiles des voisines : les points du calcul montrent les autres galaxies
+                fusionCloud.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, companionShare, sc.extent.width, sc.extent.height, fusionCloud.milkyWayPoints);
+        }
         if (!skyOnly && (fusionPoints.count || clones.count || armTracers.count)) {
             PushConstants still = pc;      // les étoiles du calcul sont déjà à leur place : pas de mouvement propre à ajouter
             still.par[2] = 0;
@@ -675,7 +814,7 @@ int runWindow(const WindowOptions& opt) {
         transition(cmd, final.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, final.view, sc.extent);
-        screen.draw(cmd, sc.extent);
+        screen.draw(cmd, sc.extent, sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv > 0) ? 1.0f : 0.0f);      // étirement « photo » seulement quand une galaxie résolue règle la pose
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
         vkCmdEndRendering(cmd);
         // 3. Copie dans la fenêtre.
@@ -738,6 +877,21 @@ int runWindow(const WindowOptions& opt) {
         }
         std::printf("premier passage d'Andromede : %.3f milliards d'annees ; etoiles mesurees montrees jusqu'a %.3f (fondu depuis %.3f) ; part des etoiles mesurees a cette date : %.2f\n",
                     sim.firstPassageGa, sim.starEraEndYears / 1.0e9, sim.starEraFadeYears / 1.0e9, sim.starShare());
+        if (milkyWayStarsOk)
+        {
+            std::printf("etoiles du modele : orbites exactes au pas %ld, retard %ld pas, pretes %d ; feuilles en epicycles %u sur %u\n", milkyWayStars.orbitStep(),
+                        milkyWayStars.orbitLagSteps(), milkyWayStars.orbitReady() ? 1 : 0, milkyWayStars.epicycleLeaves(), milkyWayStars.leafCount());
+            // contrôle du repère : Soleil selon l'appli (CPU), Soleil selon la carte graphique (dernier état), centre des étoiles
+            const phys::Vec3 suc = sim.sunGalacto();
+            const auto& ob = milkyWayStars.orbits();
+            const auto sg = ob.readBack(g, 1, ob.count - 1);
+            const uint32_t m = std::min<uint32_t>(ob.count - 1, 400000);
+            const auto st = ob.readBack(g, m, 0);
+            double cx = 0, cy = 0, cz = 0;
+            for (uint32_t i = 0; i < m; ++i) { cx += st[i * 8]; cy += st[i * 8 + 1]; cz += st[i * 8 + 2]; }
+            std::printf("repere : Soleil appli (%.3f, %.3f, %.3f) kpc ; Soleil carte (%.3f, %.3f, %.3f) ; centre des etoiles (%.3f, %.3f, %.3f)\n",
+                        suc.x, suc.y, suc.z, sg[0], sg[1], sg[2], cx / m, cy / m, cz / m);
+        }
         std::printf("fenetre cachee %ux%u : %d images en %.3f s, soit %.1f images par seconde ; astre suivi : %s ; date : %s ; ephemerides : %s\nPASSE\n",
                     sc.extent.width, sc.extent.height, frame, total, frame / total, sim.bodies[static_cast<size_t>(sim.focus)].name.c_str(),
                     frDate(sim.years).c_str(), !hasSpk ? spkError.c_str() : sim.ephemValid ? "lues" : "hors plage");
@@ -754,6 +908,8 @@ int runWindow(const WindowOptions& opt) {
     planets.release(g);
     gaiaSky.destroy(g);
     if (gaiaBOk) gaiaB.release(g);
+    if (milkyWayStarsOk) milkyWayStars.release(g);
+    if (neighbourStarsOk) neighbourStars.release(g);
     gaia.release(g);
     milkyWay.release(g);
     fusionPoints.release(g);
@@ -763,6 +919,7 @@ int runWindow(const WindowOptions& opt) {
     armTracers.release(g);
     asteroids.release(g);
     galaxies.release(g);
+    galaxyShapes.release(g);
     spheres.release(g);
     if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
         const uint32_t n = std::min<uint32_t>(20000, orbits.count);
