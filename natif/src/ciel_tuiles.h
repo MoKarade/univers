@@ -32,6 +32,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <unordered_map>
 
 namespace {
@@ -72,6 +73,20 @@ inline uint64_t healpixInterleave(uint32_t x, uint32_t y) {
 // std::string serait lue dans la page de code ANSI : on passe par les caractères larges.
 inline std::filesystem::path utf8Path(const std::string& s) {
     return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()), s.size()));
+}
+
+// halfToFloat (float16 → float) : commun.h.
+inline float percentile995(const std::vector<uint16_t>& d) {
+    std::vector<float> v;
+    v.reserve(d.size());
+    for (uint16_t h : d) {
+        const float x = halfToFloat(h);
+        if (std::isfinite(x)) v.push_back(x);
+    }
+    if (v.empty()) return 0;
+    const size_t k = static_cast<size_t>(0.995 * (v.size() - 1));
+    std::nth_element(v.begin(), v.begin() + static_cast<std::ptrdiff_t>(k), v.end());
+    return v[k];
 }
 
 class SkyTileStream {
@@ -143,11 +158,22 @@ public:
         check(vkMapMemory(g.dev, staging_.mem, 0, tileBytes_ * kBatch, 0, &stagingMap_), "tuiles du ciel");
         slotKey_.assign(slots_, kNone);
         slotSeen_.assign(slots_, 0);
+        slotHigh_.assign(slots_, 0.0f);
         state_.clear();
         stop_ = false;
         for (auto& t : workers_) t = std::thread([this] { run(); });
         active = true;
         return true;
+    }
+
+    // Le plus fort des 99,5e centiles des tuiles demandées à cette image (valeur mesurée), 0 s'il n'y en a pas : sert à
+    // relever le haut de l'échelle de couleur en vue serrée, pour ne pas saturer un noyau de galaxie.
+    double viewHigh() const {
+        if (!active) return 0;
+        float h = 0;
+        for (uint32_t s = 0; s < slots_; ++s)
+            if (slotKey_[s] != kNone && slotSeen_[s] == frame_) h = std::max(h, slotHigh_[s]);
+        return h / scale;
     }
 
     VkDescriptorBufferInfo pageInfo() const { return {page_.buf, 0, pages_ * 4}; }
@@ -264,6 +290,7 @@ private:
     struct Read {
         uint64_t key;
         std::vector<uint16_t> data;      // vide : lecture ratée
+        float high = 0;                  // 99,5e centile des valeurs mesurées de la tuile (valeur stockée, avant facteur)
     };
     static constexpr uint32_t kBatch = 32;              // tuiles envoyées au plus par image
     static constexpr int kAbsent = -2, kLoading = -1;
@@ -277,6 +304,7 @@ private:
     uint32_t* pageMap_ = nullptr;
     void* stagingMap_ = nullptr;
     std::vector<uint64_t> slotKey_, slotSeen_;
+    std::vector<float> slotHigh_;
     std::unordered_map<uint64_t, int> state_;      // clé → emplacement (≥ 0), kLoading ou kAbsent
     uint64_t frame_ = 0;
 
@@ -329,6 +357,7 @@ private:
                 r.data.resize(static_cast<size_t>(width) * width);
                 f.read(reinterpret_cast<char*>(r.data.data()), static_cast<std::streamsize>(tileBytes_));
                 if (!f) r.data.clear();
+                else r.high = percentile995(r.data);
             }
             {
                 std::lock_guard<std::mutex> lk(mu_);
@@ -366,6 +395,7 @@ private:
             }
             slotKey_[slot] = r.key;
             slotSeen_[slot] = frame_;
+            slotHigh_[slot] = r.high;
             it->second = slot;
             std::memcpy(static_cast<char*>(stagingMap_) + used * tileBytes_, r.data.data(), tileBytes_);
             copies.push_back({used * tileBytes_, static_cast<VkDeviceSize>(slot) * tileBytes_, tileBytes_});

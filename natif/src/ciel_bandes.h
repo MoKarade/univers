@@ -392,6 +392,11 @@ public:
             }
             l.push_back(b);
         }
+        if (viewHigh_ > 0) {
+            std::snprintf(b, sizeof b, "Haut de l'échelle relevé à %.3g %s pour cette vue (99,5 %% des pixels mesurés à l'écran en dessous), au lieu de %.3g pour le ciel entier.",
+                          viewHigh_, info.unit.c_str(), info.hi);
+            l.push_back(b);
+        }
         std::snprintf(b, sizeof b, "Fausses couleurs, échelle %s de %.3g à %.3g %s. Hachures : pas de mesure.",
                       info.scaleKind == "log" ? "logarithmique" : (info.scaleKind == "asinh" ? "asinh (log au-dessus du seuil de douceur, linéaire autour de zéro)" : "linéaire"),
                       info.lo, info.hi, info.unit.c_str());
@@ -451,7 +456,14 @@ public:
         std::memcpy(u.up, uu, 16);
         std::memcpy(u.fwd, ff, 16);
         u.scale[0] = static_cast<float>(info.lo);
-        u.scale[1] = static_cast<float>(info.hi);
+        // Vue serrée sur des tuiles fines : si le plus brillant mesuré à l'écran dépasse le haut de l'échelle du ciel entier,
+        // on relève le haut (sinon un noyau de galaxie sature) ; jamais abaissé. La légende le dit (viewHigh_).
+        viewHigh_ = 0;
+        if (tiles_.active && tiles_.shownOrder) {
+            const double vh = tiles_.viewHigh();
+            if (vh > info.hi) viewHigh_ = vh;
+        }
+        u.scale[1] = static_cast<float>(viewHigh_ > 0 ? viewHigh_ : info.hi);
         u.scale[2] = info.scaleKind == "asinh" ? 2.0f : (info.scaleKind == "log" ? 1.0f : 0.0f);
         u.scale[3] = static_cast<float>(alpha);
         u.grid[0] = static_cast<float>(info.nside);
@@ -565,6 +577,7 @@ public:
 
 private:
     static constexpr int kRing = 4;
+    double viewHigh_ = 0;      // haut de l'échelle relevé pour la vue (0 : celui du ciel entier)
     static constexpr double kSourcesOnScreen = 1000.0;      // sources d'un catalogue à l'écran, à peu près, en champ large
     const Gpu* gpu_ = nullptr;
     SkyTileStream tiles_;
