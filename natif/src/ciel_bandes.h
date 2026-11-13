@@ -461,7 +461,7 @@ public:
         viewHigh_ = 0;
         if (tiles_.active && tiles_.shownOrder) {
             const double vh = tiles_.viewHigh();
-            if (vh > info.hi) viewHigh_ = vh;
+            if (vh > 1.05 * info.hi) viewHigh_ = vh;      // relèvement de moins de 5 % : on garde l'échelle du ciel entier
         }
         u.scale[1] = static_cast<float>(viewHigh_ > 0 ? viewHigh_ : info.hi);
         u.scale[2] = info.scaleKind == "asinh" ? 2.0f : (info.scaleKind == "log" ? 1.0f : 0.0f);
