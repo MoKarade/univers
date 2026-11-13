@@ -57,7 +57,7 @@ Get-ChildItem "$Donnees\tuiles" -Directory -ErrorAction SilentlyContinue | ForEa
     New-Item -ItemType Directory -Force "$Cible\tuiles\$($_.Name)" | Out-Null
     Get-ChildItem $_.FullName -Filter *.idx -File | ForEach-Object { Copier-SiChange $_.FullName "$Cible\tuiles\$($_.Directory.Name)\$($_.Name)" }
 }
-foreach ($f in 'gaia.bin', 'gaia_agrege.bin', 'voie_lactee.bin') { if (Test-Path "$Gaia\$f") { Copier-SiChange "$Gaia\$f" "$Cible\$f" } }
+foreach ($f in 'gaia.bin', 'gaia_b.bin', 'gaia_agrege.bin', 'voie_lactee.bin') { if (Test-Path "$Gaia\$f") { Copier-SiChange "$Gaia\$f" "$Cible\$f" } }
 # Vue de départ : la ceinture d'Orion (étoile nommée de la page), si elle est dans le catalogue.
 $meta = Get-Content "$Cible\etoiles.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $orion = $meta.nommees | Where-Object { $_.n -like 'Alnilam*' } | Select-Object -First 1

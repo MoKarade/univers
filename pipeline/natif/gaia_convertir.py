@@ -30,6 +30,10 @@ Format gaia.bin (petit-boutiste), sections alignées sur 64 octets :
   résumés (528 octets par feuille) : centre de lumière x, y, z (f32), réservé (f32), lumière 10^(-0,4 M) par tranche (64 f32),
                         pas de couleur moyen par tranche (64 f32) ; tranches et bornes : en-tête, octets 1056 à 1067
 
+Jeu « B » (--parquet, docs/plan-gaia-complet.md, 13/11/2026) : <dossier des parts> est alors le fichier gaia_b.parquet de
+gaia_tuiles.py (étoiles à parallaxe entre 5 et 10 erreurs, avec leurs erreurs) ; drapeau 8 = « distance à 10-20 % près ».
+Le rééquilibrage vu de loin est calculé sur ces étoiles seules.
+
 Usage : python gaia_convertir.py <dossier des parts> <etoiles.bin> <passband.dat> <zeropt.dat> <dossier de sortie>
         [--erreurs <dossier du jeu erreurs>] [--seuil-vitesse 10] [--reequilibre oui|non]
 """
@@ -78,6 +82,14 @@ def lire_parts(dossier, erreurs=None):
                 with fits.open(os.path.join(extra, os.path.basename(p)), memmap=False) as he:
                     for k, v in _aligne(np.asarray(d['source_id']), he[1].data, liste).items(): cols[k].append(v)
     return {k: np.concatenate(v) for k, v in cols.items()}
+
+
+def lire_parquet(chemin):
+    """Jeu B : toutes les colonnes, erreurs comprises, dans un seul fichier Parquet (gaia_tuiles.py)."""
+    import pyarrow.parquet as pq
+    tb = pq.read_table(chemin, columns=['source_id', 'ra', 'dec', 'parallax', 'pmra', 'pmdec', 'radial_velocity',
+                                        'phot_g_mean_mag', 'bp_rp'] + ERREURS)
+    return {c: tb.column(c).to_numpy(zero_copy_only=False) for c in tb.column_names}
 
 
 def temperatures(passband, zeropt):
@@ -161,12 +173,14 @@ def main():
     dossier, etoiles_bin, passband, zeropt, sortie = sys.argv[1:6]
     opt = dict(zip(sys.argv[6::2], sys.argv[7::2]))
     erreurs, reequilibre = opt.get('--erreurs'), opt.get('--reequilibre', 'oui') == 'oui'
+    jeu_b = opt.get('--parquet', 'non') == 'oui'
+    if jeu_b: erreurs = True      # les erreurs sont dans le même fichier
     seuil = float(opt.get('--seuil-vitesse', SEUIL_VITESSE))
     t0 = time.time()
-    G = lire_parts(dossier, erreurs)
+    G = lire_parquet(dossier) if jeu_b else lire_parts(dossier, erreurs)
     n_total = len(G['ra'])
     print(f'{n_total} étoiles lues ({time.time() - t0:.0f} s)')
-    if n_total != ATTENDU: sys.exit(f'{n_total} étoiles lues, {ATTENDU} attendues (compte du 12 novembre 2026) : téléchargement incomplet')
+    if not jeu_b and n_total != ATTENDU: sys.exit(f'{n_total} étoiles lues, {ATTENDU} attendues (compte du 12 novembre 2026) : téléchargement incomplet')
     T = temperatures(passband, zeropt)
 
     ra, de, plx = np.radians(G['ra']), np.radians(G['dec']), G['parallax']
@@ -219,7 +233,7 @@ def main():
     # Éclat rééquilibré vu de loin (drapeau 4, gaia_reequilibre.py) : HYPOTHÈSE dite à l'écran, aucune étoile ajoutée.
     uk = np.stack([cd[k] * ca[k], cd[k] * sa[k], sd[k]], 1)
     dm = gr.decalage_mmag(gr.poids(gr.cles(uk, 1000.0 / plx[k], M[k]))) if reequilibre else np.zeros(len(k), np.int16)
-    rec['f'] = a_rv[k].astype(np.uint8) | (fiable[k].astype(np.uint8) << 1) | ((dm != 0).astype(np.uint8) << 2)
+    rec['f'] = a_rv[k].astype(np.uint8) | (fiable[k].astype(np.uint8) << 1) | ((dm != 0).astype(np.uint8) << 2) | (np.uint8(8) if jeu_b else np.uint8(0))
     vel = np.zeros((len(k), 4), '<i2')
     vel[:, :3] = np.clip(np.rint(v[k] / V_PAS), -32767, 32767)
     vel[:, 3] = dm

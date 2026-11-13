@@ -256,6 +256,8 @@ int runWindow(const WindowOptions& opt) {
     // là, le dessin d'origine ne garde que le catalogue principal (Gaia en a retiré les doublons).
     GaiaRenderer gaia;
     const bool gaiaOk = gaia.create(g, dataDir + "/gaia.bin", HdrTarget::kFormat);
+    GaiaRenderer gaiaB;      // 93,9 M étoiles à parallaxe entre 5 et 10 erreurs (gaia_b.bin), si le fichier est là
+    const bool gaiaBOk = gaiaOk && gaiaB.create(g, dataDir + "/gaia_b.bin", HdrTarget::kFormat, false);
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
     // Décision de Marc (12 novembre 2026, « je veux full ce qu'il y a réellement ») : la lueur d'ensemble de la Voie lactée
@@ -267,7 +269,7 @@ int runWindow(const WindowOptions& opt) {
     sim.hasGaia = gaiaOk;
     sim.gaiaCellDispersionKms = gaiaOk ? gaia.cellDispersionKms : 0;
     sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
-    sim.gaiaCount = gaiaOk ? gaia.count : 0;
+    sim.gaiaCount = gaiaOk ? gaia.count + (gaiaBOk ? gaiaB.count : 0) : 0;
     sim.gaiaReliableCount = gaiaOk ? gaia.reliableCount : 0;
     sim.gaiaReliableLight = gaiaOk ? gaia.reliableLight : 0;
     sim.gaiaRebalancedCount = gaiaOk ? gaia.rebalancedCount : 0;
@@ -297,7 +299,7 @@ int runWindow(const WindowOptions& opt) {
     sim.asteroidCount = asteroids.ready ? asteroids.count : 0;
     // Complétude par échelle : comptée une fois sur les données réellement chargées (après les astéroïdes, pour qu'ils
     // soient comptés), lue ensuite par l'interface.
-    const auto rapportCompletude = completude::rapport(completude::compter(sim, galaxies.count, gaia.count, gaia.cellCount ? dataDir + "/gaia_agrege.bin" : "", gaiaOk ? dataDir + "/gaia.bin" : "", dataDir));
+    const auto rapportCompletude = completude::rapport(completude::compter(sim, galaxies.count, gaia.count + (gaiaBOk ? gaiaB.count : 0), gaia.cellCount + gaia.skyCount ? dataDir + "/gaia_agrege.bin" : "", gaiaOk ? dataDir + "/gaia.bin" : "", dataDir));
     sim.completeness = &rapportCompletude;
     FusionPoints fusionPoints;
     fusionPoints.create(g, 0);      // remplacé par fusionCloud (les images du calcul ne sont plus chargées en mémoire)
@@ -618,6 +620,10 @@ int runWindow(const WindowOptions& opt) {
             sim.gaiaSkyLimit = gaiaSky.gLimit;
             gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
             gaiaSky.draw(cmd, cam, sc.extent.height, pc.par[0]);
+            if (gaiaBOk) {
+                gaiaB.improved = sim.bestLook;
+                gaiaB.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
+            }
         }
         if (!skyOnly && sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
             PushConstants orbiting = pc;
@@ -727,6 +733,7 @@ int runWindow(const WindowOptions& opt) {
     screen.release(g);
     planets.release(g);
     gaiaSky.destroy(g);
+    if (gaiaBOk) gaiaB.release(g);
     gaia.release(g);
     milkyWay.release(g);
     fusionPoints.release(g);

@@ -148,7 +148,10 @@ public:
     static constexpr uint32_t kCellSpread = 8;
     static constexpr double kAggregateYears = 3.0e6;      // lumière additionnée montrée à moins de 3 millions d'années des mesures      // même valeur que SPREAD dans gaia_agrege.vert
 
-    bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
+    // full = false : jeu « B » (gaia_b.bin, étoiles à distance connue à 10-20 % près, docs/plan-gaia-complet.md) : ni
+    // lumière additionnée (déjà chargée par le jeu principal), ni orbites exactes (aucune n'est fiable : elles s'effacent
+    // loin d'aujourd'hui ; en attendant, épicycles) ; cela garde 3 Go de mémoire graphique.
+    bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat, bool full = true) {
         if (!openGaia(path, file_)) return false;
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(g.pd, &props);
@@ -193,10 +196,11 @@ public:
                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         }
         for (int i = 0; i < kRing; ++i) check(vkMapMemory(g.dev, indirect_[i].mem, 0, VK_WHOLE_SIZE, 0, &mapped_[i]), "dessins indirects");
-        loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
+        if (full) loadAggregate(g, path.substr(0, path.find_last_of("\\/") + 1) + "gaia_agrege.bin");
         std::vector<std::pair<uint32_t, uint32_t>> leafRanges(file_.leafCount);
         for (uint32_t i = 0; i < file_.leafCount; ++i) leafRanges[i] = {static_cast<uint32_t>(file_.leaves[i].first), file_.leaves[i].n};
-        orbits_.create(g, file_.stars, file_.velocities, file_.n, std::move(leafRanges), cellPos_, cellVel_);      // étoiles, puis cases, puis le Soleil      // orbites exactes : états de départ calculés dans un fil à part
+        if (full) orbits_.create(g, file_.stars, file_.velocities, file_.n, std::move(leafRanges), cellPos_, cellVel_);
+        else orbits_.create(g, file_.stars, file_.velocities, 0, {});      // le Soleil seul : la liaison 3 du shader reste valide      // étoiles, puis cases, puis le Soleil      // orbites exactes : états de départ calculés dans un fil à part
         createPipeline(g, hdrFormat);
         ready = true;
         return true;

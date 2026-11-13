@@ -56,7 +56,8 @@ constexpr int kCometesDisparues = 39, kCometesOrbiteOuverte = 2244, kCometesSans
 constexpr int kSondesSortie = 5;                           // NASA : Pioneer 10 et 11, Voyager 1 et 2, New Horizons (sortie du système solaire)
 constexpr double kObjets10pc = 540;                        // Reylé et al. 2021, A&A 650 A201 : étoiles, naines brunes, exoplanètes
 constexpr double kSourcesGaiaDr3 = 1811709771;             // ESA, Gaia DR3 (cosmos.esa.int/web/gaia/dr3)
-constexpr double kGaiaSourcesAdditionnees = 1707918961;    // gaia_agreger.py du 12/11/2026 : toutes les autres sources avec magnitude G
+constexpr double kGaiaSourcesAdditionnees = 1707918961;
+constexpr double kGaiaJeuB = 93861853;                      // gaia_tuiles.py du 13/11/2026 : parallaxe entre 5 et 10 erreurs    // gaia_agreger.py du 12/11/2026 : toutes les autres sources avec magnitude G
 constexpr double kGaiaVitessesRadiales = 25878867;         // gaia.bin du 12/11/2026 : vitesses radiales mesurées (docs/gaia-voie-lactee.md)
 constexpr double kEtoilesVoieLacteeMin = 1.0e11, kEtoilesVoieLacteeMax = 4.0e11;   // NASA Goddard (Blueshift) : estimation
 constexpr double kGalaxiesGroupeLocal = 113;               // Local Volume Database v1.1.2 (Pace, 04/11/2026) : confirmées, < 1 Mpc
@@ -459,14 +460,18 @@ inline Echelle voieLactee(const Comptes& c) {
     Echelle e;
     e.nom = "Voie lactée";
     const double n = etoilesDessinees(c);
-    const double additionnees = c.agrege ? kGaiaSourcesAdditionnees : 0;
+    // Depuis le 13/11/2026, les sources à parallaxe entre 5 et 10 erreurs sont dessinées une à une (gaia_b.bin) : elles sont
+    // dans etoilesGaia et ne sont plus additionnées (gaia_agrege.bin sans cases en volume). Les additionnées sont alors
+    // celles sans distance mesurée seulement.
+    const bool jeuB = c.agrege && c.additionneesPlacees == 0 && double(c.etoilesGaia) > 1.5e8;
+    const double additionnees = c.agrege ? kGaiaSourcesAdditionnees - (jeuB ? kGaiaJeuB : 0.0) : 0;
     e.part = (c.agrege ? double(c.etoilesGaia) + additionnees : n) / kSourcesGaiaDr3;      /* additionnées : Gaia seul (le catalogue principal y est déjà) */
     if (c.agrege)
         // Depuis gaia_agrege v2 : seules les sources dont la distance est mesurée (parallaxe supérieure à 5 fois son erreur)
         // sont additionnées à leur place ; les autres n'ont pas de distance mesurée et ne sont montrées que dans le ciel
         // d'aujourd'hui, vu du Soleil.
         e.complet = pourcent(e.part) + " des sources de Gaia DR3 : " + entier(double(c.etoilesGaia)) + " vues une à une, " +
-                    entier(double(c.additionneesPlacees)) + " additionnées à leur distance, " +
+                    (jeuB ? std::string() : entier(double(c.additionneesPlacees)) + " additionnées à leur distance, ") +
                     entier(additionnees - double(c.additionneesPlacees)) + " sans distance mesurée (ciel d'aujourd'hui seulement)";
     else
         e.complet = pourcent(e.part) + " des sources de Gaia DR3 (" + entier(n) + " étoiles)";

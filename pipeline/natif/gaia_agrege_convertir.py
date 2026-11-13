@@ -85,6 +85,10 @@ def pas_couleur(fc, fcn):
 def main():
     dossier, gaia_bin, sortie = sys.argv[1:4]
     D = lire(dossier, 'distance')
+    if '--sans-distance' in sys.argv[4:]:
+        # Les sources à parallaxe entre 5 et 10 erreurs sont dessinées une à une (gaia_b.bin, 13/11/2026) : leurs cases en
+        # volume sont retirées, pour ne pas compter leur lumière deux fois. Reste le « ciel seul ».
+        D = {c: v[:0] for c, v in D.items()}
     C = lire(dossier, 'ciel')
     err = D['fe'] / D['f']
     loin = err > ERREUR_MAX
@@ -115,7 +119,7 @@ def main():
     cases['v'], cases['s'] = v, disp
     poids = D['f'][k]
     o = np.argsort(disp); cum = np.cumsum(poids[o]) / poids.sum()
-    disp_med = float(disp[o][np.searchsorted(cum, 0.5)])
+    disp_med = float(disp[o][np.searchsorted(cum, 0.5)]) if len(disp) else 0.0      # sans cases en volume : pas de dispersion
     print(f'vitesses des cases : dispersion sur le ciel médiane (pondérée par la lumière) {disp_med:.1f} km/s ; '
           f'cases avec une vitesse radiale mesurée : {a_rv.sum()} ({poids[a_rv].sum() / poids.sum():.1%} de la lumière)')
 
