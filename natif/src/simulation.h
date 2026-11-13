@@ -220,8 +220,7 @@ struct Sim {
     const CentresReference* centres = nullptr;      // centres de référence des galaxies (fenetre.cpp), sinon le calcul de la fusion
     uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
     double milkyWayStarShare = 0;     // part montrée à cette image
-    int galaxyImageCount = 0;     // galaxies voisines montrées par leur vraie photo (galaxies_images.h)
-    double galaxyImageShare = 0;  // part montrée de ces photos à cette image
+    uint64_t neighbourStarCount = 0;   // étoiles des galaxies voisines (voisines_etoiles.bin), montrées à toute date
     bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
     double cloneMergeProbability = 0, cloneMergeGa[3] = {0, 0, 0};
     std::vector<CalcState> calcStates;

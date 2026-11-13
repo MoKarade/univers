@@ -189,7 +189,8 @@ def main():
     print(f'-> {sortie} ({time.time() - t0:.0f} s)')
 
 
-def ecrire_gaia(chemin, pos, vel, lum, teff, sun, gal2ecl, gaia_ref, drapeaux=1 | 2 | 16):
+def ecrire_gaia(chemin, pos, vel, lum, teff, sun, gal2ecl, gaia_ref, drapeaux=1 | 2 | 16, aux=None):
+    """aux : entier 16 bits par étoile rangé dans le 4e champ de la vitesse (galaxies voisines : rang de la galaxie)."""
     """Au format gaia.bin (gaia_convertir.py) : écliptique héliocentrique en al, vitesse héliocentrique en km/s."""
     T = np.fromfile(gaia_ref, np.float32, 256, offset=32)          # même table de couleurs que gaia.bin
     ok = np.isfinite(T)
@@ -202,15 +203,17 @@ def ecrire_gaia(chemin, pos, vel, lum, teff, sun, gal2ecl, gaia_ref, drapeaux=1 
     Rc = float(np.abs(p).max()) * 1.0001
     q = np.floor((p + Rc) / (2 * Rc) * (1 << 21)).clip(0, (1 << 21) - 1)
     cles = morton(q)
-    o = np.argsort(cles, kind='stable'); p, u, M, pas, cles = p[o], u[o], M[o], pas[o], cles[o]
+    aux = np.zeros(len(p), np.int16) if aux is None else np.asarray(aux, np.int16)
+    o = np.argsort(cles, kind='stable'); p, u, M, pas, cles, aux = p[o], u[o], M[o], pas[o], cles[o], aux[o]
     fs = feuilles(cles)
     num = np.zeros(len(p), np.int64)
     for i, (lo, hi) in enumerate(fs): num[lo:hi] = i
-    o = np.lexsort((M, num)); p, u, M, pas = p[o], u[o], M[o], pas[o]
+    o = np.lexsort((M, num)); p, u, M, pas, aux = p[o], u[o], M[o], pas[o], aux[o]
     rec = np.zeros(len(p), np.dtype([('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('m', '<f2'), ('c', 'u1'), ('f', 'u1')]))
     rec['x'], rec['y'], rec['z'], rec['m'], rec['c'] = p[:, 0], p[:, 1], p[:, 2], M, pas
     rec['f'] = drapeaux      # 1 vitesse complète, 2 orbite exacte, 16 étoile du MODÈLE (pas mesurée)
     vel16 = np.zeros((len(p), 4), '<i2'); vel16[:, :3] = np.clip(np.rint(u / V_PAS), -32767, 32767)
+    vel16[:, 3] = aux
     fe = np.zeros(len(fs), np.dtype([('min', '<f4', 3), ('n', '<u4'), ('max', '<f4', 3), ('r0', '<u4'), ('premier', '<u8'), ('r1', '<u8')]))
     for i, (lo, hi) in enumerate(fs):
         fe['min'][i], fe['max'][i] = p[lo:hi].min(0), p[lo:hi].max(0)

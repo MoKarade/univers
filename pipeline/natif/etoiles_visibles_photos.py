@@ -158,9 +158,9 @@ def main():
         print(f"{nom} : {n} traceurs, centre {np.round(c_pos, 1)} kpc, vitesse {np.round(c_vel, 1)} km/s ({source_ens}) ; "
               f"axe {np.round(spin_g, 3)} (accord avec le plan de la photo {accord:.3f}) ; côté de l'angle de position : {v_cote:+.0f} km/s ({sens})")
 
-    # Pour l'appli : les mêmes traceurs au format gaia.bin (voisines_etoiles.bin), drapeau 16 (modèle) sans orbite exacte :
-    # montrés autour d'aujourd'hui (le potentiel de l'appli ne contient que la Voie lactée) ; au-delà, la photo déplacée
-    # en bloc le long des centres de référence prend le relais (fenetre.cpp).
+    # Pour l'appli : les mêmes traceurs au format gaia.bin (voisines_etoiles.bin), drapeaux 16 (modèle) et 32 (galaxie voisine,
+    # rang de la galaxie dans le 4e champ de la vitesse) : à toute date, chaque galaxie se déplace en bloc le long de son
+    # centre de référence et ses étoiles tournent autour (gaia.vert) ; pas d'orbite dans le potentiel de la Voie lactée.
     if tous and len(sys.argv) > 4:
         import voie_lactee as v
         from etoiles_visibles import ecrire_gaia
@@ -168,7 +168,8 @@ def main():
         gal2ecl = np.array(D['M_GAL2ECL'])
         sgra = np.array(D['SGRA_GAL']) / np.linalg.norm(D['SGRA_GAL']); sun = -v.R0 * sgra
         P, V, L, T = (np.concatenate([t[k] for t in tous]) for k in range(4))
-        ecrire_gaia(os.path.join(sortie, 'voisines_etoiles.bin'), P, V, L, T, sun, gal2ecl, sys.argv[4], drapeaux=1 | 16)
+        rang = np.concatenate([np.full(len(t[0]), k, np.int16) for k, t in enumerate(tous)])      # 0 Andromède, 1 Triangle, 2 Grand, 3 Petit Nuage
+        ecrire_gaia(os.path.join(sortie, 'voisines_etoiles.bin'), P, V, L, T, sun, gal2ecl, sys.argv[4], drapeaux=1 | 2 | 16 | 32, aux=rang)
 
 
 if __name__ == '__main__':

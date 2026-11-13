@@ -66,8 +66,8 @@ void whatYouSee(const Sim& sim) {
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
     if (sim.starShare() <= 0) return;
     // Andromède, Triangle, Grand Nuage dès aujourd'hui (fenetre.cpp, companionShare) : galaxies modèles, dites comme telles.
-    if (sim.galaxyImageCount >= 3 && sim.galaxyImageShare > 0 && sim.dist > 3000.0)
-        ImGui::TextDisabled("Andromède, Triangle, Nuages de Magellan : vraies photos (DSS2) posées sur leur disque, inclinaison et orientation mesurées ; disque supposé mince.");
+    if (sim.neighbourStarCount && sim.bestLook && sim.dist > 3000.0)
+        ImGui::TextDisabled("Andromède, Triangle, Nuages : étoiles du MODÈLE tirées de leurs vraies photos, galaxie déplacée en bloc, rotation mesurée (sans marées).");
     else if (sim.companionShare > 0 && sim.dist > 3000.0)
         ImGui::TextDisabled("Andromède, Triangle, Grand Nuage : galaxies modèles (paramètres publiés) à leur place mesurée ; leurs routes possibles : Menu, « Incertitude ».");
     if (sim.milkyWayStarShare > 0 && sim.dist > 3000.0) {
