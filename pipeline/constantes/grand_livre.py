@@ -135,7 +135,7 @@ def main():
             '`galaxie_orbites.h` change toutes les orbites d’étoiles de ~1 % : c’est un changement visible, à faire par le fil qui possède ce fichier.',
             '- **Distance d’Andromède** : 761 kpc (table) contre 783 kpc (ancien calcul). La table suit Li et al. 2021 (Céphéides), comme Sawala 2025.',
             '- **Triangle** : 859 kpc (table, Sawala 2025) contre 809 (ancien calcul) et 840 (Corbelli 2014, utilisé par le modèle de masse).',
-            '- **Petit Nuage** : masse adoptée (3 ± 1 × 10⁹ M☉), pas mesurée. À relire : une masse dynamique publiée.', '']
+            '- **Petit Nuage** : masse totale adoptée (3 ± 1 × 10⁹ M☉), pas mesurée ; le modèle (halo, étoiles, gaz) est réglé ici sur la matière noire dans 4 kpc de Di Teodoro et al. 2019.', '']
     with open(SORTIE, 'w', encoding='utf-8', newline='\n') as fh:
         fh.write('\n'.join(out))
     n_ecart = sum(1 for l in lignes if l[5] == 'ÉCART') + sum(1 for l in lignes_m if l[7] == 'ÉCART') + sum(1 for l in ecarts_vit if l[4] == 'ÉCART')

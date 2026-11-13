@@ -404,11 +404,36 @@
   },
   "petit_nuage": {
    "nom": "Petit Nuage de Magellan",
-   "modele": null,
+   "modele": {
+    "halo": {
+     "hernquist": 3090000000.0,
+     "a": 1.73,
+     "coupure": 10.0
+    },
+    "bulbe": null,
+    "disques": [
+     {
+      "kind": 1,
+      "masse": 310000000.0,
+      "rd": 1.0,
+      "hz": 0.8,
+      "q_min": 2.5
+     },
+     {
+      "kind": 3,
+      "masse": 560000000.0,
+      "rd": 2.0,
+      "hz": 0.3,
+      "q_min": 1.5
+     }
+    ],
+    "src": "MODÈLE réglé ici, pas un modèle publié. Contraintes lues : matière noire dans 4 kpc 1 à 1,5 × 10⁹ M☉ (Di Teodoro et al. 2019, résumé : halo dominant toujours requis) → 1,5 × 10⁹ retenu ; vitesse circulaire ~55 km/s à 2,8 kpc (même source ; le modèle donne ~50 km/s, calcul sphérique approché) ; masse dynamique 2,4 × 10⁹ M☉ dans ~3 kpc (Stanimirović et al. 2004, qui concluaient sans matière noire : avis contraire) ; gaz : HI 4,2 × 10⁸ M☉ (Stanimirović et al. 2004, table 1) × 1,33 pour l’hélium ; étoiles : L_V 3,1 × 10⁸ L☉ et M/L ≈ 1 (même source). Masse totale gardée à 3 × 10⁹ (valeur adoptée), d’où 2,13 × 10⁹ de halo après la coupure à 10 kpc (rayon de marée face au Grand Nuage, ordre de grandeur) [Supposition]. Longueurs, épaisseurs et agitation minimale : choisies, non relues (disque stellaire épais et chaud : le Petit Nuage est très perturbé) [Supposition]"
+   },
    "loi_masse": {
     "centre": 3000000000.0,
     "sigma": 1000000000.0,
-    "src": "ADOPTÉ, pas mesuré : aucune masse totale relue (Bekki et Stanimirović 2009 : matière noire 7,5 × 10⁷ dans ~3 kpc pour M/L = 3,8, davantage si M/L < 1 ; Di Teodoro et al. 2019 : pas de masse dans la partie lue). Valeur d’usage des études d’orbites [Supposition]"
+    "src": "centre = masse du modèle (3,0 × 10⁹ M☉), ADOPTÉE et non mesurée : aucune masse totale publiée relue ; seules les masses dans 3 à 4 kpc le sont (voir le modèle). Largeur adoptée [Supposition]",
+    "centre_statut": "calculé : masse totale du modèle"
    },
    "observe": {
     "ra": 13.1866,
@@ -424,7 +449,14 @@
     "src": "mouvement propre et vitesse radiale : Kallivayalil et al. 2013 (0,772 ; −1,117 mas/an ; 145,6 km/s), comme le Grand Nuage et le fil Voie lactée (Zivick et al. 2018 : 0,82 ; −1,21, compatible) ; distance : Graczyk et al. 2020 ; direction : centre optique (Sesame) [Probable]"
    },
    "disque": null,
-   "statut": "adopté",
+   "statut": "adopté (modèle réglé sur des masses internes mesurées)",
+   "masses_modele": {
+    "halo": 2130000000.0,
+    "disque": 310000000.0,
+    "gaz": 560000000.0,
+    "total": 3000000000.0,
+    "statut": "calculé (intégrale des densités du modèle, coupures comprises)"
+   },
    "aujourdhui": {
     "position": [
      16.0026,
