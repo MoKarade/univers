@@ -342,6 +342,8 @@ public:
     // Contrôle : la prochaine avance porte sur toutes les feuilles, pas seulement les visibles.
     void wantAllLeaves() { visible_.resize(file_.leafCount); for (uint32_t i = 0; i < file_.leafCount; ++i) visible_[i] = i; }
     const GaiaOrbits& orbits() const { return orbits_; }
+    uint32_t epicycleLeaves() const { return epicycleLeaves_; }
+    uint32_t leafCount() const { return file_.leafCount; }
 
     void release(const Gpu& g) {
         if (!ready) return;

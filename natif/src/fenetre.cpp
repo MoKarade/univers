@@ -541,7 +541,6 @@ int runWindow(const WindowOptions& opt) {
                     const double lo = static_cast<double>(gaia.orbitStep()) * OrbitGpu::kStepYears + off;
                     shownYears = std::clamp(wanted, lo, lo + OrbitGpu::kStepYears - 1.0);
                     gaia.advance(g, once, shownYears, 0);      // retard recompté pour la date réellement montrée
-                    if (milkyWayStarsOk) milkyWayStars.advance(g, once, shownYears, test && !opt.hasPath ? 1000000 : 64);
                     // Les états de départ de Gaia se préparent pendant les premières secondes : d'ici là, la date reste à moins de
                     // 30 000 ans d'aujourd'hui, où le mouvement est la ligne droite mesurée (l'orbite y pèse moins de 1 %).
                     if (!gaia.orbitReady()) shownYears = std::clamp(shownYears, off - 3.0e4, off + 3.0e4);
@@ -549,6 +548,14 @@ int runWindow(const WindowOptions& opt) {
                 orbits.advance(once, shownYears, gaiaOk || test ? 1000000 : 64);
                 const double lo = static_cast<double>(orbits.stepLo) * OrbitGpu::kStepYears;
                 if (orbits.lagSteps) shownYears = std::clamp(shownYears, lo, lo + OrbitGpu::kStepYears - 1.0);
+                endOnce(g, once);
+            }
+            // Étoiles visibles du modèle : leurs orbites exactes avancent à CHAQUE image (le calcul ne fait que les feuilles
+            // dessinées à l'image d'avant, et retombe à « à jour » dès qu'il n'en voit pas) ; tant qu'une feuille n'a pas
+            // rattrapé la date, elle est dessinée en épicycles, valables seulement près d'aujourd'hui.
+            if (milkyWayStarsOk) {
+                VkCommandBuffer once = beginOnce(g);
+                milkyWayStars.advance(g, once, shownYears, test && !opt.hasPath ? 1000000 : 64);
                 endOnce(g, once);
             }
             holdOn = shownYears != wanted;
@@ -871,7 +878,20 @@ int runWindow(const WindowOptions& opt) {
         std::printf("premier passage d'Andromede : %.3f milliards d'annees ; etoiles mesurees montrees jusqu'a %.3f (fondu depuis %.3f) ; part des etoiles mesurees a cette date : %.2f\n",
                     sim.firstPassageGa, sim.starEraEndYears / 1.0e9, sim.starEraFadeYears / 1.0e9, sim.starShare());
         if (milkyWayStarsOk)
-            std::printf("etoiles du modele : orbites exactes au pas %ld, retard %ld pas, pretes %d\n", milkyWayStars.orbitStep(), milkyWayStars.orbitLagSteps(), milkyWayStars.orbitReady() ? 1 : 0);
+        {
+            std::printf("etoiles du modele : orbites exactes au pas %ld, retard %ld pas, pretes %d ; feuilles en epicycles %u sur %u\n", milkyWayStars.orbitStep(),
+                        milkyWayStars.orbitLagSteps(), milkyWayStars.orbitReady() ? 1 : 0, milkyWayStars.epicycleLeaves(), milkyWayStars.leafCount());
+            // contrôle du repère : Soleil selon l'appli (CPU), Soleil selon la carte graphique (dernier état), centre des étoiles
+            const phys::Vec3 suc = sim.sunGalacto();
+            const auto& ob = milkyWayStars.orbits();
+            const auto sg = ob.readBack(g, 1, ob.count - 1);
+            const uint32_t m = std::min<uint32_t>(ob.count - 1, 400000);
+            const auto st = ob.readBack(g, m, 0);
+            double cx = 0, cy = 0, cz = 0;
+            for (uint32_t i = 0; i < m; ++i) { cx += st[i * 8]; cy += st[i * 8 + 1]; cz += st[i * 8 + 2]; }
+            std::printf("repere : Soleil appli (%.3f, %.3f, %.3f) kpc ; Soleil carte (%.3f, %.3f, %.3f) ; centre des etoiles (%.3f, %.3f, %.3f)\n",
+                        suc.x, suc.y, suc.z, sg[0], sg[1], sg[2], cx / m, cy / m, cz / m);
+        }
         std::printf("fenetre cachee %ux%u : %d images en %.3f s, soit %.1f images par seconde ; astre suivi : %s ; date : %s ; ephemerides : %s\nPASSE\n",
                     sc.extent.width, sc.extent.height, frame, total, frame / total, sim.bodies[static_cast<size_t>(sim.focus)].name.c_str(),
                     frDate(sim.years).c_str(), !hasSpk ? spkError.c_str() : sim.ephemValid ? "lues" : "hors plage");
