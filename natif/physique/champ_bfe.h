@@ -37,6 +37,8 @@ struct Cylindre {
 
 namespace detail {
 
+inline constexpr double kPi = 3.14159265358979323846;
+
 inline void hermite(double t, double h[8]) {
     const double t2 = t * t, t3 = t2 * t;
     h[0] = 2 * t3 - 3 * t2 + 1; h[1] = t3 - 2 * t2 + t; h[2] = -2 * t3 + 3 * t2; h[3] = t3 - t2;
@@ -67,7 +69,7 @@ inline void evalMultipole(const Multipole& M, const double p[3], double& phi, do
     // P̄_lm et sinθ dP̄_lm/dθ
     std::vector<double> P((L + 1) * (L + 1), 0.0), D((L + 1) * (L + 1), 0.0);
     auto at = [L](int l, int m) { return l * (L + 1) + m; };
-    P[at(0, 0)] = 1 / std::sqrt(4 * M_PI);
+    P[at(0, 0)] = 1 / std::sqrt(4 * kPi);
     for (int m = 0; m <= L; ++m) {
         if (m > 0) P[at(m, m)] = std::sqrt((2.0 * m + 1) / (2.0 * m)) * st * P[at(m - 1, m - 1)];
         if (m + 1 <= L) P[at(m + 1, m)] = std::sqrt(2.0 * m + 3) * ct * P[at(m, m)];
