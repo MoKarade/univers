@@ -1,0 +1,488 @@
+{
+ "version": 1,
+ "date": "2026-11-13",
+ "genere_par": "pipeline/constantes/construire.py depuis table_source.py — ne pas éditer",
+ "unites": "kpc, km/s, M☉, Ga ; mouvements propres en µas/an ; angles en degrés",
+ "repere": {
+  "R0": 8.2,
+  "R0_err": 0.09,
+  "src_R0": "McMillan 2017 (MNRAS 465, 76), résumé : R0 = 8,20 ± 0,09 kpc ; identique à l’appli (kR0) et au repère attendu par le fil Voie lactée",
+  "sgra": [
+   0.9999992,
+   -0.00097327,
+   -0.00080564
+  ],
+  "src_sgra": "direction de Sagittarius A* en coordonnées galactiques (DATA.SGRA_GAL de la page, kSgra de l’appli)",
+  "v0": 232.8,
+  "v0_err": 3.0,
+  "src_v0": "McMillan 2017, résumé : vitesse circulaire au Soleil 232,8 ± 3,0 km/s (meilleur modèle, table 3 : 233,1). L’appli utilise 230 (kV0) : écart signalé dans le grand livre",
+  "soleil_particulier": [
+   11.1,
+   12.24,
+   7.25
+  ],
+  "src_soleil_particulier": "Schönrich, Binney et Dehnen 2010 (MNRAS 403, 1829), mouvement propre du Soleil (U, V, W)",
+  "statut": "mesuré",
+  "soleil_position": [
+   -8.199993,
+   0.007981,
+   0.006606
+  ],
+  "soleil_vitesse": [
+   11.1,
+   245.04,
+   7.25
+  ]
+ },
+ "cosmologie": {
+  "H0": 67.4,
+  "omega_m": 0.315,
+  "omega_lambda": 0.685,
+  "w0": -1.0,
+  "wa": 0.0,
+  "src": "Planck 2018 VI (A&A 641, A6), comme natif/src/cosmologie.h ; énergie noire dans le Groupe local : a = H0² Ω_Λ (x − x_cm) (pipeline/fusion/energie_noire.py ; Partridge, Lahav et Hoffman 2013 ; Peñarrubia et al. 2014)",
+  "statut": "mesuré",
+  "K_lambda": 0.00311179,
+  "K_lambda_unite": "(km/s)² / kpc² : a_Λ = K_lambda × (x − x_cm)"
+ },
+ "ordre": [
+  "voie_lactee",
+  "andromede",
+  "triangle",
+  "grand_nuage",
+  "petit_nuage"
+ ],
+ "galaxies": {
+  "voie_lactee": {
+   "nom": "Voie lactée",
+   "modele": {
+    "halo": {
+     "rho0": 8540000.0,
+     "rs": 19.6,
+     "coupure": 250.0
+    },
+    "bulbe": {
+     "rho0": 98400000000.0,
+     "r0": 0.075,
+     "puissance": 1.8,
+     "coupure": 2.1,
+     "q": 0.5
+    },
+    "disques": [
+     {
+      "kind": 1,
+      "sigma0": 896000000.0,
+      "rd": 2.5,
+      "hz": 0.3,
+      "sigma_soleil": 35.0,
+      "r_soleil": 8.2
+     },
+     {
+      "kind": 4,
+      "sigma0": 183000000.0,
+      "rd": 3.02,
+      "hz": 0.9,
+      "sigma_soleil": 50.0,
+      "r_soleil": 8.2
+     },
+     {
+      "kind": 3,
+      "masse": 12200000000.0,
+      "rd": 7.0,
+      "hz": 0.085,
+      "q_min": 1.5
+     }
+    ],
+    "src": "McMillan 2017 (MNRAS 465, 76), table 3, meilleur modèle ; agitation au Soleil : Bland-Hawthorn et Gerhard 2016 § 5.4 ; gaz HI + H2 pris comme un disque froid (modeles_v2.py)",
+    "barre": {
+     "demi_longueur": 5.0,
+     "omega": 39.0,
+     "angle_aujourdhui": 28.0,
+     "src": "Wegg, Gerhard et Portail 2015 ; Portail et al. 2017 (39,0 ± 3,5 km/s/kpc) ; angle avec la direction Soleil-centre"
+    }
+   },
+   "loi_masse": {
+    "centre": 1343000000000.0,
+    "sigma": 300000000000.0,
+    "src": "centre = masse totale du modèle (halo coupé à 250 kpc compris) ; largeur : McMillan 2017, résumé, masse du viriel 1,30 ± 0,30 × 10¹² M☉ (Sawala 2025 prend 1,0 ± 0,2 : variante « sawala2025 »)",
+    "centre_statut": "calculé : masse totale du modèle"
+   },
+   "statut": "mesuré",
+   "masses_modele": {
+    "halo": 1276000000000.0,
+    "bulbe": 8878000000.0,
+    "disque": 35190000000.0,
+    "disque_epais": 10490000000.0,
+    "gaz": 12200000000.0,
+    "total": 1343000000000.0,
+    "statut": "calculé (intégrale des densités du modèle, coupures comprises)"
+   },
+   "aujourdhui": {
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "vitesse": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "statut": "origine du repère"
+   },
+   "disque": {
+    "axe_rotation": [
+     0.0,
+     0.0,
+     -1.0
+    ],
+    "src": "la Voie lactée tourne vers l = 90° au Soleil : moment cinétique vers le pôle sud galactique"
+   }
+  },
+  "andromede": {
+   "nom": "Andromède (M31)",
+   "modele": {
+    "halo": {
+     "rho0": 11000000.0,
+     "rs": 16.5,
+     "coupure": 207.0
+    },
+    "bulbe": {
+     "masse": 31000000000.0,
+     "a": 0.55
+    },
+    "disques": [
+     {
+      "kind": 1,
+      "masse": 56000000000.0,
+      "rd": 5.3,
+      "hz": 0.6,
+      "q_min": 1.5
+     },
+     {
+      "kind": 3,
+      "masse": 5600000000.0,
+      "rd": 6.0,
+      "hz": 0.15,
+      "q_min": 1.5
+     }
+    ],
+    "src": "Tamm et al. 2012 (A&A 546, A4), tables 2 et 4 (halo NFW, disque 5,6 × 10¹⁰ borne basse) ; disque 5,3 kpc : Courteau et al. 2011 ; bulbe 3,1 × 10¹⁰ : Blaña Díaz et al. 2018 ; gaz : Chemin et al. 2009 × 1,33 ; hauteurs [modèle]",
+    "barre": {
+     "demi_longueur": 4.0,
+     "omega": 40.0,
+     "angle_aujourdhui": 54.7,
+     "src": "Blaña Díaz et al. 2018 (40 ± 5 km/s/kpc ; 54,7 ± 3,8°)"
+    }
+   },
+   "loi_masse": {
+    "centre": 1065000000000.0,
+    "sigma": 250000000000.0,
+    "src": "centre = masse du modèle (Tamm 2012 : 1,04 × 10¹² dans 207 kpc) ; largeur 0,25 × 10¹² pour couvrir 0,8 (Kafle 2018) à 1,3 (Sawala 2025) [modèle : choix fait ici]",
+    "centre_statut": "calculé : masse totale du modèle"
+   },
+   "observe": {
+    "ra": 10.6847083,
+    "dec": 41.26875,
+    "dmod": 24.407,
+    "dmod_err": 0.032,
+    "pmra": 45.9,
+    "pmra_err": 8.1,
+    "pmdec": -20.5,
+    "pmdec_err": 6.6,
+    "vr": -301.0,
+    "vr_err": 1.0,
+    "src": "direction : Sesame ; module de distance 24,407 ± 0,032 (761 kpc, Li et al. 2021) via Sawala 2025 ED table 1 ; mouvement propre : Wu et al. 2025 (A&A 701, A265, supergéantes Gaia DR3) via Wu et al. 2026 (arXiv:2603.22863) ; vitesse radiale : Sawala 2025",
+    "variante_sawala2025": {
+     "pmra": 48.9,
+     "pmra_err": 10.5,
+     "pmdec": -36.9,
+     "pmdec_err": 8.1
+    }
+   },
+   "disque": {
+    "inclinaison": 77.0,
+    "pa_noeuds": 38.0,
+    "sens_vu_terre": "antihoraire",
+    "bout_approche_pa": 218.0,
+    "src": "Blaña Díaz et al. 2018 § 2.2 (77°, 38°) ; sens : van der Marel et al. 2019 (V_rot = −206 ± 86 km/s, antihoraire) ; côté sud-ouest en approche (bien établi) ; côté proche déduit des deux (attendu : nord-ouest)",
+    "axe_rotation": [
+     -0.4102,
+     -0.7623,
+     -0.5007
+    ],
+    "cote_proche_retenu_pa": 308.0,
+    "axe_statut": "calculé (inclinaison, angle de position, sens, côté proche) ; repère phys::galaxie"
+   },
+   "statut": "mesuré",
+   "masses_modele": {
+    "halo": 972100000000.0,
+    "bulbe": 31000000000.0,
+    "disque": 56000000000.0,
+    "gaz": 5600000000.0,
+    "total": 1065000000000.0,
+    "statut": "calculé (intégrale des densités du modèle, coupures comprises)"
+   },
+   "aujourdhui": {
+    "position": [
+     -374.5444,
+     605.5266,
+     -279.8164
+    ],
+    "vitesse": [
+     31.921,
+     -103.866,
+     43.602
+    ],
+    "distance_soleil": 761.027,
+    "statut": "calculé depuis « observe » (astropy, repère galactique, Soleil de « repere »)"
+   }
+  },
+  "triangle": {
+   "nom": "Triangle (M33)",
+   "modele": {
+    "halo": {
+     "rho0": 5080000.0,
+     "rs": 16.7,
+     "coupure": 160.0
+    },
+    "bulbe": null,
+    "disques": [
+     {
+      "kind": 1,
+      "masse": 4800000000.0,
+      "rd": 1.8,
+      "hz": 0.3,
+      "q_min": 1.5
+     },
+     {
+      "kind": 3,
+      "masse": 3000000000.0,
+      "rd": 4.0,
+      "hz": 0.15,
+      "q_min": 1.5
+     }
+    ],
+    "src": "Corbelli et al. 2014 (A&A 572, A23) : étoiles 4,8 × 10⁹, 1,8 kpc, halo NFW 4,3 × 10¹¹ (c = 9,5) ; gaz : Kam et al. 2017 et Corbelli 2014 × 1,33 ; hauteurs [modèle]"
+   },
+   "loi_masse": {
+    "centre": 408100000000.0,
+    "sigma": 100000000000.0,
+    "src": "centre = masse du modèle (Corbelli 2014 : 4,3 ± 1,0 × 10¹¹) ; Sawala 2025 prend 3 ± 1 × 10¹¹ (variante « sawala2025 »)",
+    "centre_statut": "calculé : masse totale du modèle"
+   },
+   "observe": {
+    "ra": 23.46206906218,
+    "dec": 30.66017511198,
+    "dmod": 24.67,
+    "dmod_err": 0.07,
+    "pmra": 30.6,
+    "pmra_err": 5.7,
+    "pmdec": 19.0,
+    "pmdec_err": 5.7,
+    "vr": -179.2,
+    "vr_err": 1.8,
+    "src": "direction : Sesame ; module de distance 24,67 ± 0,07 (859 kpc) : Sawala 2025 ED table 1 ; mouvement propre : moyenne pondérée Wu et al. 2025 et VLBA (Brunthaler), via Wu 2026 ; vitesse radiale : Sawala 2025",
+    "variante_sawala2025": {
+     "pmra": 31.0,
+     "pmra_err": 19.0,
+     "pmdec": -29.0,
+     "pmdec_err": 16.0
+    }
+   },
+   "disque": {
+    "inclinaison": 55.0,
+    "pa_noeuds": 22.0,
+    "sens_vu_terre": "horaire",
+    "bout_approche_pa": 22.0,
+    "src": "Corbelli et Schneider 1997 (22°, 55°), comme le fil Voie lactée (Kam et al. 2017 : 52 ± 3°, 22,5°) ; sens : van der Marel et al. 2019 (80 ± 52 km/s, horaire) ; côté nord-est en approche (fil Voie lactée) ; côté proche déduit des deux",
+    "axe_rotation": [
+     0.1886,
+     0.968,
+     -0.1654
+    ],
+    "cote_proche_retenu_pa": 292.0,
+    "axe_statut": "calculé (inclinaison, angle de position, sens, côté proche) ; repère phys::galaxie"
+   },
+   "statut": "mesuré",
+   "masses_modele": {
+    "halo": 400300000000.0,
+    "disque": 4800000000.0,
+    "gaz": 3000000000.0,
+    "total": 408100000000.0,
+    "statut": "calculé (intégrale des densités du modèle, coupures comprises)"
+   },
+   "aujourdhui": {
+    "position": [
+     -514.3047,
+     531.2809,
+     -446.6603
+    ],
+    "vitesse": [
+     3.068,
+     97.67,
+     185.697
+    ],
+    "distance_soleil": 859.014,
+    "statut": "calculé depuis « observe » (astropy, repère galactique, Soleil de « repere »)"
+   }
+  },
+  "grand_nuage": {
+   "nom": "Grand Nuage de Magellan",
+   "modele": {
+    "halo": {
+     "hernquist": 229000000000.0,
+     "a": 25.8,
+     "coupure": 100.0
+    },
+    "bulbe": null,
+    "disques": [
+     {
+      "kind": 1,
+      "masse": 2700000000.0,
+      "rd": 1.5,
+      "hz": 0.3,
+      "q_min": 1.5
+     }
+    ],
+    "src": "masse totale 1,38 × 10¹¹ M☉ (Erkal et al. 2019) APRÈS la coupure à 100 kpc, et 1,7 × 10¹⁰ M☉ dans 8,7 kpc (van der Marel et Kallivayalil 2014) : les deux fixent la normalisation (2,29 × 10¹¹ avant coupure) et l’échelle (25,8 kpc) du Hernquist [calculé ici ; modeles_v2.py avait 1,38 × 10¹¹ et 16,1 kpc AVANT coupure, soit 0,97 × 10¹¹ seulement après] ; étoiles : van der Marel 2006"
+   },
+   "loi_masse": {
+    "centre": 137900000000.0,
+    "sigma": 25000000000.0,
+    "src": "centre = masse du modèle, réglée sur Erkal 2019 (1,38 +0,27 −0,24 × 10¹¹) ; Sawala 2025 prend 1,5 ± 0,5 × 10¹¹",
+    "centre_statut": "calculé : masse totale du modèle"
+   },
+   "observe": {
+    "ra": 80.89417,
+    "dec": -69.75611,
+    "dmod": 18.477,
+    "dmod_err": 0.026,
+    "pmra": 1910.0,
+    "pmra_err": 20.0,
+    "pmdec": 229.0,
+    "pmdec_err": 47.0,
+    "vr": 262.2,
+    "vr_err": 3.4,
+    "src": "Sawala 2025 ED table 1 (distance : Pietrzyński et al. 2019 ; mouvement propre : Kallivayalil et al. 2013, van der Marel et Kallivayalil 2014)"
+   },
+   "disque": {
+    "inclinaison": 34.7,
+    "pa_noeuds": 139.1,
+    "sens_vu_terre": "horaire",
+    "cote_proche_pa": 49.1,
+    "src": "van der Marel et Kallivayalil 2014 (139,1 ± 4,1° ; 34,7°, comme le fil Voie lactée) ; côté proche au nord-est [Probable] ; sens : horaire vu de la Terre (van der Marel et Kallivayalil 2014) [À vérifier : le fil Voie lactée le donne à confirmer]",
+    "axe_rotation": [
+     -0.2778,
+     -0.949,
+     -0.1489
+    ],
+    "cote_proche_retenu_pa": 49.1,
+    "axe_statut": "calculé (inclinaison, angle de position, sens, côté proche) ; repère phys::galaxie"
+   },
+   "statut": "mesuré",
+   "masses_modele": {
+    "halo": 135200000000.0,
+    "disque": 2700000000.0,
+    "total": 137900000000.0,
+    "statut": "calculé (intégrale des densités du modèle, coupures comprises)"
+   },
+   "aujourdhui": {
+    "position": [
+     -0.6361,
+     -40.9421,
+     -26.9214
+    ],
+    "vitesse": [
+     -39.656,
+     -226.468,
+     227.159
+    ],
+    "distance_soleil": 49.591,
+    "statut": "calculé depuis « observe » (astropy, repère galactique, Soleil de « repere »)"
+   }
+  },
+  "petit_nuage": {
+   "nom": "Petit Nuage de Magellan",
+   "modele": {
+    "halo": {
+     "hernquist": 3090000000.0,
+     "a": 1.73,
+     "coupure": 10.0
+    },
+    "bulbe": null,
+    "disques": [
+     {
+      "kind": 1,
+      "masse": 310000000.0,
+      "rd": 1.0,
+      "hz": 0.8,
+      "q_min": 2.5
+     },
+     {
+      "kind": 3,
+      "masse": 560000000.0,
+      "rd": 2.0,
+      "hz": 0.3,
+      "q_min": 1.5
+     }
+    ],
+    "src": "MODÈLE réglé ici, pas un modèle publié. Contraintes lues : matière noire dans 4 kpc 1 à 1,5 × 10⁹ M☉ (Di Teodoro et al. 2019, résumé : halo dominant toujours requis) → 1,5 × 10⁹ retenu ; vitesse circulaire ~55 km/s à 2,8 kpc (même source ; le modèle donne ~50 km/s, calcul sphérique approché) ; masse dynamique 2,4 × 10⁹ M☉ dans ~3 kpc (Stanimirović et al. 2004, qui concluaient sans matière noire : avis contraire) ; gaz : HI 4,2 × 10⁸ M☉ (Stanimirović et al. 2004, table 1) × 1,33 pour l’hélium ; étoiles : L_V 3,1 × 10⁸ L☉ et M/L ≈ 1 (même source). Masse totale gardée à 3 × 10⁹ (valeur adoptée), d’où 2,13 × 10⁹ de halo après la coupure à 10 kpc (rayon de marée face au Grand Nuage, ordre de grandeur) [Supposition]. Longueurs, épaisseurs et agitation minimale : choisies, non relues (disque stellaire épais et chaud : le Petit Nuage est très perturbé) [Supposition]"
+   },
+   "loi_masse": {
+    "centre": 3000000000.0,
+    "sigma": 1000000000.0,
+    "src": "centre = masse du modèle (3,0 × 10⁹ M☉), ADOPTÉE et non mesurée : aucune masse totale publiée relue ; seules les masses dans 3 à 4 kpc le sont (voir le modèle). Largeur adoptée [Supposition]",
+    "centre_statut": "calculé : masse totale du modèle"
+   },
+   "observe": {
+    "ra": 13.1866,
+    "dec": -72.8286,
+    "dmod": 18.977,
+    "dmod_err": 0.032,
+    "pmra": 772.0,
+    "pmra_err": 63.0,
+    "pmdec": -1117.0,
+    "pmdec_err": 61.0,
+    "vr": 145.6,
+    "vr_err": 0.6,
+    "src": "mouvement propre et vitesse radiale : Kallivayalil et al. 2013 (0,772 ; −1,117 mas/an ; 145,6 km/s), comme le Grand Nuage et le fil Voie lactée (Zivick et al. 2018 : 0,82 ; −1,21, compatible) ; distance : Graczyk et al. 2020 ; direction : centre optique (Sesame) [Probable]"
+   },
+   "disque": null,
+   "statut": "adopté (modèle réglé sur des masses internes mesurées)",
+   "masses_modele": {
+    "halo": 2130000000.0,
+    "disque": 310000000.0,
+    "gaz": 560000000.0,
+    "total": 3000000000.0,
+    "statut": "calculé (intégrale des densités du modèle, coupures comprises)"
+   },
+   "aujourdhui": {
+    "position": [
+     16.0026,
+     -37.5514,
+     -43.5956
+    ],
+    "vitesse": [
+     3.136,
+     -160.06,
+     143.312
+    ],
+    "distance_soleil": 62.431,
+    "statut": "calculé depuis « observe » (astropy, repère galactique, Soleil de « repere »)"
+   }
+  }
+ },
+ "ensemble": {
+  "concentration": {
+   "centre": 10.0,
+   "sigma": 2.0,
+   "src": "Sawala 2025 (c = 10 ± 2) pour les galaxies sans halo NFW publié"
+  },
+  "adoucissement_kpc": 20.0,
+  "seuil_fusion_kpc": 20.0,
+  "pas_ga": 0.00097779,
+  "coupure_sigma": 2.0,
+  "src": "Sawala et al. 2025 (arXiv:2408.00064) : saute-mouton à pas de 1 Ma, forces adoucies de 20 kpc, frottement de Chandrasekhar, fusion à moins de 20 kpc, tirages normaux tronqués à ±2σ"
+ }
+}

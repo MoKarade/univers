@@ -33,3 +33,8 @@ add_executable(chaos_systeme_solaire essais/chaos_systeme_solaire.cpp)
 target_link_libraries(chaos_systeme_solaire PRIVATE univers_physique)
 target_compile_options(chaos_systeme_solaire PRIVATE -Wall -Wextra -O3 -march=native)
 target_link_options(chaos_systeme_solaire PRIVATE -static)
+
+# Champ de gravité en coefficients (plan B+, étape 8) : égalité avec pipeline/champ/champ_bfe.py
+add_executable(essai_champ_bfe essais/essai_champ_bfe.cpp)
+target_compile_options(essai_champ_bfe PRIVATE -Wall -Wextra)
+target_link_options(essai_champ_bfe PRIVATE -static)

@@ -1,0 +1,49 @@
+# Vieillissement de la lumière des étoiles visibles (pipeline/etoiles/vieillissement_populations.py) : les isochrones MIST
+# ne se téléchargent pas depuis les conteneurs des fils ; cette tâche les télécharge (~ quelques centaines de Mo, non
+# gardés), écrit la table (~60 ko) et la remet sur la branche. Durée attendue : quelques minutes.
+name: Populations - vieillissement MIST
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["table-unique"]
+    paths: ["pipeline/etoiles/vieillissement_populations.py", ".github/workflows/populations-mist.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: populations-mist-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  table:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Logiciels
+        run: python -m pip install --quiet numpy
+      - name: Isochrones MIST v1.2 (v/vcrit 0,4, toutes les métallicités)
+        run: |
+          mkdir -p /tmp/mist && cd /tmp/mist
+          curl -sSfL --retry 3 -o isos.txz https://mist.science/data/tarballs_v1.2/MIST_v1.2_vvcrit0.4_basic_isos.txz
+          ls -la isos.txz
+          tar -xJf isos.txz
+          find /tmp/mist -name '*.iso' | head -20
+          f=$(find /tmp/mist -name '*.iso' | head -1); head -15 "$f"
+      - name: Table
+        run: |
+          d=$(dirname "$(find /tmp/mist -name '*.iso' | head -1)")
+          python pipeline/etoiles/vieillissement_populations.py "$d" pipeline/etoiles/vieillissement_populations.json
+      - name: Remettre la table sur la branche
+        if: github.event_name == 'push' || github.ref_name == 'table-unique'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline/etoiles/vieillissement_populations.json
+          git diff --cached --quiet && { echo "table inchangée"; exit 0; }
+          git commit -m "data(etoiles): table de vieillissement des populations (MIST v1.2), écrite par la tâche populations-mist"
+          git push origin HEAD:${{ github.ref_name }}
