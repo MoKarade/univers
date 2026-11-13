@@ -39,7 +39,7 @@ une version allégée ». Tailles mesurées sur le PC ce jour ; durées = estima
 
 | Données | Montré | Complet | Coût estimé |
 |---|---|---|---|
-| Galaxies DESI DR1 | 13,5 % tirées au hasard (5,57 M objets, tous relevés) | ~15 à 18 M décalages vers le rouge sûrs | ~1 à 2 Go à télécharger, ~0,4 Go dans l'appli ; téléchargement lancé le 12/11 (pipeline/natif/desi_complet.py) |
+| Galaxies (tous relevés) | FAIT 13/11 : 18 343 142 galaxies et quasars, position exacte (DESI DR1 complet 15,75 M, SDSS DR17, DR16Q, 2dF, 6dF, 2MRS ; doublons à 1,5″ retirés) | — | galaxies.bin 367 Mo ; bruts sur le Drive (archives) |
 | Positions des galaxies | arrondies (16 bits, ~20″) comme la page | coordonnées exactes | compris dans la ligne du dessus |
 | Gaia, les 1,71 milliard d'autres sources | additionnées par case de ciel (HEALPix 7) | une à une | ~100 Go à télécharger (estimation : ~9 h au rythme mesuré de 98 M en 30 min), ~45 Go dans l'appli, et un nouveau moteur qui lit le disque au fil du vol (ne tient pas dans les 16 Go de la carte graphique) : plusieurs jours de travail |
 | Poussière 3D Edenhofer 2024 | supprimée du disque | 3,25 Go | seulement utile si on remet une lueur calculée, contraire à « seulement du mesuré » |

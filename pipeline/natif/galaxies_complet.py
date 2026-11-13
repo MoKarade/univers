@@ -97,7 +97,8 @@ def lire_tsv(chemin: str, colz: int, echelle: float, qual: int | None = None) ->
         try:
             if qual is not None and int(c[qual]) not in (3, 4, 5):
                 continue
-            ra.append(float(c[0])); de.append(float(c[1])); z.append(float(c[colz]) * echelle)
+            a, d, zz = float(c[0]), float(c[1]), float(c[colz]) * echelle      # tout lu avant d'ajouter : lignes incomplètes écartées
+            ra.append(a); de.append(d); z.append(zz)
         except (ValueError, IndexError):
             continue
     return np.array(ra), np.array(de), np.array(z)
@@ -111,7 +112,8 @@ def lire_csv(fichiers: list[str], cols: tuple[int, int, int, int]) -> tuple:
             for l in h:
                 c = l.rstrip('\n').split(',')
                 try:
-                    ra.append(float(c[cols[0]])); de.append(float(c[cols[1]])); z.append(float(c[cols[2]]))
+                    a, d, zz = float(c[cols[0]]), float(c[cols[1]]), float(c[cols[2]])
+                    ra.append(a); de.append(d); z.append(zz)
                     q.append(c[cols[3]].strip().strip('"').upper().startswith('Q'))
                 except (ValueError, IndexError):
                     continue
