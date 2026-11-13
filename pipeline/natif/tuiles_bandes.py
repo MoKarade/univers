@@ -326,6 +326,18 @@ def main():
     os.makedirs(dossier_paq, exist_ok=True)
     fiche = lire_fiche(a.sortie, a.nom, r)
     facteur = facteur_float16(fiche.get('stats', {}))
+    etat = os.path.join(dossier_paq, 'etat.npz')
+    if os.path.exists(etat):
+        # reprise : les morceaux déjà écrits l'ont été avec un facteur ; on garde CELUI-LÀ (12/11/2026 : une reprise
+        # lancée sans la carte entière à côté recalculait 1 au lieu de 10 000 pour eROSITA)
+        e = np.load(etat)
+        if 'facteur' not in e.files:
+            raise SystemExit(f'{etat} : facteur absent ; le mettre avant de reprendre (voir fiche.json)')
+        if float(e['facteur']) != facteur:
+            print(f'  reprise : facteur {float(e["facteur"]):g} des morceaux déjà faits gardé (calculé ici : {facteur:g})', flush=True)
+        facteur = float(e['facteur'])
+    if not fiche.get('stats') and not os.path.exists(etat):
+        raise SystemExit(f'ciel_{a.nom}.bin absent de {a.sortie} : pas de statistiques pour choisir le facteur float16')
     table = cb.orientations(w)[0].ravel()
     print(f'{r["libelle"]} : serveur {adresse}, tuiles {w} px, ordres {ordres} (publié jusqu\'à {ordre_max}), '
           f'Nside {w << K_FIN}, facteur float16 {facteur:g}', flush=True)
@@ -335,7 +347,6 @@ def main():
                                    facteur_float16=facteur, format='UNIVTIL2', en_cours=True,
                                    outil_tuiles='pipeline/natif/tuiles_bandes.py'))
     # état de reprise : index déjà remplis et morceaux faits
-    etat = os.path.join(dossier_paq, 'etat.npz')
     idx = {k: np.zeros(12 * 4 ** k, dtype=np.uint32) for k in ordres}
     faits, depass, absentes = set(), 0, 0
     if os.path.exists(etat):
@@ -372,7 +383,7 @@ def main():
                         blocs[n] = b
                 ecrire_paquets(dossier_paq, k, blocs, idx[k])
             faits.add(m)
-            np.savez(etat[:-4] + '_part.npz', faits=np.array(sorted(faits)), depass=depass, absentes=absentes,
+            np.savez(etat[:-4] + '_part.npz', faits=np.array(sorted(faits)), depass=depass, absentes=absentes, facteur=facteur,
                      **{f'idx{k}': idx[k] for k in ordres})
             os.replace(etat[:-4] + '_part.npz', etat)
             print(f'  morceau {m + 1}/{n_morceaux} fait, {time.time() - t0:.0f} s', flush=True)
