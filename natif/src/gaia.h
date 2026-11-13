@@ -271,9 +271,26 @@ public:
     // est atteinte (kpc). Chaque galaxie se déplace en bloc ; ses étoiles tournent autour de son centre (gaia.vert).
     static constexpr int kMaxGalaxies = 8;
     static constexpr VkDeviceSize kGalaxyBytes = kMaxGalaxies * 4 * 16;
+    // Vieillissement de la lumière des étoiles du MODÈLE (drapeau 16), par composante (0 à 15) : facteurs de lumière et de
+    // température à la date montrée (pipeline/etoiles/vieillissement_populations.json, docs/vieillissement-lumiere.md),
+    // rangés dans les cases 6 (lumière) et 7 (température) de la table lue par gaia.vert.
+    void setAgeing(const float lum[16], const float teff[16]) {
+        if (!galaxiesMapped_) return;
+        std::memcpy(static_cast<char*>(galaxiesMapped_) + 6 * 64, lum, 64);
+        std::memcpy(static_cast<char*>(galaxiesMapped_) + 7 * 64, teff, 64);
+    }
+
+    // Soleil de l'appli (galactocentrique, kpc), case 5 : les étoiles du MODÈLE sont placées par rapport à lui, comme tout
+    // le monde affiché ; sur des milliards d'années, le Soleil de la carte graphique s'en écarte (calcul en simple précision).
+    void setSunGalacto(phys::Vec3 s) {
+        if (!galaxiesMapped_) return;
+        const float v[4] = {static_cast<float>(s.x), static_cast<float>(s.y), static_cast<float>(s.z), 1.0f};
+        std::memcpy(static_cast<char*>(galaxiesMapped_) + 5 * 64, v, 16);
+    }
+
     void setGalaxies(const float* data, int count) {
         if (!galaxiesMapped_) return;
-        const int n = std::min(count, kMaxGalaxies);
+        const int n = std::min(count, 5);      // case 5 : Soleil (setSunGalacto) ; 6 et 7 : vieillissement (setAgeing)
         std::memcpy(galaxiesMapped_, data, static_cast<size_t>(n) * 64);
         if (leafGalaxy_.empty()) {      // galaxie de chaque feuille : celle de sa première étoile (4e champ de la vitesse)
             leafGalaxy_.resize(file_.leafCount);
@@ -281,7 +298,7 @@ public:
             for (uint32_t i = 0; i < file_.leafCount; ++i) {
                 int16_t r = 0;
                 std::memcpy(&r, file_.velocities + file_.leaves[i].first * 8 + 6, 2);
-                leafGalaxy_[i] = std::clamp<int>(r, 0, n - 1);
+                leafGalaxy_[i] = std::clamp<int>(r & 15, 0, n - 1);      // rang de la galaxie ; au-dessus : composante
                 // rayon où ses étoiles peuvent tourner : coin le plus loin du centre de sa galaxie à t = 0
                 const float* g = data + leafGalaxy_[i] * 16;
                 const GaiaLeaf& L = file_.leaves[i];
@@ -325,6 +342,8 @@ public:
     // Contrôle : la prochaine avance porte sur toutes les feuilles, pas seulement les visibles.
     void wantAllLeaves() { visible_.resize(file_.leafCount); for (uint32_t i = 0; i < file_.leafCount; ++i) visible_[i] = i; }
     const GaiaOrbits& orbits() const { return orbits_; }
+    uint32_t epicycleLeaves() const { return epicycleLeaves_; }
+    uint32_t leafCount() const { return file_.leafCount; }
 
     void release(const Gpu& g) {
         if (!ready) return;
