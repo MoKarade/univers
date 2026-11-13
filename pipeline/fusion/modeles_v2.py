@@ -27,6 +27,7 @@ import sys
 import numpy as np
 
 G = 4.30091e-6
+PART_HALO = 0.7      # part des particules donnée à la matière noire (0,5 donnait des particules de halo 22 fois plus lourdes que les étoiles)
 
 # Chaque composante : forme, paramètres, part des particules. Les sources sont dans docs/parametres-galaxies.md.
 GALAXIES = {
@@ -103,12 +104,12 @@ def construire(nom, n_total, adoucissement=None):
     resume = dict(nom=nom, vc={f'{r:g} kpc': round(float(np.interp(r, R, vc)), 1) for r in (2, 4, 8.21, 15, 25)}, composantes=[])
 
     m_halo = float(ph.totalMass())
-    m_bulbe = float(pb.totalMass()) if pb else 0.0
+    m_bulbe = float(pb.totalMass()) if pb is not None else 0.0
     m_etoiles = sum(d['masse'] for d in g['disques']) + m_bulbe
-    # Particules : la moitié pour la matière noire, l'autre moitié pour le reste au prorata des masses. Les particules de
+    # Particules : PART_HALO pour la matière noire, le reste au prorata des masses. Les particules de
     # matière noire sont donc plus lourdes ; le rapport est écrit dans le résumé (à garder sous 10 : au-delà, elles
     # chauffent artificiellement le disque).
-    n_halo = n_total // 2
+    n_halo = int(n_total * PART_HALO)
     n_reste = n_total - n_halo
     out = []
     dfh = agama.DistributionFunction(type='QuasiSpherical', potential=pot, density=ph)
@@ -116,7 +117,7 @@ def construire(nom, n_total, adoucissement=None):
     eps_e = adoucissement or 0.1 * (36000 / max(n_reste, 1)) ** (1 / 3)      # comme calcul.py : 0,1 kpc pour 36 000 étoiles, puis N^(-1/3)
     out.append((xv, m, 4 * eps_e, 0))
     resume['composantes'].append(dict(nom='halo', masse=m_halo, particules=n_halo, masse_particule=m_halo / n_halo))
-    if pb:
+    if pb is not None:
         nb = max(1, round(n_reste * m_bulbe / m_etoiles))
         dfb = agama.DistributionFunction(type='QuasiSpherical', potential=pot, density=pb)
         xv, m = agama.GalaxyModel(pot, dfb).sample(nb)
