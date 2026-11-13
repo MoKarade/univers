@@ -150,7 +150,9 @@ def moyenne_enfants(blocs_fins, n, w):
             fin[k * w * w:(k + 1) * w * w] = b
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', RuntimeWarning)      # pixel sans enfant mesuré : reste NaN
-        return np.nanmean(fin.reshape(-1, 4), axis=1)
+        m = np.nanmean(fin.reshape(-1, 4), axis=1)
+    # tuile sans aucun pixel mesuré : hors de l'index (le moteur retombe sur la carte entière, l'écran ne prétend rien)
+    return m if np.isfinite(m).any() else None
 
 
 def ecrire_idx(chemin, ordre, w, idx):
@@ -270,7 +272,7 @@ def morceau(ex, adresse, w, table, facteur, premier, nombre, brut, ordre=K_FIN, 
     absentes, dépassements)."""
     ns = liste if liste is not None else range(premier, premier + nombre)
     futurs = {ex.submit(telecharger, adresse, ordre, n, brut): n for n in ns}
-    blocs, echecs, absentes, depass = {}, [], 0, 0
+    blocs, echecs, absentes, depass, vides = {}, [], 0, 0, 0
     for fu in cf.as_completed(futurs):
         n = futurs[fu]
         try:
@@ -287,6 +289,9 @@ def morceau(ex, adresse, w, table, facteur, premier, nombre, brut, ordre=K_FIN, 
             raise SystemExit(f'tuile {n} : {img.shape}, attendu {w} × {w}')
         v = np.full(w * w, np.nan, dtype=np.float32)
         v[table] = img.astype(np.float32).ravel()
+        if not np.isfinite(v).any():      # tuile servie mais sans aucune mesure (MPE) : traitée comme absente
+            vides += 1
+            continue
         v *= facteur
         trop = np.abs(v) > F16_MAX
         depass += int(trop.sum())
@@ -294,7 +299,9 @@ def morceau(ex, adresse, w, table, facteur, premier, nombre, brut, ordre=K_FIN, 
         blocs[n] = v
     if echecs:
         raise SystemExit(f'{len(echecs)} tuiles en échec réseau ({echecs[:10]}) ; relancer, la reprise part de ce morceau')
-    return blocs, absentes, depass
+    if vides:
+        print(f'  {vides} tuiles servies sans aucune mesure, laissées hors de l’index', flush=True)
+    return blocs, absentes + vides, depass
 
 
 def main():
