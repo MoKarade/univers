@@ -13,6 +13,9 @@ Même schéma que calcul.py (saute-mouton, pas fixe). La carte est rendue à Mar
 programme l'occupe.
 
 Usage : python stabilite_tir.py <depart.npz> <durée en Ga> <sortie.json> [--pas-ma=0.25] [--theta=0.7] [--releve-ma=50]
+           [--guide=masse,a,omega,monte,tenue,descente[,b,c,angle0]] [--etat-final=<galaxie mûrie.npz>]
+  --guide : barre « guide » qui tourne (masse en M☉, demi-longueur en kpc, vitesse en km/s/kpc, durées en Ga) : elle entraîne
+            le centre du disque en barre, puis s'efface ; ce qui reste est une barre faite des étoiles elles-mêmes.
   --releve-ma=10 pour lire la vitesse de rotation d'une barre (son angle doit tourner de moins d'un quart de tour entre deux relevés).
 """
 import json
@@ -57,6 +60,31 @@ def releve(pos, vel, m, kind, t, e_rel, cm):
     return out
 
 
+def guide_barre(cp, pos, t, g):
+    """Accélération d'une barre « guide » : une aiguille adoucie (Long et Murali 1992, ApJ 397, 44) qui tourne à vitesse
+    fixe autour de +z. Elle n'a pas de particules : elle sert à entraîner le centre du disque sur des orbites de barre,
+    puis elle est retirée ; la barre qui reste alors est faite des étoiles elles-mêmes. Sa masse monte, tient, puis descend
+    (g : masse en M☉, demi-longueur a, largeurs b et c en kpc, vitesse en km/s/kpc, durées de montée, tenue, descente en Ga)."""
+    tm, tt, td = g['monte'], g['tenue'], g['descente']
+    if t < tm: f = 0.5 * (1 - math.cos(math.pi * t / tm))
+    elif t < tm + tt: f = 1.0
+    elif t < tm + tt + td: f = 0.5 * (1 + math.cos(math.pi * (t - tm - tt) / td))
+    else: return None, 0.0
+    if f <= 0: return None, 0.0
+    ang = g['angle0'] + g['omega'] * 1.0227121650456 * t      # rad ; km/s/kpc -> rad/Ga
+    co, si = math.cos(ang), math.sin(ang)
+    x = pos[:, 0] * co + pos[:, 1] * si; y = -pos[:, 0] * si + pos[:, 1] * co; z = pos[:, 2]
+    a, b, c = g['a'], g['b'], g['c']
+
+    def phi(x, y, z):
+        q = y * y + (b + cp.sqrt(c * c + z * z)) ** 2
+        tp = cp.sqrt((a + x) ** 2 + q); tn = cp.sqrt((a - x) ** 2 + q)
+        return G * f * g['masse'] / (2 * a) * cp.log((x - a + tn) / (x + a + tp))
+    h = 1e-3
+    ax = -(phi(x + h, y, z) - phi(x - h, y, z)) / (2 * h); ay = -(phi(x, y + h, z) - phi(x, y - h, z)) / (2 * h); az = -(phi(x, y, z + h) - phi(x, y, z - h)) / (2 * h)
+    return cp.stack([ax * co - ay * si, ax * si + ay * co, az], axis=1), f
+
+
 def attendre(t_check):
     if time.time() - t_check < 30: return t_check
     cp.cuda.Stream.null.synchronize()
@@ -86,7 +114,22 @@ def main():
     m = cp.asarray(p['m'], dtype=cp.float64); eps = cp.asarray(p['eps'], dtype=cp.float64); mg = m * G
     dt = dt_ma * 1e-3 / T_UNIT
     steps = int(round(duree * 1000 / dt_ma)); every = int(round(float(opts.get('releve-ma', 50.0)) / dt_ma))
-    acc, phi = gravite_gpu.gravity(pos, mg, eps, theta=theta, quad=True)
+    guide = None
+    if 'guide' in opts:      # --guide=masse,a,omega,monte,tenue,descente[,b,c,angle0]
+        v = [float(x) for x in opts['guide'].split(',')]
+        guide = dict(masse=v[0], a=v[1], omega=v[2], monte=v[3], tenue=v[4], descente=v[5], b=v[6] if len(v) > 6 else 0.6, c=v[7] if len(v) > 7 else 0.35, angle0=v[8] if len(v) > 8 else 0.0)
+
+    def forces(t):
+        acc, phi = gravite_gpu.gravity(pos, mg, eps, theta=theta, quad=True)
+        if guide:
+            ag, f = guide_barre(cp, pos - cm_gpu(), t, guide)
+            if ag is not None: acc = acc + ag
+        return acc, phi
+
+    def cm_gpu():
+        return cp.sum(pos * m[:, None], axis=0) / cp.sum(m)
+
+    acc, phi = forces(0.0)
 
     def energie(phi):
         return 0.5 * float(cp.sum(m * cp.sum(vel ** 2, axis=1))) + 0.5 * float(cp.sum(m * phi))
@@ -109,13 +152,18 @@ def main():
     for s in range(steps):
         vel += 0.5 * dt * acc
         pos += dt * vel
-        acc, phi = gravite_gpu.gravity(pos, mg, eps, theta=theta, quad=True)
+        acc, phi = forces((s + 1) * dt_ma * 1e-3)
         vel += 0.5 * dt * acc
         if (s + 1) % every == 0: note((s + 1) * dt_ma * 1e-3)
         t_check = attendre(t_check)
     # Verdict : calme si la force de la barre reste sous 0,1 partout ; la vitesse de la barre se lit entre deux relevés.
     pire = max(x['a2'] for r in res['releves'] for x in r['anneaux'] if x)
     res['a2_max'] = pire
+    if guide: res['guide'] = guide
+    if 'etat-final' in opts:      # la galaxie mûrie, au même format que modeles_v2.py : elle peut servir de départ à rencontre.py
+        c0 = cp.asnumpy(cm_gpu()); v0 = cp.asnumpy(cp.sum(vel * m[:, None], axis=0) / cp.sum(m))
+        meta2 = dict(meta); meta2['murie'] = dict(duree_ga=duree, guide=guide, depart=os.path.basename(depart))
+        np.savez_compressed(opts['etat-final'], pos=cp.asnumpy(pos) - c0, vel=cp.asnumpy(vel) - v0, m=p['m'], eps=p['eps'], kind=kind, meta=json.dumps(meta2, ensure_ascii=False))
     json.dump(res, open(sortie, 'w', encoding='utf-8'), ensure_ascii=False)
     print(f"force maximale du motif à deux bras : {pire:.3f} ({'disque calme' if pire < 0.1 else 'barre ou bras marqués'})")
 
