@@ -1,0 +1,23 @@
+{
+ "variante": "sawala2025",
+ "energie_noire": true,
+ "galaxies": [
+  "MW",
+  "M31",
+  "M33",
+  "LMC"
+ ],
+ "n": 5000,
+ "clip": 2.0,
+ "probabilite_fusion_mw_m31": 0.5526,
+ "quantiles_ga": {
+  "0.05": 5.758,
+  "0.16": 6.45,
+  "0.5": 7.599,
+  "0.84": 8.957,
+  "0.95": 9.672
+ },
+ "duree_s": 148.3,
+ "probabilite_LMC_MW": 0.998,
+ "probabilite_M33_M31": 0.8596
+}

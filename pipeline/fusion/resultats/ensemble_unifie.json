@@ -1,0 +1,25 @@
+{
+ "variante": "unifie",
+ "energie_noire": true,
+ "galaxies": [
+  "MW",
+  "M31",
+  "M33",
+  "LMC",
+  "SMC"
+ ],
+ "n": 5000,
+ "clip": 2.0,
+ "probabilite_fusion_mw_m31": 0.9592,
+ "quantiles_ga": {
+  "0.05": 4.702,
+  "0.16": 5.373,
+  "0.5": 6.646,
+  "0.84": 7.78,
+  "0.95": 8.717
+ },
+ "duree_s": 232.5,
+ "probabilite_LMC_MW": 1.0,
+ "probabilite_M33_M31": 0.141,
+ "probabilite_SMC_LMC": 0.6882
+}

@@ -1,0 +1,132 @@
+{
+ "version": 1,
+ "date": "2026-11-13",
+ "genere_par": "pipeline/fusion/groupe_local_reference.py",
+ "repere": "phys::galaxie (Voie lactée à l’origine et au repos aujourd’hui)",
+ "unites": "kpc, km/s, M☉, Ga",
+ "source": "pipeline/constantes/univers.json (valeurs centrales) ; ce sont les positions et vitesses à atteindre AUJOURD’HUI",
+ "galaxies": {
+  "voie_lactee": {
+   "nom": "Voie lactée",
+   "masse": 1343000000000.0,
+   "position_aujourdhui": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "vitesse_aujourdhui": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "position_reference_moins_passe": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "vitesse_reference_moins_passe": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "andromede": {
+   "nom": "Andromède (M31)",
+   "masse": 1065000000000.0,
+   "position_aujourdhui": [
+    -374.5444,
+    605.5266,
+    -279.8164
+   ],
+   "vitesse_aujourdhui": [
+    31.921,
+    -103.866,
+    43.602
+   ],
+   "position_reference_moins_passe": [
+    -473.918,
+    785.182,
+    -355.462
+   ],
+   "vitesse_reference_moins_passe": [
+    26.621,
+    -26.402,
+    12.031
+   ]
+  },
+  "triangle": {
+   "nom": "Triangle (M33)",
+   "masse": 408100000000.0,
+   "position_aujourdhui": [
+    -514.3047,
+    531.2809,
+    -446.6603
+   ],
+   "vitesse_aujourdhui": [
+    3.068,
+    97.67,
+    185.697
+   ],
+   "position_reference_moins_passe": [
+    -434.518,
+    238.008,
+    -773.714
+   ],
+   "vitesse_reference_moins_passe": [
+    -37.514,
+    97.955,
+    64.841
+   ]
+  },
+  "grand_nuage": {
+   "nom": "Grand Nuage de Magellan",
+   "masse": 137900000000.0,
+   "position_aujourdhui": [
+    -0.6361,
+    -40.9421,
+    -26.9214
+   ],
+   "vitesse_aujourdhui": [
+    -39.656,
+    -226.468,
+    227.159
+   ],
+   "position_reference_moins_passe": [
+    -2.582,
+    137.222,
+    115.181
+   ],
+   "vitesse_reference_moins_passe": [
+    20.589,
+    56.599,
+    -167.435
+   ]
+  },
+  "petit_nuage": {
+   "nom": "Petit Nuage de Magellan",
+   "masse": 3000000000.0,
+   "position_aujourdhui": [
+    16.0026,
+    -37.5514,
+    -43.5956
+   ],
+   "vitesse_aujourdhui": [
+    3.136,
+    -160.06,
+    143.312
+   ],
+   "position_reference_moins_passe": [
+    -5.184,
+    40.225,
+    52.905
+   ],
+   "vitesse_reference_moins_passe": [
+    147.623,
+    171.826,
+    -170.75
+   ]
+  }
+ },
+ "debut_reference_ga": -2.9998597200000003,
+ "note": "Les positions « reference_moins_passe » viennent des orbites des centres (galaxies indéformables) : elles servent de point de départ au tir, pas de vérité ; le calcul N-corps doit retomber sur « aujourdhui » à t = 0."
+}
