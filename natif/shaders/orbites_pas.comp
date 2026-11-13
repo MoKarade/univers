@@ -23,10 +23,10 @@ const float OP_MD = 6.8e10;
 const float OP_AD = 3.0;
 const float OP_BD = 0.28;
 const float OP_RS = 16.0;
-const float OP_GMH = 2410361.25417129;      /* phys::galaxie::gmHalo() */
+const float OP_GMH = 2552189.27458262;      /* phys::galaxie::gmHalo() */
 const float OP_K = 1.0227121650456;         /* km/s -> kpc par milliard d'années */
 const float OP_RB = 5.0;                    /* demi-longueur de la barre (kpc) */
-const float OP_ABAR = 777.79646;            /* force de la barre : 0,01 x 230^2 x (8,2 / 5)^3 / 3 */
+const float OP_ABAR = 796.84938;            /* force de la barre : 0,01 x 232,8^2 x (8,2 / 5)^3 / 3 */
 const float OP_BAR0 = 2.65290046;           /* angle de la barre à t = 0 : pi - 28 degrés */
 const float OP_BARW = 39.8857744;           /* rotation de la barre : 39 km/s/kpc, en radians par milliard d'années */
 const float OP_KL = 0.00311179;             /* énergie noire : H0² Ω_Λ ((km/s)²/kpc²), phys::galaxie::kLambdaKmsKpc2 */
