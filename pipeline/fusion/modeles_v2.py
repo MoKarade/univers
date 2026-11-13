@@ -42,6 +42,28 @@ GALAXIES = {
             dict(kind=4, sigma0=1.83e8, rd=3.02, hz=0.90, sigma_soleil=50.0, r_soleil=8.21),   # disque épais 1,05e10 M☉
             dict(kind=3, masse=1.22e10, rd=7.0, hz=0.085, q_min=1.5),                           # gaz (HI + H2), pris comme un disque froid
         ]),
+    # Variante « barre » : dans la vraie Voie lactée, le bulbe est surtout une barre née du disque (Portail et al. 2017 :
+    # 1,04e10 M☉ sur des orbites de barre). La masse du bulbe de McMillan est donc mise dans un disque intérieur compact et
+    # froid, sans bulbe sphérique, pour que la barre puisse naître d'elle-même. Longueur du disque compact : [modèle].
+    'voie_lactee_barre': dict(
+        halo=dict(rho0=8.54e6, rs=19.6, coupure=250.0),
+        bulbe=None,
+        disques=[
+            dict(kind=1, sigma0=8.96e8, rd=2.50, hz=0.30, sigma_soleil=35.0, r_soleil=8.21),
+            dict(kind=4, sigma0=1.83e8, rd=3.02, hz=0.90, sigma_soleil=50.0, r_soleil=8.21),
+            dict(kind=1, masse=9.23e9, rd=1.0, hz=0.30, q_min=1.2),
+            dict(kind=3, masse=1.22e10, rd=7.0, hz=0.085, q_min=1.5),
+        ]),
+    # Variante « barre » d'Andromède : bulbe classique seul (1,18e10 M☉) ; le bulbe en boîte (1,91e10 M☉, Blaña Díaz et al.
+    # 2018), qui est une barre, est mis dans un disque intérieur compact. Longueur du disque compact : [modèle].
+    'andromede_barre': dict(
+        halo=dict(rho0=1.10e7, rs=16.5, coupure=207.0),
+        bulbe=dict(masse=1.18e10, a=0.55),
+        disques=[
+            dict(kind=1, masse=5.6e10, rd=5.3, hz=0.6, q_min=1.5),
+            dict(kind=1, masse=1.91e10, rd=1.5, hz=0.4, q_min=1.2),
+            dict(kind=3, masse=5.6e9, rd=6.0, hz=0.15, q_min=1.5),
+        ]),
     # Tamm et al. 2012 (A&A 546, A4), tables 2 et 4 (halo NFW) ; disque : Courteau et al. 2011 (5,3 kpc) ; bulbe : Blaña Díaz
     # et al. 2018 (3,09e10 M☉) et Courteau 2011 (rayon effectif 1,0 kpc, soit a = 0,55 kpc pour un profil de Hernquist).
     'andromede': dict(

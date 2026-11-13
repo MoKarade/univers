@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["voie_lactee --rsig=3","voie_lactee --rsig=4","andromede --rsig=3","andromede --rsig=4"]') }}
+        galaxie: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.galaxie)) || fromJSON('["voie_lactee_barre --rsig=3","andromede_barre --rsig=3"]') }}
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
