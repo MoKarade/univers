@@ -97,10 +97,44 @@ pas de gaz, 809 kpc, 49°.
 | Centre | 16,25°, −72,42° (gaz) | Stanimirović et al. 2004, cité [lu] |
 | Masse | 3 × 10⁹ M☉ : valeur adoptée, pas mesurée [résumé] | à chercher |
 
-## 7. Ce qui reste à relire avant d'écrire le nouveau `modeles.py`
+## 7. Compléments relus le même jour
 
-- Andromède : masse du disque d'étoiles et masse totale du halo.
-- Voie lactée : barre et bulbe (Portail et al. 2017).
+### Voie lactée : barre et bulbe
+
+| Grandeur | Valeur | Source |
+|---|---|---|
+| Vitesse de la barre | 39,0 ± 3,5 km/s/kpc ; corotation à 6,1 ± 0,5 kpc | Portail et al. 2017 (arXiv:1608.07954) [lu] |
+| Masse dans le bulbe (boîte ±2,2 × ±1,4 × ±1,2 kpc) | 1,85 ± 0,05 × 10¹⁰ M☉, dont étoiles 1,32 ± 0,08 et matière noire 0,32 ± 0,05 | idem [lu] |
+| Barre et bulbe (étoiles) | 1,88 ± 0,12 × 10¹⁰ M☉, dont barre longue 0,54 ± 0,04 ; disque intérieur 1,29 ± 0,12 | idem [lu] |
+| Angle et demi-longueur de la barre | 28° ; 5,0 ± 0,2 kpc | idem, d'après Wegg et al. 2015 [lu] |
+| Épaisseurs de la barre | environ 180 pc et 45 pc | Wegg, Gerhard et Portail 2015 [lu] |
+| Agitation des étoiles au Soleil | disque mince 35 ± 5 km/s (radial), 25 ± 5 (vertical) ; disque épais 50 ± 5 et 50 ± 5 | Bland-Hawthorn et Gerhard 2016, § 5.4 [lu] |
+| Disque épais | longueur 2,0 ± 0,2 kpc ; 6 ± 3 × 10⁹ M☉ | idem [lu] |
+| Total des étoiles | 5 ± 1 × 10¹⁰ M☉ (R0 = 8,2 kpc) | idem [lu] |
+
+### Andromède : disque et halo
+
+| Grandeur | Valeur | Source |
+|---|---|---|
+| Étoiles au total | 10 à 15 × 10¹⁰ M☉ ; bulbe 30 %, disque 56 % | Tamm et al. 2012 (arXiv:1208.5712), résumé de l'article [lu] |
+| Disque d'étoiles | 5,6 × 10¹⁰ M☉ (borne basse ; borne haute × 1,5) | idem, table 2 [lu] |
+| Bulbe | 3,1 × 10¹⁰ M☉ (borne basse) : d'accord avec Blaña Díaz 2018 (3,09) | idem [lu] |
+| Halo d'étoiles | 1,3 × 10¹⁰ M☉ | idem [lu] |
+| Halo de matière noire NFW | 1,10 ± 0,18 × 10⁻² M☉/pc³, rayon 16,5 ± 1,5 kpc ; masse 1,04 × 10¹² M☉ dans 207 kpc | idem, table 4 [lu] |
+| Autres formes de halo | 0,8 à 1,1 × 10¹² M☉ dans 189 à 213 kpc | idem [lu] |
+| Masse par les vitesses d'échappement | 0,8 ± 0,1 × 10¹² M☉ dans 240 ± 10 kpc | Kafle et al. 2018 (arXiv:1801.03949) [lu] |
+| Masse enfermée | 39 × 10¹⁰ dans 32 kpc ; 55 × 10¹⁰ dans 55 kpc ; 75 × 10¹⁰ dans 125 kpc | Tamm et al. 2012, table 3 [lu] |
+
+Conséquence : dans `modeles.py`, Andromède pèse 1,5 fois la Voie lactée (halo de 1,59 × 10¹² M☉). Les mesures relues
+donnent un halo de 0,8 à 1,1 × 10¹² M☉, soit **moins que la Voie lactée de McMillan** (1,37 × 10¹²) ; les scénarios
+d'incertitude utilisent 1,3 ± 0,4. La masse d'Andromède est l'inconnue qui pèse le plus sur la date de la rencontre.
+
+### Petit Nuage de Magellan
+
+La masse totale n'a pas été trouvée (l'article visé n'était pas à l'adresse essayée). À chercher : Di Teodoro et al. 2019.
+
+## 8. Ce qui reste avant d'écrire les nouveaux modèles
+
 - Petit Nuage : masse totale.
-- Trancher la distance d'Andromède (761 ou 785 kpc) et l'utiliser partout, scénarios compris.
-- Toutes les valeurs [résumé].
+- Trancher la distance d'Andromède (761 ou 785 kpc) et la masse de son halo, et utiliser les mêmes partout, scénarios compris.
+- Relire les valeurs marquées [résumé].
