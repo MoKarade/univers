@@ -207,23 +207,50 @@ def ecart_a_la_cible(journal, cible):
     return out
 
 
-def jacobien_orbite(pos0, vel0, T, r_tab, m_tab, m_sat):
-    """Comment l'état d'arrivée (position, vitesse) d'une galaxie change quand on change son état de départ : matrice 6 x 6,
-    par différences finies sur une orbite SIMPLE (un point dans la masse enfermée de la Voie lactée, sans frottement).
-    Ce modèle simple ne sert qu'à orienter la correction ; l'écart lui-même vient du vrai calcul."""
-    def orbite(x, v):
-        x = np.array(x, float); v = np.array(v, float); n = max(200, int(abs(T) / 0.002)); h = T / n
-        def acc(x):
-            r = max(np.linalg.norm(x), 1.0)
-            return -G * (np.interp(r, r_tab, m_tab) + m_sat) * x / r ** 3
-        a = acc(x)
-        for _ in range(n):
-            v = v + 0.5 * h * a; x = x + h * v; a = acc(x); v = v + 0.5 * h * a
-        return np.concatenate([x, v])
-    base = orbite(pos0, vel0); J = np.zeros((6, 6))
+def profils(dossier):
+    """Masse enfermée de chaque galaxie en fonction du rayon, lue dans ses particules : pour le modèle simple des centres."""
+    out = []
+    for nom in ORDRE:
+        with np.load(os.path.join(dossier, nom + '.npz')) as z:
+            r = np.linalg.norm(z['pos'], axis=1); m = z['m']
+        o = np.argsort(r); pas = max(1, len(r) // 3000)
+        out.append((r[o][::pas], np.cumsum(m[o])[::pas]))
+    return out
+
+
+def centres_simples(etat, T, prof):
+    """Modèle SIMPLE des cinq centres : chaque galaxie est un point attiré par la masse que les autres enferment à sa
+    distance (profils des vraies particules), sans frottement ni marée. Il ne sert qu'à deux choses : deviner le départ
+    en remontant depuis les mesures d'aujourd'hui, et orienter les corrections (matrice de sensibilité). L'écart, lui,
+    vient toujours du vrai calcul. etat : {galaxie: {pos, vel}} relatifs à la Voie lactée ; T en kpc/(km/s), négatif pour
+    remonter le temps. Rend l'état d'arrivée, relatif à la Voie lactée."""
+    x = np.array([etat[n]['pos'] for n in ORDRE], float); v = np.array([etat[n]['vel'] for n in ORDRE], float)
+    n = max(200, int(abs(T) / 0.001)); h = T / n
+
+    def acc(x):
+        a = np.zeros_like(x)
+        for i in range(len(ORDRE)):
+            for j in range(len(ORDRE)):
+                if i == j: continue
+                d = x[i] - x[j]; r = max(np.linalg.norm(d), 2.0)
+                a[i] -= G * np.interp(r, prof[j][0], prof[j][1]) * d / r ** 3
+        return a
+    a = acc(x)
+    for _ in range(n):
+        v += 0.5 * h * a; x += h * v; a = acc(x); v += 0.5 * h * a
+    return {nom: dict(pos=(x[g] - x[0]).tolist(), vel=(v[g] - v[0]).tolist()) for g, nom in enumerate(ORDRE)}
+
+
+def sensibilite(etat, g, T, prof):
+    """Matrice 6 x 6 : comment l'état d'arrivée de la galaxie g change avec son état de départ, dans le modèle simple."""
+    nom = ORDRE[g]
+    def arrivee(e):
+        f = centres_simples(e, T, prof)[nom]; return np.concatenate([f['pos'], f['vel']])
+    base = arrivee(etat); J = np.zeros((6, 6))
     for k in range(6):
-        d = np.zeros(6); d[k] = 1.0 if k < 3 else 0.5      # 1 kpc ou 0,5 km/s
-        J[:, k] = (orbite(np.array(pos0) + d[:3], np.array(vel0) + d[3:]) - base) / d[k]
+        e = json.loads(json.dumps(etat)); pas = 1.0 if k < 3 else 0.5      # 1 kpc ou 0,5 km/s
+        (e[nom]['pos'] if k < 3 else e[nom]['vel'])[k % 3] += pas
+        J[:, k] = (arrivee(e) - base) / pas
     return J
 
 
@@ -233,12 +260,8 @@ def main():
     mode = args[0]
     cible = json.load(open(os.path.join(ICI, 'resultats', 'cible_aujourdhui.json'), encoding='utf-8'))
     t_depart = float(cible['debut_reference_ga'])
-    if 'depart' in opts:      # départ plus récent : premier état lu dans les orbites de référence (centres_reference.npz)
-        with np.load(os.path.join(ICI, 'resultats', 'centres_reference.npz')) as z:
-            i = int(np.argmin(np.abs(z['t'] - float(opts['depart']))))
-            t_depart = float(z['t'][i]); ref = {n: dict(pos=z['pos'][i, g].astype(float).tolist(), vel=z['vel'][i, g].astype(float).tolist()) for g, n in enumerate(ORDRE)}
-    else:
-        ref = {n: dict(pos=cible['galaxies'][n]['position_reference_moins_passe'], vel=cible['galaxies'][n]['vitesse_reference_moins_passe']) for n in ORDRE}
+    ref = None
+    if 'depart' in opts: t_depart = float(opts['depart'])
     if mode in ('tir', 'passe'):
         dossier, sortie = args[1], args[2]
         os.makedirs(sortie, exist_ok=True)
@@ -246,7 +269,11 @@ def main():
             precedent = json.load(open(opts['etat'], encoding='utf-8'))
             etat, t_depart = precedent['etat'], float(precedent['t_depart'])
         else:
-            etat = ref
+            # Premier départ : on remonte depuis les places et vitesses mesurées aujourd'hui, dans le modèle simple des centres
+            # bâti sur les masses de CE calcul. (Les orbites de la référence, avec leur frottement de formule, ne valent pas
+            # pour les Nuages dans ce calcul : tirs 1 à 3 du 13/11, 120 à 250 kpc d'écart.)
+            auj = {n: dict(pos=cible['galaxies'][n]['position_aujourdhui'], vel=cible['galaxies'][n]['vitesse_aujourdhui']) for n in ORDRE}
+            etat = centres_simples(auj, t_depart / T_UNIT, profils(dossier))
         p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)))
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
         S = Calcul(p, theta=float(opts.get('theta', 0.7)))
@@ -256,16 +283,13 @@ def main():
         # retiré de la position de départ, compte tenu de ce que le changement de vitesse déplace sur la durée du trajet
         # (mouvement libre : une approximation, d'où les tirs successifs). Amorti pour ne pas osciller.
         amorti, T = float(opts.get('amorti', 0.8)), -t_depart / T_UNIT
-        vl = p['gid'] == 0
-        r = np.sort(np.linalg.norm(p['pos'][vl] - np.average(p['pos'][vl], axis=0, weights=p['m'][vl]), axis=1))      # masse enfermée de la Voie lactée (au départ)
-        m_tab = np.cumsum(np.full(len(r), 0) + p['m'][vl][np.argsort(np.linalg.norm(p['pos'][vl] - np.average(p['pos'][vl], axis=0, weights=p['m'][vl]), axis=1))])
-        pas = max(1, len(r) // 2000); r_tab, m_tab = r[::pas], m_tab[::pas]
+        prof = profils(dossier)
         corrige = {}
         for g, n in enumerate(ORDRE):
             e = dict(pos=list(map(float, etat[n]['pos'])), vel=list(map(float, etat[n]['vel'])))
             if n in ecart:
                 # Newton : on cherche le changement de départ qui annule l'écart d'arrivée, avec la matrice de l'orbite simple.
-                J = jacobien_orbite(e['pos'], e['vel'], T, r_tab, m_tab, float(p['m'][p['gid'] == g].sum()))
+                J = sensibilite(etat, g, T, prof)
                 d = np.linalg.lstsq(J, -np.concatenate([ecart[n]['dx'], ecart[n]['dv']]), rcond=1e-6)[0] * amorti
                 # garde-fou : jamais plus de 60 % de la distance ni de 150 km/s en un tir
                 fx = min(1.0, 0.6 * np.linalg.norm(e['pos']) / max(np.linalg.norm(d[:3]), 1e-9)); fv = min(1.0, 150.0 / max(np.linalg.norm(d[3:]), 1e-9)); f = min(fx, fv)
