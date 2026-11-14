@@ -160,6 +160,11 @@ class Calcul:
             except Exception:
                 break
             if u < 35: break
+            if os.environ.get('UNIVERS_CEDER') == '1':
+                # Marc joue ou ouvre son appli : on rend TOUTE la carte (mémoire comprise) en s'arrêtant. Le veilleur
+                # (veilleur_calcul.ps1) relance le calcul depuis la dernière sauvegarde quand la carte est de nouveau libre.
+                print(f'  carte graphique occupée à {u} % par un autre programme : le calcul se retire, reprise à la dernière sauvegarde', flush=True)
+                sys.exit(3)
             print(f'  carte graphique occupée à {u} % par un autre programme : pause de 60 s', flush=True)
             time.sleep(60)
         self.t_check = time.time()
@@ -429,7 +434,8 @@ def futur(sortie, t_fin, opts, cible):
         except Exception as err:
             print(f'  index du film non écrit : {err}', flush=True)
 
-    avancer(S, t0, t_fin, film, releve_ma=releve_ma, journal=journal, a_chaque_releve=image_et_index)
+    # Sauvegarde toutes les 5 images (50 Ma, environ 7 minutes de carte) : un arrêt ne perd jamais plus que cela.
+    avancer(S, t0, t_fin, film, releve_ma=releve_ma, instantane_ga=0.05, journal=journal, a_chaque_releve=image_et_index)
     print('film terminé :', len(meta['t']), 'images')
 
 
