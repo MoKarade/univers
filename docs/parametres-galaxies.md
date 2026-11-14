@@ -1,0 +1,175 @@
+# Paramètres publiés des galaxies du Groupe local, relus le 13 novembre 2026
+
+But : remplacer les modèles de départ du calcul de la rencontre (`pipeline/fusion/modeles.py`), qui sont instables et
+faux (`docs/revue-detaillee.md`, G1 à G5 et G10), par des valeurs relues dans les articles.
+
+Statut de chaque valeur : **[lu]** texte de l'article lu tel quel ce jour (version arXiv) ; **[résumé]** tiré d'un résumé
+automatique de la partie non lue, à relire avant d'entrer dans le code ; **[calculé]** calculé ici.
+
+## 1. Ce que mesurent les modèles actuels (`pipeline/fusion/stabilite.py`) [calculé]
+
+| Galaxie | Stabilité du disque Q (minimum) | Il faut | Remarque |
+|---|---|---|---|
+| Voie lactée | 0,74 | plus de 1,5 | 252 km/s au Soleil au lieu de 230 ; disque de 68 M☉/pc² |
+| Andromède | 0,74 | plus de 1,5 | même forme que la Voie lactée, agrandie |
+| Triangle | 0,61 | plus de 1,5 | 81 km/s de rotation au lieu de 100 à 125 |
+| Grand Nuage | 2,37 | plus de 1,5 | stable, mais halo non coupé |
+
+Chauffer le disque ne suffit pas (il faudrait doubler l'agitation, bien au-delà des mesures) : **le disque est trop
+lourd**. Avec le modèle publié de la Voie lactée et l'agitation mesurée au Soleil (30 à 40 km/s), on obtient Q = 1,7 à
+2,3 : stable, sans rien forcer.
+
+## 2. Voie lactée : McMillan 2017 (MNRAS 465, 76 ; arXiv:1608.00971), meilleur modèle, table 3 [lu]
+
+| Composante | Forme | Valeurs |
+|---|---|---|
+| Disque mince | exponentiel, hauteur 300 pc | 896 M☉/pc², longueur 2,50 kpc, soit 3,52 × 10¹⁰ M☉ [calculé] |
+| Disque épais | exponentiel, hauteur 900 pc | 183 M☉/pc², longueur 3,02 kpc, soit 1,05 × 10¹⁰ M☉ [calculé] |
+| Gaz atomique | disque troué (4 kpc), longueur 7 kpc, hauteur 85 pc | 1,1 × 10¹⁰ M☉ |
+| Gaz moléculaire | disque troué (12 kpc), longueur 1,5 kpc, hauteur 45 pc | 1,2 × 10⁹ M☉ |
+| Bulbe | loi de puissance 1,8, coupure 2,1 kpc, aplati 0,5 | 9,23 × 10⁹ M☉ |
+| Halo | NFW | 0,00854 M☉/pc³, rayon 19,6 kpc ; masse 1,37 × 10¹² M☉, concentration 15,4 |
+| Soleil | | R0 = 8,21 kpc ; vitesse circulaire 233,1 km/s ; matière noire locale 0,0101 M☉/pc³ |
+| Total des étoiles | | 5,43 × 10¹⁰ M☉ |
+
+À ajouter (hors de cet article, à relire) : barre de 5,0 kpc, 28°, 39 km/s/kpc, masse du bulbe et de la barre
+1,9 × 10¹⁰ M☉ (Wegg et al. 2015 ; Portail et al. 2017) [non relu ce jour]. Le bulbe de McMillan (0,9 × 10¹⁰) est
+axisymétrique et ne compte pas la barre longue.
+
+## 3. Andromède
+
+| Grandeur | Valeur | Source |
+|---|---|---|
+| Distance | 785 ± 25 kpc adoptée par les trois articles ci-dessous [lu] ; 761 ± 11 kpc (Li et al. 2021, Céphéides) [non relu] | à trancher : une seule valeur partout |
+| Inclinaison, angle de position | 77° ; 38° (ou 74° et 37,7° en cinématique) | Blaña Díaz 2018 § 2.2 [lu] ; Chemin 2009 [lu / résumé] |
+| Longueur du disque | 5,3 ± 0,5 kpc (3,6 µm, sans poussière) | Courteau et al. 2011, résumé de l'article [lu] |
+| Bulbe classique | 1,18 (+0,06 −0,07) × 10¹⁰ M☉ | Blaña Díaz et al. 2018 [lu] |
+| Bulbe en boîte (barre) | 1,91 ± 0,06 × 10¹⁰ M☉ | idem [lu] |
+| Bulbe total | 3,09 × 10¹⁰ M☉ | idem [lu] |
+| Barre | 40 ± 5 km/s/kpc ; angle 54,7 ± 3,8° ; demi-longueur 4,0 kpc | idem [lu] |
+| Masse sur lumière à 3,6 µm | 0,72 ± 0,02 | idem [lu] |
+| Matière noire dans 3,2 kpc | 1,2 × 10¹⁰ M☉ ; halo d'Einasto 1,29 × 10⁷ M☉/kpc³, 7,8 kpc, α = 0,51 | idem [lu] ; paramètres [résumé] |
+| Rotation | 340 km/s au centre, creux à 202 km/s vers 4 kpc, 275 km/s au bord | Chemin, Carignan et Foster 2009 [lu] |
+| Gaz atomique | 4,23 × 10⁹ M☉ | idem [lu] |
+| Bulbe de Sersic | indice 2,2 ± 0,3 ; rayon 1,0 ± 0,2 kpc ; lumière : 23 % bulbe, 73 % disque, 4 % halo | Courteau et al. 2011 [lu] |
+| Masse du disque d'étoiles, masse totale du halo | **non trouvées** dans ces lectures | à chercher (Tamm et al. 2012 ; Kafle et al. 2018) |
+
+Dans `modeles.py` aujourd'hui : disque de 3,0 kpc, bulbe de 0,75 × 10¹⁰ M☉, pas de barre.
+
+## 4. Triangle (M33)
+
+| Grandeur | Valeur | Source |
+|---|---|---|
+| Distance | 840 kpc | Corbelli et al. 2014 ; Kam et al. 2017 [lu] |
+| Inclinaison | 52 ± 3° (optique) ; 53 à 58° selon le rayon | Kam et al. 2017, table 1 [lu] ; table 4 [résumé] |
+| Angle de position | 22,5 ± 1° ; cinématique 202° au centre, 165° au bord (disque tordu) | Kam et al. 2017 [lu] |
+| Étoiles | 4,8 ± 0,6 × 10⁹ M☉ [résumé] ; 5,5 × 10⁹ M☉ [lu] | Corbelli 2014 ; Kam 2017 |
+| Longueur du disque | 1,8 ± 0,1 kpc ; 1,6 kpc | Corbelli 2014 [lu] ; Kam 2017 [lu] |
+| Gaz atomique | 1,53 × 10⁹ [résumé] ; 1,95 ± 0,36 × 10⁹ M☉ [lu] ; × 1,33 pour l'hélium | Corbelli ; Kam |
+| Gaz moléculaire | 3,0 × 10⁸ M☉ | Corbelli 2014 [lu] |
+| Rotation | 100 km/s à 4 kpc, 120 à 130 km/s au-delà ; maximum 125 km/s | Corbelli 2014 [lu] ; Kam 2017 [lu] |
+| Halo | NFW 4,3 ± 1,0 × 10¹¹ M☉, concentration ≈ 10 | Corbelli 2014 [lu] |
+| Masse dans 23 kpc | 8 × 10¹⁰ M☉ ; 5 × 10¹¹ au rayon du viriel | Kam 2017 [lu] |
+
+Dans `modeles.py` aujourd'hui : halo de Plummer de 2,5 × 10¹¹ à cœur de 21 kpc (81 km/s seulement), disque de 1,4 kpc,
+pas de gaz, 809 kpc, 49°.
+
+## 5. Grand Nuage de Magellan
+
+| Grandeur | Valeur | Source |
+|---|---|---|
+| Distance | 50,1 ± 2,5 kpc | van der Marel et Kallivayalil 2014, table 1 [lu] |
+| Inclinaison | 39,6 ± 4,5° (mouvements propres), 34,0 ± 7,0° (avec vieilles étoiles), 26,2 ± 5,9° (avec jeunes) | idem [lu] |
+| Ligne des nœuds | 147,4 ± 10,0° ; 139,1 ± 4,1° ; 154,5 ± 2,1° | idem [lu] |
+| Rotation | 91,7 ± 18,8 km/s ; masse dans 8,7 kpc : 1,7 ± 0,7 × 10¹⁰ M☉ | idem [lu] |
+| Centre | 78,76 ± 0,52°, −69,19 ± 0,25° | idem [lu] |
+| Mouvement propre | −1,910 ± 0,020 ; 0,229 ± 0,047 mas/an | idem [lu] |
+| Masse totale | 1,38 (+0,27 −0,24) × 10¹¹ M☉ | Erkal et al. 2019 [lu] |
+| Étoiles | 2,7 × 10⁹ M☉ | van der Marel 2006, cité par Erkal 2019 [lu] |
+
+## 6. Petit Nuage de Magellan (absent du calcul aujourd'hui)
+
+| Grandeur | Valeur | Source |
+|---|---|---|
+| Mouvement propre | −0,82 ± 0,02 (± 0,10) ; −1,21 ± 0,01 (± 0,03) mas/an | Zivick et al. 2018 [lu] |
+| Vitesse radiale | 145,6 ± 0,6 km/s | Harris et Zaritsky 2006, cité [lu] |
+| Distance | module 18,99 ± 0,1, soit environ 63 kpc [calculé] | Cioni et al. 2000, cité [lu] |
+| Centre | 16,25°, −72,42° (gaz) | Stanimirović et al. 2004, cité [lu] |
+| Masse | 3 × 10⁹ M☉ : valeur adoptée, pas mesurée [résumé] | à chercher |
+
+## 7. Compléments relus le même jour
+
+### Voie lactée : barre et bulbe
+
+| Grandeur | Valeur | Source |
+|---|---|---|
+| Vitesse de la barre | 39,0 ± 3,5 km/s/kpc ; corotation à 6,1 ± 0,5 kpc | Portail et al. 2017 (arXiv:1608.07954) [lu] |
+| Masse dans le bulbe (boîte ±2,2 × ±1,4 × ±1,2 kpc) | 1,85 ± 0,05 × 10¹⁰ M☉, dont étoiles 1,32 ± 0,08 et matière noire 0,32 ± 0,05 | idem [lu] |
+| Barre et bulbe (étoiles) | 1,88 ± 0,12 × 10¹⁰ M☉, dont barre longue 0,54 ± 0,04 ; disque intérieur 1,29 ± 0,12 | idem [lu] |
+| Angle et demi-longueur de la barre | 28° ; 5,0 ± 0,2 kpc | idem, d'après Wegg et al. 2015 [lu] |
+| Épaisseurs de la barre | environ 180 pc et 45 pc | Wegg, Gerhard et Portail 2015 [lu] |
+| Agitation des étoiles au Soleil | disque mince 35 ± 5 km/s (radial), 25 ± 5 (vertical) ; disque épais 50 ± 5 et 50 ± 5 | Bland-Hawthorn et Gerhard 2016, § 5.4 [lu] |
+| Disque épais | longueur 2,0 ± 0,2 kpc ; 6 ± 3 × 10⁹ M☉ | idem [lu] |
+| Total des étoiles | 5 ± 1 × 10¹⁰ M☉ (R0 = 8,2 kpc) | idem [lu] |
+
+### Andromède : disque et halo
+
+| Grandeur | Valeur | Source |
+|---|---|---|
+| Étoiles au total | 10 à 15 × 10¹⁰ M☉ ; bulbe 30 %, disque 56 % | Tamm et al. 2012 (arXiv:1208.5712), résumé de l'article [lu] |
+| Disque d'étoiles | 5,6 × 10¹⁰ M☉ (borne basse ; borne haute × 1,5) | idem, table 2 [lu] |
+| Bulbe | 3,1 × 10¹⁰ M☉ (borne basse) : d'accord avec Blaña Díaz 2018 (3,09) | idem [lu] |
+| Halo d'étoiles | 1,3 × 10¹⁰ M☉ | idem [lu] |
+| Halo de matière noire NFW | 1,10 ± 0,18 × 10⁻² M☉/pc³, rayon 16,5 ± 1,5 kpc ; masse 1,04 × 10¹² M☉ dans 207 kpc | idem, table 4 [lu] |
+| Autres formes de halo | 0,8 à 1,1 × 10¹² M☉ dans 189 à 213 kpc | idem [lu] |
+| Masse par les vitesses d'échappement | 0,8 ± 0,1 × 10¹² M☉ dans 240 ± 10 kpc | Kafle et al. 2018 (arXiv:1801.03949) [lu] |
+| Masse enfermée | 39 × 10¹⁰ dans 32 kpc ; 55 × 10¹⁰ dans 55 kpc ; 75 × 10¹⁰ dans 125 kpc | Tamm et al. 2012, table 3 [lu] |
+
+Conséquence : dans `modeles.py`, Andromède pèse 1,5 fois la Voie lactée (halo de 1,59 × 10¹² M☉). Les mesures relues
+donnent un halo de 0,8 à 1,1 × 10¹² M☉, soit **moins que la Voie lactée de McMillan** (1,37 × 10¹²) ; les scénarios
+d'incertitude utilisent 1,3 ± 0,4. La masse d'Andromède est l'inconnue qui pèse le plus sur la date de la rencontre.
+
+### Petit Nuage de Magellan
+
+La masse totale n'a pas été trouvée (l'article visé n'était pas à l'adresse essayée). À chercher : Di Teodoro et al. 2019.
+
+## 8. Ce qui reste avant d'écrire les nouveaux modèles
+
+- Petit Nuage : masse totale.
+- Trancher la distance d'Andromède (761 ou 785 kpc) et la masse de son halo, et utiliser les mêmes partout, scénarios compris.
+- Relire les valeurs marquées [résumé].
+
+## 9. Résultats des nouveaux modèles (`pipeline/fusion/modeles_v2.py`), 13 novembre 2026 [mesuré sur la carte graphique]
+
+Chaque galaxie seule, toutes ses particules s'attirant, pendant 2 milliards d'années (`stabilite_tir.py`).
+« Déformation » : force du motif à deux bras (0 = disque rond, 0,3 et plus = barre). Ancien modèle : 0,4 à 0,5.
+
+| Galaxie | Particules | Déformation maximale en 2 Ga | Rotation (km/s) | Épaisseur (début → fin) | Énergie | Durée du tir |
+|---|---|---|---|---|---|---|
+| Voie lactée | 2 M | 0,036 | 234 au Soleil (publié 233) | 0,46 → 0,52 kpc | −0,001 % | 19 min |
+| Andromède | 2 M | 0,023 | 232 à 237 de 8 à 15 kpc (mesuré 230 à 275) | 0,69 → 0,74 kpc | −0,02 % | 25 min |
+| Triangle | 1 M | 0,06 | 108 à 4 kpc, 123 à 8 kpc, 130 à 15 kpc (mesuré 100, puis 120 à 130) | 0,36 → 0,39 kpc | +0,001 % | 8 min |
+| Grand Nuage | 1 M | 0,046 | 92 à 100 (mesuré 92 ± 19) | 0,33 → 0,34 kpc | 0,000 % | 10 min |
+
+Les quatre disques restent calmes. Ce qui n'est pas encore bon :
+- **aucune barre ne naît**, alors que la Voie lactée, Andromède et le Grand Nuage en ont une : le centre des disques est
+  trop agité au départ. Essais en cours avec un centre plus froid (`--rsig=3` et `--rsig=4`) ;
+- Andromède tourne un peu trop lentement vers 10 à 17 kpc (disque pris à sa borne basse de masse) ;
+- le disque de la Voie lactée s'épaissit de 13 % dans les 100 premiers millions d'années : léger défaut d'équilibre vertical ;
+- Triangle et Grand Nuage : particules de matière noire 15 à 22 fois plus lourdes que les étoiles (il en faut moins de 10) ;
+- le gaz est pris comme des étoiles froides ; le Petit Nuage manque.
+
+## 10. Position, vitesse et axe de rotation d'aujourd'hui (repère `phys::galaxie`)
+
+Valeurs utilisées par les étoiles visibles (`docs/contrat-etoiles-visibles.md`, fichiers du fil « Montrer la Voie lactée
+entière », 13/11). La table unique de constantes du plan B+ tranchera ; la masse et la lumière doivent partir des mêmes.
+
+| Galaxie | Vitesse d'ensemble (km/s) | Axe de rotation | Source et statut |
+|---|---|---|---|
+| Andromède | (28,4 ; −109,8 ; 41,4) | (−0,445 ; −0,766 ; −0,464) ; côté nord-est qui s'éloigne | mouvement propre de Wu et al. 2025 ; axe de la page, contrôlé [à relire : distance 761 ou 785 kpc] |
+| Triangle | (39,6 ; 79,6 ; 126,0) | (0,189 ; 0,968 ; −0,165) : angle de position 22°, inclinaison 55° (Corbelli et Schneider 1997) ; côté nord-est qui s'approche | **l'axe de l'ancien calcul, (0,672 ; −0,477 ; 0,567), est faux** (accord de 0,43 seulement avec la mesure) |
+| Grand Nuage | (−57,2 ; −234,5 ; 220,6) | (−0,278 ; −0,949 ; −0,149) : ligne des nœuds 139,1°, inclinaison 34,7° (van der Marel et Kallivayalil 2014) ; sens à confirmer | **l'axe de l'ancien calcul est faux** (accord de 0,65) |
+| Petit Nuage | (3,2 ; −162,9 ; 143,3) ; centre (16,0 ; −37,6 ; −43,6) kpc | sens de rotation non mesuré ; rotation 25 km/s, agitation 26 km/s (Stanimirović et al. 2004) | module de distance 18,977 (Graczyk et al. 2020) ; mouvement propre (0,772 ; −1,117) mas/an et 145,6 km/s (Kallivayalil et al. 2013) [non relu par moi] |
+
+Les vitesses d'Andromède, du Triangle et du Grand Nuage viennent encore de `conditions.json` (ancien calcul) : à
+reprendre des mesures dans la table unique.
