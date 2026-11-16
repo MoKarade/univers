@@ -18,7 +18,7 @@ Ce qui est mesuré, et ce qui ne l'est pas :
 - la barre n'est PAS posée ici : elle doit naître en laissant vieillir la galaxie seule, puis être comparée aux mesures
   (Voie lactée : 5,0 kpc, 39 km/s/kpc ; Andromède : 4,0 kpc, 40 km/s/kpc).
 
-Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7]
+Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7] [--froid=1.2]
   --rsig : longueur de décroissance de l'agitation des étoiles, en longueurs de disque (2 : disque très calme, sans barre ;
            3 ou 4 : centre plus froid, où une barre peut naître) ; --halo : part des particules donnée à la matière noire.
 """
@@ -108,7 +108,7 @@ except Exception as _e:      # table absente : on le dit dans le résumé du tir
     TABLE = None
 
 
-def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None):
+def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None):
     import agama
     agama.setUnits(mass=1, length=1, velocity=1)
     g = GALAXIES[nom]
@@ -167,7 +167,14 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
         nd = max(1, round(n_reste * d['masse'] / m_etoiles))
         sig = d['sigma0'] * np.exp(-R / d['rd'])
         rsig = rsig_facteur * d['rd']      # longueur sur laquelle l'agitation décroît : 2 Rd par défaut ; plus grand = centre plus froid (barre)
-        if 'sigma_soleil' in d:      # agitation mesurée au Soleil, profil exponentiel de longueur 2 Rd
+        if froid and d['kind'] != 3:
+            # Départ « froid » : l'agitation mesurée aujourd'hui est celle d'un disque que sa barre a déjà chauffé. Pour
+            # que la barre naisse et tienne d'elle-même, les étoiles partent avec la plus petite agitation qui donne
+            # Q >= froid (contre tous les disques ensemble) ; le disque épais garde son rapport mesuré au disque mince.
+            zone = (R > 0.5 * d['rd']) & (R < 4 * d['rd'])
+            sig_tot = sum(x['sigma0'] * np.exp(-R / x['rd']) for x in g['disques'])
+            s0 = float(np.max(froid * 3.36 * G * sig_tot[zone] / kappa[zone] * np.exp(R[zone] / rsig))) * d.get('sigma_soleil', 35.0) / 35.0
+        elif 'sigma_soleil' in d:      # agitation mesurée au Soleil, profil exponentiel de longueur 2 Rd
             s0 = d['sigma_soleil'] * math.exp(d['r_soleil'] / rsig)
         else:                        # non mesurée : la plus petite agitation qui donne Q >= q_min entre 1 et 4 Rd [modèle]
             zone = (R > d['rd']) & (R < 4 * d['rd'])
@@ -195,7 +202,8 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
 def main():
     nom, n, sortie = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     opts = dict(a[2:].split('=', 1) for a in sys.argv[4:] if a.startswith('--') and '=' in a)
-    p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None)
+    p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None,
+                           froid=float(opts['froid']) if 'froid' in opts else None)
     resume['options'] = opts
     resume['table_unique'] = TABLE
     np.savez_compressed(sortie, meta=json.dumps(resume, ensure_ascii=False), **p)
