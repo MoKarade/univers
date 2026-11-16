@@ -171,9 +171,19 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
             # Départ « froid » : l'agitation mesurée aujourd'hui est celle d'un disque que sa barre a déjà chauffé. Pour
             # que la barre naisse et tienne d'elle-même, les étoiles partent avec la plus petite agitation qui donne
             # Q >= froid (contre tous les disques ensemble) ; le disque épais garde son rapport mesuré au disque mince.
-            zone = (R > 0.5 * d['rd']) & (R < 4 * d['rd'])
+            # Le même profil pour tous les disques d'étoiles : entre 0,5 et 3 longueurs du disque principal, la longueur de
+            # décroissance est celle qui colle le mieux à Q constant (sinon le centre sort brûlant).
+            rd_p = max((x for x in g['disques'] if x['kind'] != 3), key=lambda x: x['masse'])['rd']
+            zone = (R > 0.5 * rd_p) & (R < 3 * rd_p)
             sig_tot = sum(x['sigma0'] * np.exp(-R / x['rd']) for x in g['disques'])
-            s0 = float(np.max(froid * 3.36 * G * sig_tot[zone] / kappa[zone] * np.exp(R[zone] / rsig))) * d.get('sigma_soleil', 35.0) / 35.0
+            cible = froid * 3.36 * G * sig_tot[zone] / kappa[zone]
+            meilleur = None
+            for rs_ in np.linspace(0.8 * rd_p, 12 * rd_p, 200):
+                s0_ = float(np.max(cible * np.exp(R[zone] / rs_)))
+                cout = float(np.mean(s0_ * np.exp(-R[zone] / rs_) / cible))
+                if meilleur is None or cout < meilleur[0]: meilleur = (cout, s0_, rs_)
+            _, s0, rsig = meilleur
+            s0 *= d.get('sigma_soleil', 35.0) / 35.0
         elif 'sigma_soleil' in d:      # agitation mesurée au Soleil, profil exponentiel de longueur 2 Rd
             s0 = d['sigma_soleil'] * math.exp(d['r_soleil'] / rsig)
         else:                        # non mesurée : la plus petite agitation qui donne Q >= q_min entre 1 et 4 Rd [modèle]
@@ -187,7 +197,7 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
         xv, m = agama.GalaxyModel(pot, dfd).sample(nd)
         out.append((xv, m, eps_e, d['kind']))
         resume['composantes'].append(dict(nom={1: 'disque mince', 3: 'gaz (froid)', 4: 'disque épais'}[d['kind']], masse=d['masse'], particules=nd,
-                                          agitation_centre=round(s0, 1), q_seul_min=round(float(q[zone].min()), 2)))
+                                          agitation_centre=round(s0, 1), longueur_agitation_kpc=round(float(rsig), 2), q_seul_min=round(float(q[zone].min()), 2)))
     # Q de l'ensemble des disques (étoiles et gaz ensemble, agitation moyenne pondérée par la masse) : c'est lui qui compte.
     pos = np.concatenate([o[0][:, :3] for o in out]); vel = np.concatenate([o[0][:, 3:] for o in out])
     mass = np.concatenate([o[1] for o in out])
