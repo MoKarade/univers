@@ -64,7 +64,7 @@ def plummer(masse, a, n, rng):
     return r[:, None] * direction(n), v[:, None] * direction(n)
 
 
-def assembler(dossier, etat, fraction=1.0, graine=20261113):
+def assembler(dossier, etat, fraction=1.0, graine=20261113, angles=None):
     """Pose chaque galaxie à sa place de départ. etat : {galaxie: {pos, vel}} relatifs à la Voie lactée."""
     rng = np.random.default_rng(graine)
     parts = {k: [] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
@@ -81,6 +81,9 @@ def assembler(dossier, etat, fraction=1.0, graine=20261113):
                 p['m'] = p['m'] / fraction; p['eps'] = p['eps'] * fraction ** (-1 / 3)
             axe = (C.galaxie(nom).get('disque') or {}).get('axe_rotation') or [0.0, 0.0, 1.0]      # Petit Nuage : sens de rotation non mesuré
             R = rotation_vers(axe)
+            a = math.radians((angles or {}).get(nom, 0.0))      # tour autour de son propre axe : cale la barre de la masse sur la barre mesurée (mode « barre »)
+            Z = np.array([[math.cos(a), -math.sin(a), 0.0], [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]])
+            R = R @ Z
             pos, vel = p['pos'] @ R.T, p['vel'] @ R.T
             m, eps, kind = p['m'], p['eps'], p['kind']
         else:      # Petit Nuage : masse adoptée de la table, sphère de Plummer de 1,5 kpc [modèle]
@@ -322,7 +325,8 @@ def main():
             # pour les Nuages dans ce calcul : tirs 1 à 3 du 13/11, 120 à 250 kpc d'écart.)
             auj = {n: dict(pos=cible['galaxies'][n]['position_aujourdhui'], vel=cible['galaxies'][n]['vitesse_aujourdhui']) for n in ORDRE}
             etat = centres_simples(auj, t_depart / T_UNIT, profils(dossier))
-        p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)))
+        angles = {a.split(':')[0]: float(a.split(':')[1]) for a in opts['angles'].split(',')} if 'angles' in opts else None
+        p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)), angles=angles)
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
         S = Calcul(p, theta=float(opts.get('theta', 0.7)))
         journal = avancer(S, t_depart, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)))
@@ -338,10 +342,77 @@ def main():
         if mode == 'passe':
             np.savez(os.path.join(sortie, 'aujourdhui.npz'), t=0.0, **S.etat())
             print('instantané d\'aujourd\'hui écrit')
+    elif mode == 'barre':
+        barre(args[1], opts, cible)
     elif mode == 'futur':
         futur(args[1], float(args[2]), opts, cible)
     else:
         raise SystemExit('mode inconnu : ' + mode)
+
+
+# Composante des étoiles visibles (docs/contrat-etoiles-visibles.md) -> sortes de particules de masse qui la portent.
+PORTEUSES = {1: (1,), 2: (1, 2), 4: (4, 1), 5: (3, 1)}
+
+
+def repere_disque(nom, pos, centre):
+    """Positions dans le repère du disque de la galaxie (axe de rotation = +z), centre à l'origine."""
+    axe = (C.galaxie(nom).get('disque') or {}).get('axe_rotation') or [0.0, 0.0, 1.0]
+    return (pos - centre) @ rotation_vers(axe)
+
+
+def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=20261116):
+    """Donne à chaque étoile visible la vitesse d'une particule de masse voisine de la même famille (une des `voisins`
+    plus proches, au hasard : l'agitation locale est ainsi celle de la masse). Les étoiles visibles sont posées d'après
+    les mesures, mais leurs vitesses du contrat viennent de formules qui ne sont pas à l'équilibre dans la masse du
+    calcul (docs/premier-film.md, défaut 3 : sursaut des 50 premiers Ma). Le halo d'étoiles (6) garde ses vitesses.
+    La hauteur compte triple dans la distance, pour prendre une voisine de même hauteur."""
+    from scipy.spatial import cKDTree
+    rng = np.random.default_rng(graine + g)
+    tv = tv.copy(); pris = {}
+    echelle = np.array([1.0, 1.0, 3.0])
+    td = repere_disque(nom, tp, centre) * echelle
+    for c, sortes in PORTEUSES.items():
+        qui = np.where(comp == c)[0]
+        if not len(qui): continue
+        for sorte in sortes:
+            masse = np.where((p['gid'] == g) & (p['kind'] == sorte))[0]
+            if len(masse) >= 10 * voisins: break
+        else:
+            masse = np.where((p['gid'] == g) & (p['kind'] != 0) & (p['kind'] != 9))[0]
+        arbre = cKDTree(repere_disque(nom, p['pos'][masse], centre) * echelle)
+        _, v = arbre.query(td[qui], k=voisins, workers=-1)
+        choix = v[np.arange(len(qui)), rng.integers(0, voisins, len(qui))]
+        tv[qui] = p['vel'][masse[choix]]
+        pris[str(c)] = int(len(qui))
+    return tv, pris
+
+
+def phase_barre(x, y, r0=1.0, r1=4.0):
+    """Force et angle (degrés, modulo 180) du motif à deux bras entre r0 et r1 kpc."""
+    r = np.hypot(x, y); m = (r > r0) & (r < r1)
+    c = np.mean(np.exp(2j * np.arctan2(y[m], x[m])))
+    return float(abs(c)), float(np.degrees(np.angle(c)) / 2)
+
+
+def barre(sortie, opts, cible):
+    """Compare, à t = 0, la barre de la masse (aujourdhui.npz) à celle des étoiles visibles, galaxie par galaxie, et
+    écrit l'angle dont il faut tourner la galaxie de départ autour de son axe (--angles du mode « passe »)."""
+    with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
+        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
+    S0 = Calcul(p); cp_, _ = S0.centres(); del S0
+    res = {}
+    for g, nom in enumerate(ORDRE):
+        f = os.path.join(opts['traceurs'], f'etoiles_visibles_{nom}.npz')
+        if nom not in ('voie_lactee', 'andromede') or not os.path.exists(f): continue
+        with np.load(f) as z: tp = z['pos'].astype(np.float64)
+        td = repere_disque(nom, tp, np.array(cible['galaxies'][nom]['position_aujourdhui']))
+        md = repere_disque(nom, p['pos'][(p['gid'] == g) & (p['kind'] != 0)], cp_[g])
+        r1 = 4.0 if nom == 'voie_lactee' else 5.0
+        fm, am = phase_barre(md[:, 0], md[:, 1], 1.0, r1); ft, at = phase_barre(td[:, 0], td[:, 1], 1.0, r1)
+        d = (at - am + 90.0) % 180.0 - 90.0
+        res[nom] = dict(masse=dict(force=round(fm, 3), angle=round(am, 1)), etoiles=dict(force=round(ft, 3), angle=round(at, 1)), tourner_de=round(d, 1))
+        print(f"{nom:12s} barre de la masse {fm:.3f} à {am:+6.1f}° ; des étoiles visibles {ft:.3f} à {at:+6.1f}° ; tourner le départ de {d:+.1f}°")
+    json.dump(res, open(os.path.join(sortie, 'barre.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 
 def futur(sortie, t_fin, opts, cible):
@@ -380,7 +451,12 @@ def futur(sortie, t_fin, opts, cible):
                 mesure_p = np.array(cible['galaxies'][nom]['position_aujourdhui']); mesure_v = np.array(cible['galaxies'][nom]['vitesse_aujourdhui'])
                 # du repère de l'appli (Voie lactée à l'origine, au repos) au repère du calcul ; l'écart entre la place mesurée
                 # de la galaxie et celle que le calcul lui donne à t = 0 est retiré, pour que les étoiles restent sur leur masse.
-                ajout['pos'].append(tp - mesure_p + cp_[g]); ajout['vel'].append(tv - mesure_v + cv[g])
+                tp = tp - mesure_p + cp_[g]; tv = tv - mesure_v + cv[g]
+                if opts.get('vitesses', 'masse') == 'masse':      # vitesses prises à la masse qui porte les étoiles (pas de sursaut au départ)
+                    with np.load(f) as z: comp = z['comp']
+                    tv, pris = vitesses_de_la_masse(nom, tp, tv, comp, p, g, cp_[g])
+                    meta.setdefault('vitesses_de_la_masse', {})[nom] = pris
+                ajout['pos'].append(tp); ajout['vel'].append(tv)
                 n = len(tp)
                 ajout['m'].append(np.full(n, 1.0)); ajout['eps'].append(np.full(n, 0.05)); ajout['kind'].append(np.full(n, 9, dtype=np.int8)); ajout['gid'].append(np.full(n, g, dtype=np.int8))
                 meta['traceurs'][g] = n
