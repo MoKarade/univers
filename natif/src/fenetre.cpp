@@ -654,7 +654,9 @@ int runWindow(const WindowOptions& opt) {
                                           "calcul fait à l'avance où toutes les étoiles de la Galaxie s'attirent : bras calculés, position non prévisible"});
             if (sim.armTracers)
                 sim.calcStates.push_back({"Traceurs des bras spiraux", !armTracers.count ? CalcMode::Hidden : std::fabs(sim.years - kStartYears) < 3.0e4 ? CalcMode::Measured : CalcMode::Approx, 0,
-                                          std::fabs(sim.years - kStartYears) < 3.0e4
+                                          milkyWayStarsOk && sim.bestLook && std::fabs(sim.years - kStartYears) > kLinearLimitYears
+                                              ? "non montrés loin d'aujourd'hui : les bras sont alors portés par les étoiles visibles, qui tournent chacune à sa vitesse"
+                                          : std::fabs(sim.years - kStartYears) < 3.0e4
                                               ? "masers à parallaxe radio (Reid et al. 2019) et amas ouverts datés (Hunt & Reffert 2023) : positions mesurées"
                                               : "dessin mesuré aujourd'hui, tourné d'un bloc à la vitesse mesurée des bras (28,2 ± 2,1 km/s par kpc, Dias et al. 2019) : approché, les bras se déforment aussi"});
             if (sim.cloneCount)
@@ -709,7 +711,13 @@ int runWindow(const WindowOptions& opt) {
         sim.loneGalaxyShare = loneGalaxy.count ? loneShare : 0.0;
         if (milkyWayCentre >= 0 && sim.showClones) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
         else clones.count = 0;
-        if (milkyWayCentre >= 0) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
+        // Traceurs mesurés des bras (masers, amas) : à leur place mesurée près d'aujourd'hui. Plus loin dans le temps, ce calque
+        // les fait tourner d'un bloc, alors que les étoiles visibles de la Voie lactée tournent chacune à sa vitesse (film ou
+        // orbites) : les deux se contredisaient à l'écran (contrôle du premier film, docs/premier-film.md, défaut 6). Quand les
+        // étoiles visibles sont dessinées, le calque n'est donc montré qu'à moins de 3 millions d'années d'aujourd'hui.
+        const bool armLayerAgrees = !(milkyWayStarsOk && sim.bestLook) || std::fabs(sim.years - kStartYears) <= kLinearLimitYears;
+        if (milkyWayCentre >= 0 && armLayerAgrees) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
+        else armTracers.count = 0;
         sim.armTracersShown = armTracers.count > 0;
         tasksTimer += dt;
         if (tasksTimer > 2.0) {      // calculs de fond du PC : relus toutes les 2 secondes
