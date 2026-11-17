@@ -288,6 +288,10 @@ public:
         std::memcpy(static_cast<char*>(galaxiesMapped_) + 5 * 64, v, 16);
     }
 
+    // Le film mène les étoiles des galaxies voisines : elles peuvent être arrachées loin de leur galaxie (marées), donc plus
+    // de tri par le champ de vue autour du centre de la galaxie.
+    void setFreeNeighbours(bool on) { freeNeighbours_ = on; }
+
     void setGalaxies(const float* data, int count) {
         if (!galaxiesMapped_) return;
         const int n = std::min(count, 5);      // case 5 : Soleil (setSunGalacto) ; 6 et 7 : vieillissement (setAgeing)
@@ -444,6 +448,7 @@ private:
     void* galaxiesMapped_ = nullptr;
     uint32_t subClouds_ = 1;      // étoiles par sous-nuage (gaia.vert, GV_SOUS_NUAGE) ; 1 : pas de sous-nuage
     std::vector<uint32_t> visible_;      // feuilles dessinées à la dernière image : ce sont elles que les orbites exactes avancent
+    bool freeNeighbours_ = false;
     uint32_t epicycleLeaves_ = 0;        // feuilles dessinées en épicycles à la dernière image (orbite exacte pas encore rattrapée)
     Buffer stars_, velocities_, colors_, indirect_[kRing];
     void* mapped_[kRing]{};
@@ -527,6 +532,7 @@ private:
                 for (int a = 0; a < 3; ++a) { lo[a] = c[a] - r; hi[a] = c[a] + r; }
             }
             bool inside = true;
+            if (!(freeNeighbours_ && !leafGalaxy_.empty()))
             for (const Vec3& p : planes) {      // coin le plus avancé du côté intérieur du plan
                 const double s = (p.x > 0 ? hi[0] : lo[0]) * p.x + (p.y > 0 ? hi[1] : lo[1]) * p.y + (p.z > 0 ? hi[2] : lo[2]) * p.z;
                 if (s < 0) { inside = false; break; }

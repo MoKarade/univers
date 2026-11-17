@@ -67,6 +67,12 @@ void main() {
         w *= 1.0 + G.rr.y * sqrt(-2.0 * log(u1)) * cos(6.2831853 * u2);
         float ang = w * pc.par.w;
         rel = rel * cos(ang) + cross(a, rel) * sin(ang) + a * along * (1.0 - cos(ang));
+        if (G.rr.z > 0.5) {
+            /* le film du Groupe local couvre la date : l'étoile est là où le calcul unique l'a emportée, par rapport au centre
+               de sa galaxie (état donné par l'appli, film_etoiles.h) ; plus de bloc rigide, les marées se voient */
+            Etat e = orb[gl_VertexIndex];
+            rel = OG_M * (e.p.xyz + pc.frac * 1.0e-3 * OP_K * e.v.xyz) * OG_KPC_LY;
+        }
         voisineBase = G.ct.xyz;
         pos = rel;
     }

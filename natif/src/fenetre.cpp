@@ -294,8 +294,16 @@ int runWindow(const WindowOptions& opt) {
     // autour d'aujourd'hui : sans orbite exacte (le potentiel de l'appli ne contient que la Voie lactée), elles s'effacent en
     // quelques millions d'années (gaia_fiable.glsl) et la photo déplacée en bloc prend le relais, sans double lumière.
     GaiaRenderer neighbourStars;
-    const bool neighbourStarsOk = neighbourStars.create(g, dataDir + "/voisines_etoiles.bin", HdrTarget::kFormat, false, false);
+    // Avec le film du Groupe local, ces étoiles aussi suivent le calcul unique (leur état vient du film, jamais d'un calcul
+    // d'orbites de l'appli) : il leur faut donc la table des états, d'où « full ». Sans film : le bloc qui tourne, comme avant.
+    const bool neighbourFilmWanted = filmStarsOk && std::ifstream(dataDir + "/voisines_etoiles.ordre").good();
+    const bool neighbourStarsOk = neighbourStars.create(g, dataDir + "/voisines_etoiles.bin", HdrTarget::kFormat, neighbourFilmWanted, false);
     if (neighbourStarsOk) neighbourStars.enableSubClouds(16);
+    FilmStars filmNeighbours;
+    std::vector<float> filmNeighbourStates;
+    const bool filmNeighboursOk = neighbourFilmWanted && neighbourStarsOk && neighbourStars.externalStatesFit() &&
+                                  filmNeighbours.load(dataDir, neighbourStars.starCount(), "voisines_etoiles.ordre", 1, 4);
+    std::printf("film du Groupe local, galaxies voisines : %s\n", filmNeighboursOk ? "lu, leurs etoiles le suivent" : "non (bloc qui tourne)");
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
     // Décision de Marc (13 novembre 2026, « je veux le plus proche possible de la réalité, pas seulement le mesuré ») : la
@@ -588,6 +596,22 @@ int runWindow(const WindowOptions& opt) {
                     endOnce(g, once);
                 }
                 sim.filmLeads = byFilm && milkyWayStars.externalStates();
+                // Mêmes dates, même film pour les étoiles d'Andromède, du Triangle et des Nuages (positions autour du centre de
+                // leur galaxie ; le centre lui-même suit déjà le film, simulation.h).
+                if (filmNeighboursOk) {
+                    filmNeighbours.reload(dt);
+                    if (byFilm && filmNeighbours.covers(tStep)) {
+                        if (step != filmNeighbours.lastStep || !neighbourStars.externalStates()) {
+                            if (filmNeighbours.states(tStep, {}, {}, filmNeighbourStates)) {
+                                neighbourStars.setExternalStates(g, filmNeighbourStates, step);
+                                filmNeighbours.lastStep = step;
+                            }
+                        }
+                    } else if (neighbourStars.externalStates()) {
+                        neighbourStars.leaveExternalStates();
+                        filmNeighbours.lastStep = LONG_MIN;
+                    }
+                }
             }
             holdOn = shownYears != wanted;
             holdGoal = wanted;
@@ -782,10 +806,11 @@ int runWindow(const WindowOptions& opt) {
                 const float row[16] = {static_cast<float>(v.c0.x), static_cast<float>(v.c0.y), static_cast<float>(v.c0.z), 0,
                                        static_cast<float>(ct.x), static_cast<float>(ct.y), static_cast<float>(ct.z), 0,
                                        static_cast<float>(a.x), static_cast<float>(a.y), static_cast<float>(a.z), v.vrot,
-                                       v.rrot, v.agit, 0, 0};
+                                       v.rrot, v.agit, neighbourStars.externalStates() ? 1.0f : 0.0f, 0};      // 1 : le film mène (gaia.vert)
                 std::memcpy(table + k * 16, row, sizeof(row));
             }
             neighbourStars.setGalaxies(table, 4);
+            neighbourStars.setFreeNeighbours(neighbourStars.externalStates());
             neighbourStars.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
         }
         if (!skyOnly && sim.starShare() > 0) {      // étoiles Gaia sur leur orbite calculée ; part qui baisse quand le calcul de la fusion prend le relais

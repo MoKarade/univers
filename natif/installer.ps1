@@ -68,6 +68,7 @@ if (Test-Path "$Donnees\etoiles-visibles\vl_etoiles.bin") { Copier-SiChange "$Do
 # Film du Groupe local (natif/src/film_etoiles.h) : l'ordre des étoiles de l'appli dans le film, et le dossier du film
 # (une ligne ; le film lui-même, des dizaines de Go, reste où le calcul l'écrit).
 if (Test-Path "$Donnees\etoiles-visibles\vl_etoiles.ordre") { Copier-SiChange "$Donnees\etoiles-visibles\vl_etoiles.ordre" "$Cible\vl_etoiles.ordre" }
+if (Test-Path "$Donnees\etoiles-visibles\voisines_etoiles.ordre") { Copier-SiChange "$Donnees\etoiles-visibles\voisines_etoiles.ordre" "$Cible\voisines_etoiles.ordre" }
 if (Test-Path "$Donnees\film_dossier.txt") { Copy-Item "$Donnees\film_dossier.txt" "$Cible\film_dossier.txt" -Force }
 foreach ($f in 'gaia.bin', 'gaia_b.bin', 'gaia_agrege.bin', 'voie_lactee.bin') { if (Test-Path "$Gaia\$f") { Copier-SiChange "$Gaia\$f" "$Cible\$f" } }
 # Vue de départ : la ceinture d'Orion (étoile nommée de la page), si elle est dans le catalogue.
