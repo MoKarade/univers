@@ -3,7 +3,8 @@
 # Il attend que la carte graphique soit libre (pas de jeu, pas d'appli Univers ouverte), lance le calcul, et le relance
 # depuis sa derniere sauvegarde chaque fois qu'il s'est retire pour laisser la carte. Il s'arrete quand le film est fini.
 # N'ouvre aucune fenetre. Arret : Ctrl-C dans ce terminal.
-param([string]$sortie = 'C:/tmp/natif/groupe-local', [string]$galaxies = '')
+param([string]$sortie = 'C:/tmp/natif/groupe-local', [string]$galaxies = '', [string]$traceurs = '')
+if ($traceurs) { $env:UNIVERS_TRACEURS = $traceurs }
 if ($galaxies) { $env:UNIVERS_GALAXIES = $galaxies }
 $bash = 'C:\Program Files\Git\bin\bash.exe'
 $lanceur = 'C:/tmp/analyse-architecture/univers/pipeline/fusion/lancer_rencontre.sh'

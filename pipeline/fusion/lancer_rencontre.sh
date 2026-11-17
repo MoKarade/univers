@@ -9,7 +9,7 @@ ICI="$(cd "$(dirname "$0")" && pwd)"
 PY=/c/tmp/venv-cupy/Scripts/python.exe
 G=C:/tmp/analyse-architecture/galaxies
 GAL="${UNIVERS_GALAXIES:-$G/plein}"      # dossier des cinq galaxies de départ
-TR=C:/tmp/natif/donnees/etoiles-visibles
+TR="${UNIVERS_TRACEURS:-C:/tmp/natif/donnees/etoiles-visibles}"      # dossier des étoiles visibles
 S="${1:-C:/tmp/natif/groupe-local}"
 export PYTHONIOENCODING=utf-8 UNIVERS_AVANCEMENT=C:/dev/Univers-PC/avancement
 mkdir -p "$S"

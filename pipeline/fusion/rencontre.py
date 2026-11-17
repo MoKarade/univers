@@ -360,7 +360,7 @@ def repere_disque(nom, pos, centre):
     return (pos - centre) @ rotation_vers(axe)
 
 
-def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=20261116):
+def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=20261116, sauf=()):
     """Donne à chaque étoile visible la vitesse d'une particule de masse voisine de la même famille (une des `voisins`
     plus proches, au hasard : l'agitation locale est ainsi celle de la masse). Les étoiles visibles sont posées d'après
     les mesures, mais leurs vitesses du contrat viennent de formules qui ne sont pas à l'équilibre dans la masse du
@@ -373,7 +373,7 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
     td = repere_disque(nom, tp, centre) * echelle
     for c, sortes in PORTEUSES.items():
         qui = np.where(comp == c)[0]
-        if not len(qui): continue
+        if not len(qui) or c in sauf: continue      # sauf : étoiles déjà posées sur la masse, position et vitesse
         for sorte in sortes:
             masse = np.where((p['gid'] == g) & (p['kind'] == sorte))[0]
             if len(masse) >= 10 * voisins: break
@@ -453,8 +453,10 @@ def futur(sortie, t_fin, opts, cible):
                 # de la galaxie et celle que le calcul lui donne à t = 0 est retiré, pour que les étoiles restent sur leur masse.
                 tp = tp - mesure_p + cp_[g]; tv = tv - mesure_v + cv[g]
                 if opts.get('vitesses', 'masse') == 'masse':      # vitesses prises à la masse qui porte les étoiles (pas de sursaut au départ)
-                    with np.load(f) as z: comp = z['comp']
-                    tv, pris = vitesses_de_la_masse(nom, tp, tv, comp, p, g, cp_[g])
+                    with np.load(f) as z:
+                        comp = z['comp']
+                        deja = json.loads(str(z['meta'])).get('posees_sur_la_masse', []) if 'meta' in z else []      # etoiles_visibles_masse.py
+                    tv, pris = vitesses_de_la_masse(nom, tp, tv, comp, p, g, cp_[g], sauf=deja)
                     meta.setdefault('vitesses_de_la_masse', {})[nom] = pris
                 ajout['pos'].append(tp); ajout['vel'].append(tv)
                 n = len(tp)
