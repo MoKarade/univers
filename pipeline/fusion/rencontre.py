@@ -352,6 +352,7 @@ def main():
 
 # Composante des étoiles visibles (docs/contrat-etoiles-visibles.md) -> sortes de particules de masse qui la portent.
 PORTEUSES = {1: (1,), 2: (1, 2), 4: (4, 1), 5: (3, 1)}
+JEUNES_AGITATION = (5.0, 2.0)
 
 
 def repere_disque(nom, pos, centre):
@@ -365,7 +366,11 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
     plus proches, au hasard : l'agitation locale est ainsi celle de la masse). Les étoiles visibles sont posées d'après
     les mesures, mais leurs vitesses du contrat viennent de formules qui ne sont pas à l'équilibre dans la masse du
     calcul (docs/premier-film.md, défaut 3 : sursaut des 50 premiers Ma). Le halo d'étoiles (6) garde ses vitesses.
-    La hauteur compte triple dans la distance, pour prendre une voisine de même hauteur."""
+    La hauteur compte triple dans la distance, pour prendre une voisine de même hauteur.
+    Étoiles jeunes (5) : il n'y a pas de gaz froid dans le calcul, et les particules qui en tiennent lieu sont agitées ;
+    leur donner cette agitation les éparpillait en 30 Ma (mesuré le 16/11 : épaisseur 49 -> 270 pc, rayon médian + 1 kpc).
+    Elles prennent donc la vitesse MOYENNE des 128 particules voisines dans le plan (le courant local, barre comprise),
+    plus une petite agitation (JEUNES_AGITATION, km/s : dans le plan, en hauteur) [modèle]."""
     from scipy.spatial import cKDTree
     rng = np.random.default_rng(graine + g)
     tv = tv.copy(); pris = {}
@@ -374,6 +379,38 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
     for c, sortes in PORTEUSES.items():
         qui = np.where(comp == c)[0]
         if not len(qui) or c in sauf: continue      # sauf : étoiles déjà posées sur la masse, position et vitesse
+        if c == 5:
+            masse = np.where((p['gid'] == g) & ((p['kind'] == 1) | (p['kind'] == 3)))[0]
+            if len(masse) >= 320:
+                md = repere_disque(nom, p['pos'][masse], centre)
+                _, v = cKDTree(md[:, :2]).query(td[qui, :2], k=128, workers=-1)
+                axe = (C.galaxie(nom).get('disque') or {}).get('axe_rotation') or [0.0, 0.0, 1.0]
+                R = rotation_vers(axe)
+                # courant moyen dans le repère du disque, sans sa part en hauteur (la moyenne de voisines agitées en garde
+                # plusieurs km/s de bruit, ce qui suffisait à épaissir les jeunes : 49 -> 220 pc en 100 Ma, mesuré)
+                vm = np.zeros((len(qui), 3)); vmasse = (p['vel'][masse] - p['vel'][masse].mean(0)) @ R
+                for a0 in range(0, len(qui), 200000):
+                    vm[a0:a0 + 200000] = vmasse[v[a0:a0 + 200000]].mean(axis=1)
+                vm[:, 2] = 0.0
+                # Les étoiles agitées tournent moins vite que la vitesse circulaire (ici 196 au lieu de ~235 km/s au Soleil) ;
+                # des jeunes lancées à cette vitesse tomberaient vers le centre. Leur vitesse de rotation est donc remise à
+                # l'échelle de la vitesse circulaire de la masse du calcul, rayon par rayon ; l'écart au cercle (courant de
+                # la barre) est gardé.
+                tous = np.where(p['gid'] == g)[0]
+                rc, vc = vitesse_circulaire(repere_disque(nom, p['pos'][tous], centre), p['m'][tous])
+                Rm = np.hypot(md[:, 0], md[:, 1]); vphi_m = (md[:, 0] * vmasse[:, 1] - md[:, 1] * vmasse[:, 0]) / np.maximum(Rm, 1e-6)
+                k_ = np.clip(np.searchsorted(rc, Rm) , 1, len(rc) - 1)
+                moy = np.array([vphi_m[k_ == i].mean() if (k_ == i).sum() > 50 else np.nan for i in range(len(rc))])
+                signe = np.sign(np.nanmedian(moy))
+                facteur = np.where(np.isfinite(moy) & (np.abs(moy) > 20.0), signe * vc / moy, 1.0)
+                Rj = np.hypot(td[qui, 0], td[qui, 1]); fj = np.interp(Rj, rc, facteur)
+                er = td[qui, :2] / np.maximum(Rj, 1e-6)[:, None]; ep = np.stack([-er[:, 1], er[:, 0]], 1)
+                vr = (vm[:, :2] * er).sum(1); vp = (vm[:, :2] * ep).sum(1) * fj
+                vm[:, :2] = er * vr[:, None] + ep * vp[:, None]
+                bruit = rng.normal(0.0, 1.0, (len(qui), 3)) * np.array([JEUNES_AGITATION[0], JEUNES_AGITATION[0], JEUNES_AGITATION[1]])
+                tv[qui] = (vm + bruit) @ R.T + p['vel'][masse].mean(0)
+                pris[str(c)] = int(len(qui))
+                continue
         for sorte in sortes:
             masse = np.where((p['gid'] == g) & (p['kind'] == sorte))[0]
             if len(masse) >= 10 * voisins: break
@@ -385,6 +422,21 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
         tv[qui] = p['vel'][masse[choix]]
         pris[str(c)] = int(len(qui))
     return tv, pris
+
+
+def vitesse_circulaire(pos, m, rmax=20.0, pas=0.5, azimuts=8, eps=0.1):
+    """Vitesse circulaire (km/s) de la masse d'une galaxie dans son plan, par somme directe de l'attraction de toutes
+    ses particules sur des points d'essai (moyenne sur `azimuts` directions). pos : repère du disque (kpc), m : M☉."""
+    rc = np.arange(pas, rmax + 1e-9, pas); vc = np.zeros(len(rc))
+    pos = pos.astype(np.float32); mg = (m * G).astype(np.float32)
+    for i, r in enumerate(rc):
+        ar = 0.0
+        for a in np.arange(azimuts) * 2 * math.pi / azimuts:
+            x = np.array([r * math.cos(a), r * math.sin(a), 0.0], np.float32)
+            d = pos - x; d3 = ((d * d).sum(1) + np.float32(eps * eps)) ** np.float32(1.5)
+            ar += float(((mg / d3) * (d[:, 0] * x[0] + d[:, 1] * x[1])).sum()) / r      # composante radiale (vers l'extérieur)
+        vc[i] = math.sqrt(max(-ar / azimuts * r, 0.0))
+    return rc, vc
 
 
 def phase_barre(x, y, r0=1.0, r1=4.0):
