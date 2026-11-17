@@ -27,6 +27,7 @@ struct FilmStars {
     phys::film::FilmV2 film;
     std::vector<uint32_t> ordre;      // rang dans le film de chaque étoile de l'appli
     std::string dossier;
+    std::string note;      // écarts connus de ce film, écrits par celui qui l'a calculé (<dossier>/ecarts.txt, une ligne) ; dits à l'écran
     bool ready = false;
     long lastStep = LONG_MIN;
     double reloadTimer = 0;
@@ -45,6 +46,9 @@ struct FilmStars {
         o.read(reinterpret_cast<char*>(ordre.data()), static_cast<std::streamsize>(starCount * 4));
         if (!film.charger(dossier) || film.galaxies() < firstGalaxy + galaxyCount) return false;
         first_ = firstGalaxy; galaxies_ = galaxyCount;
+        std::ifstream e(dossier + "/ecarts.txt");
+        if (std::getline(e, note))
+            while (!note.empty() && (note.back() == '\r' || note.back() == ' ')) note.pop_back();
         if (inFilm(film) != starCount) return false;
         base_ = 0;
         for (int g = 0; g < firstGalaxy; ++g) base_ += film.etoiles(g);

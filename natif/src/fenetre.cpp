@@ -668,7 +668,8 @@ int runWindow(const WindowOptions& opt) {
             }
             if (sim.filmLeads)
                     sim.calcStates.push_back({"Étoiles visibles de la Voie lactée", CalcMode::Precomputed, 0,
-                                              "film du calcul unique du Groupe local (cinq galaxies qui s'attirent, énergie noire) : les mêmes étoiles qu'aujourd'hui, emportées par ce calcul ; un scénario, sans barre dans la masse"});
+                                              std::string("film du calcul unique du Groupe local (cinq galaxies qui s'attirent, énergie noire) : les mêmes étoiles qu'aujourd'hui, emportées par ce calcul ; un scénario ; ") +
+                                                  (filmStars.note.empty() ? std::string("sans barre dans la masse") : filmStars.note)});
             if (sim.replay)
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
