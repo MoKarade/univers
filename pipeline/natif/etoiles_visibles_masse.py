@@ -80,6 +80,20 @@ def main():
         pos[comp == cc] = p_; vel[comp == cc] = v_
     print(f'{n1} + {n2} + {n4} étoiles posées sur la masse ({time.time() - t0:.0f} s)')
 
+    # Étoiles jeunes : leur place dans le plan est mesurée (bras, régions HII), mais le disque du calcul ondule de quelques
+    # centaines de pc autour du plan (flambage de la barre, passage des Nuages). Leur hauteur est donc comptée à partir du
+    # milieu LOCAL du disque de la masse (médiane des 1 024 particules voisines dans le plan), sinon elles oscillent autour
+    # de lui et la couche jeune s'épaissit en 100 Ma (mesuré le 16/11 : 49 -> 255 pc).
+    j = np.where(comp == 5)[0]
+    froid = (mk == 1) | (mk == 3)
+    arbre = cKDTree(mp[froid, :2]); zf = mp[froid, 2]
+    milieu = np.zeros(len(j))
+    for a in range(0, len(j), 100000):
+        _, v_ = arbre.query(pos[j[a:a + 100000], :2], k=1024, workers=-1)
+        milieu[a:a + 100000] = np.median(zf[v_], axis=1)
+    pos[j, 2] += milieu
+    print(f'{len(j)} étoiles jeunes remises sur le milieu du disque : décalage médian {np.median(np.abs(milieu)) * 1000:.0f} pc, au plus {np.abs(milieu).max() * 1000:.0f} pc ({time.time() - t0:.0f} s)')
+
     # Gaia montre déjà les étoiles mesurées près du Soleil : comme etoiles_visibles.py, chaque étoile ne garde que ce qui manque.
     D = v.data_keys(['M_GAL2ECL', 'SGRA_GAL'])
     gal2ecl = np.array(D['M_GAL2ECL']); ecl2gal = gal2ecl.T
@@ -97,6 +111,7 @@ def main():
     print(f'Gaia montre déjà {1 - lum_vue.sum() / lum.sum():.1%} de la lumière des étoiles visibles ({time.time() - t0:.0f} s)')
 
     meta['date'] = '2026-11-16'
+    meta['jeunes_sur_le_milieu_du_disque'] = True
     meta['posees_sur_la_masse'] = [1, 2, 4]      # rencontre.py garde leurs vitesses ; les autres prennent celle de la masse voisine
     meta['masse'] = os.path.abspath(auj)
     meta['lumiere_montree_hors_Gaia'] = float(lum_vue.sum())

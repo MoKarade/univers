@@ -369,7 +369,7 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
     La hauteur compte triple dans la distance, pour prendre une voisine de même hauteur.
     Étoiles jeunes (5) : il n'y a pas de gaz froid dans le calcul, et les particules qui en tiennent lieu sont agitées ;
     leur donner cette agitation les éparpillait en 30 Ma (mesuré le 16/11 : épaisseur 49 -> 270 pc, rayon médian + 1 kpc).
-    Elles prennent donc la vitesse MOYENNE des 128 particules voisines dans le plan (le courant local, barre comprise),
+    Elles prennent donc la vitesse MOYENNE des 1 024 particules voisines dans le plan (le courant local, barre comprise),
     plus une petite agitation (JEUNES_AGITATION, km/s : dans le plan, en hauteur) [modèle]."""
     from scipy.spatial import cKDTree
     rng = np.random.default_rng(graine + g)
@@ -383,15 +383,15 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
             masse = np.where((p['gid'] == g) & ((p['kind'] == 1) | (p['kind'] == 3)))[0]
             if len(masse) >= 320:
                 md = repere_disque(nom, p['pos'][masse], centre)
-                _, v = cKDTree(md[:, :2]).query(td[qui, :2], k=128, workers=-1)
+                arbre = cKDTree(md[:, :2])
                 axe = (C.galaxie(nom).get('disque') or {}).get('axe_rotation') or [0.0, 0.0, 1.0]
                 R = rotation_vers(axe)
                 # courant moyen dans le repère du disque, sans sa part en hauteur (la moyenne de voisines agitées en garde
                 # plusieurs km/s de bruit, ce qui suffisait à épaissir les jeunes : 49 -> 220 pc en 100 Ma, mesuré)
                 vm = np.zeros((len(qui), 3)); vmasse = (p['vel'][masse] - p['vel'][masse].mean(0)) @ R
-                for a0 in range(0, len(qui), 200000):
-                    vm[a0:a0 + 200000] = vmasse[v[a0:a0 + 200000]].mean(axis=1)
-                vm[:, 2] = 0.0
+                for a0 in range(0, len(qui), 100000):      # 1 024 voisines : la moyenne garde ~1 km/s de bruit, y compris en hauteur (le disque ondule)
+                    _, v = arbre.query(td[qui[a0:a0 + 100000], :2], k=1024, workers=-1)
+                    vm[a0:a0 + 100000] = vmasse[v].mean(axis=1)
                 # Les étoiles agitées tournent moins vite que la vitesse circulaire (ici 196 au lieu de ~235 km/s au Soleil) ;
                 # des jeunes lancées à cette vitesse tomberaient vers le centre. Leur vitesse de rotation est donc remise à
                 # l'échelle de la vitesse circulaire de la masse du calcul, rayon par rayon ; l'écart au cercle (courant de
@@ -404,6 +404,10 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
                 signe = np.sign(np.nanmedian(moy))
                 facteur = np.where(np.isfinite(moy) & (np.abs(moy) > 20.0), signe * vc / moy, 1.0)
                 Rj = np.hypot(td[qui, 0], td[qui, 1]); fj = np.interp(Rj, rc, facteur)
+                # dans la barre (moins de 6 kpc) il n'y a pas d'orbite circulaire : le courant moyen est gardé tel quel ;
+                # la remise à l'échelle entre progressivement de 6 à 9 kpc (run du 16/11 : appliquée partout, elle éjectait
+                # les jeunes du centre, rayon médian 5,9 -> 8,1 kpc en 50 Ma)
+                u_ = np.clip((Rj - 6.0) / 3.0, 0.0, 1.0); fj = 1.0 + (fj - 1.0) * u_ * u_ * (3 - 2 * u_)
                 er = td[qui, :2] / np.maximum(Rj, 1e-6)[:, None]; ep = np.stack([-er[:, 1], er[:, 0]], 1)
                 vr = (vm[:, :2] * er).sum(1); vp = (vm[:, :2] * ep).sum(1) * fj
                 vm[:, :2] = er * vr[:, None] + ep * vp[:, None]
