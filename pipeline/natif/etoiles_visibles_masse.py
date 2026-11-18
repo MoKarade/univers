@@ -26,6 +26,7 @@ from scipy.spatial import cKDTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import voie_lactee as v
+import lumiere_hors_gaia as lhg
 import etoiles_visibles as ev
 
 GRAINE = 20261116
@@ -106,7 +107,9 @@ def main():
     dans = (i >= 0) & (i < v.NX) & (j >= 0) & (j < v.NY) & (k >= 0) & (k < v.NZ)
     case = np.where(dans, (k * v.NY + j) * v.NX + i, 0)
     Ltr = np.bincount(case[dans], lum[dans], v.NX * v.NY * v.NZ) / (100.0 * 100.0 * 50.0)
-    part = np.clip((Ltr - cat.ravel()) / np.maximum(Ltr, 1e-30), 0.0, 1.0)
+    # retrait lissé (lumiere_hors_gaia.py) : la lumière Gaia d'une case sans traceur est retirée des cases voisines
+    retrait, _ = lhg.retrait_lisse(Ltr.reshape(v.NZ, v.NY, v.NX), cat)
+    part = lhg.part_gardee(Ltr, retrait.ravel())
     lum_vue = lum * np.where(dans & (comp != 6), part[case], 1.0)
     print(f'Gaia montre déjà {1 - lum_vue.sum() / lum.sum():.1%} de la lumière des étoiles visibles ({time.time() - t0:.0f} s)')
 

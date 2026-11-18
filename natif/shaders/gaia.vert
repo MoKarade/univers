@@ -125,11 +125,12 @@ void main() {
         flux *= gvCase(voisines[6], comp);
         fT = gvCase(voisines[7], comp);
     }
+    /* Même tache pour toutes les étoiles, mesurées ou du MODÈLE : la taille ne dépend que de la lumière reçue. Avant, la
+       tache du modèle était bornée à 2,5 pixels : à lumière égale, une étoile Gaia s'étalait jusqu'à 14 pixels, saturait
+       moins à l'écran et paraissait plus claire que sa voisine du modèle (fil « étoiles Gaia plus claires »). La borne
+       n'est plus utile : chaque point du modèle est une part d'au plus 20 % de son traceur (GV_PART), soit l'éclat d'une
+       étoile brillante, pas d'un amas. */
     float size = clamp(1.5 + 1.2 * log2(1.0 + flux), 1.5, 14.0) * pc.par.y / 1080.0;
-    /* étoile du MODÈLE : tache bornée à 2,5 pixels (lumière inchangée : elle est divisée par la surface de la tache). Un
-       traceur porte la lumière de nombreuses étoiles : vu de loin avec l'éclat multiplié, il ne doit pas devenir une grosse
-       tache qu'aucune étoile réelle ne ferait. */
-    if ((flags & 16u) != 0u) size = min(size, 2.5 * pc.par.y / 1080.0);
     vec3 teinte = colorOf[pas].rgb;
     if (fT > 0.0 && abs(fT - 1.0) > 1e-4) teinte *= gvCorpsNoir(5800.0 * fT) / gvCorpsNoir(5800.0);      /* teinte décalée comme la température */
     vCol = teinte * min(flux, 3.0e4) / (size * size);

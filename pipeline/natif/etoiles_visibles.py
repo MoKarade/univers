@@ -26,7 +26,8 @@ jeunes 10 km/s) ; barre : rotation d'ensemble à 39 km/s/kpc dans la limite de l
 Lumière de chaque traceur : tirée d'une loi de Pareto (indice 1,5), somme égale à la lumière de sa composante
 [modèle : les traceurs portent la lumière de toutes les étoiles faibles qui les entourent].
 Près du Soleil, Gaia dessine déjà les étoiles mesurées : la lumière de chaque traceur est réduite de ce que Gaia
-montre dans sa case (100 pc), d'après la lumière cataloguée de voie_lactee.py ; rien n'est compté deux fois.
+montre dans sa case (100 pc), d'après la lumière cataloguée de voie_lactee.py, et ce qui ne trouve pas de traceur dans sa
+case est retiré des cases voisines (retrait lissé, lumiere_hors_gaia.py) ; rien n'est compté deux fois.
 Tirage déterministe (graine fixe).
 Usage : python etoiles_visibles.py <gaia.bin[,gaia_b.bin]> <etoiles.bin> <gaia_agrege.bin> <wise_hii.tsv> <dossier de sortie>
 """
@@ -39,6 +40,7 @@ PARETO_MAX = 10.0      # un traceur porte au plus 10 fois la lumière du plus fa
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import voie_lactee as v
+import lumiere_hors_gaia as lhg
 import voie_lactee_jeunes as vj
 from gaia_convertir import morton, feuilles, TRANCHES, TRANCHE0, TRANCHE_L, BPRP0, BPRP_PAS, V_PAS
 
@@ -169,7 +171,9 @@ def main():
     dans = (i >= 0) & (i < v.NX) & (j >= 0) & (j < v.NY) & (k >= 0) & (k < v.NZ)
     case = np.where(dans, (k * v.NY + j) * v.NX + i, 0)
     Ltr = np.bincount(case[dans], lum[dans], v.NX * v.NY * v.NZ) / (100.0 * 100.0 * 50.0)
-    part = np.clip((Ltr - cat.ravel()) / np.maximum(Ltr, 1e-30), 0.0, 1.0)
+    # retrait lissé (lumiere_hors_gaia.py) : la lumière Gaia d'une case sans traceur est retirée des cases voisines
+    retrait, _ = lhg.retrait_lisse(Ltr.reshape(v.NZ, v.NY, v.NX), cat)
+    part = lhg.part_gardee(Ltr, retrait.ravel())
     reste = np.where(dans & (comp != 6), part[case], 1.0)
     lum_vue = lum * reste
     print(f'Gaia montre déjà {1 - lum_vue.sum() / lum.sum():.1%} de la lumière des traceurs ({time.time() - t0:.0f} s)')
