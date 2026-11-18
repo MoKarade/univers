@@ -18,7 +18,7 @@ Ce qui est mesuré, et ce qui ne l'est pas :
 - la barre n'est PAS posée ici : elle doit naître en laissant vieillir la galaxie seule, puis être comparée aux mesures
   (Voie lactée : 5,0 kpc, 39 km/s/kpc ; Andromède : 4,0 kpc, 40 km/s/kpc).
 
-Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7] [--froid=1.2]
+Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7] [--froid=1.2] [--froid-centre=0.9]
   --rsig : longueur de décroissance de l'agitation des étoiles, en longueurs de disque (2 : disque très calme, sans barre ;
            3 ou 4 : centre plus froid, où une barre peut naître) ; --halo : part des particules donnée à la matière noire.
 """
@@ -51,7 +51,7 @@ GALAXIES = {
         disques=[
             dict(kind=1, sigma0=8.96e8, rd=2.50, hz=0.30, sigma_soleil=35.0, r_soleil=8.21),
             dict(kind=4, sigma0=1.83e8, rd=3.02, hz=0.90, sigma_soleil=50.0, r_soleil=8.21),
-            dict(kind=1, masse=9.23e9, rd=1.0, hz=0.30, q_min=1.2),
+            dict(kind=1, masse=9.23e9, rd=1.0, hz=0.30, q_min=1.2, compact=True),
             dict(kind=3, masse=1.22e10, rd=7.0, hz=0.085, q_min=1.5),
         ]),
     # Variante « barre » d'Andromède : bulbe classique seul (1,18e10 M☉) ; le bulbe en boîte (1,91e10 M☉, Blaña Díaz et al.
@@ -61,7 +61,7 @@ GALAXIES = {
         bulbe=dict(masse=1.18e10, a=0.55),
         disques=[
             dict(kind=1, masse=5.6e10, rd=5.3, hz=0.6, q_min=1.5),
-            dict(kind=1, masse=1.91e10, rd=1.5, hz=0.4, q_min=1.2),
+            dict(kind=1, masse=1.91e10, rd=1.5, hz=0.4, q_min=1.2, compact=True),
             dict(kind=3, masse=5.6e9, rd=6.0, hz=0.15, q_min=1.5),
         ]),
     # Tamm et al. 2012 (A&A 546, A4), tables 2 et 4 (halo NFW) ; disque : Courteau et al. 2011 (5,3 kpc) ; bulbe : Blaña Díaz
@@ -108,7 +108,7 @@ except Exception as _e:      # table absente : on le dit dans le résumé du tir
     TABLE = None
 
 
-def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None):
+def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None, froid_centre=None):
     import agama
     agama.setUnits(mass=1, length=1, velocity=1)
     g = GALAXIES[nom]
@@ -167,7 +167,20 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
         nd = max(1, round(n_reste * d['masse'] / m_etoiles))
         sig = d['sigma0'] * np.exp(-R / d['rd'])
         rsig = rsig_facteur * d['rd']      # longueur sur laquelle l'agitation décroît : 2 Rd par défaut ; plus grand = centre plus froid (barre)
-        if froid and d['kind'] != 3:
+        if froid_centre and d.get('compact'):
+            # Centre froid SEUL : le disque compact central (la masse de la barre) part à Q = froid_centre contre tous les
+            # disques, pour que la barre naisse ; le disque mince et le disque épais gardent l'agitation MESURÉE. Un disque
+            # entier à Q < 1 s'agite et s'épaissit de lui-même en 1 Ga (mesuré le 18/11 : mince 0,22 -> 0,54 kpc au Soleil).
+            zone = (R > 0.5 * d['rd']) & (R < 3 * d['rd'])
+            sig_tot = sum(x['sigma0'] * np.exp(-R / x['rd']) for x in g['disques'])
+            cible = froid_centre * 3.36 * G * sig_tot[zone] / kappa[zone]
+            meilleur = None
+            for rs_ in np.linspace(0.8 * d['rd'], 12 * d['rd'], 200):
+                s0_ = float(np.max(cible * np.exp(R[zone] / rs_)))
+                cout = float(np.mean(s0_ * np.exp(-R[zone] / rs_) / cible))
+                if meilleur is None or cout < meilleur[0]: meilleur = (cout, s0_, rs_)
+            _, s0, rsig = meilleur
+        elif froid and d['kind'] != 3:
             # Départ « froid » : l'agitation mesurée aujourd'hui est celle d'un disque que sa barre a déjà chauffé. Pour
             # que la barre naisse et tienne d'elle-même, les étoiles partent avec la plus petite agitation qui donne
             # Q >= froid (contre tous les disques ensemble) ; le disque épais garde son rapport mesuré au disque mince.
@@ -213,7 +226,8 @@ def main():
     nom, n, sortie = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     opts = dict(a[2:].split('=', 1) for a in sys.argv[4:] if a.startswith('--') and '=' in a)
     p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None,
-                           froid=float(opts['froid']) if 'froid' in opts else None)
+                           froid=float(opts['froid']) if 'froid' in opts else None,
+                           froid_centre=float(opts['froid-centre']) if 'froid-centre' in opts else None)
     resume['options'] = opts
     resume['table_unique'] = TABLE
     np.savez_compressed(sortie, meta=json.dumps(resume, ensure_ascii=False), **p)
