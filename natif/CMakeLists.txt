@@ -88,6 +88,9 @@ target_link_options(essai_eclipse PRIVATE -static)
 
 # Contrôle des distances cosmologiques contre astropy.
 add_executable(essai_cosmologie src/essai_cosmologie.cpp)
+add_executable(essai_bac_a_sable src/essai_bac_a_sable.cpp)
+target_compile_options(essai_bac_a_sable PRIVATE -Wall -Wextra)
+target_link_options(essai_bac_a_sable PRIVATE -static)
 target_compile_options(essai_cosmologie PRIVATE -Wall -Wextra)
 target_link_options(essai_cosmologie PRIVATE -static)
 

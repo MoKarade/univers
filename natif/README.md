@@ -68,3 +68,32 @@ par Claude sur le PC) : c'est Marc qui la voit en premier.
 - F1 ou « ? » : toutes les commandes. L'interface grandit avec la fenêtre (police chargée pour l'écran du PC).
 - Contrôles sans fenêtre : `UNIVERS_ECRAN=accueil|aide|menu|completude|eclipse[:<rang>]|voyager|recherche:<texte>|visite:<étape>|vol:<nom>:<0 à 1>`
   avec `--fenetre-test 20 --capture f.ppm`. `essai_interface.exe` vérifie la recherche et la lecture des dates.
+
+## Bac à sable : panneau, frise, réglages, orbites (18 novembre 2026)
+
+Demande de Marc : interface retravaillée, informative (images, explications, courbes, analyses), frise du temps de
+l'univers, paramètres modifiables, orbite de n'importe quel objet.
+
+- `src/interface_panneau.h` : panneau à droite, trois onglets. **Astre** : carte de surface (textures déjà installées,
+  Solar System Scope CC BY 4.0, `src/interface_images.h`), explication sourcée (`src/interface_savoir.h`), courbe de
+  l'orbite et analyse (durée d'un tour, rayons extrêmes, prochain passage), valeurs de l'ancienne fiche. **Univers** :
+  époque choisie sur la frise, taille de l'univers dans le temps (tes réglages contre Planck 2018), composition, destin
+  (expansion sans fin, Grande Déchirure ou retombée), tout « calculé ». **Réglages** : vitesse d'expansion, matière,
+  énergie noire (w0, wa), essais rapides ; matière noire et barre de la Voie lactée, énergie noire dans la galaxie.
+  Fermé (×), il laisse une colonne de trois boutons.
+- `src/interface_frise.h` : frise en bas. À gauche, toute l'histoire en échelle logarithmique, colorée par la
+  température du rayonnement (calculée) ; un clic l'explique. À droite, le temps simulé (−1 Ga à la fin du film),
+  logarithmique des deux côtés d'aujourd'hui ; clic ou glisser pose la date (`sim.years`, bornée par
+  `minYears`/`maxYears`).
+- `src/orbites_objet.h` : orbite de l'astre suivi. Étoiles et Soleil : même modèle et même départ que `Sim::exact`,
+  ±250 Ma ; variante « et si… » (pointillé bleu) avec les réglages. Galaxies du Groupe local : film puis centres de
+  référence (même règle que `refreshGalaxies`). Sondes : trajectoire JPL. Astéroïdes : orbite JPL.
+- `physique/galaxie_orbites.h` : `Potentiel::lambda` (énergie noire locale), valeur par défaut inchangée.
+- `src/interface_cosmo_courbes.h` : histoire de l'expansion. Contrôle `essai_bac_a_sable` : âge identique à
+  `cosmo::ageGyr` ; univers fermé (Ωm = 2) contre la solution exacte, 0,04 % ; Grande Déchirure (w = −1,5) contre la
+  formule approchée de Caldwell 2003, 3 % ; 1/a = 1076 à 380 000 ans (Planck : z* = 1090).
+- Contrôle sans fenêtre : `UNIVERS_PANNEAU=astre | univers[:<époque>] | reglages | ferme`, suivi au besoin de
+  `,halo:<x>`, `,w0:<x>`, `,ode:<x>`, `,om:<x>`.
+- Ne change pas : le film de la rencontre avec Andromède et le mouvement des millions d'étoiles affichées (calculés à
+  l'avance avec les valeurs mesurées). Le panneau le dit.
+- Pas vérifié : la fenêtre réellement affichée (captures en fenêtre cachée seulement), la souris sur la frise.
