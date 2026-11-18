@@ -206,11 +206,24 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
         sr = s0 * np.exp(-R / rsig)
         q = sr * kappa / (3.36 * G * sig)
         zone = (R > 0.5 * d['rd']) & (R < 4 * d['rd'])
-        dfd = agama.DistributionFunction(type='QuasiIsothermal', potential=pot, Sigma0=d['sigma0'], Rdisk=d['rd'], Hdisk=d['hz'], sigmar0=s0, Rsigmar=rsig)
+        # Hauteur : le paramètre « Hdisk » de cette loi ne donne pas un disque de la hauteur voulue (mesuré le 18/11 sur les
+        # départs : disque mince 1,8 fois trop épais au Soleil, disque épais 2,3 fois). On le règle donc par essais : petit
+        # tirage, médiane de |z| mesurée entre 0,5 et 3 longueurs de disque, comparée à celle d'un disque exponentiel de
+        # hauteur hz (hz ln 2), et on recommence (4 fois au plus).
+        h_df, cible_z = d['hz'], d['hz'] * math.log(2.0)
+        for _ in range(4):
+            dfd = agama.DistributionFunction(type='QuasiIsothermal', potential=pot, Sigma0=d['sigma0'], Rdisk=d['rd'], Hdisk=h_df, sigmar0=s0, Rsigmar=rsig)
+            xe, _m = agama.GalaxyModel(pot, dfd).sample(200000)
+            Re = np.hypot(xe[:, 0], xe[:, 1]); ze = np.abs(xe[(Re > 0.5 * d['rd']) & (Re < 3 * d['rd']), 2])
+            mesure = float(np.median(ze))
+            if abs(mesure / cible_z - 1.0) < 0.03: break
+            h_df *= cible_z / mesure
+        dfd = agama.DistributionFunction(type='QuasiIsothermal', potential=pot, Sigma0=d['sigma0'], Rdisk=d['rd'], Hdisk=h_df, sigmar0=s0, Rsigmar=rsig)
         xv, m = agama.GalaxyModel(pot, dfd).sample(nd)
+        Rv = np.hypot(xv[:, 0], xv[:, 1]); zmed = float(np.median(np.abs(xv[(Rv > 0.5 * d['rd']) & (Rv < 3 * d['rd']), 2])))
         out.append((xv, m, eps_e, d['kind']))
         resume['composantes'].append(dict(nom={1: 'disque mince', 3: 'gaz (froid)', 4: 'disque épais'}[d['kind']], masse=d['masse'], particules=nd,
-                                          agitation_centre=round(s0, 1), longueur_agitation_kpc=round(float(rsig), 2), q_seul_min=round(float(q[zone].min()), 2)))
+                                          agitation_centre=round(s0, 1), longueur_agitation_kpc=round(float(rsig), 2), hauteur_reglee_kpc=round(float(h_df), 4), z_median_kpc=round(zmed, 4), z_median_voulu_kpc=round(cible_z, 4), q_seul_min=round(float(q[zone].min()), 2)))
     # Q de l'ensemble des disques (étoiles et gaz ensemble, agitation moyenne pondérée par la masse) : c'est lui qui compte.
     pos = np.concatenate([o[0][:, :3] for o in out]); vel = np.concatenate([o[0][:, 3:] for o in out])
     mass = np.concatenate([o[1] for o in out])
