@@ -14,6 +14,7 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include <future>
 #include <span>
 #include <vector>
 
@@ -69,6 +70,7 @@ struct ObjectTrack {
     }
 
     void update(const Sim& sim, const SandboxGalaxy& sb) {
+        collect(sim.lastAdvance == 0.0);      // orbite recalculée à part : reprise dès qu'elle est prête (attendue à l'arrêt)
         const int f = sim.focus;
         const Body& b = sim.bodies[static_cast<size_t>(f)];
         const bool star = b.kind == Kind::Star || b.kind == Kind::Sun;
@@ -77,6 +79,14 @@ struct ObjectTrack {
                               (b.kind == Kind::Asteroid && std::fabs(sim.years - centreYears) > 0.2 * std::max(asteroidSpan, 1e-3));
         const int ast = b.kind == Kind::Asteroid ? sim.asteroidSel : -2;      // un seul emplacement pour tous les astéroïdes
         if (f == focus && ast == usedAsteroid && sameSettings(sb, sim.cosmology) && !recentre) return;
+        // Même étoile, mêmes réglages, le temps défile : la fenêtre glisse. L'orbite est intégrée depuis aujourd'hui (des
+        // milliers de pas d'un million d'années loin dans le temps : jusqu'à ~60 ms) ; le calcul se fait dans un fil à part
+        // avec exactement les mêmes données, et l'ancien tracé reste en attendant (quelques images).
+        if (star && kind == 0 && f == focus && ast == usedAsteroid && sameSettings(sb, sim.cosmology) && sim.lastAdvance != 0.0) {
+            if (!pending_.valid()) startStar(sim, sb);
+            return;
+        }
+        if (pending_.valid()) (void)pending_.get();      // autre astre ou autres réglages : le calcul en cours ne sert plus
         focus = f;
         usedAsteroid = ast;
         usedSandbox = sb;
@@ -106,6 +116,43 @@ struct ObjectTrack {
     }
 
 private:
+    // Calcul d'orbite d'étoile fait à part (startStar) : mêmes vecteurs que buildStar.
+    struct StarJob {
+        std::vector<double> t;
+        std::vector<phys::Vec3> g, gWhatIf;
+        std::vector<float> r, rWhatIf;
+        bool hasWhatIf = false;
+    };
+    std::future<StarJob> pending_;
+
+    void startStar(const Sim& sim, const SandboxGalaxy& sb) {
+        sim.ensureExact();
+        const int idx = sim.bodies[static_cast<size_t>(sim.focus)].kind == Kind::Sun ? 0 : sim.exactOf[static_cast<size_t>(sim.focus)];
+        if (idx < 0) return;
+        centreYears = sim.years;
+        const double now = sim.years / 1.0e9;
+        const double lo = std::max(now - kHalfWindowGa, (sim.minYears()) / 1.0e9), hi = std::min(now + kHalfWindowGa, sim.maxYears() / 1.0e9);
+        const phys::Vec3 p0 = sim.exact.g0[static_cast<size_t>(idx)], v0 = sim.exact.v0[static_cast<size_t>(idx)];
+        const bool whatIf = sb.differs(sim.cosmology);
+        const phys::galaxie::Potentiel pw = sb.potential(sim.cosmology);
+        pending_ = std::async(std::launch::async, [p0, v0, lo, hi, whatIf, pw] {
+            StarJob j;
+            integrateTo(p0, v0, phys::galaxie::Potentiel{}, lo, hi, &j.t, j.g, j.r);
+            j.hasWhatIf = whatIf;
+            if (whatIf) integrateTo(p0, v0, pw, lo, hi, nullptr, j.gWhatIf, j.rWhatIf);
+            return j;
+        });
+    }
+    // Reprend le calcul fait à part s'il est prêt (ou l'attend si wait).
+    void collect(bool wait) {
+        if (!pending_.valid()) return;
+        if (!wait && pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        StarJob j = pending_.get();
+        t = std::move(j.t); g = std::move(j.g); r = std::move(j.r);
+        gWhatIf = std::move(j.gWhatIf); rWhatIf = std::move(j.rWhatIf);
+        hasWhatIf = j.hasWhatIf;
+    }
+
     void buildStar(const Sim& sim, const SandboxGalaxy& sb) {
         sim.ensureExact();
         const int idx = sim.bodies[static_cast<size_t>(sim.focus)].kind == Kind::Sun ? 0 : sim.exactOf[static_cast<size_t>(sim.focus)];
@@ -125,6 +172,10 @@ private:
     // Intégration d'une seule étoile au pas de l'appli (1 million d'années), un point tous les 1 Ma de lo à hi.
     void integrate(phys::Vec3 p0, phys::Vec3 v0, const phys::galaxie::Potentiel& P, double lo, double hi, bool keepTimes,
                    std::vector<phys::Vec3>& out, std::vector<float>& dist) {
+        integrateTo(p0, v0, P, lo, hi, keepTimes ? &t : nullptr, out, dist);
+    }
+    static void integrateTo(phys::Vec3 p0, phys::Vec3 v0, const phys::galaxie::Potentiel& P, double lo, double hi, std::vector<double>* times,
+                            std::vector<phys::Vec3>& out, std::vector<float>& dist) {
         const phys::Vec3 pos[1] = {p0}, vel[1] = {v0};
         phys::galaxie::Orbites o(std::span<const phys::Vec3>(pos, 1), std::span<const phys::Vec3>(vel, 1), P);
         o.avance(lo, 1);
@@ -135,7 +186,7 @@ private:
             const phys::Vec3 q = o.position(0);
             out.push_back(q);
             dist.push_back(static_cast<float>(std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z)));
-            if (keepTimes) t.push_back(tg * 1.0e9);
+            if (times) times->push_back(tg * 1.0e9);
         }
     }
 
