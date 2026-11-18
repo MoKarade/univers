@@ -270,6 +270,10 @@ public:
     // Sous-nuages : chaque étoile du MODÈLE (drapeau 16) est dessinée en GV_SOUS_NUAGE étoiles (gaia.vert), confondues vu de
     // loin, écartées en s'approchant ; la somme de leur lumière est celle du traceur. Rien n'est stocké.
     void enableSubClouds(uint32_t k) { subClouds_ = std::max(1u, k); }
+    // Distance de la caméra au-delà de laquelle un sous-nuage est fermé : mêmes valeurs que gaia.vert (GV_LOIN), en
+    // années-lumière. Au-delà, ses 16 étoiles sont au même point (fondu du sous-nuage entre 20 000 et 2 000 al, PR 96).
+    static constexpr double kSubCloudFarLy = 20000.0;
+    uint64_t collapsedLeaves = 0;      // feuilles dessinées en un point par traceur à la dernière image (contrôle)
 
     // Galaxies voisines (étoiles au drapeau 32, voisines_etoiles.bin) : par galaxie, 4 vec4 = centre à t = 0 et centre à la date
     // montrée (années-lumière, repère du simulateur), axe de rotation (écliptique) et vitesse de rotation (km/s), rayon où elle
@@ -523,6 +527,11 @@ private:
                                 {cam.fwd.x * ty - cam.up.x, cam.fwd.y * ty - cam.up.y, cam.fwd.z * ty - cam.up.z},
                                 {cam.fwd.x * ty + cam.up.x, cam.fwd.y * ty + cam.up.y, cam.fwd.z * ty + cam.up.z}};
         uint32_t k = 0, kb = 0;      // feuilles en orbite exacte (début de la liste) et en épicycles (fin de la liste)
+        // Sous-étoiles seulement de près (choix de Marc, 18/11/2026) : une feuille dont le point le plus proche est au-delà de
+        // kSubCloudFarLy (sous-nuage fermé dans gaia.vert) est dessinée en UN point par traceur, qui porte toute sa lumière, au
+        // lieu de subClouds_ (16) points au même endroit. Marque : première instance = subClouds_ (gaia.vert).
+        const double cut = subClouds_ > 1 ? kSubCloudFarLy : 0.0;
+        collapsedLeaves = 0;
         drawn = 0;
         restPoints = 0;
         visible_.clear();
@@ -567,7 +576,9 @@ private:
             }
             if (take == 0) continue;
             visible_.push_back(i);
-            const VkDrawIndirectCommand c{take, subClouds_, static_cast<uint32_t>(L.first), 0};      // une instance par étoile du sous-nuage
+            const bool collapse = subClouds_ > 1 && d2 >= cut * cut;
+            if (collapse) ++collapsedLeaves;
+            const VkDrawIndirectCommand c{take, collapse ? 1u : subClouds_, static_cast<uint32_t>(L.first), collapse ? subClouds_ : 0u};      // une instance par étoile du sous-nuage, ou une seule (repliée)
             if (!moved || !leafGalaxy_.empty() || orbits_.rangeReady(i)) out[k++] = c;      // à jour, temps proche, ou galaxie voisine
             else out[file_.leafCount - 1 - kb++] = c;               // pas encore rattrapée : épicycles en attendant
             drawn += take;

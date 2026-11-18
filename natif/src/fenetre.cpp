@@ -1034,8 +1034,9 @@ int runWindow(const WindowOptions& opt) {
         {
             std::printf("film du Groupe local a cette date : %s (film de %.3f a %.3f milliards d'annees, %d images)\n", sim.filmLeads ? "il mene les etoiles visibles" : "non",
                         filmStarsOk ? filmStars.film.debutGa() : 0.0, filmStarsOk ? filmStars.film.finGa() : 0.0, filmStarsOk ? filmStars.film.images() : 0);
-            std::printf("etoiles du modele : orbites exactes au pas %ld, retard %ld pas, pretes %d ; feuilles en epicycles %u sur %u\n", milkyWayStars.orbitStep(),
-                        milkyWayStars.orbitLagSteps(), milkyWayStars.orbitReady() ? 1 : 0, milkyWayStars.epicycleLeaves(), milkyWayStars.leafCount());
+            std::printf("etoiles du modele : orbites exactes au pas %ld, retard %ld pas, pretes %d ; feuilles en epicycles %u sur %u ; sous-nuages replies %llu\n", milkyWayStars.orbitStep(),
+                        milkyWayStars.orbitLagSteps(), milkyWayStars.orbitReady() ? 1 : 0, milkyWayStars.epicycleLeaves(), milkyWayStars.leafCount(),
+                        static_cast<unsigned long long>(milkyWayStars.collapsedLeaves));
             // contrôle du repère : Soleil selon l'appli (CPU), Soleil selon la carte graphique (dernier état), centre des étoiles
             const phys::Vec3 suc = sim.sunGalacto();
             const auto& ob = milkyWayStars.orbits();

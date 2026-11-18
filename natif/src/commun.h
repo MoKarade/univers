@@ -201,6 +201,7 @@ Gpu createGpu(bool window = false) {
     VkPhysicalDeviceFeatures feats{};
     feats.largePoints = VK_TRUE;
     feats.multiDrawIndirect = VK_TRUE;      // étoiles Gaia : un dessin par feuille de l'arbre, en un seul appel (gaia.h)
+    feats.drawIndirectFirstInstance = VK_TRUE;      // sous-nuages repliés : marqués par la première instance (gaia.h, selectLeaves)
     feats.samplerAnisotropy = VK_TRUE;      // cartes de surface nettes en vue rasante
     VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &on13};
     dci.queueCreateInfoCount = 1;
