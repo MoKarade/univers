@@ -146,10 +146,19 @@ public:
     // Distance (années-lumière) d'un décalage vers le rouge, par la même table que le shader (galaxies_formes.h) ; version :
     // change à chaque nouvelle table.
     double distanceLy(double z) const {
-        if (!mapped_) return 0;
+        return distanceAt(zPlace(z));
+    }
+    // Place d'un décalage z dans la table (case et fraction) : ne dépend pas de la date, se calcule une fois par galaxie.
+    struct ZPlace { int k; double f; };
+    static ZPlace zPlace(double z) {
         const double u = std::clamp(std::log(1.0 + z) / std::log(1.0 + kGalaxyZMax), 0.0, 1.0) * 256.0;
         const int k = std::min(static_cast<int>(u), 255);
-        return table_cpu_[k] + (table_cpu_[k + 1] - table_cpu_[k]) * (u - k);
+        return {k, u - k};
+    }
+    // Distance (années-lumière) pour une place calculée par zPlace : mêmes opérations que distanceLy, donc même résultat.
+    double distanceAt(ZPlace p) const {
+        if (!mapped_) return 0;
+        return table_cpu_[static_cast<size_t>(p.k)] + (table_cpu_[static_cast<size_t>(p.k) + 1] - table_cpu_[static_cast<size_t>(p.k)]) * p.f;
     }
     uint64_t tableVersion = 0;
 

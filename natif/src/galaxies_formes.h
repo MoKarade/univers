@@ -45,6 +45,8 @@ public:
             check(vkMapMemory(g.dev, ind_[r].mem, 0, VK_WHOLE_SIZE, 0, &indMap_[r]), "galaxies : dessins");
         }
         world_.resize(count);
+        for (uint32_t i = 0; i < count; ++i)
+            if (!(recs_[i].d > 0)) byZ_.push_back({i, GalaxyRenderer::zPlace(recs_[i].z)});
         createPipeline(g, hdrFormat);
         ready = true;
         return true;
@@ -56,11 +58,23 @@ public:
         if (!ready) return;
         ring_ = (ring_ + 1) % kRing;
         if (cat.tableVersion != version_) {
+            // La table change à chaque million d'années (l'univers grandit) : seules les galaxies placées par leur décalage
+            // vers le rouge bougent alors ; celles à distance mesurée sont placées une fois. Leur place dans la table (case,
+            // fraction) est calculée une fois (byZ_) : mêmes opérations que distanceLy, mêmes distances, 10 ms -> ~1 ms.
+            const bool first = version_ == ~0ull;
             version_ = cat.tableVersion;
-            for (uint32_t i = 0; i < count; ++i) {
-                const Rec& r = recs_[i];
-                const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
-                world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
+            if (first) {
+                for (uint32_t i = 0; i < count; ++i) {
+                    const Rec& r = recs_[i];
+                    const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
+                    world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
+                }
+            } else {
+                for (const ByZ& b : byZ_) {
+                    const Rec& r = recs_[b.i];
+                    const double d = cat.distanceAt(b.p);
+                    world_[b.i] = {r.ux * d, r.uy * d, r.uz * d, d};
+                }
             }
         }
         const double pxPerRad = height / (2.0 * cam.tanHalf);
@@ -247,6 +261,8 @@ private:
 
     std::vector<Rec> recs_;
     std::vector<W> world_;
+    struct ByZ { uint32_t i; GalaxyRenderer::ZPlace p; };
+    std::vector<ByZ> byZ_;      // galaxies placées par leur décalage vers le rouge, et leur place dans la table des distances
     uint64_t version_ = ~0ull;
     double pxPerRad_ = 1;
     int ring_ = 0;
