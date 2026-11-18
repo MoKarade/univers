@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
     namespace g = phys::galaxie;
     verifie(proche(constante(src, "OG_G"), g::kG) && proche(constante(src, "OG_MB"), g::kMb) && proche(constante(src, "OG_AB"), g::kAb) &&
                 proche(constante(src, "OG_MD"), g::kMd) && proche(constante(src, "OG_AD"), g::kAd) && proche(constante(src, "OG_BD"), g::kBd) &&
-                proche(constante(src, "OG_RS"), g::kRs) && proche(constante(src, "OG_GMH"), g::gmHalo()) && proche(constante(src, "OG_K"), g::kKmsKpcToRadGa) &&
+                proche(constante(src, "OG_RS"), g::kRs) && proche(constante(src, "OG_GMH"), g::gmHalo()) && proche(constante(src, "OG_KL"), g::kLambdaKmsKpc2) && proche(constante(src, "OG_K"), g::kKmsKpcToRadGa) &&
                 proche(constante(src, "OG_KPC_LY"), orbite::kKpcLy) && proche(constante(src, "OG_RACCORD_ANS"), orbite::kRaccordAns) &&
                 proche(constante(src, "OG_AMP_MAX"), orbite::kAmplitudeMax),
             "constantes de la carte graphique = constantes de la bibliothèque de physique");

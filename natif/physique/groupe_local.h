@@ -10,6 +10,7 @@
 // Le traceur Soleil du calcul n'est pas fiable (le disque modèle forme une barre et il migre vers le centre) : non fourni.
 #pragma once
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <span>

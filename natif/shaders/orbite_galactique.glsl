@@ -12,6 +12,7 @@ const float OG_AD = 3.0;
 const float OG_BD = 0.28;
 const float OG_RS = 16.0;
 const float OG_GMH = 2552189.27458262;      /* halo calé sur 232,8 km/s au Soleil (phys::galaxie::gmHalo) */
+const float OG_KL = 0.0031117906;           /* énergie noire : H0² ΩΛ en (km/s)²/kpc² (phys::galaxie::kLambdaKmsKpc2) */
 const float OG_K = 1.0227121650456;         /* km/s/kpc -> radians par milliard d'années */
 const float OG_KPC_LY = 3261.5637769;
 const float OG_RACCORD_ANS = 3.0e5;
@@ -31,8 +32,10 @@ vec4 ogFrequences(float R) {
     float d2 = -2.0 * gb / ((R + OG_AB) * (R + OG_AB) * (R + OG_AB)) + gd * (c2 - 2.0 * R * R) / (D2 * D2 * D)
              + OG_GMH * (x / ((1.0 + x) * (1.0 + x) * OG_RS * R * R) - 2.0 * m / (R * R * R));
     float nu2 = gb / (R * (R + OG_AB) * (R + OG_AB)) + gd * (OG_AD + OG_BD) / (OG_BD * D2 * D) + OG_GMH * m / (R * R * R);
+    /* énergie noire (revue O3) : même retrait que phys::galaxie::frequences, sinon la carte et le processeur divergent */
+    d1 -= OG_KL * R; d2 -= OG_KL; nu2 -= OG_KL;
     float om2 = d1 / R;
-    return vec4(sqrt(R * d1), sqrt(om2), sqrt(max(d2 + 3.0 * om2, 1e-6)), sqrt(nu2));
+    return vec4(sqrt(R * d1), sqrt(om2), sqrt(max(d2 + 3.0 * om2, 1e-6)), sqrt(max(nu2, 1e-6)));
 }
 
 float ogF(float u, float e, float q, float beta) {

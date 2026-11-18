@@ -14,6 +14,7 @@
 #pragma once
 #include <array>
 #include <climits>
+#include <cmath>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -72,7 +73,29 @@ struct FilmStars {
     // s'arrête une image avant la fin.
     bool covers(double tGa) const { return ready && film.images() >= 5 && tGa >= film.debutGa() && tGa <= film.date(film.images() - 2); }
 
-    // États (8 flottants par étoile, ordre de l'appli, puis le Soleil) à tGa. sun, sunVel : place et vitesse galactocentriques du
+    // Lumière entière des étoiles (revue F1). vl_etoiles.bin ne porte que la lumière que Gaia ne montre pas déjà ; <nom>.lum
+    // (pipeline/natif/ordre_film.py) donne la lumière entière de chaque étoile, en L☉ (bande V), dans l'ordre de l'appli.
+    // gain[i] = entière / rangée : quand le film mène et que Gaia s'éteint, l'étoile reprend la lumière que Gaia portait.
+    std::vector<float> gain;
+    double gaiaOff = 0;      // 0 : Gaia montré, gain sans effet ; 1 : Gaia éteint, lumière entière (à poser avant states)
+    // magnitude(i) : magnitude absolue V rangée pour l'étoile i (GaiaRenderer::starMagnitude). false sans fichier : rien ne change.
+    template <class Mag> bool loadLum(const std::string& dataDir, const char* lumFile, Mag magnitude) {
+        std::ifstream f(dataDir + "/" + lumFile, std::ios::binary | std::ios::ate);
+        if (!f || static_cast<uint64_t>(f.tellg()) != ordre.size() * 4) return false;
+        std::vector<float> lum(ordre.size());
+        f.seekg(0);
+        f.read(reinterpret_cast<char*>(lum.data()), static_cast<std::streamsize>(lum.size() * 4));
+        gain.resize(lum.size());
+        constexpr double kMSolV = 4.83;      // même valeur que pipeline/natif/etoiles_visibles.py
+        for (size_t i = 0; i < lum.size(); ++i) {
+            const double rangee = std::pow(10.0, -0.4 * (static_cast<double>(magnitude(i)) - kMSolV));
+            gain[i] = rangee > 0 && std::isfinite(rangee) && lum[i] > 0 ? static_cast<float>(lum[i] / rangee) : 1.0f;
+        }
+        return true;
+    }
+
+    // États (8 flottants par étoile, ordre de l'appli, puis le Soleil) à tGa. Le 8e flottant de chaque étoile est son facteur de
+    // lumière (gaia.vert ; 0 : sans objet). sun, sunVel : place et vitesse galactocentriques du
     // Soleil selon l'appli (kpc, km/s). false si une image manque : l'appelant garde alors l'état précédent.
     bool states(double tGa, phys::Vec3 sun, phys::Vec3 sunVel, std::vector<float>& out) {
         const int n = film.images();
@@ -100,7 +123,7 @@ struct FilmStars {
                 o[4 + a] = d[0] * p[0][c] + d[1] * p[1][c] + d[2] * p[2][c] + d[3] * p[3][c];
             }
             o[3] = 1.0f;      // sous-pas (sans objet : le film mène)
-            o[7] = 0.0f;
+            o[7] = gain.empty() || gaiaOff <= 0 ? 0.0f : static_cast<float>(1.0 + gaiaOff * (gain[s] - 1.0));
         }
         float* o = &out[stars * 8];
         o[0] = static_cast<float>(sun.x); o[1] = static_cast<float>(sun.y); o[2] = static_cast<float>(sun.z); o[3] = 1.0f;

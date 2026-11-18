@@ -223,6 +223,7 @@ struct Sim {
     // voisines et la place des étoiles visibles de la Voie lactée ; sinon les centres et les orbites de référence.
     const phys::film::FilmV2* film = nullptr;
     bool filmLeads = false;      // à cette image, les étoiles visibles suivent le film
+    double gaiaFilmOff = 0;      // part de Gaia éteinte parce que le film mène (0 à 1, revue F1 ; fenetre.cpp)
     bool filmCovers(double tGa) const { return film && film->images() >= 5 && tGa >= film->debutGa() && tGa <= film->date(film->images() - 2); }
     uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
     double milkyWayStarShare = 0;     // part montrée à cette image
@@ -555,7 +556,13 @@ struct Sim {
 
     bool deepTime() const { return std::fabs(years - kStartYears) > kLinearLimitYears; }
     double replayGa() const { return (years - kStartYears) / 1.0e9; }
-    double maxYears() const { return kStartYears + (replay ? replay->finGa() * 1.0e9 : kLinearLimitYears); }
+    // Fin du temps : la plus tardive des fins du film du Groupe local et de l'ancien calcul ; sans l'un ni l'autre, la limite
+    // du mouvement en ligne droite (revue F8 : le film seul ne laissait pas dépasser cette limite).
+    double maxYears() const {
+        double finGa = replay ? replay->finGa() : 0.0;
+        if (film && film->images() >= 5) finGa = std::max(finGa, film->date(film->images() - 2));
+        return kStartYears + (finGa > 0.0 ? finGa * 1.0e9 : kLinearLimitYears);
+    }
     double minYears() const { return kStartYears - kOrbitLimitYears; }
     // Part des étoiles mesurées encore montrée (1 jusqu'à 800 millions d'années, 0 à 1 milliard) ; le calcul de la fusion
     // prend la part restante.
@@ -640,7 +647,21 @@ struct Sim {
             const int ci = centres && centres->ready ? CentresReference::indexOf(b.name) : -1;
             if (ci >= 0) {
                 phys::Vec3 g;
-                if ((filmCovers(tGa) && ci < film->galaxies() && film->centre(ci, tGa, g)) || centres->centre(ci, tGa, g)) {
+                bool ok = false;
+                if (filmCovers(tGa) && ci < film->galaxies() && film->centre(ci, tGa, g)) {
+                    // Revue F4 : le centre du film à t = 0 n'est pas exactement le centre mesuré (decalage_a_t0 n'est pas dans
+                    // l'index du film v2). L'écart à la date de départ commune est retiré, puis s'efface sur 100 Ma : plus de
+                    // saut au passage référence -> film, et le film reprend seul la main loin d'aujourd'hui.
+                    const double t0 = std::clamp(0.0, film->debutGa(), film->date(film->images() - 2));
+                    phys::Vec3 f0, r0;
+                    if (film->centre(ci, t0, f0) && centres->centre(ci, t0, r0)) {
+                        const double w = std::clamp(1.0 - std::fabs(tGa - t0) / 0.1, 0.0, 1.0);
+                        g = {g.x - w * (f0.x - r0.x), g.y - w * (f0.y - r0.y), g.z - w * (f0.z - r0.z)};
+                    }
+                    ok = true;
+                } else
+                    ok = centres->centre(ci, tGa, g);
+                if (ok) {
                     const Vec3 w = fromGalactocentric(g);
                     galPos[i] = {w.x + shift.x, w.y + shift.y, w.z + shift.z};
                     galValid[i] = 1;

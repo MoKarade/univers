@@ -50,6 +50,7 @@ void main() {
     if (garde < 1.0e-4) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
     uvec2 q = (pc.par.z != 0.0 || (flags & 52u) != 0u) ? vel[gl_VertexIndex] : uvec2(0u);      /* 16 : composante du modèle (vieillissement) */
     vec3 voisineBase = vec3(0.0);
+    float gainFilm = 1.0;      /* facteur de lumière quand le film mène et que Gaia s'éteint (revue F1) */
     bool voisine = (flags & 32u) != 0u;
     if (voisine) {
         /* étoile d'une galaxie VOISINE (Andromède, Triangle, Nuages) : la galaxie se déplace en bloc le long de son centre de
@@ -72,6 +73,7 @@ void main() {
                de sa galaxie (état donné par l'appli, film_etoiles.h) ; plus de bloc rigide, les marées se voient */
             Etat e = orb[gl_VertexIndex];
             rel = OG_M * (e.p.xyz + pc.frac * 1.0e-3 * OP_K * e.v.xyz) * OG_KPC_LY;
+            if (e.v.w > 0.0) gainFilm = e.v.w;
         }
         voisineBase = G.ct.xyz;
         pos = rel;
@@ -88,6 +90,7 @@ void main() {
             float u = pc.par.w * 1.0e9 / OG_RACCORD_ANS, w = 1.0 - exp(-u * u);
             float tEtat = pc.par.w - pc.frac * 1.0e-3, h = pc.frac * 1.0e-3 * OP_K;
             Etat a = orb[gl_VertexIndex], s = orb[pc.sun];
+            if ((flags & 16u) != 0u && a.v.w > 0.0) gainFilm = a.v.w;      /* film : lumière que Gaia, éteint, ne porte plus (film_etoiles.h) */
             vec3 xa = a.p.xyz + h * a.v.xyz + 0.5 * h * h * accGal(a.p.xyz, tEtat);
             vec3 xs = s.p.xyz + h * s.v.xyz + 0.5 * h * h * accGal(s.p.xyz, tEtat);
             if ((flags & 16u) != 0u && voisines[5].c0.w > 0.5) xs = voisines[5].c0.xyz;      /* étoile du modèle : Soleil de l'appli (gaia.h, setSunGalacto) */
@@ -113,7 +116,7 @@ void main() {
     uint pas = (r.w >> 16) & 255u;
     /* éclat rééquilibré vu de loin (gaia_fiable.glsl) : HYPOTHÈSE, décalage en millièmes de magnitude */
     if ((flags & 4u) != 0u && (pc.cellBase & GF_MODE_RENDU) != 0u) m += gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, pos) * 0.001 * float(int(q.y) >> 16);
-    float flux = pc.par.x * pow(10.0, -0.4 * m) * garde * part;
+    float flux = pc.par.x * pow(10.0, -0.4 * m) * garde * part * gainFilm;
     /* vieillissement de la lumière (étoiles du MODÈLE) : facteurs par composante à la date montrée, 1 aujourd'hui
        (MIST v1.2, Kroupa, histoires de formation supposées, naines blanches non comptées ; gaia.h, setAgeing) */
     float fT = 1.0;

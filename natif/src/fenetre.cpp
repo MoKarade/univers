@@ -289,6 +289,9 @@ int runWindow(const WindowOptions& opt) {
     std::vector<float> filmStates;
     const bool filmStarsOk = milkyWayStarsOk && milkyWayStars.externalStatesFit() && filmStars.load(dataDir, milkyWayStars.starCount());
     if (filmStarsOk) sim.film = &filmStars.film;
+    // Lumière entière des étoiles (vl_etoiles.lum) : sans elle, Gaia reste montré quand le film mène (revue F1).
+    const bool filmLumOk = filmStarsOk && filmStars.loadLum(dataDir, "vl_etoiles.lum", [&](size_t i) { return milkyWayStars.starMagnitude(i); });
+    std::printf("lumiere entiere des etoiles visibles : %s\n", filmLumOk ? "lue, Gaia cede au film loin d'aujourd'hui" : "absente, Gaia reste montre");
     std::printf("film du Groupe local : %s\n", filmStarsOk ? "lu, les etoiles visibles le suivent" : "absent ou incomplet, orbites de reference");
     // Andromède, Triangle, Nuages faits de leurs étoiles visibles (tirées des vraies photos, pipeline/natif/etoiles_visibles_photos.py),
     // autour d'aujourd'hui : sans orbite exacte (le potentiel de l'appli ne contient que la Voie lactée), elles s'effacent en
@@ -303,6 +306,7 @@ int runWindow(const WindowOptions& opt) {
     std::vector<float> filmNeighbourStates;
     const bool filmNeighboursOk = neighbourFilmWanted && neighbourStarsOk && neighbourStars.externalStatesFit() &&
                                   filmNeighbours.load(dataDir, neighbourStars.starCount(), "voisines_etoiles.ordre", 1, 4);
+    if (filmNeighboursOk) filmNeighbours.loadLum(dataDir, "voisines_etoiles.lum", [&](size_t i) { return neighbourStars.starMagnitude(i); });
     std::printf("film du Groupe local, galaxies voisines : %s\n", filmNeighboursOk ? "lu, leurs etoiles le suivent" : "non (bloc qui tourne)");
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
@@ -574,7 +578,15 @@ int runWindow(const WindowOptions& opt) {
                 filmStars.reload(dt);
                 const long step = milkyWayStars.stepOf(shownYears);
                 const double tRaw = (milkyWayStars.yearsOfStep(step) - kStartYears) / 1.0e9, tStep = std::max(tRaw, 0.0);
-                const bool byFilm = filmStarsOk && tRaw > -2.0e-3 && filmStars.covers(tStep);
+                // Le pas d'aujourd'hui commence à l'époque de Gaia (2016), dix ans avant le départ du film : seul cet écart de
+                // quelques années est ramené à t = 0. Le pas d'avant (de −1 Ma à 0) reste sur les orbites de l'appli (revue F7).
+                const bool byFilm = filmStarsOk && tRaw > -1.0e-6 && filmStars.covers(tStep);
+                // Revue F1 : quand le film mène, Gaia s'éteint entre 1 et 10 Ma d'aujourd'hui [choix : d'ici là, les orbites de
+                // l'appli et le film restent proches] ; les étoiles du film reprennent la lumière que Gaia portait (gain, .lum).
+                // Constant dans un pas d'un million d'années : il suit l'état donné à la carte.
+                const double gaiaOff = byFilm && !filmStars.gain.empty() && sim.bestLook ? std::clamp((std::fabs(tStep) * 1.0e3 - 1.0) / 9.0, 0.0, 1.0) : 0.0;
+                filmStars.gaiaOff = gaiaOff;
+                filmNeighbours.gaiaOff = gaiaOff;
                 if (byFilm) {
                     if (step != filmStars.lastStep || !milkyWayStars.externalStates()) {
                         sim.ensureExact();      // le Soleil : son orbite selon l'appli (il n'est pas dans le film)
@@ -596,6 +608,7 @@ int runWindow(const WindowOptions& opt) {
                     endOnce(g, once);
                 }
                 sim.filmLeads = byFilm && milkyWayStars.externalStates();
+                sim.gaiaFilmOff = sim.filmLeads ? gaiaOff : 0.0;
                 // Mêmes dates, même film pour les étoiles d'Andromède, du Triangle et des Nuages (positions autour du centre de
                 // leur galaxie ; le centre lui-même suit déjà le film, simulation.h).
                 if (filmNeighboursOk) {
@@ -637,7 +650,7 @@ int runWindow(const WindowOptions& opt) {
                                           sim.ephemValid ? CalcMode::Precomputed : !sim.outer ? CalcMode::Hidden : direct ? CalcMode::Exact : table ? CalcMode::Approx : CalcMode::Hidden, 0,
                                           sim.ephemValid ? "éphémérides de la NASA (calcul ajusté sur les mesures), lues telles quelles"
                                           : !sim.outer ? "hors des dates connues"
-                                          : direct ? "calculé ici (gravité mutuelle), parti des éphémérides de la NASA ; les autres lunes ne sont pas montrées"
+                                          : direct ? "calculé ici (gravité mutuelle), parti des positions des éphémérides de la NASA, vitesses recalées pour retrouver leurs longitudes 400 ans plus loin ; les autres lunes ne sont pas montrées"
                                           : table ? "table d'orbites calculée à l'avance, relue entre ses points : place sur l'orbite de moins en moins sûre"
                                                   : "non montrées : au-delà de ce qui est calculé"});
             }
@@ -833,11 +846,12 @@ int runWindow(const WindowOptions& opt) {
             sim.gaiaSkyStars = gaiaSky.shownStars;
             sim.gaiaSkyPending = gaiaSky.pendingTiles;
             sim.gaiaSkyLimit = gaiaSky.gLimit;
-            gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
-            gaiaSky.draw(cmd, cam, sc.extent.height, pc.par[0]);
+            const double gaiaLeft = sim.starShare() * (1.0 - sim.gaiaFilmOff);      // revue F1 : Gaia cède au film
+            gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeft), sim.years);
+            gaiaSky.draw(cmd, cam, sc.extent.height, pc.par[0] * static_cast<float>(1.0 - sim.gaiaFilmOff));
             if (gaiaBOk) {
                 gaiaB.improved = sim.bestLook;
-                gaiaB.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.starShare()), sim.years);
+                gaiaB.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeft), sim.years);
             }
         }
         // Étoiles visibles de la Voie lactée (contrat docs/contrat-etoiles-visibles.md : toujours dessinées, à toute date) : sur

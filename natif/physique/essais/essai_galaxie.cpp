@@ -25,7 +25,7 @@ int main() {
            encore 230 km/s (GAL.GMs, app/gen, à régénérer) : les valeurs de référence sont recalculées par cette bibliothèque,
            qui reproduisait la page à 5e-4 kpc près avec les anciennes constantes. Anciennes valeurs de la page :
            (-5,078895720 ; -6,208048454 ; 0,085053558) et sans barre (-5,710272466 ; -5,915890796 ; 0,095103441). */
-        ok(d < 5e-4, "Soleil à +200 Ma : écart à la page %.2g kpc (énergie noire en plus ici)", d);
+        ok(d < 5e-4, "Soleil à +200 Ma : écart à la page %.2g kpc (énergie noire et barre en 3D en plus ici)", d);
         Potentiel P; P.barre = false; Orbites q(sp, sv, P); q.avance(0.2); const auto r = q.position(0);
         const double e = std::sqrt(std::pow(r.x + 6.222465546, 2) + std::pow(r.y + 5.446780851, 2) + std::pow(r.z - 0.097195938, 2));
         ok(e < 5e-4, "Soleil à +200 Ma sans barre : écart à la page %.2g kpc (énergie noire en plus ici)", e);
@@ -37,7 +37,7 @@ int main() {
     }
     {      // Jacobi : E + Φ_barre + Ω_b L_z constant (la barre tourne dans le sens du disque)
         const phys::Vec3 p0[1] = {{-4.5, 0.3, 0.05}}, v0[1] = {{20, 180, 5}}; Orbites o(p0, v0); const auto& P = o.potentiel();
-        auto J = [&] { const auto p = o.position(0), v = o.vitesse(0); return P.energie(p.x, p.y, p.z, v.x, v.y, v.z) + P.phiBarre(p.x, p.y, o.temps()) + kBarOmegaKmsKpc * (p.x * v.y - p.y * v.x); };
+        auto J = [&] { const auto p = o.position(0), v = o.vitesse(0); return P.energie(p.x, p.y, p.z, v.x, v.y, v.z) + P.phiBarre(p.x, p.y, o.temps(), p.z) + kBarOmegaKmsKpc * (p.x * v.y - p.y * v.x); };
         const double j0 = J(); double w = 0; for (int s = 1; s <= 500; s++) { o.avance(s * kDtGa, 1); w = std::fmax(w, std::fabs(J() / j0 - 1)); }
         ok(w < 2e-3, "intégrale de Jacobi conservée à %.1e près sur 500 Ma", w);
     }
@@ -51,6 +51,18 @@ int main() {
         ok(ms < 60000, "100 000 étoiles sur 100 Ma : %.0f ms", ms);
         a.avance(0); double back = 0; for (size_t k = 0; k < p.size(); k += 97) { const auto x = a.position(k); back = std::fmax(back, std::hypot(x.x - p[k].x, x.y - p[k].y, x.z - p[k].z)); }
         ok(back < 1e-6, "aller 100 Ma puis retour : écart %.2g kpc", back);
+    }
+    {   // Barre en 3D (Monari 2016, revue O1) : son accélération est bien −∇Φb, dans et hors du plan, dedans et dehors de la barre.
+        Potentiel P, S; S.barre = false; double worst = 0;
+        for (double x : {-7.3, -2.1, 0.8, 3.9, 6.6}) for (double y : {-4.2, 0.6, 2.7}) for (double z : {0.0, 0.15, -0.9, 2.5}) {
+            double a[3], b[3]; P.acc(x, y, z, 0.03, a); S.acc(x, y, z, 0.03, b); const double h = 1e-5;
+            const double g[3] = {-(P.phiBarre(x + h, y, 0.03, z) - P.phiBarre(x - h, y, 0.03, z)) / (2 * h),
+                                 -(P.phiBarre(x, y + h, 0.03, z) - P.phiBarre(x, y - h, 0.03, z)) / (2 * h),
+                                 -(P.phiBarre(x, y, 0.03, z + h) - P.phiBarre(x, y, 0.03, z - h)) / (2 * h)};
+            const double n = std::hypot(g[0], g[1], g[2]) + 1e-3;
+            for (int c = 0; c < 3; c++) worst = std::fmax(worst, std::fabs(a[c] - b[c] - g[c]) / n);
+        }
+        ok(worst < 1e-6, "barre en 3D : accélération = −∇Φb à %.1e près (relatif)", worst);
     }
     {   // Fréquences analytiques contre différences finies de Potentiel::acc (sans barre), de 0,5 à 30 kpc.
         Potentiel P; P.barre = false; double worst = 0;

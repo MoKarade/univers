@@ -38,3 +38,52 @@ jobs:
       - name: Plus de fondu daté pour les planètes (R7)
         shell: bash
         run: "! grep -rn FATE_P app/src"
+
+  # T1 (revue 18/11) : la physique native (sans Vulkan ni windows.h) compile et ses essais sans données tournent sous Linux.
+  # Les essais qui lisent un film ou DE440 sont seulement compilés : leurs fichiers restent sur le PC de Marc.
+  physique-native:
+    name: Physique native (compilation et essai des orbites)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compiler
+        shell: bash
+        run: |
+          # natif/physique n'est pas un projet CMake autonome (natif/CMakeLists.txt l'inclut) : petite enveloppe.
+          mkdir -p ci-physique
+          printf '%s\n' 'cmake_minimum_required(VERSION 3.20)' 'project(physique CXX)' 'set(CMAKE_CXX_STANDARD 20)' \
+            'set(CMAKE_CXX_STANDARD_REQUIRED ON)' 'add_subdirectory(${CMAKE_SOURCE_DIR}/../natif/physique physique)' > ci-physique/CMakeLists.txt
+          cmake -S ci-physique -B build-physique -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-physique -j 4 --target essai_galaxie essai_fusion essai_champ_bfe essai_film
+      - name: Shaders (GLSL -> SPIR-V, comme la construction Windows)
+        shell: bash
+        run: |
+          sudo apt-get install -y -qq glslang-tools >/dev/null
+          for f in natif/shaders/*.vert natif/shaders/*.frag natif/shaders/*.comp; do glslang -V --quiet -Inatif/shaders "$f" -o /dev/null || exit 1; done
+      - name: Orbites des étoiles (essai_galaxie)
+        shell: bash
+        run: ./build-physique/physique/essai_galaxie
+
+  # T1 (revue 18/11) : toute l'appli PC (Vulkan, interface, essais) se compile pour Windows depuis Linux avec MinGW-w64.
+  # Ce n'est pas la chaîne de Marc (llvm-mingw) : une erreur de compilation ici en est une là-bas aussi, l'inverse n'est pas garanti.
+  appli-pc-windows:
+    name: Appli PC (compilation croisée Windows)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Outils
+        shell: bash
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq g++-mingw-w64-x86-64-posix ninja-build glslang-tools >/dev/null
+      - name: Compiler
+        shell: bash
+        run: |
+          printf '%s\n' 'set(CMAKE_SYSTEM_NAME Windows)' 'set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc-posix)' \
+            'set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++-posix)' 'set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)' 'set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)' > mingw.cmake
+          cmake -S natif -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE=$PWD/mingw.cmake -DCMAKE_BUILD_TYPE=Release -Wno-dev
+          cmake --build build-win -j 4

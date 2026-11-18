@@ -167,10 +167,14 @@ public:
         vkDestroyDescriptorPool(g.dev, pool_, nullptr);
         vkDestroyDescriptorSetLayout(g.dev, setLayout_, nullptr);
         vkDestroyShaderModule(g.dev, cs_, nullptr);
+        releaseStaging(g);
         destroy(g, state);
     }
 
 private:
+    Buffer staging_{};
+    void* stagingMap_ = nullptr;
+    VkDeviceSize stagingSize_ = 0;
     std::thread worker_;
     std::atomic<bool> initDone_{false};
     bool uploaded_ = false, external_ = false;
@@ -223,19 +227,29 @@ private:
     void uploadFrom(const Gpu& g, const uint8_t* source, uint32_t first, uint32_t n) {
         constexpr VkDeviceSize kChunk = 256ull << 20;
         const VkDeviceSize base = static_cast<VkDeviceSize>(first) * 32, size = static_cast<VkDeviceSize>(n) * 32;
-        Buffer staging = createBuffer(g, std::min(size, kChunk), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        void* p = nullptr;
-        check(vkMapMemory(g.dev, staging.mem, 0, VK_WHOLE_SIZE, 0, &p), "états Gaia");
+        // Tampon d'envoi gardé d'un appel à l'autre (revue P1 : le film en envoie un à chaque pas de temps), agrandi au besoin.
+        const VkDeviceSize need = std::min(size, kChunk);
+        if (need > stagingSize_) {
+            releaseStaging(g);
+            staging_ = createBuffer(g, need, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            check(vkMapMemory(g.dev, staging_.mem, 0, VK_WHOLE_SIZE, 0, &stagingMap_), "états Gaia");
+            stagingSize_ = need;
+        }
         for (VkDeviceSize off = 0; off < size; off += kChunk) {
             const VkDeviceSize m = std::min(kChunk, size - off);
-            std::memcpy(p, source + base + off, m);
+            std::memcpy(stagingMap_, source + base + off, m);
             VkCommandBuffer c = beginOnce(g);
             const VkBufferCopy region{0, base + off, m};
-            vkCmdCopyBuffer(c, staging.buf, state.buf, 1, &region);
-            endOnce(g, c);
+            vkCmdCopyBuffer(c, staging_.buf, state.buf, 1, &region);
+            endOnce(g, c);      // attend la copie : le tampon d'envoi peut resservir aussitôt
         }
-        vkUnmapMemory(g.dev, staging.mem);
-        destroy(g, staging);
+    }
+
+    void releaseStaging(const Gpu& g) {
+        if (!stagingSize_) return;
+        vkUnmapMemory(g.dev, staging_.mem);
+        destroy(g, staging_);
+        staging_ = {}; stagingMap_ = nullptr; stagingSize_ = 0;
     }
 
     void createPipeline(const Gpu& g) {

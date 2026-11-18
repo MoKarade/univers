@@ -140,6 +140,11 @@ public:
     // par case (« ciel seul ») est alors retirée pour ne pas la compter deux fois.
     bool hideSkyOnly = false;
     VkBuffer colorBuffer() const { return colors_.buf; }
+    // Magnitude absolue rangée pour l'étoile i (demi-flottant du fichier) ; NaN hors du fichier.
+    float starMagnitude(uint64_t i) const {
+        if (i >= file_.n) return std::numeric_limits<float>::quiet_NaN();
+        uint16_t h; std::memcpy(&h, file_.stars + i * 16 + 12, 2); return halfToFloat(h);
+    }
     bool starReliable(uint64_t i) const { return i < file_.n && (file_.stars[i * 16 + 15] & GaiaFiable::kOrbiteFiable); }
     // Part de la lumière de la feuille i portée par des étoiles à orbite fiable (0 à 1).
     float leafReliableShare(uint32_t i) const { return i < leafShare_.size() ? leafShare_[i] : 0.0f; }
