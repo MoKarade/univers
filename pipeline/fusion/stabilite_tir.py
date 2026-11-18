@@ -183,6 +183,7 @@ def main():
               f" | énergie {100 * r['energie']:+.3f} % | {time.time() - t0:5.0f} s", flush=True)
         json.dump(res, open(sortie + '.tmp', 'w', encoding='utf-8'), ensure_ascii=False); os.replace(sortie + '.tmp', sortie)
 
+    inst = int(round(float(opts['instantanes']) * 1000 / dt_ma)) if 'instantanes' in opts else 0
     t0 = time.time(); t_check = time.time()
     note(0.0)
     for s in range(steps):
@@ -192,6 +193,9 @@ def main():
         vel += 0.5 * dt * acc
         if gaz: gaz.naissances(kind_g, cp.where(kind_g == 3)[0], dt, (s + 1) * dt_ma * 1e-3)
         if (s + 1) % every == 0: note((s + 1) * dt_ma * 1e-3)
+        if inst and (s + 1) % inst == 0 and s + 1 < steps:      # --instantanes=0.5 : état gardé tous les 0,5 Ga, pour le bulletin à plusieurs dates
+            if gaz: kind[:] = cp.asnumpy(kind_g)
+            np.savez(f"{os.path.splitext(sortie)[0]}_t{(s + 1) * dt_ma * 1e-3:.2f}.npz", pos=cp.asnumpy(pos), vel=cp.asnumpy(vel), m=p['m'], eps=p['eps'], kind=kind)
         t_check = attendre(t_check)
     # Verdict : calme si la force de la barre reste sous 0,1 partout ; la vitesse de la barre se lit entre deux relevés.
     pire = max(x['a2'] for r in res['releves'] for x in r['anneaux'] if x)
