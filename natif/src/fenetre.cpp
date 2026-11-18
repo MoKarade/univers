@@ -797,7 +797,7 @@ int runWindow(const WindowOptions& opt) {
         const bool skyOnly = sim.skyBand >= 0 && sky.loaded;
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
-        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
+        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);      // même exposition que les étoiles
         if (!skyOnly && galaxyShapes.ready) {
             galaxyShapes.prepare(cam, galaxies, sc.extent.height);
             float aL[16], aT[16];
