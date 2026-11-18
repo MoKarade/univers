@@ -148,10 +148,6 @@ def main():
     def forces(t):
         acc, phi = gravite_gpu.gravity(pos, mg, eps, theta=theta, quad=True)
         acc += K_LAMBDA * (pos - cm_gpu())      # énergie noire : jamais négligée (règle de Marc), même si elle ne pèse ici que quelques millionièmes
-        if gaz:
-            qui = cp.where(kind_g == 3)[0]
-            ah = gaz.acceleration(pos, vel, m, qui, dt)
-            if ah is not None: acc[qui] += ah
         if guide:
             ag, f = guide_barre(cp, pos - cm_gpu(), t, guide)
             if ag is not None: acc = acc + ag
@@ -178,7 +174,7 @@ def main():
             dern = res['releves'][-1]['gaz'] if res['releves'] else dict(nees_msol=0.0, t=0.0)
             taux = (mn - dern['nees_msol']) / max((t - dern['t']) * 1e9, 1.0)      # M☉ par an depuis le relevé d'avant
             r['gaz'] = dict(t=t, gaz_msol=mg_, nees_msol=mn, naissances_msol_par_an=taux, courant=gaz.cfl)
-            print(f"         gaz {mg_:.3e} M☉ ({100 * mg_ / masse_gaz0:.0f} % du départ) | étoiles nées {mn:.3e} M☉ | {taux:.2f} M☉/an | nombre de Courant {gaz.cfl:.2f}", flush=True)
+            print(f"         gaz {mg_:.3e} M☉ ({100 * mg_ / masse_gaz0:.0f} % du départ) | étoiles nées {mn:.3e} M☉ | {taux:.2f} M☉/an | nombre de Courant {gaz.cfl:.2f} avec {gaz.sous_pas} sous-pas", flush=True)
         res['releves'].append(r)
         a = [x for x in r['anneaux'] if x]
         print(f"t = {t:5.2f} Ga | A2 par anneau : " + ' '.join(f"{x['a2']:.3f}" for x in a) + f" | épaisseur {a[2]['epaisseur_kpc']:.2f} kpc | agitation {a[3]['sigma_r']:.0f} km/s"
@@ -190,7 +186,12 @@ def main():
     note(0.0)
     for s in range(steps):
         vel += 0.5 * dt * acc
-        pos += dt * vel
+        if gaz:      # le gaz avance par sous-pas sous sa pression (gaz_galaxie.avancer) ; les autres particules d'un seul pas
+            est_gaz = kind_g == 3; qui = cp.where(est_gaz)[0]
+            pos[~est_gaz] += dt * vel[~est_gaz]
+            gaz.avancer(pos, vel, m, qui, dt)
+        else:
+            pos += dt * vel
         acc, phi = forces((s + 1) * dt_ma * 1e-3)
         vel += 0.5 * dt * acc
         if gaz: gaz.naissances(kind_g, cp.where(kind_g == 3)[0], dt, (s + 1) * dt_ma * 1e-3)
