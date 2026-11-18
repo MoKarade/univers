@@ -81,11 +81,16 @@ struct Potentiel {
         const double B = std::sqrt(z * z + kBd * kBd), D2 = R2 + (kAd + B) * (kAd + B), D3 = D2 * std::sqrt(D2), gm = kG * kMd;
         a[0] = ar * x / r - gm * x / D3; a[1] = ar * y / r - gm * y / D3; a[2] = ar * z / r - gm * z * (kAd + B) / (B * D3);
         a[0] += kLambdaKmsKpc2 * x; a[1] += kLambdaKmsKpc2 * y; a[2] += kLambdaKmsKpc2 * z;      /* énergie noire */
-        if (barre && R2 > 1e-8) {      // Dehnen 2000 : a_R = −A cos2ψ U'(R), a_φ = 2A sin2ψ U(R) / R
-            const double R = std::sqrt(R2), c = x / R, s = y / R, psi = std::atan2(y, x) - angleBarre(t), c2 = std::cos(2 * psi), s2 = std::sin(2 * psi), q = R / Rb;
-            const double U = R < Rb ? q * q * q - 2 : -1 / (q * q * q), dU = R < Rb ? 3 * q * q / Rb : 3 / (q * q * q * q * Rb);
-            const double aR = -Ab * c2 * dU, aP = 2 * Ab * s2 * U / R;
-            a[0] += aR * c - aP * s; a[1] += aR * s + aP * c;
+        if (barre && R2 > 1e-8) {
+            /* Barre de Dehnen 2000 étendue en 3D comme Monari et al. 2016 (A&A 590, A55) : Φb = A cos2ψ (R/r)² U(r), r = |x|.
+               Dans le plan (z = 0) c'est exactement la barre plane d'avant ; hors du plan elle s'affaiblit au lieu de garder la
+               même force à toute hauteur (revue O1). G(R, z) = R² U(r) / r² ; a_R = −A cos2ψ ∂G/∂R, a_φ = 2A sin2ψ G / R,
+               a_z = −A cos2ψ ∂G/∂z. */
+            const double R = std::sqrt(R2), rb = std::sqrt(R2 + z * z), c = x / R, s = y / R, psi = std::atan2(y, x) - angleBarre(t), c2 = std::cos(2 * psi), s2 = std::sin(2 * psi), q = rb / Rb;
+            const double U = rb < Rb ? q * q * q - 2 : -1 / (q * q * q), dU = rb < Rb ? 3 * q * q / Rb : 3 / (q * q * q * q * Rb);
+            const double h = U / (rb * rb), hp = dU / (rb * rb) - 2 * U / (rb * rb * rb), G = R2 * h, dGdR = 2 * R * h + R2 * hp * R / rb, dGdz = R2 * hp * z / rb;
+            const double aR = -Ab * c2 * dGdR, aP = 2 * Ab * s2 * G / R;
+            a[0] += aR * c - aP * s; a[1] += aR * s + aP * c; a[2] += -Ab * c2 * dGdz;
         }
     }
     // Énergie sans la barre (sert au choix des sous-pas et aux contrôles), (km/s)².
@@ -94,9 +99,9 @@ struct Potentiel {
         const double phi = -kG * kMb / (r + kAb) - kG * kMd / std::sqrt(R2 + (kAd + B) * (kAd + B)) - GMs * std::log(1 + r / kRs) / r - 0.5 * kLambdaKmsKpc2 * r * r;
         return 0.5 * (vx * vx + vy * vy + vz * vz) + phi;
     }
-    double phiBarre(double x, double y, double t) const {
-        const double R = std::hypot(x, y), q = R / Rb, U = R < Rb ? q * q * q - 2 : -1 / (q * q * q);
-        return Ab * std::cos(2 * (std::atan2(y, x) - angleBarre(t))) * U;
+    double phiBarre(double x, double y, double t, double z = 0) const {
+        const double R2 = x * x + y * y, r2 = R2 + z * z, q = std::sqrt(r2) / Rb, U = q < 1 ? q * q * q - 2 : -1 / (q * q * q);
+        return r2 > 0 ? Ab * std::cos(2 * (std::atan2(y, x) - angleBarre(t))) * U * R2 / r2 : 0;
     }
 };
 
@@ -143,15 +148,19 @@ private:
         return hi < 0.7 ? 32 : hi < 2 ? 8 : hi < 4 ? 2 : 1;
     }
     void pas(size_t a, size_t b, double dt, long steps, double t0) {
+        // Saute-mouton KDK. La force de fin d'un sous-pas est celle du début du suivant (même position, même date) : elle est
+        // gardée au lieu d'être recalculée, une force par sous-pas au lieu de deux (revue O2), même schéma, mêmes résultats.
         double acc[3];
-        for (long s = 0; s < steps; s++) for (size_t k = a; k < b; k++) {
+        for (size_t k = a; k < b; k++) {
             const int m = sub_[k]; const double h = dt * kKmsKpcToRadGa / m; double* X = &X_[3 * k]; double* V = &V_[3 * k];
-            for (int u = 0; u < m; u++) {
-                const double ta = t0 + (s + double(u) / m) * dt, tb = ta + dt / m;
-                P_.acc(X[0], X[1], X[2], ta, acc); for (int c = 0; c < 3; c++) V[c] += 0.5 * h * acc[c];
-                for (int c = 0; c < 3; c++) X[c] += h * V[c];
-                P_.acc(X[0], X[1], X[2], tb, acc); for (int c = 0; c < 3; c++) V[c] += 0.5 * h * acc[c];
-            }
+            P_.acc(X[0], X[1], X[2], t0, acc);
+            for (long s = 0; s < steps; s++)
+                for (int u = 0; u < m; u++) {
+                    const double tb = t0 + (s + double(u + 1) / m) * dt;
+                    for (int c = 0; c < 3; c++) V[c] += 0.5 * h * acc[c];
+                    for (int c = 0; c < 3; c++) X[c] += h * V[c];
+                    P_.acc(X[0], X[1], X[2], tb, acc); for (int c = 0; c < 3; c++) V[c] += 0.5 * h * acc[c];
+                }
         }
     }
 };
