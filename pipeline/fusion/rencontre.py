@@ -64,7 +64,7 @@ def plummer(masse, a, n, rng):
     return r[:, None] * direction(n), v[:, None] * direction(n)
 
 
-def assembler(dossier, etat, fraction=1.0, graine=20261113):
+def assembler(dossier, etat, fraction=1.0, graine=20261113, angles=None):
     """Pose chaque galaxie à sa place de départ. etat : {galaxie: {pos, vel}} relatifs à la Voie lactée."""
     rng = np.random.default_rng(graine)
     parts = {k: [] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
@@ -81,6 +81,9 @@ def assembler(dossier, etat, fraction=1.0, graine=20261113):
                 p['m'] = p['m'] / fraction; p['eps'] = p['eps'] * fraction ** (-1 / 3)
             axe = (C.galaxie(nom).get('disque') or {}).get('axe_rotation') or [0.0, 0.0, 1.0]      # Petit Nuage : sens de rotation non mesuré
             R = rotation_vers(axe)
+            a = math.radians((angles or {}).get(nom, 0.0))      # tour autour de son propre axe : cale la barre de la masse sur la barre mesurée (mode « barre »)
+            Z = np.array([[math.cos(a), -math.sin(a), 0.0], [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]])
+            R = R @ Z
             pos, vel = p['pos'] @ R.T, p['vel'] @ R.T
             m, eps, kind = p['m'], p['eps'], p['kind']
         else:      # Petit Nuage : masse adoptée de la table, sphère de Plummer de 1,5 kpc [modèle]
@@ -160,6 +163,11 @@ class Calcul:
             except Exception:
                 break
             if u < 35: break
+            if os.environ.get('UNIVERS_CEDER') == '1':
+                # Marc joue ou ouvre son appli : on rend TOUTE la carte (mémoire comprise) en s'arrêtant. Le veilleur
+                # (veilleur_calcul.ps1) relance le calcul depuis la dernière sauvegarde quand la carte est de nouveau libre.
+                print(f'  carte graphique occupée à {u} % par un autre programme : le calcul se retire, reprise à la dernière sauvegarde', flush=True)
+                sys.exit(3)
             print(f'  carte graphique occupée à {u} % par un autre programme : pause de 60 s', flush=True)
             time.sleep(60)
         self.t_check = time.time()
@@ -317,7 +325,8 @@ def main():
             # pour les Nuages dans ce calcul : tirs 1 à 3 du 13/11, 120 à 250 kpc d'écart.)
             auj = {n: dict(pos=cible['galaxies'][n]['position_aujourdhui'], vel=cible['galaxies'][n]['vitesse_aujourdhui']) for n in ORDRE}
             etat = centres_simples(auj, t_depart / T_UNIT, profils(dossier))
-        p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)))
+        angles = {a.split(':')[0]: float(a.split(':')[1]) for a in opts['angles'].split(',')} if 'angles' in opts else None
+        p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)), angles=angles)
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
         S = Calcul(p, theta=float(opts.get('theta', 0.7)))
         journal = avancer(S, t_depart, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)))
@@ -333,10 +342,133 @@ def main():
         if mode == 'passe':
             np.savez(os.path.join(sortie, 'aujourdhui.npz'), t=0.0, **S.etat())
             print('instantané d\'aujourd\'hui écrit')
+    elif mode == 'barre':
+        barre(args[1], opts, cible)
     elif mode == 'futur':
         futur(args[1], float(args[2]), opts, cible)
     else:
         raise SystemExit('mode inconnu : ' + mode)
+
+
+# Composante des étoiles visibles (docs/contrat-etoiles-visibles.md) -> sortes de particules de masse qui la portent.
+PORTEUSES = {1: (1,), 2: (1, 2), 4: (4, 1), 5: (3, 1)}
+JEUNES_AGITATION = (5.0, 2.0)
+
+
+def repere_disque(nom, pos, centre):
+    """Positions dans le repère du disque de la galaxie (axe de rotation = +z), centre à l'origine."""
+    axe = (C.galaxie(nom).get('disque') or {}).get('axe_rotation') or [0.0, 0.0, 1.0]
+    return (pos - centre) @ rotation_vers(axe)
+
+
+def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=20261116, sauf=()):
+    """Donne à chaque étoile visible la vitesse d'une particule de masse voisine de la même famille (une des `voisins`
+    plus proches, au hasard : l'agitation locale est ainsi celle de la masse). Les étoiles visibles sont posées d'après
+    les mesures, mais leurs vitesses du contrat viennent de formules qui ne sont pas à l'équilibre dans la masse du
+    calcul (docs/premier-film.md, défaut 3 : sursaut des 50 premiers Ma). Le halo d'étoiles (6) garde ses vitesses.
+    La hauteur compte triple dans la distance, pour prendre une voisine de même hauteur.
+    Étoiles jeunes (5) : il n'y a pas de gaz froid dans le calcul, et les particules qui en tiennent lieu sont agitées ;
+    leur donner cette agitation les éparpillait en 30 Ma (mesuré le 16/11 : épaisseur 49 -> 270 pc, rayon médian + 1 kpc).
+    Elles prennent donc la vitesse MOYENNE des 1 024 particules voisines dans le plan (le courant local, barre comprise),
+    plus une petite agitation (JEUNES_AGITATION, km/s : dans le plan, en hauteur) [modèle]."""
+    from scipy.spatial import cKDTree
+    rng = np.random.default_rng(graine + g)
+    tv = tv.copy(); pris = {}
+    echelle = np.array([1.0, 1.0, 3.0])
+    td = repere_disque(nom, tp, centre) * echelle
+    for c, sortes in PORTEUSES.items():
+        qui = np.where(comp == c)[0]
+        if not len(qui) or c in sauf: continue      # sauf : étoiles déjà posées sur la masse, position et vitesse
+        if c == 5:
+            masse = np.where((p['gid'] == g) & ((p['kind'] == 1) | (p['kind'] == 3)))[0]
+            if len(masse) >= 320:
+                md = repere_disque(nom, p['pos'][masse], centre)
+                arbre = cKDTree(md[:, :2])
+                axe = (C.galaxie(nom).get('disque') or {}).get('axe_rotation') or [0.0, 0.0, 1.0]
+                R = rotation_vers(axe)
+                # courant moyen dans le repère du disque, sans sa part en hauteur (la moyenne de voisines agitées en garde
+                # plusieurs km/s de bruit, ce qui suffisait à épaissir les jeunes : 49 -> 220 pc en 100 Ma, mesuré)
+                vm = np.zeros((len(qui), 3)); vmasse = (p['vel'][masse] - p['vel'][masse].mean(0)) @ R
+                for a0 in range(0, len(qui), 100000):      # 1 024 voisines : la moyenne garde ~1 km/s de bruit, y compris en hauteur (le disque ondule)
+                    _, v = arbre.query(td[qui[a0:a0 + 100000], :2], k=1024, workers=-1)
+                    vm[a0:a0 + 100000] = vmasse[v].mean(axis=1)
+                # Les étoiles agitées tournent moins vite que la vitesse circulaire (ici 196 au lieu de ~235 km/s au Soleil) ;
+                # des jeunes lancées à cette vitesse tomberaient vers le centre. Leur vitesse de rotation est donc remise à
+                # l'échelle de la vitesse circulaire de la masse du calcul, rayon par rayon ; l'écart au cercle (courant de
+                # la barre) est gardé.
+                tous = np.where(p['gid'] == g)[0]
+                rc, vc = vitesse_circulaire(repere_disque(nom, p['pos'][tous], centre), p['m'][tous])
+                Rm = np.hypot(md[:, 0], md[:, 1]); vphi_m = (md[:, 0] * vmasse[:, 1] - md[:, 1] * vmasse[:, 0]) / np.maximum(Rm, 1e-6)
+                k_ = np.clip(np.searchsorted(rc, Rm) , 1, len(rc) - 1)
+                moy = np.array([vphi_m[k_ == i].mean() if (k_ == i).sum() > 50 else np.nan for i in range(len(rc))])
+                signe = np.sign(np.nanmedian(moy))
+                facteur = np.where(np.isfinite(moy) & (np.abs(moy) > 20.0), signe * vc / moy, 1.0)
+                Rj = np.hypot(td[qui, 0], td[qui, 1]); fj = np.interp(Rj, rc, facteur)
+                # dans la barre (moins de 6 kpc) il n'y a pas d'orbite circulaire : le courant moyen est gardé tel quel ;
+                # la remise à l'échelle entre progressivement de 6 à 9 kpc (run du 16/11 : appliquée partout, elle éjectait
+                # les jeunes du centre, rayon médian 5,9 -> 8,1 kpc en 50 Ma)
+                u_ = np.clip((Rj - 6.0) / 3.0, 0.0, 1.0); fj = 1.0 + (fj - 1.0) * u_ * u_ * (3 - 2 * u_)
+                er = td[qui, :2] / np.maximum(Rj, 1e-6)[:, None]; ep = np.stack([-er[:, 1], er[:, 0]], 1)
+                vr = (vm[:, :2] * er).sum(1); vp = (vm[:, :2] * ep).sum(1) * fj
+                vm[:, :2] = er * vr[:, None] + ep * vp[:, None]
+                bruit = rng.normal(0.0, 1.0, (len(qui), 3)) * np.array([JEUNES_AGITATION[0], JEUNES_AGITATION[0], JEUNES_AGITATION[1]])
+                tv[qui] = (vm + bruit) @ R.T + p['vel'][masse].mean(0)
+                pris[str(c)] = int(len(qui))
+                continue
+        for sorte in sortes:
+            masse = np.where((p['gid'] == g) & (p['kind'] == sorte))[0]
+            if len(masse) >= 10 * voisins: break
+        else:
+            masse = np.where((p['gid'] == g) & (p['kind'] != 0) & (p['kind'] != 9))[0]
+        arbre = cKDTree(repere_disque(nom, p['pos'][masse], centre) * echelle)
+        _, v = arbre.query(td[qui], k=voisins, workers=-1)
+        choix = v[np.arange(len(qui)), rng.integers(0, voisins, len(qui))]
+        tv[qui] = p['vel'][masse[choix]]
+        pris[str(c)] = int(len(qui))
+    return tv, pris
+
+
+def vitesse_circulaire(pos, m, rmax=20.0, pas=0.5, azimuts=8, eps=0.1):
+    """Vitesse circulaire (km/s) de la masse d'une galaxie dans son plan, par somme directe de l'attraction de toutes
+    ses particules sur des points d'essai (moyenne sur `azimuts` directions). pos : repère du disque (kpc), m : M☉."""
+    rc = np.arange(pas, rmax + 1e-9, pas); vc = np.zeros(len(rc))
+    pos = pos.astype(np.float32); mg = (m * G).astype(np.float32)
+    for i, r in enumerate(rc):
+        ar = 0.0
+        for a in np.arange(azimuts) * 2 * math.pi / azimuts:
+            x = np.array([r * math.cos(a), r * math.sin(a), 0.0], np.float32)
+            d = pos - x; d3 = ((d * d).sum(1) + np.float32(eps * eps)) ** np.float32(1.5)
+            ar += float(((mg / d3) * (d[:, 0] * x[0] + d[:, 1] * x[1])).sum()) / r      # composante radiale (vers l'extérieur)
+        vc[i] = math.sqrt(max(-ar / azimuts * r, 0.0))
+    return rc, vc
+
+
+def phase_barre(x, y, r0=1.0, r1=4.0):
+    """Force et angle (degrés, modulo 180) du motif à deux bras entre r0 et r1 kpc."""
+    r = np.hypot(x, y); m = (r > r0) & (r < r1)
+    c = np.mean(np.exp(2j * np.arctan2(y[m], x[m])))
+    return float(abs(c)), float(np.degrees(np.angle(c)) / 2)
+
+
+def barre(sortie, opts, cible):
+    """Compare, à t = 0, la barre de la masse (aujourdhui.npz) à celle des étoiles visibles, galaxie par galaxie, et
+    écrit l'angle dont il faut tourner la galaxie de départ autour de son axe (--angles du mode « passe »)."""
+    with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
+        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
+    S0 = Calcul(p); cp_, _ = S0.centres(); del S0
+    res = {}
+    for g, nom in enumerate(ORDRE):
+        f = os.path.join(opts['traceurs'], f'etoiles_visibles_{nom}.npz')
+        if nom not in ('voie_lactee', 'andromede') or not os.path.exists(f): continue
+        with np.load(f) as z: tp = z['pos'].astype(np.float64)
+        td = repere_disque(nom, tp, np.array(cible['galaxies'][nom]['position_aujourdhui']))
+        md = repere_disque(nom, p['pos'][(p['gid'] == g) & (p['kind'] != 0)], cp_[g])
+        r1 = 4.0 if nom == 'voie_lactee' else 5.0
+        fm, am = phase_barre(md[:, 0], md[:, 1], 1.0, r1); ft, at = phase_barre(td[:, 0], td[:, 1], 1.0, r1)
+        d = (at - am + 90.0) % 180.0 - 90.0
+        res[nom] = dict(masse=dict(force=round(fm, 3), angle=round(am, 1)), etoiles=dict(force=round(ft, 3), angle=round(at, 1)), tourner_de=round(d, 1))
+        print(f"{nom:12s} barre de la masse {fm:.3f} à {am:+6.1f}° ; des étoiles visibles {ft:.3f} à {at:+6.1f}° ; tourner le départ de {d:+.1f}°")
+    json.dump(res, open(os.path.join(sortie, 'barre.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 
 def futur(sortie, t_fin, opts, cible):
@@ -375,7 +507,14 @@ def futur(sortie, t_fin, opts, cible):
                 mesure_p = np.array(cible['galaxies'][nom]['position_aujourdhui']); mesure_v = np.array(cible['galaxies'][nom]['vitesse_aujourdhui'])
                 # du repère de l'appli (Voie lactée à l'origine, au repos) au repère du calcul ; l'écart entre la place mesurée
                 # de la galaxie et celle que le calcul lui donne à t = 0 est retiré, pour que les étoiles restent sur leur masse.
-                ajout['pos'].append(tp - mesure_p + cp_[g]); ajout['vel'].append(tv - mesure_v + cv[g])
+                tp = tp - mesure_p + cp_[g]; tv = tv - mesure_v + cv[g]
+                if opts.get('vitesses', 'masse') == 'masse':      # vitesses prises à la masse qui porte les étoiles (pas de sursaut au départ)
+                    with np.load(f) as z:
+                        comp = z['comp']
+                        deja = json.loads(str(z['meta'])).get('posees_sur_la_masse', []) if 'meta' in z else []      # etoiles_visibles_masse.py
+                    tv, pris = vitesses_de_la_masse(nom, tp, tv, comp, p, g, cp_[g], sauf=deja)
+                    meta.setdefault('vitesses_de_la_masse', {})[nom] = pris
+                ajout['pos'].append(tp); ajout['vel'].append(tv)
                 n = len(tp)
                 ajout['m'].append(np.full(n, 1.0)); ajout['eps'].append(np.full(n, 0.05)); ajout['kind'].append(np.full(n, 9, dtype=np.int8)); ajout['gid'].append(np.full(n, g, dtype=np.int8))
                 meta['traceurs'][g] = n
@@ -429,7 +568,8 @@ def futur(sortie, t_fin, opts, cible):
         except Exception as err:
             print(f'  index du film non écrit : {err}', flush=True)
 
-    avancer(S, t0, t_fin, film, releve_ma=releve_ma, journal=journal, a_chaque_releve=image_et_index)
+    # Sauvegarde toutes les 5 images (50 Ma, environ 7 minutes de carte) : un arrêt ne perd jamais plus que cela.
+    avancer(S, t0, t_fin, film, releve_ma=releve_ma, instantane_ga=0.05, journal=journal, a_chaque_releve=image_et_index)
     print('film terminé :', len(meta['t']), 'images')
 
 

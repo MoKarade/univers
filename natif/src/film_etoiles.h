@@ -27,21 +27,31 @@ struct FilmStars {
     phys::film::FilmV2 film;
     std::vector<uint32_t> ordre;      // rang dans le film de chaque étoile de l'appli
     std::string dossier;
+    std::string note;      // écarts connus de ce film, écrits par celui qui l'a calculé (<dossier>/ecarts.txt, une ligne) ; dits à l'écran
     bool ready = false;
     long lastStep = LONG_MIN;
     double reloadTimer = 0;
 
     // Rend false si le film, son index ou l'ordre des étoiles manquent : l'appli garde alors ses orbites de référence.
-    bool load(const std::string& dataDir, uint64_t starCount) {
+    // ordreFile : rang de chaque étoile de l'appli parmi les étoiles des galaxies firstGalaxy à firstGalaxy + galaxyCount - 1
+    // du film (la Voie lactée : galaxie 0 seule ; les voisines : galaxies 1 à 4, voisines_etoiles.ordre).
+    bool load(const std::string& dataDir, uint64_t starCount, const char* ordreFile = "vl_etoiles.ordre", int firstGalaxy = 0, int galaxyCount = 1) {
         std::ifstream f(dataDir + "/film_dossier.txt");
         if (!std::getline(f, dossier) || dossier.empty()) return false;
         while (!dossier.empty() && (dossier.back() == '\r' || dossier.back() == ' ')) dossier.pop_back();
-        std::ifstream o(dataDir + "/vl_etoiles.ordre", std::ios::binary | std::ios::ate);
+        std::ifstream o(dataDir + "/" + ordreFile, std::ios::binary | std::ios::ate);
         if (!o || static_cast<uint64_t>(o.tellg()) != starCount * 4) return false;
         ordre.resize(starCount);
         o.seekg(0);
         o.read(reinterpret_cast<char*>(ordre.data()), static_cast<std::streamsize>(starCount * 4));
-        if (!film.charger(dossier) || film.etoiles(0) != starCount) return false;
+        if (!film.charger(dossier) || film.galaxies() < firstGalaxy + galaxyCount) return false;
+        first_ = firstGalaxy; galaxies_ = galaxyCount;
+        std::ifstream e(dossier + "/ecarts.txt");
+        if (std::getline(e, note))
+            while (!note.empty() && (note.back() == '\r' || note.back() == ' ')) note.pop_back();
+        if (inFilm(film) != starCount) return false;
+        base_ = 0;
+        for (int g = 0; g < firstGalaxy; ++g) base_ += film.etoiles(g);
         for (uint32_t k : ordre)
             if (k >= starCount) return false;
         ready = true;
@@ -53,7 +63,7 @@ struct FilmStars {
         if (!ready || reloadTimer < 5.0) return;
         reloadTimer = 0;
         phys::film::FilmV2 neuf;
-        if (neuf.charger(dossier) && neuf.images() > film.images() && neuf.etoiles(0) == film.etoiles(0)) {
+        if (neuf.charger(dossier) && neuf.images() > film.images() && neuf.galaxies() == film.galaxies() && inFilm(neuf) == inFilm(film)) {
             film = std::move(neuf);
             for (int& h : have_) h = -1;
         }
@@ -99,6 +109,13 @@ struct FilmStars {
     }
 
 private:
+    int first_ = 0, galaxies_ = 1;
+    uint64_t base_ = 0;      // rang, dans une image du film, de la première étoile suivie
+    uint64_t inFilm(const phys::film::FilmV2& f) const {
+        uint64_t n = 0;
+        for (int g = first_; g < first_ + galaxies_; ++g) n += f.etoiles(g);
+        return n;
+    }
     // Quatre images décodées (nombres sur 16 bits -> flottants) et rangées dans l'ordre de l'appli : 48 Mo chacune pour 4 M d'étoiles.
     std::array<int, 4> have_{-1, -1, -1, -1};
     std::array<std::vector<float>, 4> frames_;
@@ -106,7 +123,8 @@ private:
     const float* decoded(int image) {
         for (int j = 0; j < 4; ++j)
             if (have_[static_cast<size_t>(j)] == image) return frames_[static_cast<size_t>(j)].data();
-        const uint16_t* raw = film.image(image);      // les étoiles de la Voie lactée sont les premières du film
+        const uint16_t* raw = film.image(image);
+        if (raw) raw += base_ * 3;      // les étoiles de la Voie lactée sont les premières du film, celles des voisines suivent
         if (!raw) return nullptr;
         // on remplace l'image décodée la plus éloignée de celle demandée
         int slot = 0, loin = -1;

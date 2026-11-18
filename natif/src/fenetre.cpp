@@ -294,8 +294,16 @@ int runWindow(const WindowOptions& opt) {
     // autour d'aujourd'hui : sans orbite exacte (le potentiel de l'appli ne contient que la Voie lactée), elles s'effacent en
     // quelques millions d'années (gaia_fiable.glsl) et la photo déplacée en bloc prend le relais, sans double lumière.
     GaiaRenderer neighbourStars;
-    const bool neighbourStarsOk = neighbourStars.create(g, dataDir + "/voisines_etoiles.bin", HdrTarget::kFormat, false, false);
+    // Avec le film du Groupe local, ces étoiles aussi suivent le calcul unique (leur état vient du film, jamais d'un calcul
+    // d'orbites de l'appli) : il leur faut donc la table des états, d'où « full ». Sans film : le bloc qui tourne, comme avant.
+    const bool neighbourFilmWanted = filmStarsOk && std::ifstream(dataDir + "/voisines_etoiles.ordre").good();
+    const bool neighbourStarsOk = neighbourStars.create(g, dataDir + "/voisines_etoiles.bin", HdrTarget::kFormat, neighbourFilmWanted, false);
     if (neighbourStarsOk) neighbourStars.enableSubClouds(16);
+    FilmStars filmNeighbours;
+    std::vector<float> filmNeighbourStates;
+    const bool filmNeighboursOk = neighbourFilmWanted && neighbourStarsOk && neighbourStars.externalStatesFit() &&
+                                  filmNeighbours.load(dataDir, neighbourStars.starCount(), "voisines_etoiles.ordre", 1, 4);
+    std::printf("film du Groupe local, galaxies voisines : %s\n", filmNeighboursOk ? "lu, leurs etoiles le suivent" : "non (bloc qui tourne)");
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
     // Décision de Marc (13 novembre 2026, « je veux le plus proche possible de la réalité, pas seulement le mesuré ») : la
@@ -588,6 +596,22 @@ int runWindow(const WindowOptions& opt) {
                     endOnce(g, once);
                 }
                 sim.filmLeads = byFilm && milkyWayStars.externalStates();
+                // Mêmes dates, même film pour les étoiles d'Andromède, du Triangle et des Nuages (positions autour du centre de
+                // leur galaxie ; le centre lui-même suit déjà le film, simulation.h).
+                if (filmNeighboursOk) {
+                    filmNeighbours.reload(dt);
+                    if (byFilm && filmNeighbours.covers(tStep)) {
+                        if (step != filmNeighbours.lastStep || !neighbourStars.externalStates()) {
+                            if (filmNeighbours.states(tStep, {}, {}, filmNeighbourStates)) {
+                                neighbourStars.setExternalStates(g, filmNeighbourStates, step);
+                                filmNeighbours.lastStep = step;
+                            }
+                        }
+                    } else if (neighbourStars.externalStates()) {
+                        neighbourStars.leaveExternalStates();
+                        filmNeighbours.lastStep = LONG_MIN;
+                    }
+                }
             }
             holdOn = shownYears != wanted;
             holdGoal = wanted;
@@ -644,7 +668,8 @@ int runWindow(const WindowOptions& opt) {
             }
             if (sim.filmLeads)
                     sim.calcStates.push_back({"Étoiles visibles de la Voie lactée", CalcMode::Precomputed, 0,
-                                              "film du calcul unique du Groupe local (cinq galaxies qui s'attirent, énergie noire) : les mêmes étoiles qu'aujourd'hui, emportées par ce calcul ; un scénario, sans barre dans la masse"});
+                                              std::string("film du calcul unique du Groupe local (cinq galaxies qui s'attirent, énergie noire) : les mêmes étoiles qu'aujourd'hui, emportées par ce calcul ; un scénario ; ") +
+                                                  (filmStars.note.empty() ? std::string("sans barre dans la masse") : filmStars.note)});
             if (sim.replay)
                 sim.calcStates.push_back({"Étoiles du calcul de la fusion", share < 1 ? CalcMode::Precomputed : CalcMode::Hidden, 0,
                                           fusionCloud.physical ? "points du calcul fait à l'avance (un scénario) ; éclat : masse de chaque point divisée par le rapport masse/lumière de sa galaxie, même échelle que les étoiles mesurées"
@@ -654,7 +679,9 @@ int runWindow(const WindowOptions& opt) {
                                           "calcul fait à l'avance où toutes les étoiles de la Galaxie s'attirent : bras calculés, position non prévisible"});
             if (sim.armTracers)
                 sim.calcStates.push_back({"Traceurs des bras spiraux", !armTracers.count ? CalcMode::Hidden : std::fabs(sim.years - kStartYears) < 3.0e4 ? CalcMode::Measured : CalcMode::Approx, 0,
-                                          std::fabs(sim.years - kStartYears) < 3.0e4
+                                          milkyWayStarsOk && sim.bestLook && std::fabs(sim.years - kStartYears) > kLinearLimitYears
+                                              ? "non montrés loin d'aujourd'hui : les bras sont alors portés par les étoiles visibles, qui tournent chacune à sa vitesse"
+                                          : std::fabs(sim.years - kStartYears) < 3.0e4
                                               ? "masers à parallaxe radio (Reid et al. 2019) et amas ouverts datés (Hunt & Reffert 2023) : positions mesurées"
                                               : "dessin mesuré aujourd'hui, tourné d'un bloc à la vitesse mesurée des bras (28,2 ± 2,1 km/s par kpc, Dias et al. 2019) : approché, les bras se déforment aussi"});
             if (sim.cloneCount)
@@ -709,7 +736,13 @@ int runWindow(const WindowOptions& opt) {
         sim.loneGalaxyShare = loneGalaxy.count ? loneShare : 0.0;
         if (milkyWayCentre >= 0 && sim.showClones) clones.update(cam, sim.position(milkyWayCentre), (sim.years - kStartYears) / 1.0e9, sim.dist, pc.par[0]);
         else clones.count = 0;
-        if (milkyWayCentre >= 0) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
+        // Traceurs mesurés des bras (masers, amas) : à leur place mesurée près d'aujourd'hui. Plus loin dans le temps, ce calque
+        // les fait tourner d'un bloc, alors que les étoiles visibles de la Voie lactée tournent chacune à sa vitesse (film ou
+        // orbites) : les deux se contredisaient à l'écran (contrôle du premier film, docs/premier-film.md, défaut 6). Quand les
+        // étoiles visibles sont dessinées, le calque n'est donc montré qu'à moins de 3 millions d'années d'aujourd'hui.
+        const bool armLayerAgrees = !(milkyWayStarsOk && sim.bestLook) || std::fabs(sim.years - kStartYears) <= kLinearLimitYears;
+        if (milkyWayCentre >= 0 && armLayerAgrees) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
+        else armTracers.count = 0;
         sim.armTracersShown = armTracers.count > 0;
         tasksTimer += dt;
         if (tasksTimer > 2.0) {      // calculs de fond du PC : relus toutes les 2 secondes
@@ -774,10 +807,11 @@ int runWindow(const WindowOptions& opt) {
                 const float row[16] = {static_cast<float>(v.c0.x), static_cast<float>(v.c0.y), static_cast<float>(v.c0.z), 0,
                                        static_cast<float>(ct.x), static_cast<float>(ct.y), static_cast<float>(ct.z), 0,
                                        static_cast<float>(a.x), static_cast<float>(a.y), static_cast<float>(a.z), v.vrot,
-                                       v.rrot, v.agit, 0, 0};
+                                       v.rrot, v.agit, neighbourStars.externalStates() ? 1.0f : 0.0f, 0};      // 1 : le film mène (gaia.vert)
                 std::memcpy(table + k * 16, row, sizeof(row));
             }
             neighbourStars.setGalaxies(table, 4);
+            neighbourStars.setFreeNeighbours(neighbourStars.externalStates());
             neighbourStars.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
         }
         if (!skyOnly && sim.starShare() > 0) {      // étoiles Gaia sur leur orbite calculée ; part qui baisse quand le calcul de la fusion prend le relais

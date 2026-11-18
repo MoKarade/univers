@@ -8,6 +8,8 @@ set -u
 ICI="$(cd "$(dirname "$0")" && pwd)"
 PY=/c/tmp/venv-cupy/Scripts/python.exe
 G=C:/tmp/analyse-architecture/galaxies
+GAL="${UNIVERS_GALAXIES:-$G/plein}"      # dossier des cinq galaxies de départ
+TR="${UNIVERS_TRACEURS:-C:/tmp/natif/donnees/etoiles-visibles}"      # dossier des étoiles visibles
 S="${1:-C:/tmp/natif/groupe-local}"
 export PYTHONIOENCODING=utf-8 UNIVERS_AVANCEMENT=C:/dev/Univers-PC/avancement
 mkdir -p "$S"
@@ -18,7 +20,21 @@ echo $$ > "$VERROU"
 
 if [ ! -f "$S/aujourdhui.npz" ]; then
   echo "=== passe : d'il y a 1 Ga à aujourd'hui ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
-  "$PY" -u rencontre.py passe "$G/plein" "$S" --etat="$G/etat_combine.json" --releve-ma=50 >> "$S/journal.txt" 2>&1 || { echo "ECHEC du passe" >> "$S/journal.txt"; exit 1; }
+  if [ ! -f "$S/angles.txt" ]; then
+    # Premier passage : sert à savoir où pointe la barre de la masse aujourd'hui, pour la caler sur la barre mesurée.
+    if [ ! -f "$S/passage1.npz" ]; then
+      "$PY" -u rencontre.py passe "$GAL" "$S" --etat="$G/etat_combine.json" --releve-ma=50 >> "$S/journal.txt" 2>&1 || { echo "ECHEC du passe" >> "$S/journal.txt"; exit 1; }
+      mv "$S/aujourdhui.npz" "$S/passage1.npz"
+    fi
+    cp "$S/passage1.npz" "$S/aujourdhui.npz"
+    "$PY" -u rencontre.py barre "$S" --traceurs="$TR" >> "$S/journal.txt" 2>&1 || { echo "ECHEC de la mesure de la barre" >> "$S/journal.txt"; exit 1; }
+    rm -f "$S/aujourdhui.npz" "$S/reprise.npz"
+    "$PY" -c "import json,sys; b=json.load(open(sys.argv[1]+'/barre.json',encoding='utf-8')); print(','.join(f\"{n}:{v['tourner_de']}\" for n,v in b.items()))" "$S" > "$S/angles.txt"
+    mv "$S/barre.json" "$S/barre_passage1.json"
+  fi
+  echo "=== passe avec la barre calée : $(cat "$S/angles.txt") ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
+  "$PY" -u rencontre.py passe "$GAL" "$S" --etat="$G/etat_combine.json" --releve-ma=50 --angles="$(cat "$S/angles.txt")" >> "$S/journal.txt" 2>&1 || { echo "ECHEC du passe" >> "$S/journal.txt"; exit 1; }
+  "$PY" -u rencontre.py barre "$S" --traceurs="$TR" >> "$S/journal.txt" 2>&1
 fi
 # Contrôle de l'arrivée : on ne continue que si chaque galaxie est assez près de sa place mesurée.
 "$PY" - "$S" >> "$S/journal.txt" 2>&1 <<'EOF' || { echo "ARRÊT : arrivée trop loin des mesures, le futur n'est pas lancé" >> "$S/journal.txt"; exit 2; }
@@ -30,6 +46,6 @@ print('arrivée :', {n: (e[n]['distance_kpc'], e[n]['vitesse_kms']) for n in lim
 sys.exit(0 if ok else 1)
 EOF
 echo "=== futur : d'aujourd'hui à +10 Ga ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
-"$PY" -u rencontre.py futur "$S" 10.0 --traceurs=C:/tmp/natif/donnees/etoiles-visibles --releve-ma=10 --champ=2 >> "$S/journal.txt" 2>&1
+"$PY" -u rencontre.py futur "$S" 10.0 --traceurs="$TR" --releve-ma=10 --champ=2 >> "$S/journal.txt" 2>&1
 echo "=== fin ($(date '+%d/%m %H:%M')), code $?" >> "$S/journal.txt"
 rm -f "$VERROU"

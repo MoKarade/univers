@@ -6,7 +6,12 @@ L'appli range les étoiles visibles de la Voie lactée par zones (vl_etoiles.bin
 pour chaque étoile de l'appli, son rang dans le contrat, en comparant les positions, et l'écrit dans vl_etoiles.ordre
 (un entier 32 bits par étoile, dans l'ordre de l'appli). Sans ce fichier, l'appli ne peut pas suivre le film.
 
-Usage : python ordre_film.py <vl_etoiles.bin> <etoiles_visibles_voie_lactee.npz> [sortie]
+Galaxies voisines : même chose avec voisines_etoiles.bin et les fichiers du contrat des quatre galaxies, dans l'ordre du
+film (Andromède, Triangle, Grand Nuage, Petit Nuage), séparés par des virgules ; le rang compte alors à partir de la première
+étoile d'Andromède. À 2,5 millions d'années-lumière, l'appli range les positions à 0,1 pc près : deux étoiles très proches
+peuvent se confondre, ce qui est toléré jusqu'à 0,5 % (elles suivent alors la même route).
+
+Usage : python ordre_film.py <vl_etoiles.bin> <etoiles_visibles_voie_lactee.npz[,autre.npz...]> [sortie]
 """
 import os
 import sys
@@ -30,13 +35,17 @@ def main():
         f.seek(4096 + (feuilles * 48 + 63) // 64 * 64)
         rec = np.frombuffer(f.read(n * 16), np.dtype([('p', '<f4', 3), ('m', '<f2'), ('c', 'u1'), ('f', 'u1')]))
     appli = (rec['p'].astype(np.float64) / KPC_LY) @ GAL2ECL + SUN      # écliptique héliocentrique (al) -> phys::galaxie (kpc)
-    with np.load(npz) as z: contrat = z['pos'].astype(np.float64)
+    morceaux = []
+    for chemin_npz in npz.split(','):
+        with np.load(chemin_npz) as z: morceaux.append(z['pos'].astype(np.float64))
+    contrat = np.concatenate(morceaux); plusieurs = len(morceaux) > 1
     if len(contrat) != n: raise SystemExit(f'ECHEC : {n} étoiles dans l\'appli, {len(contrat)} dans le contrat')
     d, rang = cKDTree(contrat).query(appli, workers=-1)
-    unique = len(np.unique(rang)) == n
+    doubles = n - len(np.unique(rang)); unique = doubles == 0
     print(f'{n} étoiles ; écart le plus grand entre une étoile de l\'appli et celle du contrat : {d.max() * 1000:.4f} pc ; médiane {np.median(d) * 1000:.5f} pc ; '
           f'chaque étoile du contrat prise une seule fois : {"oui" if unique else "NON"}')
-    if d.max() > 1e-3 or not unique: raise SystemExit('ECHEC : les deux fichiers ne décrivent pas les mêmes étoiles')
+    if plusieurs: print(f'étoiles confondues avec une voisine : {doubles} ({100 * doubles / n:.3f} %)')
+    if d.max() > (3e-3 if plusieurs else 1e-3) or (doubles > 0.005 * n if plusieurs else not unique): raise SystemExit('ECHEC : les deux fichiers ne décrivent pas les mêmes étoiles')
     rang.astype('<u4').tofile(sortie + '.partiel'); os.replace(sortie + '.partiel', sortie)
     print('->', sortie)
 
