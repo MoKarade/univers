@@ -138,8 +138,18 @@ def main():
         v = [float(x) for x in opts['guide'].split(',')]
         guide = dict(masse=v[0], a=v[1], omega=v[2], monte=v[3], tenue=v[4], descente=v[5], b=v[6] if len(v) > 6 else 0.6, c=v[7] if len(v) > 7 else 0.35, angle0=v[8] if len(v) > 8 else 0.0)
 
+    # --gaz=1 : les particules de gaz (sorte 3) sentent la pression et les chocs, et peuvent devenir des étoiles (gaz_galaxie.py)
+    gaz = None; kind_g = cp.asarray(kind)
+    if 'gaz' in opts:
+        import gaz_galaxie
+        gaz = gaz_galaxie.Gaz(len(kind)); masse_gaz0 = float(p['m'][kind == 3].sum())
+
     def forces(t):
         acc, phi = gravite_gpu.gravity(pos, mg, eps, theta=theta, quad=True)
+        if gaz:
+            qui = cp.where(kind_g == 3)[0]
+            ah = gaz.acceleration(pos, vel, m, qui, dt)
+            if ah is not None: acc[qui] += ah
         if guide:
             ag, f = guide_barre(cp, pos - cm_gpu(), t, guide)
             if ag is not None: acc = acc + ag
@@ -159,7 +169,14 @@ def main():
 
     def note(t):
         cm = cp.asnumpy(cp.sum(pos * m[:, None], axis=0) / cp.sum(m)) - cm0
+        if gaz: kind[:] = cp.asnumpy(kind_g)
         r = releve(cp.asnumpy(pos), cp.asnumpy(vel), p['m'], kind, t, energie(phi) / e0 - 1, [round(float(x), 4) for x in cm])
+        if gaz:
+            mg_ = float(p['m'][kind == 3].sum()); mn = float(p['m'][kind == 5].sum())
+            dern = res['releves'][-1]['gaz'] if res['releves'] else dict(nees_msol=0.0, t=0.0)
+            taux = (mn - dern['nees_msol']) / max((t - dern['t']) * 1e9, 1.0)      # M☉ par an depuis le relevé d'avant
+            r['gaz'] = dict(t=t, gaz_msol=mg_, nees_msol=mn, naissances_msol_par_an=taux, courant=gaz.cfl)
+            print(f"         gaz {mg_:.3e} M☉ ({100 * mg_ / masse_gaz0:.0f} % du départ) | étoiles nées {mn:.3e} M☉ | {taux:.2f} M☉/an | nombre de Courant {gaz.cfl:.2f}", flush=True)
         res['releves'].append(r)
         a = [x for x in r['anneaux'] if x]
         print(f"t = {t:5.2f} Ga | A2 par anneau : " + ' '.join(f"{x['a2']:.3f}" for x in a) + f" | épaisseur {a[2]['epaisseur_kpc']:.2f} kpc | agitation {a[3]['sigma_r']:.0f} km/s"
@@ -173,6 +190,7 @@ def main():
         pos += dt * vel
         acc, phi = forces((s + 1) * dt_ma * 1e-3)
         vel += 0.5 * dt * acc
+        if gaz: gaz.naissances(kind_g, cp.where(kind_g == 3)[0], dt, (s + 1) * dt_ma * 1e-3)
         if (s + 1) % every == 0: note((s + 1) * dt_ma * 1e-3)
         t_check = attendre(t_check)
     # Verdict : calme si la force de la barre reste sous 0,1 partout ; la vitesse de la barre se lit entre deux relevés.
@@ -182,7 +200,9 @@ def main():
     if 'etat-final' in opts:      # la galaxie mûrie, au même format que modeles_v2.py : elle peut servir de départ à rencontre.py
         c0 = cp.asnumpy(cm_gpu()); v0 = cp.asnumpy(cp.sum(vel * m[:, None], axis=0) / cp.sum(m))
         meta2 = dict(meta); meta2['murie'] = dict(duree_ga=duree, guide=guide, depart=os.path.basename(depart))
-        np.savez_compressed(opts['etat-final'], pos=cp.asnumpy(pos) - c0, vel=cp.asnumpy(vel) - v0, m=p['m'], eps=p['eps'], kind=kind, meta=json.dumps(meta2, ensure_ascii=False))
+        if gaz: kind[:] = cp.asnumpy(kind_g)
+        plus = dict(naissance=gaz.naissance) if gaz else {}
+        np.savez_compressed(opts['etat-final'], pos=cp.asnumpy(pos) - c0, vel=cp.asnumpy(vel) - v0, m=p['m'], eps=p['eps'], kind=kind, meta=json.dumps(meta2, ensure_ascii=False), **plus)
     json.dump(res, open(sortie, 'w', encoding='utf-8'), ensure_ascii=False)
     print(f"force maximale du motif à deux bras : {pire:.3f} ({'disque calme' if pire < 0.1 else 'barre ou bras marqués'})")
 
