@@ -176,6 +176,7 @@ void showVoyagerJupiter(Sim& sim, UiState& ui) {
     sim.paused = true;
     sim.backward = false;
     sim.rate = 1;      // 1 heure par seconde : le survol se déroule en quelques secondes
+    sim.speed = 0;
     sim.refreshEphemeris();
     if (v >= 0 && sim.visible(v)) sim.flyTo(v);
 }

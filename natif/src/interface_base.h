@@ -259,6 +259,7 @@ void showEclipse(Sim& sim, UiState& ui, int k) {
     sim.paused = true;
     sim.backward = false;
     sim.rate = 1;      // 1 heure par seconde : l'ombre traverse la Terre en quelques secondes
+    sim.speed = 0;
     sim.refreshEphemeris();
     if (earth < 0 || !sim.visible(earth)) return;
     sim.flyTo(earth);
@@ -519,8 +520,8 @@ void handleKeys(Sim& sim, UiState& ui) {
         ui.tour = -1;
         sim.back();
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_PageUp)) sim.rate = std::min(sim.rate + 1, kRateCount - 1);
-    if (ImGui::IsKeyPressed(ImGuiKey_PageDown)) sim.rate = std::max(sim.rate - 1, 0);
+    if (ImGui::IsKeyPressed(ImGuiKey_PageUp)) sim.stepRate(+1);
+    if (ImGui::IsKeyPressed(ImGuiKey_PageDown)) sim.stepRate(-1);
     // Flèches : tourner autour de l'astre suivi (un demi-tour en un peu plus de 3 secondes).
     const double step = 190.0 * io.DeltaTime;
     double dx = 0, dy = 0;

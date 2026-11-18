@@ -351,6 +351,7 @@ public:
     // Contrôle : la prochaine avance porte sur toutes les feuilles, pas seulement les visibles.
     void wantAllLeaves() { visible_.resize(file_.leafCount); for (uint32_t i = 0; i < file_.leafCount; ++i) visible_[i] = i; }
     const GaiaOrbits& orbits() const { return orbits_; }
+    GaiaOrbits& orbitsForFilm() { return orbits_; }      // film_carte.h écrit les états directement sur la carte
     // FILM (film_etoiles.h) : nombre d'étoiles du fichier, pas d'un million d'années de la date montrée, et remplacement des
     // états par ceux du film (8 flottants par étoile dans l'ordre du fichier, puis le Soleil en dernier).
     uint64_t starCount() const { return file_.n; }

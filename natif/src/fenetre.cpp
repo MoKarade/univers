@@ -27,6 +27,7 @@
 #include "galaxies_formes.h"
 #include "vieillissement.h"
 #include "film_etoiles.h"
+#include "film_carte.h"
 #include "rendu_fenetre.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -222,6 +223,7 @@ int runWindow(const WindowOptions& opt) {
     if (pathActive) {
         sim.years = opt.pathStart;
         sim.rate = std::clamp(opt.pathRate, 0, kRateCount - 1);
+        sim.speed = opt.pathSpeed > 0 ? std::min(opt.pathSpeed, Sim::kMaxYearsPerSecond) : 0;
         sim.backward = opt.years < opt.pathStart;
         sim.paused = false;
         sim.refreshEphemeris();
@@ -308,6 +310,12 @@ int runWindow(const WindowOptions& opt) {
                                   filmNeighbours.load(dataDir, neighbourStars.starCount(), "voisines_etoiles.ordre", 1, 4);
     if (filmNeighboursOk) filmNeighbours.loadLum(dataDir, "voisines_etoiles.lum", [&](size_t i) { return neighbourStars.starMagnitude(i); });
     std::printf("film du Groupe local, galaxies voisines : %s\n", filmNeighboursOk ? "lu, leurs etoiles le suivent" : "non (bloc qui tourne)");
+    // Film relu sur la carte graphique à la date exacte de chaque image (film_carte.h) : fluide, et le même résultat quelle
+    // que soit la vitesse du temps. Sans lui (échec de création), l'ancien chemin par le processeur reste.
+    FilmGpu filmGpu, filmGpuNeighbours;
+    const bool filmGpuOk = filmStarsOk && filmGpu.create(g, filmStars, milkyWayStars.orbitsForFilm());
+    const bool filmGpuNeighboursOk = filmNeighboursOk && filmGpuNeighbours.create(g, filmNeighbours, neighbourStars.orbitsForFilm());
+    std::printf("film sur la carte graphique : %s\n", filmGpuOk ? "oui" : "non (relu par le processeur)");
     GaiaSkyTiles gaiaSky;      // 1,62 milliard de sources sans distance, lues à la demande sur le Drive (gaia_ciel.h)
     if (gaiaOk) gaiaSky.create(g, dataDir, HdrTarget::kFormat, gaia.colorBuffer());
     // Décision de Marc (13 novembre 2026, « je veux le plus proche possible de la réalité, pas seulement le mesuré ») : la
@@ -507,6 +515,9 @@ int runWindow(const WindowOptions& opt) {
     auto last = std::chrono::steady_clock::now();
     const auto start = last;
     int frame = 0, shown = 0;
+    bool gaiaLiveNow = true;            // le calcul en direct de Gaia sert-il à cette image ? (non quand le film mène et que Gaia y est éteint)
+    double pathYears0 = 0, pathWall = 0;      // contrôle --horloge-reelle : date et durée du trajet
+    long pathFrames = 0;
     double titleTimer = 0;
     bool drawable = true;
     while (!input.quit) {
@@ -520,7 +531,10 @@ int runWindow(const WindowOptions& opt) {
             }
         }
         const auto now = std::chrono::steady_clock::now();
-        const double dt = test && opt.hasPath ? 1.0 / 60.0 : std::min(0.1, std::chrono::duration<double>(now - last).count());      // contrôle d'un trajet : pas fixe
+        // Le temps suit l'horloge réelle : à 200 Ma/s, la date avance de 200 Ma par seconde quelle que soit la cadence d'images
+        // (le plafond de 0,1 s par image la ralentissait dès que l'appli passait sous 10 images/s). Plafond de 0,5 s
+        // gardé pour un arrêt de la fenêtre (déplacement, mise en veille). Contrôle d'un trajet : pas fixe.
+        const double dt = test && opt.hasPath && !opt.realClock ? 1.0 / 60.0 : std::min(0.5, std::chrono::duration<double>(now - last).count());
         last = now;
 
         // Gestes -> simulateur.
@@ -546,16 +560,34 @@ int runWindow(const WindowOptions& opt) {
                 pathActive = false;
             }
             wanted = std::clamp(wanted, sim.minYears(), sim.maxYears());
+            // Au-delà de ce que le film du Groupe local a déjà calculé, la date s'arrête au bord du film (décision de Marc,
+            // 18/11/2026) : rien n'est inventé, et le bord avance tout seul à mesure que le calcul tourne (FilmStars::reload).
+            sim.filmEdgeYears = 0;
+            if (filmStarsOk && filmStars.film.images() >= 5 && wanted > kStartYears) {
+                const double edge = kStartYears + filmStars.film.date(filmStars.film.images() - 2) * 1.0e9;
+                if (wanted > edge) {
+                    wanted = edge;
+                    sim.filmEdgeYears = edge;
+                }
+            }
             double shownYears = wanted;
             const double off = gaiaOk ? gaia.orbitEpochYears() : 0.0;
+            // Le film mène-t-il à la date voulue ? Alors les étoiles visibles ne demandent aucun calcul d'orbite (film_carte.h),
+            // et, quand Gaia y est entièrement éteint (vue « meilleur rendu », plus de 10 Ma d'aujourd'hui), le calcul en direct
+            // de Gaia n'a plus lieu : la date n'attend plus rien.
+            const double tWanted = (wanted - kStartYears) / 1.0e9;
+            const bool filmAtWanted = filmGpuOk && tWanted > -1.0e-6 && filmStars.covers(std::max(tWanted, 0.0));
+            const bool gaiaGone = filmAtWanted && !filmStars.gain.empty() && sim.bestLook && std::fabs(tWanted) * 1.0e3 >= 10.0;
+            const bool gaiaLive = gaiaOk && !gaiaGone;
+            gaiaLiveNow = gaiaLive;
             const bool need = static_cast<long>(std::floor(wanted / OrbitGpu::kStepYears)) != orbits.stepLo ||
-                              (gaiaOk && (static_cast<long>(std::floor((wanted - off) / OrbitGpu::kStepYears)) != gaia.orbitStep() || gaia.orbitLagSteps() != 0)) ||
+                              (gaiaLive && (static_cast<long>(std::floor((wanted - off) / OrbitGpu::kStepYears)) != gaia.orbitStep() || gaia.orbitLagSteps() != 0)) ||
                               // étoiles visibles du modèle : leurs orbites exactes rattrapent la date même quand Gaia est à jour
-                              (milkyWayStarsOk && (static_cast<long>(std::floor((wanted - off) / OrbitGpu::kStepYears)) != milkyWayStars.orbitStep() ||
-                                                   milkyWayStars.orbitLagSteps() != 0));
+                              (milkyWayStarsOk && !filmAtWanted &&
+                               (static_cast<long>(std::floor((wanted - off) / OrbitGpu::kStepYears)) != milkyWayStars.orbitStep() || milkyWayStars.orbitLagSteps() != 0));
             if (need) {
                 VkCommandBuffer once = beginOnce(g);
-                if (gaiaOk) {
+                if (gaiaLive) {
                     gaia.advance(g, once, wanted, test && !opt.hasPath ? 1000000 : 64);      // le fil Gaia borne lui-même le travail par image
                     const double lo = static_cast<double>(gaia.orbitStep()) * OrbitGpu::kStepYears + off;
                     shownYears = std::clamp(wanted, lo, lo + OrbitGpu::kStepYears - 1.0);
@@ -584,10 +616,23 @@ int runWindow(const WindowOptions& opt) {
                 // Revue F1 : quand le film mène, Gaia s'éteint entre 1 et 10 Ma d'aujourd'hui [choix : d'ici là, les orbites de
                 // l'appli et le film restent proches] ; les étoiles du film reprennent la lumière que Gaia portait (gain, .lum).
                 // Constant dans un pas d'un million d'années : il suit l'état donné à la carte.
-                const double gaiaOff = byFilm && !filmStars.gain.empty() && sim.bestLook ? std::clamp((std::fabs(tStep) * 1.0e3 - 1.0) / 9.0, 0.0, 1.0) : 0.0;
+                // Film sur la carte : la part de Gaia éteinte suit la date exacte (et non plus le pas d'un million d'années).
+                const double tExact = std::max((shownYears - kStartYears) / 1.0e9, 0.0);
+                const double gaiaOff = byFilm && !filmStars.gain.empty() && sim.bestLook
+                                           ? std::clamp(((filmGpuOk ? tExact : std::fabs(tStep)) * 1.0e3 - 1.0) / 9.0, 0.0, 1.0) : 0.0;
                 filmStars.gaiaOff = gaiaOff;
                 filmNeighbours.gaiaOff = gaiaOff;
-                if (byFilm) {
+                const int dir = sim.paused ? 0 : sim.backward ? -1 : 1;
+                if (byFilm && filmGpuOk) {
+                    // État de chaque étoile écrit sur la carte à la date exacte montrée, à chaque image : rien ne dépend du
+                    // pas d'un million d'années ni de la vitesse du temps. Le Soleil (hors du film) : son orbite selon l'appli.
+                    sim.ensureExact();
+                    const double y = shownYears, h = 1.0e3;
+                    const phys::Vec3 s0 = sim.exact.position(0, y - h), s1 = sim.exact.position(0, y + h), s = sim.exact.position(0, y);
+                    const double k = 3.0856775814913673e16 / (2.0 * h * kYearSeconds);      // kpc par an -> km/s
+                    if (filmGpu.update(g, filmStars, milkyWayStars.orbitsForFilm(), tExact, dir, s, {(s1.x - s0.x) * k, (s1.y - s0.y) * k, (s1.z - s0.z) * k}, gaiaOff, step))
+                        filmStars.lastStep = step;
+                } else if (byFilm) {
                     if (step != filmStars.lastStep || !milkyWayStars.externalStates()) {
                         sim.ensureExact();      // le Soleil : son orbite selon l'appli (il n'est pas dans le film)
                         const double y = milkyWayStars.yearsOfStep(step), h = 1.0e3;
@@ -613,7 +658,10 @@ int runWindow(const WindowOptions& opt) {
                 // leur galaxie ; le centre lui-même suit déjà le film, simulation.h).
                 if (filmNeighboursOk) {
                     filmNeighbours.reload(dt);
-                    if (byFilm && filmNeighbours.covers(tStep)) {
+                    if (byFilm && filmGpuNeighboursOk && filmNeighbours.covers(tExact)) {
+                        if (filmGpuNeighbours.update(g, filmNeighbours, neighbourStars.orbitsForFilm(), tExact, dir, {}, {}, gaiaOff, step))
+                            filmNeighbours.lastStep = step;
+                    } else if (byFilm && filmNeighbours.covers(tStep)) {
                         if (step != filmNeighbours.lastStep || !neighbourStars.externalStates()) {
                             if (filmNeighbours.states(tStep, {}, {}, filmNeighbourStates)) {
                                 neighbourStars.setExternalStates(g, filmNeighbourStates, step);
@@ -847,9 +895,11 @@ int runWindow(const WindowOptions& opt) {
             sim.gaiaSkyPending = gaiaSky.pendingTiles;
             sim.gaiaSkyLimit = gaiaSky.gLimit;
             const double gaiaLeft = sim.starShare() * (1.0 - sim.gaiaFilmOff);      // revue F1 : Gaia cède au film
-            gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeft), sim.years);
-            gaiaSky.draw(cmd, cam, sc.extent.height, pc.par[0] * static_cast<float>(1.0 - sim.gaiaFilmOff));
-            if (gaiaBOk) {
+            // Gaia entièrement éteint (le film mène, loin d'aujourd'hui) : rien à dessiner, et ses 192 M d'étoiles ne coûtent
+            // plus le tri des feuilles à chaque image.
+            if (gaiaLeft > 0) gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeft), sim.years);
+            if (sim.gaiaFilmOff < 1.0) gaiaSky.draw(cmd, cam, sc.extent.height, pc.par[0] * static_cast<float>(1.0 - sim.gaiaFilmOff));
+            if (gaiaBOk && gaiaLeft > 0) {
                 gaiaB.improved = sim.bestLook;
                 gaiaB.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeft), sim.years);
             }
@@ -933,7 +983,12 @@ int runWindow(const WindowOptions& opt) {
         else if (pr != VK_SUCCESS) fail("affichage", pr);
 
         ++frame;
-        if (test && (holdOn || pathActive || (gaiaOk && gaia.orbitLagSteps() != 0))) frame = 0;
+        if (test && pathActive) {      // mesure du trajet : années parcourues et images, à l'horloge réelle
+            if (pathFrames == 0) pathYears0 = sim.years;
+            ++pathFrames;
+            pathWall += dt;
+        }
+        if (test && (holdOn || pathActive || (gaiaOk && gaiaLiveNow && gaia.orbitLagSteps() != 0))) frame = 0;
         if (test && opt.stopAfter > 0 && ++loops >= opt.stopAfter) break;      // contrôle : image prise en route, calcul en cours compris      // contrôle : les images ne comptent qu'une fois la date atteinte et calculée
         ++shown;
         titleTimer += dt;
@@ -950,6 +1005,21 @@ int runWindow(const WindowOptions& opt) {
     if (outerThread.joinable()) outerThread.join();
     if (test) {
         const double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        if (opt.hasPath && pathFrames > 1 && pathWall > 0)
+            std::printf("trajet : %.4g annees en %.3f s (%ld images) : %.4g annees par seconde, %.1f images par seconde\n", std::fabs(sim.years - pathYears0), pathWall,
+                        pathFrames, std::fabs(sim.years - pathYears0) / pathWall, pathFrames / pathWall);
+        // Contrôle « même date, même résultat » : empreinte des états des étoiles visibles à la date finale (à comparer entre
+        // un saut direct et des trajets à différentes vitesses).
+        if (milkyWayStarsOk && milkyWayStars.externalStates()) {
+            const GaiaOrbits& o = milkyWayStars.orbits();
+            const uint32_t m = std::min<uint32_t>(o.count, 1000000);
+            const std::vector<float> e = o.readBack(g, m);
+            double sx = 0, sy = 0, sz = 0, sv = 0;
+            for (uint32_t i = 0; i + 1 < m; ++i) { sx += e[i * 8]; sy += e[i * 8 + 1]; sz += e[i * 8 + 2]; sv += std::fabs(e[i * 8 + 4]) + std::fabs(e[i * 8 + 5]); }
+            std::printf("empreinte des etats (film, %u etoiles) a l'an %.3f : x %.9g  y %.9g  z %.9g  |v| %.9g ; etoile 12345 : %.7g %.7g %.7g\n", m - 1, sim.years, sx, sy, sz, sv,
+                        e[12345 * 8], e[12345 * 8 + 1], e[12345 * 8 + 2]);
+        }
+        if (filmGpuOk) std::printf("film sur la carte : %ld images envoyees\n", filmGpu.uploads);
         if (!opt.capture.empty()) writeCapture(g, final, sc.extent, opt.capture);
         if (!opt.capture.empty() && sim.asteroidCat) {      // mesure : durée d'une recherche de l'astéroïde sous un clic
             const auto t0 = std::chrono::steady_clock::now();
@@ -992,6 +1062,8 @@ int runWindow(const WindowOptions& opt) {
     planets.release(g);
     gaiaSky.destroy(g);
     if (gaiaBOk) gaiaB.release(g);
+    filmGpu.release(g);
+    filmGpuNeighbours.release(g);
     if (milkyWayStarsOk) milkyWayStars.release(g);
     if (neighbourStarsOk) neighbourStars.release(g);
     gaia.release(g);

@@ -143,6 +143,18 @@ public:
         uploadFrom(g, reinterpret_cast<const uint8_t*>(etats.data()), 0, count);
         uploaded_ = true;
         external_ = true;
+        exactDate_ = false;
+        std::fill(step_.begin(), step_.end(), step);
+        target = step;
+        stepAt = step;
+        lagSteps = 0;
+    }
+    // FILM SUR LA CARTE (film_carte.h) : les états viennent d'être écrits sur la carte à la date EXACTE montrée ; gaia.vert
+    // ne les prolonge pas (fraction 0). step : pas d'un million d'années de cette date (pour le contrôle et la sortie du film).
+    void markExternalExact(long step) {
+        uploaded_ = true;
+        external_ = true;
+        exactDate_ = true;
         std::fill(step_.begin(), step_.end(), step);
         target = step;
         stepAt = step;
@@ -152,13 +164,17 @@ public:
     void leaveExternal() {
         if (!external_) return;
         external_ = false;
+        exactDate_ = false;
         uploaded_ = false;
         std::fill(step_.begin(), step_.end(), 0L);
     }
     bool external() const { return external_; }
 
     // Part du pas écoulée depuis l'état (0 à 1).
-    float fraction(double since) const { return static_cast<float>(std::clamp(since / kStepYears - static_cast<double>(target), 0.0, 1.0)); }
+    float fraction(double since) const {
+        if (external_ && exactDate_) return 0.0f;      // état déjà à la date exacte (film sur la carte)
+        return static_cast<float>(std::clamp(since / kStepYears - static_cast<double>(target), 0.0, 1.0));
+    }
 
     void release(const Gpu& g) {
         if (worker_.joinable()) worker_.join();
@@ -177,7 +193,7 @@ private:
     VkDeviceSize stagingSize_ = 0;
     std::thread worker_;
     std::atomic<bool> initDone_{false};
-    bool uploaded_ = false, external_ = false;
+    bool uploaded_ = false, external_ = false, exactDate_ = false;
     std::vector<float> initial_;
     std::vector<Vec3> extraPos_, extraVel_;
     std::vector<std::pair<uint32_t, uint32_t>> ranges_;      // (première étoile, nombre)

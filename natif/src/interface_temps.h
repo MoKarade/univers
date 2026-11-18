@@ -120,7 +120,7 @@ void deepTimeNote(const Sim& sim) {
         if (sim.hasGaia) ImGui::TextDisabled("Étoiles Gaia : départ mesuré, orbite approchée (épicycles) dans le même potentiel.");
         ImGui::TextDisabled("Au-delà d'environ 100 millions d'années, la limite est ce modèle de la Galaxie : ±2,5 %% sur la rotation, "
                             "soit environ 5 000 années-lumière et 10 degrés d'écart à 100 millions d'années.");
-        if (kRates[sim.rate].yearsPerSecond < 1.0e7 && !sim.paused)
+        if (sim.yearsPerSecond() < 1.0e7 && !sim.paused)
             ImGui::TextDisabled("Un tour de la Galaxie prend environ 230 millions d'années : à cette vitesse, la rotation est réelle mais invisible.");
     }
     if (sim.starShare() < 1 && sim.years < kStartYears)
@@ -145,6 +145,24 @@ bool anyPlanetShown(const Sim& sim) {
     return false;
 }
 
+// Vitesse du temps en mots : « 37 millions d'années par seconde », « 2,5 jours par seconde », « temps réel »…
+std::string rateText(double yearsPerSecond) {
+    const double s = yearsPerSecond * kYearSeconds;      // secondes de temps simulé par seconde
+    if (std::fabs(s - 1.0) < 0.05) return "Temps réel";
+    struct Unit { double years; const char* one; const char* many; };
+    static const Unit units[] = {{1.0e9, "milliard d'années", "milliards d'années"}, {1.0e6, "million d'années", "millions d'années"},
+                                 {1.0e3, "millier d'années", "milliers d'années"},   {1.0, "an", "ans"},
+                                 {1.0 / 365.25, "jour", "jours"},                    {1.0 / 8766.0, "heure", "heures"},
+                                 {1.0 / 525960.0, "minute", "minutes"},              {1.0 / kYearSeconds, "seconde", "secondes"}};
+    for (const Unit& u : units)
+        if (yearsPerSecond >= u.years * 0.9999 || &u == &units[7]) {
+            const double v = yearsPerSecond / u.years;
+            const int digits = v < 10 ? 2 : v < 100 ? 1 : 0;
+            return frNum(v, digits) + " " + (v < 2 ? u.one : u.many) + " par seconde";
+        }
+    return "";
+}
+
 void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     // Centrée, sauf si elle mordrait sur la recherche : elle se décale alors vers la droite.
     const float minX = ui.searchRight + px(ui, 12) + ui.timeW * 0.5f;
@@ -153,8 +171,8 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     ImGui::SetNextWindowPos({std::clamp(w * 0.5f, minX, std::max(minX, maxX)), px(ui, 16)}, 0, {0.5f, 0});
     ImGui::Begin("temps", nullptr, fixed);
     ImGui::PushFont(ui.big);
-    const std::string date = frDate(sim.years, kRates[sim.rate].yearsPerSecond < 0.02);
-    const float rowW = ui.details ? px(ui, 600) : std::max(px(ui, 360), ImGui::CalcTextSize(frDate(sim.years, kRates[sim.rate].yearsPerSecond < 0.02).c_str()).x * 1.25f);
+    const std::string date = frDate(sim.years, sim.yearsPerSecond() < 0.02);
+    const float rowW = ui.details ? px(ui, 600) : std::max(px(ui, 360), ImGui::CalcTextSize(frDate(sim.years, sim.yearsPerSecond() < 0.02).c_str()).x * 1.25f);
     ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - ImGui::CalcTextSize(date.c_str()).x) * 0.5f + px(ui, 14)));
     ImGui::TextUnformatted(date.c_str());
     ImGui::PopFont();
@@ -172,9 +190,13 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     if (playButton(ui, sim.paused)) sim.paused = !sim.paused;
     ImGui::SameLine();
     ImGui::SetNextItemWidth(px(ui, 240));
-    if (ImGui::BeginCombo("##vitesse", kRates[sim.rate].label)) {
+    const std::string rateNow = sim.speed > 0 ? rateText(sim.speed) : std::string(kRates[sim.rate].label);
+    if (ImGui::BeginCombo("##vitesse", rateNow.c_str())) {
         for (int i = 0; i < kRateCount; ++i)
-            if (ImGui::Selectable(kRates[i].label, i == sim.rate)) sim.rate = i;
+            if (ImGui::Selectable(kRates[i].label, sim.speed <= 0 && i == sim.rate)) {
+                sim.rate = i;
+                sim.speed = 0;
+            }
         ImGui::EndCombo();
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Vitesse du temps (Page précédente : plus vite, Page suivante : plus lent)");
@@ -183,8 +205,8 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sens du temps, maintenant, aller à une date");
     if (ImGui::BeginPopup("temps-plus")) {
         if (ImGui::MenuItem(sim.backward ? "Faire avancer le temps" : "Faire reculer le temps")) sim.backward = !sim.backward;
-        if (ImGui::MenuItem("Plus lent", "Page suivante", false, sim.rate > 0)) sim.rate = std::max(sim.rate - 1, 0);
-        if (ImGui::MenuItem("Plus rapide", "Page précédente", false, sim.rate < kRateCount - 1)) sim.rate = std::min(sim.rate + 1, kRateCount - 1);
+        if (ImGui::MenuItem("Plus lent", "Page suivante", false, sim.yearsPerSecond() > kRates[0].yearsPerSecond * 1.0001)) sim.stepRate(-1);
+        if (ImGui::MenuItem("Plus rapide", "Page précédente", false, sim.yearsPerSecond() < Sim::kMaxYearsPerSecond * 0.9999)) sim.stepRate(+1);
         if (ImGui::MenuItem("Maintenant")) {
             sim.years = kStartYears;
             sim.backward = false;
@@ -196,12 +218,28 @@ void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
         ImGui::OpenPopup("date");
         ui.openDate = false;
     }
+    // Curseur de vitesse, libre (Marc, 18/11/2026) : échelle logarithmique, du temps réel à 1 milliard d'années par seconde.
+    // Le résultat ne dépend pas de la vitesse : à une date donnée, l'image est la même (fenetre.cpp, film_carte.h).
+    {
+        const float lo = static_cast<float>(std::log10(kRates[0].yearsPerSecond)), hi = static_cast<float>(std::log10(Sim::kMaxYearsPerSecond));
+        float lg = static_cast<float>(std::log10(sim.yearsPerSecond()));
+        const std::string label = rateText(sim.yearsPerSecond());
+        ImGui::SetCursorPosX(px(ui, 14));
+        ImGui::SetNextItemWidth(rowW);
+        if (ImGui::SliderFloat("##curseur-vitesse", &lg, lo, hi, label.c_str(), ImGuiSliderFlags_NoRoundToFormat | ImGuiSliderFlags_AlwaysClamp))
+            sim.speed = std::clamp(std::pow(10.0, static_cast<double>(lg)), kRates[0].yearsPerSecond, Sim::kMaxYearsPerSecond);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Vitesse du temps, au choix : glisser (Ctrl + clic pour taper une valeur)");
+    }
     dateJumpPopup(sim, ui);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);      // les remarques passent à la ligne : la barre garde sa largeur
     if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");
     // Ce qui ne vaut qu'à une autre date qu'aujourd'hui : rangé sous un titre qui se déplie (la barre restait sinon
     // haute de sept paragraphes en temps profond). Seul ce qui est en cours reste toujours visible.
-    if (sim.timeHeld) {
+    if (sim.filmEdgeYears != 0) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.43f, 1.0f));
+        ImGui::TextUnformatted(("Fin du film calculé : " + frDate(sim.filmEdgeYears) + ". Le grand calcul continue ; la date ira plus loin à mesure qu'il avance.").c_str());
+        ImGui::PopStyleColor();
+    } else if (sim.timeHeld) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.43f, 1.0f));
         ImGui::TextUnformatted(("Calcul exact en cours : date demandée " + frDate(sim.yearsGoal) + " ; la date montrée avance au rythme du calcul.").c_str());
         ImGui::PopStyleColor();
