@@ -11,8 +11,9 @@ le calcul fait évoluer. Ici, chaque traceur est un point de la photo :
 - lumière : magnitude absolue V publiée, partagée entre les traceurs (loi de Pareto, indice 1,5) [modèle] ;
 - vitesse : vitesse d'ensemble MESURÉE (module de distance, mouvement propre, vitesse radiale : mêmes valeurs que
   pipeline/fusion/groupe_local_clones.py, variante wu2026 ; Petit Nuage : Zivick et al. 2018, Graczyk et al. 2020),
-  plus la rotation du disque (courbe de rotation publiée) et l'agitation ; sens de rotation : côté du grand axe qui
-  s'approche [M31 : nord-est, certain ; les autres : à vérifier].
+  plus la rotation du disque (courbe de rotation publiée) et l'agitation ; sens de rotation : axe de
+  pipeline/constantes/univers.json [M31 : le côté nord-est s'éloigne et le sud-ouest s'approche, contrôle +167 km/s
+  du côté de l'angle de position ; les autres : à vérifier].
 Repère phys::galaxie de l'appli : centre de la Voie lactée à l'origine, Soleil à (-8,2 ; 0 ; 0) kpc, vitesse du Soleil
 (11,1 ; 245,04 ; 7,25) km/s (galaxie_orbites.h, table unique).
 Usage : python etoiles_visibles_photos.py <dossier galaxies-images> <dossier de sortie> [univers.json] [gaia.bin de référence (table des couleurs)]
