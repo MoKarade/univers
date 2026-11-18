@@ -38,3 +38,22 @@ jobs:
       - name: Plus de fondu daté pour les planètes (R7)
         shell: bash
         run: "! grep -rn FATE_P app/src"
+
+  # T1 (revue 18/11) : la physique native (sans Vulkan ni windows.h) compile et ses essais sans données tournent sous Linux.
+  # Les essais qui lisent un film ou DE440 sont seulement compilés : leurs fichiers restent sur le PC de Marc.
+  physique-native:
+    name: Physique native (compilation et essai des orbites)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compiler
+        shell: bash
+        run: |
+          cmake -S natif/physique -B build-physique -DCMAKE_CXX_STANDARD=20 -DCMAKE_BUILD_TYPE=Release -Wno-dev
+          cmake --build build-physique -j 4 --target essai_galaxie essai_fusion essai_champ_bfe essai_film
+      - name: Orbites des étoiles (essai_galaxie)
+        shell: bash
+        run: ./build-physique/essai_galaxie

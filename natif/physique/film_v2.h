@@ -26,6 +26,13 @@
 
 #include "phys.h"
 
+/* Taille de fichier sur 64 bits : _ftelli64 sous Windows, ftello ailleurs (essais sur GitHub sous Linux). */
+#ifdef _WIN32
+inline long long film_ftell64(FILE* f) { return _ftelli64(f); }
+#else
+inline long long film_ftell64(FILE* f) { return (long long)ftello(f); }
+#endif
+
 namespace phys::film {
 
 // Nombre à virgule sur 16 bits (IEEE 754 binary16) -> float.
@@ -126,7 +133,7 @@ private:
         u = (tGa - t_[(size_t)i]) / (t_[(size_t)i + 1] - t_[(size_t)i]); return true;
     }
     static bool lire(const std::string& p, std::vector<char>& b) {
-        FILE* f = std::fopen(p.c_str(), "rb"); if (!f) return false; std::fseek(f, 0, SEEK_END); const long long n = _ftelli64(f); std::fseek(f, 0, SEEK_SET);
+        FILE* f = std::fopen(p.c_str(), "rb"); if (!f) return false; std::fseek(f, 0, SEEK_END); const long long n = film_ftell64(f); std::fseek(f, 0, SEEK_SET);
         b.resize((size_t)n); const bool ok = std::fread(b.data(), 1, (size_t)n, f) == (size_t)n; std::fclose(f); return ok;
     }
 };
