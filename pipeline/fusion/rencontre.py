@@ -102,7 +102,7 @@ def assembler(dossier, etat, fraction=1.0, graine=20261113, angles=None):
 class Calcul:
     """Saute-mouton sur la carte graphique : gravité de toutes les particules (gravite_gpu) + énergie noire."""
 
-    def __init__(self, p, theta=0.7):
+    def __init__(self, p, theta=0.7, gaz=False):
         import cupy as cp
         import gravite_gpu
         self.cp, self.gg, self.theta = cp, gravite_gpu, theta
@@ -114,6 +114,14 @@ class Calcul:
         self.lourd = cp.asarray(p['kind'] != 9)      # les traceurs (9) ne comptent pas dans le centre de masse
         self.idx = [cp.asarray(np.where((p['gid'] == g) & np.isin(p['kind'], ETOILES))[0]) for g in range(len(ORDRE))]
         self.t_check = time.time()
+        # Gaz (gaz_galaxie.py) : les particules de sorte 3 sentent la pression, les chocs, et deviennent des étoiles (sorte 5).
+        # Le gaz de toutes les galaxies est calculé ensemble ; il avance par sous-pas pendant le pas long de la gravité.
+        self.gaz = None; self.kind_g = cp.asarray(p['kind'])
+        if gaz and int((p['kind'] == 3).sum()) >= 100:
+            import gaz_galaxie
+            self.gaz = gaz_galaxie.Gaz(len(p['kind']))
+            if 'h_gaz' in p: self.gaz.h = cp.asarray(p['h_gaz'], dtype=cp.float64)
+            if 'naissance' in p: self.gaz.naissance = np.array(p['naissance'], dtype=np.float64)
         self.forces()
 
     def forces(self):
@@ -129,11 +137,19 @@ class Calcul:
         cp = self.cp
         return float(0.5 * cp.sum(self.m * cp.sum(self.vel ** 2, axis=1)) + 0.5 * cp.sum(self.m * self.phi) - 0.5 * self.K * cp.sum(self.m * self.d2))
 
-    def pas(self, dt):
+    def pas(self, dt, t_ga=0.0):
+        cp = self.cp
         self.vel += 0.5 * dt * self.acc
-        self.pos += dt * self.vel
+        if self.gaz:
+            est = self.kind_g == 3; qui = cp.where(est)[0]
+            self.pos[~est] += dt * self.vel[~est]
+            self.gaz.avancer(self.pos, self.vel, self.m, qui, dt)
+        else:
+            self.pos += dt * self.vel
         self.forces()
         self.vel += 0.5 * dt * self.acc
+        if self.gaz:
+            if self.gaz.naissances(self.kind_g, cp.where(self.kind_g == 3)[0], dt, t_ga): self.kind = cp.asnumpy(self.kind_g)
 
     def centres(self):
         """Centre (sphère qui rétrécit, Power et al. 2003) et vitesse d'ensemble de chaque galaxie, sur ses étoiles."""
@@ -174,7 +190,9 @@ class Calcul:
 
     def etat(self):
         cp = self.cp
-        return dict(pos=cp.asnumpy(self.pos), vel=cp.asnumpy(self.vel), m=cp.asnumpy(self.m), eps=cp.asnumpy(self.eps), kind=self.kind, gid=self.gid)
+        e = dict(pos=cp.asnumpy(self.pos), vel=cp.asnumpy(self.vel), m=cp.asnumpy(self.m), eps=cp.asnumpy(self.eps), kind=cp.asnumpy(self.kind_g), gid=self.gid)
+        if self.gaz: e.update(h_gaz=cp.asnumpy(self.gaz.h).astype(np.float32), naissance=self.gaz.naissance)
+        return e
 
 
 def avancement(t0, t1, t):
@@ -207,6 +225,11 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
         cp_, cv = S.centres()
         journal['t'].append(round(t, 5)); journal['centres'].append((cp_ - cp_[0]).round(4).tolist()); journal['vitesses'].append((cv - cv[0]).round(3).tolist())
         journal['energie'].append(S.energie() / journal['e0'] - 1)
+        if S.gaz:      # masse de gaz et d'étoiles nées, par galaxie d'origine (M☉) : le taux de naissance s'en déduit
+            k_, mm = S.cp.asnumpy(S.kind_g), S.cp.asnumpy(S.m)
+            journal.setdefault('gaz', []).append([float(mm[(k_ == 3) & (S.gid == g)].sum()) for g in range(len(ORDRE))])
+            journal.setdefault('nees', []).append([float(mm[(k_ == 5) & (S.gid == g)].sum()) for g in range(len(ORDRE))])
+            journal.setdefault('sous_pas', []).append(int(S.gaz.sous_pas))
         d = np.linalg.norm(cp_ - cp_[0], axis=1)
         print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % | {time.time() - debut:6.0f} s", flush=True)
         json.dump(journal, open(os.path.join(sortie, 'journal.json.tmp'), 'w', encoding='utf-8')); os.replace(os.path.join(sortie, 'journal.json.tmp'), os.path.join(sortie, 'journal.json'))
@@ -215,7 +238,7 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
 
     if not journal['t']: releve(t0)
     for s in range(steps):
-        S.pas(dt)
+        S.pas(dt, t0 + (s + 1) * dt_ma * 1e-3)
         t = t0 + (s + 1) * dt_ma * 1e-3
         if (s + 1) % every == 0: releve(t)
         if (s + 1) % snap == 0 and s + 1 < steps:
@@ -328,7 +351,7 @@ def main():
         angles = {a.split(':')[0]: float(a.split(':')[1]) for a in opts['angles'].split(',')} if 'angles' in opts else None
         p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)), angles=angles)
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
-        S = Calcul(p, theta=float(opts.get('theta', 0.7)))
+        S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz='gaz' in opts)
         journal = avancer(S, t_depart, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)))
         ecart = ecart_a_la_cible(journal, cible)
         # Correction du départ : l'écart final de vitesse est retiré de la vitesse de départ ; l'écart final de position est
@@ -454,7 +477,7 @@ def barre(sortie, opts, cible):
     """Compare, à t = 0, la barre de la masse (aujourdhui.npz) à celle des étoiles visibles, galaxie par galaxie, et
     écrit l'angle dont il faut tourner la galaxie de départ autour de son axe (--angles du mode « passe »)."""
     with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
-        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
+        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance') if k in z.files}
     S0 = Calcul(p); cp_, _ = S0.centres(); del S0
     res = {}
     for g, nom in enumerate(ORDRE):
@@ -483,16 +506,17 @@ def futur(sortie, t_fin, opts, cible):
     releve_ma = float(opts.get('releve-ma', 10.0))
     if os.path.exists(reprise) and os.path.exists(os.path.join(film, 'film.json')):      # reprise après un arrêt
         with np.load(reprise) as z:
-            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}; t0 = float(z['t'])
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance') if k in z.files}; t0 = float(z['t'])
         meta = json.load(open(os.path.join(film, 'film.json'), encoding='utf-8'))
         journal = json.load(open(os.path.join(film, 'journal.json'), encoding='utf-8'))
         k = min(len(journal['t']), len(meta['t']))      # on repart du dernier instantané : les images d'après sont refaites
         while k and journal['t'][k - 1] > t0 + 1e-9: k -= 1
-        for cle in ('t', 'centres', 'vitesses', 'energie'): journal[cle] = journal[cle][:k]
+        for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas'):
+            if cle in journal: journal[cle] = journal[cle][:k]
         meta['t'] = meta['t'][:k]
     else:
         with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
-            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance') if k in z.files}
         t0, journal = 0.0, None
         S0 = Calcul(p, theta=float(opts.get('theta', 0.7)))
         cp_, cv = S0.centres(); del S0
@@ -519,8 +543,11 @@ def futur(sortie, t_fin, opts, cible):
                 ajout['m'].append(np.full(n, 1e-6))      # « sans masse » : 1e-6 M☉ et non 0 (un nœud de l'arbre fait de traceurs seuls diviserait par 0) ; 8,5 M de traceurs pèsent 8,5 M☉ en tout (revue du 18/11, N4); ajout['eps'].append(np.full(n, 0.05)); ajout['kind'].append(np.full(n, 9, dtype=np.int8)); ajout['gid'].append(np.full(n, g, dtype=np.int8))
                 meta['traceurs'][g] = n
                 meta['decalage_a_t0'][nom] = dict(position=((cp_[g] - cp_[0]) - mesure_p).round(3).tolist(), vitesse=((cv[g] - cv[0]) - mesure_v).round(3).tolist())
+            nt = sum(len(x) for x in ajout['m'])
+            if 'h_gaz' in p: ajout['h_gaz'] = [np.full(nt, 0.2, np.float32)]      # champs du gaz : sans objet pour les étoiles visibles
+            if 'naissance' in p: ajout['naissance'] = [np.full(nt, np.nan)]
             p = {k: np.concatenate([p[k]] + ajout[k]) for k in p}
-    S = Calcul(p, theta=float(opts.get('theta', 0.7)))
+    S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz='gaz' in opts)
     cp = S.cp
     tr = [cp.asarray(np.where((p['kind'] == 9) & (p['gid'] == g))[0]) for g in range(len(ORDRE))]
     print(f"futur : {int((p['kind'] != 9).sum())} particules de masse, {int((p['kind'] == 9).sum())} étoiles visibles, de {t0:+.3f} à {t_fin:+.2f} Ga", flush=True)
