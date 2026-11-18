@@ -52,7 +52,11 @@ jobs:
       - name: Compiler
         shell: bash
         run: |
-          cmake -S natif/physique -B build-physique -DCMAKE_CXX_STANDARD=20 -DCMAKE_BUILD_TYPE=Release -Wno-dev
+          # natif/physique n'est pas un projet CMake autonome (natif/CMakeLists.txt l'inclut) : petite enveloppe.
+          mkdir -p ci-physique
+          printf '%s\n' 'cmake_minimum_required(VERSION 3.20)' 'project(physique CXX)' 'set(CMAKE_CXX_STANDARD 20)' \
+            'set(CMAKE_CXX_STANDARD_REQUIRED ON)' 'add_subdirectory(${CMAKE_SOURCE_DIR}/../natif/physique physique)' > ci-physique/CMakeLists.txt
+          cmake -S ci-physique -B build-physique -DCMAKE_BUILD_TYPE=Release
           cmake --build build-physique -j 4 --target essai_galaxie essai_fusion essai_champ_bfe essai_film
       - name: Shaders (GLSL -> SPIR-V, comme la construction Windows)
         shell: bash
@@ -61,7 +65,7 @@ jobs:
           for f in natif/shaders/*.vert natif/shaders/*.frag natif/shaders/*.comp; do glslang -V --quiet -Inatif/shaders "$f" -o /dev/null || exit 1; done
       - name: Orbites des étoiles (essai_galaxie)
         shell: bash
-        run: ./build-physique/essai_galaxie
+        run: ./build-physique/physique/essai_galaxie
 
   # T1 (revue 18/11) : toute l'appli PC (Vulkan, interface, essais) se compile pour Windows depuis Linux avec MinGW-w64.
   # Ce n'est pas la chaîne de Marc (llvm-mingw) : une erreur de compilation ici en est une là-bas aussi, l'inverse n'est pas garanti.
