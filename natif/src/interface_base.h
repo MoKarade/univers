@@ -57,7 +57,7 @@ void applyStyle() {
 // Elle est chargée à la taille voulue pour la hauteur de l'écran principal (1 à 2 fois la taille de base de 1080 lignes).
 void loadFonts(ImFont*& normal, ImFont*& big) {
     ImGuiIO& io = ImGui::GetIO();
-    static const ImWchar ranges[] = {0x0020, 0x00FF, 0x2000, 0x206F, 0x2190, 0x2193, 0x2212, 0x2212, 0x2318, 0x2318, 0};
+    static const ImWchar ranges[] = {0x0020, 0x00FF, 0x0100, 0x017F, 0x0391, 0x03C9, 0x2000, 0x206F, 0x2190, 0x2193, 0x2212, 0x2212, 0x2318, 0x2318, 0};
     gFontMaxScale = std::clamp(static_cast<float>(GetSystemMetrics(SM_CYSCREEN)) / 1080.0f, 1.0f, 2.5f);
     const char* path = "C:\\Windows\\Fonts\\segoeui.ttf";
     if (std::ifstream(path).good()) {
@@ -72,10 +72,17 @@ void loadFonts(ImFont*& normal, ImFont*& big) {
 
 void row(const char* label, const std::string& value, const char* status, float s) {
     ImGui::TextDisabled("%s", label);
-    ImGui::SameLine(std::max(176.0f, ImGui::CalcTextSize(label).x / s + 16.0f) * s);
+    const float col = std::max(176.0f, ImGui::CalcTextSize(label).x / s + 16.0f) * s;
+    ImGui::SameLine(col);
     ImGui::TextUnformatted(value.c_str());
     if (status[0]) {
+        // Statut trop long pour la place restante (panneau étroit) : à la ligne, sous la valeur.
+        const float need = ImGui::CalcTextSize(status).x + ImGui::CalcTextSize("()").x + ImGui::GetStyle().ItemSpacing.x;
         ImGui::SameLine();
+        if (ImGui::GetContentRegionAvail().x < need) {
+            ImGui::NewLine();
+            ImGui::SetCursorPosX(col);      /* même repère que SameLine(col) : bord de la fenêtre */
+        }
         ImGui::TextDisabled("(%s)", status);
     }
 }

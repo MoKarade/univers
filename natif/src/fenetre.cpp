@@ -446,10 +446,10 @@ int runWindow(const WindowOptions& opt) {
     loadFonts(ui.normal, ui.big);
     applyStyle();
     ImGui_ImplWin32_Init(hwnd);
-    const VkDescriptorPoolSize uiPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16};
+    const VkDescriptorPoolSize uiPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 48};      /* police + images du panneau (interface_images.h) */
     VkDescriptorPoolCreateInfo uiPoolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     uiPoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    uiPoolInfo.maxSets = 16;
+    uiPoolInfo.maxSets = 48;
     uiPoolInfo.poolSizeCount = 1;
     uiPoolInfo.pPoolSizes = &uiPoolSize;
     VkDescriptorPool uiPool;
@@ -470,6 +470,15 @@ int runWindow(const WindowOptions& opt) {
     ii.PipelineRenderingCreateInfo.pColorAttachmentFormats = &kFinalFormat;
     ii.CheckVkResultFn = imguiCheck;
     if (!ImGui_ImplVulkan_Init(&ii)) fail("interface (Dear ImGui)");
+    // Images du panneau d'information : les cartes de surface déjà installées (interface_images.h).
+    UiImages uiImages;
+    {
+        std::vector<std::string> files;
+        for (const BodyText& t : kBodyTexts)
+            if (t.image) files.emplace_back(t.image);
+        uiImages.start(dataDir + "/textures", files);
+        gUiImages = &uiImages;
+    }
 
     VkCommandBufferAllocateInfo cai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     cai.commandPool = g.pool;
@@ -812,6 +821,7 @@ int runWindow(const WindowOptions& opt) {
             sim.tasks = readTasks(dataDir + "/avancement");
         }
         spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
+        uiImages.uploadPending(g);      // au plus une image du panneau par image affichée
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
         planets.update(sim, cam, asSphere);
 
@@ -846,7 +856,7 @@ int runWindow(const WindowOptions& opt) {
         const bool skyOnly = sim.skyBand >= 0 && sky.loaded;
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
-        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(sim.galaxyGain()), static_cast<float>(25.0 * sim.dist));
+        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);      // même exposition que les étoiles
         if (!skyOnly && galaxyShapes.ready) {
             galaxyShapes.prepare(cam, galaxies, sc.extent.height);
             float aL[16], aT[16];
@@ -1053,6 +1063,8 @@ int runWindow(const WindowOptions& opt) {
                     frDate(sim.years).c_str(), !hasSpk ? spkError.c_str() : sim.ephemValid ? "lues" : "hors plage");
     }
 
+    gUiImages = nullptr;
+    uiImages.release(g);      /* avant l'arrêt de l'interface : ses images y sont inscrites */
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();

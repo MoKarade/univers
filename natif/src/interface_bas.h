@@ -118,10 +118,10 @@ void whatYouSee(const Sim& sim) {
             ImGui::TextDisabled("car elle demanderait un modèle.");
         }
     }
-    if (sim.galaxyGain() > 0.005) {
-        ImGui::TextDisabled("Chaque point lointain est une galaxie ou un quasar, placé d'après son décalage vers le rouge mesuré");
-        ImGui::TextDisabled("(relevés 2MRS, 6dF, 2dF, SDSS, DESI). Son éclat n'est pas mesuré ici : le point a une taille fixe,");
-        ImGui::TextDisabled("qui s'efface avec la distance pour garder l'image lisible (réglage d'affichage, pas une mesure).");
+    if (sim.galaxyNote()) {
+        ImGui::TextDisabled("Les points entre les galaxies voisines ne sont pas des étoiles : ce sont des galaxies et quasars bien plus loin,");
+        ImGui::TextDisabled("placés d'après leur décalage vers le rouge mesuré (2MRS, 6dF, 2dF, SDSS, DESI). Leur éclat suit la même loi que les");
+        ImGui::TextDisabled("étoiles, mais il n'est pas dans les catalogues : il est tiré de la fonction de luminosité (Blanton 2003, supposé).");
     }
 }
 

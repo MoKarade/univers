@@ -869,10 +869,8 @@ struct Sim {
         return std::fabs(years - epochYears) < 300.0 ? 0.30 * fade : 0.0;
     }
     // Éclat donné à chaque galaxie des relevés : nul tant qu'on est dans la Voie lactée, plein au-delà de 3 millions d'années-lumière.
-    double galaxyGain() const {
-        const double t = std::clamp((std::log10(std::max(dist, 1.0)) - 4.5) / 2.0, 0.0, 1.0);
-        return 0.10 * t * t * (3.0 - 2.0 * t);
-    }
+    // Vue d'assez loin pour que les galaxies lointaines se mêlent aux étoiles : la ligne de provenance dit ce que sont ces points.
+    bool galaxyNote() const { return dist > 3.0e4; }
 
     void advance(double dt) {
         const double before = years;

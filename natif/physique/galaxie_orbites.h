@@ -74,13 +74,14 @@ struct Potentiel {
     double omegaBarre = kBarOmegaKmsKpc;      // km/s/kpc ; modifiable pour mesurer l'effet de son incertitude (33 à 41)
     double angleBarre(double t) const { return kPi - kBarAngleRad - omegaBarre * kKmsKpcToRadGa * t; }
     bool barre = true;
+    double lambda = kLambdaKmsKpc2;      // énergie noire H0² Ω_Λ ((km/s)²/kpc²) ; modifiable pour le bac à sable de l'interface
     // Accélération (km/s)²/kpc en (x, y, z) kpc à tGa.
     void acc(double x, double y, double z, double t, double a[3]) const {
         const double R2 = x * x + y * y, r = std::sqrt(R2 + z * z) + 1e-12, xs = r / kRs;
         const double ar = -kG * kMb / ((r + kAb) * (r + kAb)) - GMs * (std::log(1 + xs) - xs / (1 + xs)) / (r * r);
         const double B = std::sqrt(z * z + kBd * kBd), D2 = R2 + (kAd + B) * (kAd + B), D3 = D2 * std::sqrt(D2), gm = kG * kMd;
         a[0] = ar * x / r - gm * x / D3; a[1] = ar * y / r - gm * y / D3; a[2] = ar * z / r - gm * z * (kAd + B) / (B * D3);
-        a[0] += kLambdaKmsKpc2 * x; a[1] += kLambdaKmsKpc2 * y; a[2] += kLambdaKmsKpc2 * z;      /* énergie noire */
+        a[0] += lambda * x; a[1] += lambda * y; a[2] += lambda * z;      /* énergie noire */
         if (barre && R2 > 1e-8) {
             /* Barre de Dehnen 2000 étendue en 3D comme Monari et al. 2016 (A&A 590, A55) : Φb = A cos2ψ (R/r)² U(r), r = |x|.
                Dans le plan (z = 0) c'est exactement la barre plane d'avant ; hors du plan elle s'affaiblit au lieu de garder la
@@ -96,7 +97,7 @@ struct Potentiel {
     // Énergie sans la barre (sert au choix des sous-pas et aux contrôles), (km/s)².
     double energie(double x, double y, double z, double vx, double vy, double vz) const {
         const double r = std::sqrt(x * x + y * y + z * z) + 1e-12, R2 = x * x + y * y, B = std::sqrt(z * z + kBd * kBd);
-        const double phi = -kG * kMb / (r + kAb) - kG * kMd / std::sqrt(R2 + (kAd + B) * (kAd + B)) - GMs * std::log(1 + r / kRs) / r - 0.5 * kLambdaKmsKpc2 * r * r;
+        const double phi = -kG * kMb / (r + kAb) - kG * kMd / std::sqrt(R2 + (kAd + B) * (kAd + B)) - GMs * std::log(1 + r / kRs) / r - 0.5 * lambda * r * r;
         return 0.5 * (vx * vx + vy * vy + vz * vz) + phi;
     }
     double phiBarre(double x, double y, double t, double z = 0) const {

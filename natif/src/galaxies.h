@@ -174,18 +174,17 @@ public:
         ++tableVersion;
     }
 
-    // À appeler dans la passe en grande dynamique. gain : éclat de chaque point (0 : rien n'est dessiné).
-    // fullWithin : distance (années-lumière) en deçà de laquelle un point a son plein éclat.
-    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float gain, float fullWithin) const {
-        if (!ready || gain <= 0) return;
+    // À appeler dans la passe en grande dynamique. exposure : celle des étoiles (même loi d'éclat, galaxies.vert).
+    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure) const {
+        if (!ready || exposure <= 0) return;
         GalaxyPush pc{};
         const auto m = cam.viewProj();
         std::memcpy(pc.viewProj, m.data(), sizeof(pc.viewProj));
         pc.cam[0] = static_cast<float>(cam.pos.x);
         pc.cam[1] = static_cast<float>(cam.pos.y);
         pc.cam[2] = static_cast<float>(cam.pos.z);
-        pc.cam[3] = fullWithin;
-        pc.par[0] = gain;
+        pc.cam[3] = 0.0f;
+        pc.par[0] = exposure;
         pc.par[1] = static_cast<float>(height);
         pc.par[2] = static_cast<float>(1.0 / std::log(1.0 + kGalaxyZMax));
         pc.par[3] = 2.0f;
