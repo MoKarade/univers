@@ -623,6 +623,7 @@ int runWindow(const WindowOptions& opt) {
                 filmStars.gaiaOff = gaiaOff;
                 filmNeighbours.gaiaOff = gaiaOff;
                 const int dir = sim.paused ? 0 : sim.backward ? -1 : 1;
+                const double gaPerSecond = sim.yearsPerSecond() / 1.0e9;      // pour lire le film d'avance selon la vitesse
                 if (byFilm && filmGpuOk) {
                     // État de chaque étoile écrit sur la carte à la date exacte montrée, à chaque image : rien ne dépend du
                     // pas d'un million d'années ni de la vitesse du temps. Le Soleil (hors du film) : son orbite selon l'appli.
@@ -630,7 +631,7 @@ int runWindow(const WindowOptions& opt) {
                     const double y = shownYears, h = 1.0e3;
                     const phys::Vec3 s0 = sim.exact.position(0, y - h), s1 = sim.exact.position(0, y + h), s = sim.exact.position(0, y);
                     const double k = 3.0856775814913673e16 / (2.0 * h * kYearSeconds);      // kpc par an -> km/s
-                    if (filmGpu.update(g, filmStars, milkyWayStars.orbitsForFilm(), tExact, dir, s, {(s1.x - s0.x) * k, (s1.y - s0.y) * k, (s1.z - s0.z) * k}, gaiaOff, step))
+                    if (filmGpu.update(g, filmStars, milkyWayStars.orbitsForFilm(), tExact, dir, gaPerSecond, s, {(s1.x - s0.x) * k, (s1.y - s0.y) * k, (s1.z - s0.z) * k}, gaiaOff, step))
                         filmStars.lastStep = step;
                 } else if (byFilm) {
                     if (step != filmStars.lastStep || !milkyWayStars.externalStates()) {
@@ -659,7 +660,7 @@ int runWindow(const WindowOptions& opt) {
                 if (filmNeighboursOk) {
                     filmNeighbours.reload(dt);
                     if (byFilm && filmGpuNeighboursOk && filmNeighbours.covers(tExact)) {
-                        if (filmGpuNeighbours.update(g, filmNeighbours, neighbourStars.orbitsForFilm(), tExact, dir, {}, {}, gaiaOff, step))
+                        if (filmGpuNeighbours.update(g, filmNeighbours, neighbourStars.orbitsForFilm(), tExact, dir, gaPerSecond, {}, {}, gaiaOff, step))
                             filmNeighbours.lastStep = step;
                     } else if (byFilm && filmNeighbours.covers(tStep)) {
                         if (step != filmNeighbours.lastStep || !neighbourStars.externalStates()) {

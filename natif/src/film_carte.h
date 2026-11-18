@@ -25,7 +25,9 @@
 #include <condition_variable>
 #include <deque>
 #include <future>
+#include <cmath>
 #include <map>
+#include <set>
 #include <mutex>
 #include <thread>
 
@@ -36,7 +38,12 @@ namespace {
 
 class FilmGpu {
 public:
-    static constexpr int kSlots = 6;      // 4 images voisines de la date + 2 lues d'avance
+    // Lecture d'avance selon la vitesse du temps : environ un quart de seconde de film (à 200 Ma/s, 5 images de 10 Ma), au
+    // moins 2, au plus kMaxAhead. Chaque case pèse la part de ces étoiles dans une image (Voie lactée ~24 Mo).
+    static constexpr int kMaxAhead = 8;
+    static constexpr int kSlots = 4 + kMaxAhead;      // 4 images voisines de la date + celles lues d'avance
+    static constexpr double kAheadSeconds = 0.25;
+    static constexpr int kWorkers = 2;               // fils de lecture par film (le disque suit mieux à plusieurs)
     bool ok = false;
     long uploads = 0;                     // images envoyées à la carte depuis le départ (contrôle)
 
@@ -59,15 +66,15 @@ public:
         slot_.fill(-1);
         used_.fill(0);
         dossier_ = fs.dossier;
-        worker_ = std::thread([this] { work(); });
+        for (std::thread& w : workers_) w = std::thread([this] { work(); });
         ok = true;
         return true;
     }
 
     // Écrit sur la carte l'état de chaque étoile à tGa (Ga depuis aujourd'hui, dans le film) ; dir : sens du temps (+1, -1,
-    // 0 à l'arrêt) pour lire d'avance. sun, sunVel : Soleil selon l'appli (kpc, km/s), écrit en dernier comme avant.
+    // 0 à l'arrêt) et gaPerSecond (vitesse du temps, Ga par seconde) pour lire d'avance. sun, sunVel : Soleil selon l'appli (kpc, km/s), écrit en dernier comme avant.
     // gaiaOff : comme FilmStars::gaiaOff. Rend false si une image manque : l'état d'avant reste alors.
-    bool update(const Gpu& g, FilmStars& fs, GaiaOrbits& orb, double tGa, int dir, phys::Vec3 sun, phys::Vec3 sunVel, double gaiaOff, long step) {
+    bool update(const Gpu& g, FilmStars& fs, GaiaOrbits& orb, double tGa, int dir, double gaPerSecond, phys::Vec3 sun, phys::Vec3 sunVel, double gaiaOff, long step) {
         if (!ok) return false;
         const phys::film::FilmV2& f = fs.film;
         const int n = f.images();
@@ -75,13 +82,18 @@ public:
         while (i + 2 < n && f.date(i + 1) <= tGa) ++i;      // image juste avant la date (comme FilmStars::states)
         const double span = f.date(i + 1) - f.date(i), u = std::clamp((tGa - f.date(i)) / span, 0.0, 1.0);
         const int want[4] = {std::max(i - 1, 0), i, i + 1, std::min(i + 2, n - 1)};
-        // Lecture d'avance (le fil à part) : deux images dans le sens du temps, une de chaque côté à l'arrêt. Jamais plus de
-        // deux : il n'y a que deux cases en plus des quatre voulues (avant, à l'arrêt, quatre images d'avance se chassaient
-        // l'une l'autre et une image était renvoyée à la carte à chaque image affichée).
-        ahead_[0] = dir > 0 ? std::min(i + 3, n - 1) : dir < 0 ? std::max(i - 2, 0) : std::min(i + 3, n - 1);
-        ahead_[1] = dir > 0 ? std::min(i + 4, n - 1) : dir < 0 ? std::max(i - 3, 0) : std::max(i - 2, 0);
-        request(ahead_[0]);
-        request(ahead_[1]);
+        // Lecture d'avance (les fils à part) : dans le sens du temps, autant d'images qu'en parcourt un quart de seconde ; à
+        // l'arrêt, une de chaque côté. Jamais plus que les cases libres (sinon elles se chassent l'une l'autre et sont
+        // renvoyées à la carte à chaque image affichée).
+        aheadCount_ = 0;
+        if (dir == 0) {
+            ahead_[static_cast<size_t>(aheadCount_++)] = std::min(i + 3, n - 1);
+            ahead_[static_cast<size_t>(aheadCount_++)] = std::max(i - 2, 0);
+        } else {
+            const int m = std::clamp(static_cast<int>(std::ceil(gaPerSecond * kAheadSeconds / span)), 2, kMaxAhead);
+            for (int a = 0; a < m; ++a) ahead_[static_cast<size_t>(aheadCount_++)] = dir > 0 ? std::min(i + 3 + a, n - 1) : std::max(i - 2 - a, 0);
+        }
+        requestAhead();
         ++clock_;
         // Images voulues absentes des cases : prises parmi celles lues d'avance, sinon lues tout de suite, toutes en même temps
         // (à basse cadence, la date saute plusieurs images d'un coup : quatre lectures à la suite doublaient la durée d'une image).
@@ -104,21 +116,21 @@ public:
             slotOf[j] = find(want[j]);
             used_[static_cast<size_t>(slotOf[j])] = clock_;
         }
-        // une image lue d'avance au plus par image affichée, dans une case libre ou qui ne sert plus : elle sera prête quand la
-        // date l'atteindra. Les images lues pour une date déjà quittée sont jetées.
-        {
+        // Au plus deux images lues d'avance envoyées par image affichée, dans une case libre ou qui ne sert plus : elles seront
+        // prêtes quand la date les atteindra. Les images lues pour une date déjà quittée sont jetées.
+        for (int sent = 0; sent < 2; ++sent) {
             std::vector<uint16_t> pre;
             int ahead = -1;
             {
                 std::lock_guard<std::mutex> l(m_);
                 for (auto it = done_.begin(); it != done_.end();) {
-                    const bool useful = it->first == ahead_[0] || it->first == ahead_[1] || std::find(want, want + 4, it->first) != want + 4;
+                    const bool useful = isAhead(it->first) || std::find(want, want + 4, it->first) != want + 4;
                     if (!useful) { it = done_.erase(it); continue; }
                     if (ahead < 0 && find(it->first) < 0) { ahead = it->first; pre = std::move(it->second); it = done_.erase(it); continue; }
                     ++it;
                 }
             }
-            if (ahead >= 0) place(g, ahead, pre, want, true);
+            if (ahead < 0 || place(g, ahead, pre, want, true) < 0) break;
         }
         const double u2 = u * u, u3 = u2 * u, k = phys::film::FilmV2::kKpcGaEnKms / span;      // Catmull-Rom et sa pente (kpc/Ga -> km/s)
         Push p{};
@@ -155,7 +167,8 @@ public:
             stop_ = true;
         }
         cv_.notify_all();
-        if (worker_.joinable()) worker_.join();
+        for (std::thread& w : workers_)
+            if (w.joinable()) w.join();
         vkUnmapMemory(g.dev, staging_.mem);
         destroy(g, staging_);
         destroy(g, raw_);
@@ -179,7 +192,8 @@ private:
     };
     uint32_t n_ = 0;
     uint64_t base_ = 0, total_ = 0;      // première étoile de ces galaxies dans le film ; étoiles de tout le film
-    int ahead_[2] = {-1, -1};            // images lues d'avance pour la date actuelle (update, place)
+    std::array<int, kMaxAhead> ahead_{};      // images lues d'avance pour la date actuelle (update, place)
+    int aheadCount_ = 0;
     VkDeviceSize slotWords_ = 0, slotBytes_ = 0;
     bool hasGain_ = false;
     Buffer raw_{}, ordre_{}, gain_{}, staging_{};
@@ -196,11 +210,12 @@ private:
 
     // Fil de lecture d'avance : il lit lui-même la part utile des fichiers d'images (readSlice), sans le cache de FilmV2.
     std::string dossier_;
-    std::thread worker_;
+    std::array<std::thread, kWorkers> workers_;
     std::mutex m_;
     std::condition_variable cv_;
     std::deque<int> asked_;
     std::map<int, std::vector<uint16_t>> done_;
+    std::set<int> reading_;      // images en cours de lecture par un fil (pas de double demande)
     bool stop_ = false;
 
     int find(int image) const {
@@ -208,15 +223,22 @@ private:
             if (slot_[static_cast<size_t>(s)] == image) return s;
         return -1;
     }
-    void request(int image) {
-        if (find(image) >= 0) return;
+    bool isAhead(int image) const { return std::find(ahead_.begin(), ahead_.begin() + aheadCount_, image) != ahead_.begin() + aheadCount_; }
+    // Demandes aux fils de lecture : les images lues d'avance pas encore là, la plus proche d'abord ; les demandes d'une date
+    // déjà quittée sont retirées.
+    void requestAhead() {
+        bool added = false;
         {
             std::lock_guard<std::mutex> l(m_);
-            if (done_.count(image) || std::find(asked_.begin(), asked_.end(), image) != asked_.end()) return;
-            asked_.push_back(image);
-            while (asked_.size() > 4) asked_.pop_front();      // la date a filé : les vieilles demandes ne servent plus
+            asked_.erase(std::remove_if(asked_.begin(), asked_.end(), [this](int a) { return !isAhead(a); }), asked_.end());
+            for (int a = 0; a < aheadCount_; ++a) {
+                const int image = ahead_[static_cast<size_t>(a)];
+                if (find(image) >= 0 || done_.count(image) || reading_.count(image) || std::find(asked_.begin(), asked_.end(), image) != asked_.end()) continue;
+                asked_.push_back(image);
+                added = true;
+            }
         }
-        cv_.notify_one();
+        if (added) cv_.notify_all();
     }
     bool take(int image, std::vector<uint16_t>& out) {
         std::lock_guard<std::mutex> l(m_);
@@ -254,12 +276,15 @@ private:
                 if (stop_) return;
                 image = asked_.front();
                 asked_.pop_front();
+                reading_.insert(image);
             }
             std::vector<uint16_t> img;
-            if (!readSlice(image, img)) continue;
+            const bool good = readSlice(image, img);
             std::lock_guard<std::mutex> l(m_);
+            reading_.erase(image);
+            if (!good) continue;
             done_[image] = std::move(img);
-            while (done_.size() > 4) {      // on garde la plus récente ; on jette la plus éloignée d'elle
+            while (done_.size() > static_cast<size_t>(kMaxAhead) + 4) {      // on garde la plus récente ; on jette la plus éloignée d'elle
                 auto loin = done_.begin();
                 for (auto it = done_.begin(); it != done_.end(); ++it)
                     if (std::abs(it->first - image) > std::abs(loin->first - image)) loin = it;
@@ -277,7 +302,7 @@ private:
         for (int s = 0; s < kSlots; ++s) {
             const int h = slot_[static_cast<size_t>(s)];
             if (h >= 0 && std::find(want, want + 4, h) != want + 4) continue;
-            const bool aheadImage = h >= 0 && (h == ahead_[0] || h == ahead_[1]);
+            const bool aheadImage = h >= 0 && isAhead(h);
             if (forAhead && aheadImage) continue;
             long key;
             if (h < 0) key = LONG_MIN;
