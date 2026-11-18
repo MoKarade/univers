@@ -20,8 +20,11 @@
 // la taille d'une image dans brutMots().
 #pragma once
 #include <array>
+#include <climits>
+#include <cstdio>
 #include <condition_variable>
 #include <deque>
+#include <future>
 #include <map>
 #include <mutex>
 #include <thread>
@@ -42,6 +45,7 @@ public:
         if (!fs.ready || orb.count != fs.ordre.size() + 1) return false;
         n_ = static_cast<uint32_t>(fs.ordre.size());
         base_ = fs.base();
+        total_ = fs.film.total();
         slotWords_ = (static_cast<VkDeviceSize>(n_) * 3 + 1) / 2;
         slotBytes_ = (slotWords_ * 4 + 255) & ~VkDeviceSize(255);
         raw_ = createBuffer(g, slotBytes_ * kSlots, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -71,30 +75,50 @@ public:
         while (i + 2 < n && f.date(i + 1) <= tGa) ++i;      // image juste avant la date (comme FilmStars::states)
         const double span = f.date(i + 1) - f.date(i), u = std::clamp((tGa - f.date(i)) / span, 0.0, 1.0);
         const int want[4] = {std::max(i - 1, 0), i, i + 1, std::min(i + 2, n - 1)};
-        // lecture d'avance dans le sens du temps (le fil à part)
-        if (dir >= 0) { request(std::min(i + 3, n - 1)); request(std::min(i + 4, n - 1)); }
-        if (dir <= 0) { request(std::max(i - 2, 0)); request(std::max(i - 3, 0)); }
+        // Lecture d'avance (le fil à part) : deux images dans le sens du temps, une de chaque côté à l'arrêt. Jamais plus de
+        // deux : il n'y a que deux cases en plus des quatre voulues (avant, à l'arrêt, quatre images d'avance se chassaient
+        // l'une l'autre et une image était renvoyée à la carte à chaque image affichée).
+        ahead_[0] = dir > 0 ? std::min(i + 3, n - 1) : dir < 0 ? std::max(i - 2, 0) : std::min(i + 3, n - 1);
+        ahead_[1] = dir > 0 ? std::min(i + 4, n - 1) : dir < 0 ? std::max(i - 3, 0) : std::max(i - 2, 0);
+        request(ahead_[0]);
+        request(ahead_[1]);
         ++clock_;
+        // Images voulues absentes des cases : prises parmi celles lues d'avance, sinon lues tout de suite, toutes en même temps
+        // (à basse cadence, la date saute plusieurs images d'un coup : quatre lectures à la suite doublaient la durée d'une image).
+        std::vector<uint16_t> img[4];
+        std::future<bool> reading[4];
+        bool missing[4] = {};
+        for (int j = 0; j < 4; ++j) {
+            if (find(want[j]) >= 0 || std::find(want, want + j, want[j]) != want + j) continue;
+            missing[j] = true;
+            if (!take(want[j], img[j])) reading[j] = std::async(std::launch::async, [this, &want, &img, j] { return loadNow(want[j], img[j]); });
+        }
+        bool complete = true;
+        for (int j = 0; j < 4; ++j)
+            if (reading[j].valid() && !reading[j].get()) complete = false;
+        if (!complete) return false;
         int slotOf[4];
+        for (int j = 0; j < 4; ++j)
+            if (missing[j]) place(g, want[j], img[j], want, false);
         for (int j = 0; j < 4; ++j) {
             slotOf[j] = find(want[j]);
-            if (slotOf[j] < 0) {
-                std::vector<uint16_t> img;
-                if (!take(want[j], img) && !loadNow(fs, want[j], img)) return false;
-                slotOf[j] = place(g, want[j], img, want);
-            }
             used_[static_cast<size_t>(slotOf[j])] = clock_;
         }
-        // une image lue d'avance au plus par image affichée, dans une case libre : elle sera prête quand la date l'atteindra
+        // une image lue d'avance au plus par image affichée, dans une case libre ou qui ne sert plus : elle sera prête quand la
+        // date l'atteindra. Les images lues pour une date déjà quittée sont jetées.
         {
-            std::vector<uint16_t> img;
+            std::vector<uint16_t> pre;
             int ahead = -1;
             {
                 std::lock_guard<std::mutex> l(m_);
-                for (auto it = done_.begin(); it != done_.end(); ++it)
-                    if (find(it->first) < 0) { ahead = it->first; img = std::move(it->second); done_.erase(it); break; }
+                for (auto it = done_.begin(); it != done_.end();) {
+                    const bool useful = it->first == ahead_[0] || it->first == ahead_[1] || std::find(want, want + 4, it->first) != want + 4;
+                    if (!useful) { it = done_.erase(it); continue; }
+                    if (ahead < 0 && find(it->first) < 0) { ahead = it->first; pre = std::move(it->second); it = done_.erase(it); continue; }
+                    ++it;
+                }
             }
-            if (ahead >= 0) place(g, ahead, img, want);
+            if (ahead >= 0) place(g, ahead, pre, want, true);
         }
         const double u2 = u * u, u3 = u2 * u, k = phys::film::FilmV2::kKpcGaEnKms / span;      // Catmull-Rom et sa pente (kpc/Ga -> km/s)
         Push p{};
@@ -154,7 +178,8 @@ private:
         uint32_t hasGain, pad;
     };
     uint32_t n_ = 0;
-    uint64_t base_ = 0;
+    uint64_t base_ = 0, total_ = 0;      // première étoile de ces galaxies dans le film ; étoiles de tout le film
+    int ahead_[2] = {-1, -1};            // images lues d'avance pour la date actuelle (update, place)
     VkDeviceSize slotWords_ = 0, slotBytes_ = 0;
     bool hasGain_ = false;
     Buffer raw_{}, ordre_{}, gain_{}, staging_{};
@@ -169,7 +194,7 @@ private:
     VkDescriptorSet set_{};
     VkShaderModule cs_{};
 
-    // Fil de lecture d'avance : son propre lecteur de film (le cache de FilmV2 n'est pas partagé entre fils).
+    // Fil de lecture d'avance : il lit lui-même la part utile des fichiers d'images (readSlice), sans le cache de FilmV2.
     std::string dossier_;
     std::thread worker_;
     std::mutex m_;
@@ -201,16 +226,26 @@ private:
         done_.erase(it);
         return true;
     }
-    // Part de l'image brute qui concerne ces étoiles (galaxies firstGalaxy...), dans l'ordre du film.
-    bool cut(const uint16_t* raw, std::vector<uint16_t>& out) const {
-        if (!raw) return false;
-        out.assign(raw + base_ * 3, raw + (base_ + n_) * 3);
-        return true;
+    // Lit sur le disque SEULEMENT la part de l'image qui concerne ces étoiles (galaxies firstGalaxy..., dans l'ordre du film),
+    // droit dans out. Avant : l'image entière (51 Mo, toutes les galaxies) était lue puis copiée deux fois, ~51 ms par image,
+    // et chaque film (Voie lactée, voisines) relisait tout : à 200 Ma/s, la lecture seule faisait tomber l'appli à 2 images/s.
+    // Fichier de taille inattendue (en cours d'écriture, tronqué) : rien n'est lu.
+    bool readSlice(int image, std::vector<uint16_t>& out) const {
+        char nom[32];
+        std::snprintf(nom, sizeof(nom), "/img_%05d.f16", image);
+        FILE* f = std::fopen((dossier_ + nom).c_str(), "rb");
+        if (!f) return false;
+        std::fseek(f, 0, SEEK_END);
+        bool good = film_ftell64(f) == static_cast<long long>(total_ * 6) && std::fseek(f, static_cast<long>(base_ * 6), SEEK_SET) == 0;
+        if (good) {
+            out.resize(static_cast<size_t>(n_) * 3);
+            good = std::fread(out.data(), 6, n_, f) == n_;
+        }
+        std::fclose(f);
+        return good;
     }
-    bool loadNow(FilmStars& fs, int image, std::vector<uint16_t>& out) { return cut(fs.film.image(image), out); }
+    bool loadNow(int image, std::vector<uint16_t>& out) const { return readSlice(image, out); }
     void work() {
-        phys::film::FilmV2 film;
-        bool loaded = false;
         for (;;) {
             int image;
             {
@@ -220,11 +255,8 @@ private:
                 image = asked_.front();
                 asked_.pop_front();
             }
-            if (!loaded) loaded = film.charger(dossier_);
-            if (!loaded) continue;
-            if (film.images() <= image) film.charger(dossier_);      // le film s'est allongé depuis
             std::vector<uint16_t> img;
-            if (!cut(film.image(image), img)) continue;
+            if (!readSlice(image, img)) continue;
             std::lock_guard<std::mutex> l(m_);
             done_[image] = std::move(img);
             while (done_.size() > 4) {      // on garde la plus récente ; on jette la plus éloignée d'elle
@@ -235,14 +267,25 @@ private:
             }
         }
     }
-    // Envoie l'image dans une case qui ne sert pas aux quatre images voulues (la moins récemment utilisée).
-    int place(const Gpu& g, int image, const std::vector<uint16_t>& img, const int want[4]) {
+    // Envoie l'image dans une case qui ne sert pas aux quatre images voulues. Ordre de choix : une case vide ; sinon une image
+    // qui ne sert plus (ni voulue ni lue d'avance), la plus loin des voulues ; sinon (image voulue seulement) une image lue
+    // d'avance, la moins récemment utilisée. Une image lue d'avance ne chasse jamais une autre image utile : rend -1, rien
+    // n'est envoyé. Avant, une image lue d'avance était souvent la première jetée, puis relue et renvoyée.
+    int place(const Gpu& g, int image, const std::vector<uint16_t>& img, const int want[4], bool forAhead) {
         int best = -1;
+        long bestKey = 0;
         for (int s = 0; s < kSlots; ++s) {
             const int h = slot_[static_cast<size_t>(s)];
             if (h >= 0 && std::find(want, want + 4, h) != want + 4) continue;
-            if (best < 0 || used_[static_cast<size_t>(s)] < used_[static_cast<size_t>(best)]) best = s;
+            const bool aheadImage = h >= 0 && (h == ahead_[0] || h == ahead_[1]);
+            if (forAhead && aheadImage) continue;
+            long key;
+            if (h < 0) key = LONG_MIN;
+            else if (!aheadImage) key = LONG_MIN / 2 - std::min(std::abs(h - want[0]), std::abs(h - want[3]));
+            else key = used_[static_cast<size_t>(s)];
+            if (best < 0 || key < bestKey) { best = s; bestKey = key; }
         }
+        if (best < 0) return -1;
         std::memcpy(stagingMap_, img.data(), img.size() * 2);
         VkCommandBuffer c = beginOnce(g);
         const VkBufferCopy region{0, static_cast<VkDeviceSize>(best) * slotBytes_, (img.size() * 2 + 3) & ~size_t(3)};
