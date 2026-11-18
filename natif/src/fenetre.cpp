@@ -849,6 +849,9 @@ int runWindow(const WindowOptions& opt) {
         vkResetCommandBuffer(cmd, 0);
         VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         vkBeginCommandBuffer(cmd, &begin);
+        // Film du Groupe local : envois et calcul des états à la date de cette image, avant le dessin (film_carte.h).
+        if (filmGpuOk) filmGpu.record(cmd);
+        if (filmGpuNeighboursOk) filmGpuNeighbours.record(cmd);
         // 1. Les étoiles, en grande dynamique.
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);

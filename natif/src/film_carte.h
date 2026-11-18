@@ -44,6 +44,10 @@ public:
     static constexpr int kSlots = 4 + kMaxAhead;      // 4 images voisines de la date + celles lues d'avance
     static constexpr double kAheadSeconds = 0.25;
     static constexpr int kWorkers = 2;               // fils de lecture par film (le disque suit mieux à plusieurs)
+    // Envois d'images par image affichée sans attente : 4 voulues + 2 lues d'avance ; deux jeux, car la carte peut encore lire
+    // ceux de l'image précédente quand on prépare la suivante (une image en vol : barrière attendue avant chaque image).
+    static constexpr int kUploadsPerFrame = 6;
+    static constexpr int kStagingSets = 2;
     bool ok = false;
     long uploads = 0;                     // images envoyées à la carte depuis le départ (contrôle)
 
@@ -60,7 +64,9 @@ public:
         hasGain_ = fs.gain.size() == n_;
         const float one = 1.0f;
         gain_ = hasGain_ ? uploadStorage(g, fs.gain.data(), static_cast<VkDeviceSize>(n_) * 4) : uploadStorage(g, &one, 4);
-        staging_ = createBuffer(g, slotBytes_, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        staging_ = createBuffer(g, slotBytes_ * kUploadsPerFrame * kStagingSets, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        stateBuf_ = orb.state.buf;
         check(vkMapMemory(g.dev, staging_.mem, 0, VK_WHOLE_SIZE, 0, &stagingMap_), "film sur la carte");
         createPipeline(g, orb.state.buf);
         slot_.fill(-1);
@@ -148,14 +154,44 @@ public:
         p.n = n_;
         p.gaiaOff = static_cast<float>(gaiaOff);
         p.hasGain = hasGain_ ? 1u : 0u;
-        VkCommandBuffer cmd = beginOnce(g);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout_, 0, 1, &set_, 0, nullptr);
-        vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(p), &p);
-        vkCmdDispatch(cmd, (n_ + 1 + 255) / 256, 1, 1);
-        endOnce(g, cmd);      // attend la fin : le dessin qui suit lit ces états
+        // Le calcul est enregistré dans les commandes de l'image (record), avant le dessin qui lit ces états : aucune attente
+        // de la carte ici. L'état écrit est celui de la date de CETTE image.
+        push_ = p;
+        hasDispatch_ = true;
         orb.markExternalExact(step);
         return true;
+    }
+
+    // À appeler au début des commandes de l'image, hors de toute passe de dessin : envois des images du film en attente
+    // (zone d'envoi -> cases), puis calcul des états à la date de l'image, avec les barrières envoi -> calcul -> sommets.
+    void record(VkCommandBuffer cmd) {
+        if (!ok) return;
+        if (!copies_.empty()) {
+            vkCmdCopyBuffer(cmd, staging_.buf, raw_.buf, static_cast<uint32_t>(copies_.size()), copies_.data());
+            VkBufferMemoryBarrier b{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+            b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.buffer = raw_.buf;
+            b.size = VK_WHOLE_SIZE;
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &b, 0, nullptr);
+            copies_.clear();
+        }
+        stagingUsed_ = 0;
+        stagingSet_ = 1 - stagingSet_;      // l'image suivante écrit dans l'autre jeu (celui-ci peut encore être lu par la carte)
+        if (!hasDispatch_) return;
+        hasDispatch_ = false;
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout_, 0, 1, &set_, 0, nullptr);
+        vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_), &push_);
+        vkCmdDispatch(cmd, (n_ + 1 + 255) / 256, 1, 1);
+        VkBufferMemoryBarrier b{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        b.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        b.buffer = stateBuf_;
+        b.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1, &b, 0, nullptr);
     }
 
     // Le film s'est allongé (FilmStars::reload) : les images gardées restent justes (mêmes fichiers), rien à faire ici.
@@ -197,6 +233,11 @@ private:
     VkDeviceSize slotWords_ = 0, slotBytes_ = 0;
     bool hasGain_ = false;
     Buffer raw_{}, ordre_{}, gain_{}, staging_{};
+    VkBuffer stateBuf_ = VK_NULL_HANDLE;      // états lus par gaia.vert (écrits par le calcul du film)
+    Push push_{};
+    bool hasDispatch_ = false;
+    std::vector<VkBufferCopy> copies_;        // envois en attente pour les commandes de la prochaine image
+    int stagingSet_ = 0, stagingUsed_ = 0;
     void* stagingMap_ = nullptr;
     std::array<int, kSlots> slot_{};
     std::array<long, kSlots> used_{};
@@ -311,15 +352,38 @@ private:
             if (best < 0 || key < bestKey) { best = s; bestKey = key; }
         }
         if (best < 0) return -1;
-        std::memcpy(stagingMap_, img.data(), img.size() * 2);
-        VkCommandBuffer c = beginOnce(g);
-        const VkBufferCopy region{0, static_cast<VkDeviceSize>(best) * slotBytes_, (img.size() * 2 + 3) & ~size_t(3)};
-        vkCmdCopyBuffer(c, staging_.buf, raw_.buf, 1, &region);
-        endOnce(g, c);
+        const VkDeviceSize bytes = (img.size() * 2 + 3) & ~size_t(3);
+        if (stagingUsed_ < kUploadsPerFrame) {
+            // Envoi sans attente : copie dans la zone d'envoi de cette image, faite par la carte au début de ses commandes (record).
+            const VkDeviceSize off = (static_cast<VkDeviceSize>(stagingSet_) * kUploadsPerFrame + static_cast<VkDeviceSize>(stagingUsed_)) * slotBytes_;
+            std::memcpy(static_cast<char*>(stagingMap_) + off, img.data(), img.size() * 2);
+            copies_.push_back({off, static_cast<VkDeviceSize>(best) * slotBytes_, bytes});
+            ++stagingUsed_;
+        } else {
+            // Zone d'envoi pleine pour cette image (cas rare) : envoi immédiat, avec attente. Il passe par la dernière case du
+            // jeu en cours : aucune copie en attente ne la lit encore, car elle est envoyée tout de suite.
+            vkQueueWaitIdle(g.queue);      // la case visée peut encore être lue par l'image précédente
+            const VkDeviceSize off = (static_cast<VkDeviceSize>(stagingSet_) * kUploadsPerFrame + kUploadsPerFrame - 1) * slotBytes_;
+            flushNow(g);
+            std::memcpy(static_cast<char*>(stagingMap_) + off, img.data(), img.size() * 2);
+            VkCommandBuffer c = beginOnce(g);
+            const VkBufferCopy region{off, static_cast<VkDeviceSize>(best) * slotBytes_, bytes};
+            vkCmdCopyBuffer(c, staging_.buf, raw_.buf, 1, &region);
+            endOnce(g, c);
+        }
         slot_[static_cast<size_t>(best)] = image;
         used_[static_cast<size_t>(best)] = clock_;
         ++uploads;
         return best;
+    }
+    // Copies en attente envoyées tout de suite (zone d'envoi pleine) : la carte les fait avant de rendre la main.
+    void flushNow(const Gpu& g) {
+        if (copies_.empty()) return;
+        VkCommandBuffer c = beginOnce(g);
+        vkCmdCopyBuffer(c, staging_.buf, raw_.buf, static_cast<uint32_t>(copies_.size()), copies_.data());
+        endOnce(g, c);
+        copies_.clear();
+        stagingUsed_ = 0;
     }
     static Buffer uploadStorage(const Gpu& g, const void* data, VkDeviceSize size) {
         Buffer staging = createBuffer(g, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
