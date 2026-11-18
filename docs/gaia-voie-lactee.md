@@ -170,10 +170,14 @@ la lumière d'un `vl_etoiles.bin` existant (mêmes étoiles, mêmes places ; `.o
 Essayé et écarté : comparer la lumière Gaia désassombrie par la carte de poussière (facteurs 7 à 17 entre 2 et 6 kpc,
 Gaia dépasserait alors tout le modèle : la carte moyenne sur-corrige les étoiles des fenêtres peu poussiéreuses [Probable]).
 
-**2. Taches plus grosses** [Certain, calcul de l'écran]. La tache d'une étoile grandit avec sa lumière (1,5 à 14 pixels) ;
-celle des étoiles du modèle était bornée à 2,5 pixels. À lumière égale, après la compression de l'écran (Reinhard),
-l'étoile Gaia paraissait plus claire : × 1,3 à flux 3, × 2,1 à flux 10, × 8,5 à flux 100. Correction (`shaders/gaia.vert`) :
-même loi pour toutes les étoiles. Chaque point du modèle porte au plus 20 % de son traceur : l'éclat d'une étoile brillante.
+**2. Taches des étoiles du modèle : essayé et écarté** [Certain, vu sur images]. La tache d'une étoile grandit avec sa
+lumière (1,5 à 14 pixels) ; celle du modèle est bornée à 2,5 pixels. À lumière égale, après la compression de l'écran,
+une étoile Gaia paraît × 2 (flux 10) à × 8,5 (flux 100) plus claire. Deux essais le 18 novembre 2026 :
+même loi pour tous (le modèle se couvre de grosses taches blanches et bleues qu'aucune vraie étoile ne fait) ; lumière du
+modèle étalée en taches douces (boules floues, cadence divisée par 5 à 1 500 al). Les deux sont pires : un traceur porte
+la lumière de nombreuses étoiles faibles, la borne de 2,5 pixels reste. `shaders/gaia.vert` inchangé.
 
-Pas vérifié à l'écran : la carte graphique était prise par le grand calcul (13,9 Go sur 16) ; essai image à faire
-quand elle a au moins 10 Go libres.
+**Essai image** (18 novembre 2026, carte partagée avec le grand calcul, vue « meilleur rendu », caméra sur le Soleil) :
+lumière moyenne de l'image, avant -> après : 78,3 -> 76,0 à 1 500 al ; 76,0 -> 73,5 à 8 000 al ; 62,2 -> 61,8 à 30 000 al.
+Images : `C:	mp
+atif\gaia-eclat\comparaison3-*.png` (non versées).
