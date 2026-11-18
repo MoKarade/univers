@@ -228,10 +228,10 @@ private:
             std::lock_guard<std::mutex> l(m_);
             done_[image] = std::move(img);
             while (done_.size() > 4) {      // on garde la plus récente ; on jette la plus éloignée d'elle
-                auto far = done_.begin();
+                auto loin = done_.begin();
                 for (auto it = done_.begin(); it != done_.end(); ++it)
-                    if (std::abs(it->first - image) > std::abs(far->first - image)) far = it;
-                done_.erase(far);
+                    if (std::abs(it->first - image) > std::abs(loin->first - image)) loin = it;
+                done_.erase(loin);
             }
         }
     }
