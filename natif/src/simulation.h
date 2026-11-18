@@ -223,6 +223,7 @@ struct Sim {
     // voisines et la place des étoiles visibles de la Voie lactée ; sinon les centres et les orbites de référence.
     const phys::film::FilmV2* film = nullptr;
     bool filmLeads = false;      // à cette image, les étoiles visibles suivent le film
+    double gaiaFilmOff = 0;      // part de Gaia éteinte parce que le film mène (0 à 1, revue F1 ; fenetre.cpp)
     bool filmCovers(double tGa) const { return film && film->images() >= 5 && tGa >= film->debutGa() && tGa <= film->date(film->images() - 2); }
     uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
     double milkyWayStarShare = 0;     // part montrée à cette image
