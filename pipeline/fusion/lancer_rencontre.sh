@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Lance le grand calcul du Groupe local (plan B+) en deux temps, sans fenêtre, et le reprend s'il a été coupé :
 #   1. « passe » : d'il y a 1 Ga à aujourd'hui, à pleine finesse ; contrôle de l'arrivée ;
+#   (si UNIVERS_CONTRAT est donné : plan du disque calé et étoiles visibles de la Voie lactée tirées de la masse)
 #   2. « futur » : d'aujourd'hui à +10 Ga, avec les étoiles visibles ; écrit le film.
 # Usage : bash lancer_rencontre.sh [dossier de sortie]      (relancer la même commande reprend là où le calcul s'est arrêté)
 # Le calcul se met en pause tout seul quand un autre programme occupe la carte graphique (l'appli de Marc, un jeu).
@@ -45,6 +46,19 @@ ok = all(e[n]['distance_kpc'] <= limites[n] for n in limites)
 print('arrivée :', {n: (e[n]['distance_kpc'], e[n]['vitesse_kms']) for n in limites}, '->', 'bonne' if ok else 'TROP LOIN')
 sys.exit(0 if ok else 1)
 EOF
+# Plan du disque de la Voie lactée remis sur le plan mesuré (caler_plan.py), puis étoiles visibles de la Voie lactée tirées de
+# la masse du calcul (pipeline/natif/etoiles_visibles_masse.py) : le film part ainsi d'un état du calcul, sans sursaut.
+if [ -n "${UNIVERS_CONTRAT:-}" ]; then
+  if [ ! -f "$S/aujourdhui_brut.npz" ]; then
+    "$PY" -u caler_plan.py "$S" >> "$S/journal.txt" 2>&1 || { echo "ECHEC du calage du plan" >> "$S/journal.txt"; exit 1; }
+  fi
+  if [ ! -f "$S/etoiles/vl_etoiles.bin" ]; then
+    mkdir -p "$S/etoiles"
+    "$LOCALAPPDATA/univers-venv/Scripts/python.exe" ../natif/etoiles_visibles_masse.py "$UNIVERS_CONTRAT" "$S/aujourdhui.npz" C:/tmp/natif/gaia/gaia.bin,C:/tmp/natif/gaia/gaia_b.bin C:/tmp/natif/donnees/etoiles.bin C:/tmp/natif/gaia/gaia_agrege.bin "$S/etoiles" >> "$S/journal.txt" 2>&1 || { echo "ECHEC des étoiles visibles" >> "$S/journal.txt"; exit 1; }
+    for n in andromede triangle grand_nuage petit_nuage; do cp "$TR/etoiles_visibles_$n.npz" "$S/etoiles/"; done
+  fi
+  TR="$S/etoiles"
+fi
 echo "=== futur : d'aujourd'hui à +10 Ga ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
 "$PY" -u rencontre.py futur "$S" 10.0 --traceurs="$TR" --releve-ma=10 --champ=2 >> "$S/journal.txt" 2>&1
 echo "=== fin ($(date '+%d/%m %H:%M')), code $?" >> "$S/journal.txt"

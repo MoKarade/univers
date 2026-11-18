@@ -3,7 +3,8 @@
 # Il attend que la carte graphique soit libre (pas de jeu, pas d'appli Univers ouverte), lance le calcul, et le relance
 # depuis sa derniere sauvegarde chaque fois qu'il s'est retire pour laisser la carte. Il s'arrete quand le film est fini.
 # N'ouvre aucune fenetre. Arret : Ctrl-C dans ce terminal.
-param([string]$sortie = 'C:/tmp/natif/groupe-local', [string]$galaxies = '', [string]$traceurs = '')
+param([string]$sortie = 'C:/tmp/natif/groupe-local', [string]$galaxies = '', [string]$traceurs = '', [string]$contrat = '')
+if ($contrat) { $env:UNIVERS_CONTRAT = $contrat }
 if ($traceurs) { $env:UNIVERS_TRACEURS = $traceurs }
 if ($galaxies) { $env:UNIVERS_GALAXIES = $galaxies }
 $bash = 'C:\Program Files\Git\bin\bash.exe'
