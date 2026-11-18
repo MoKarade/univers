@@ -147,3 +147,36 @@ atif\essai-mw\orbites_4dates.png.
 - Feuilles avancées seulement si dessinées, par tours équitables (un pas par feuille en retard et par tour, voisines
   regroupées en un calcul, une barrière par tour) ; les feuilles pas encore rattrapées sont dessinées en épicycles.
   Mesuré : 18,8 ms par pas pour tout avancer (au lieu de 27) ; contrôle inchangé (médian 0,008 pc à 99 Ma).
+
+## Étoiles Gaia plus claires que celles du modèle (18 novembre 2026, remarque de Marc)
+
+Remarque : dans la Voie lactée, les étoiles observées (Gaia) paraissent plus claires que les étoiles du modèle.
+Deux causes mesurées, deux corrections.
+
+**1. Lumière comptée deux fois** [Certain, mesuré sur les fichiers installés]. Chaque case de 100 pc retirait du modèle la
+lumière Gaia de la même case, bornée à zéro. Or 1 031 096 cases contiennent des étoiles Gaia et aucun traceur du modèle
+(4 millions de traceurs pour 8 millions de cases) : 54 % de la lumière Gaia (4,65e8 L☉) n'était retirée nulle part.
+
+| Anneau dans le plan (|z| < 300 pc) | 0-0,5 kpc | 0,5-1 | 1-2 | 2-3 | 3-4 | 4-6 | 6-10 |
+|---|---|---|---|---|---|---|---|
+| (Gaia + modèle montré) / modèle entier, avant | 1,186 | 1,220 | 1,118 | 1,065 | 1,026 | 1,014 | 1,001 |
+| après | 1,038 | 1,052 | 1,015 | 0,999 | 0,995 | 0,996 | 1,000 |
+
+Correction (`pipeline/natif/lumiere_hors_gaia.py`) : la lumière Gaia sans traceur dans sa case diffuse vers les cases
+voisines (noyau gaussien de 100 pc par pas, jusqu'à 2 kpc) et y est retirée ; la lumière totale est gardée, sans marche.
+Reste 2,3 % de la lumière Gaia, là où les étoiles mesurées brillent plus que le modèle sur des kpc : la mesure est gardée.
+Utilisé par `etoiles_visibles.py`, `etoiles_visibles_masse.py` et `voie_lactee.py` ; `vl_lumiere_hors_gaia.py` refait
+la lumière d'un `vl_etoiles.bin` existant (mêmes étoiles, mêmes places ; `.ordre` et `.lum` permutés avec lui).
+Essayé et écarté : comparer la lumière Gaia désassombrie par la carte de poussière (facteurs 7 à 17 entre 2 et 6 kpc,
+Gaia dépasserait alors tout le modèle : la carte moyenne sur-corrige les étoiles des fenêtres peu poussiéreuses [Probable]).
+
+**2. Taches des étoiles du modèle : essayé et écarté** [Certain, vu sur images]. La tache d'une étoile grandit avec sa
+lumière (1,5 à 14 pixels) ; celle du modèle est bornée à 2,5 pixels. À lumière égale, après la compression de l'écran,
+une étoile Gaia paraît × 2 (flux 10) à × 8,5 (flux 100) plus claire. Deux essais le 18 novembre 2026 :
+même loi pour tous (le modèle se couvre de grosses taches blanches et bleues qu'aucune vraie étoile ne fait) ; lumière du
+modèle étalée en taches douces (boules floues, cadence divisée par 5 à 1 500 al). Les deux sont pires : un traceur porte
+la lumière de nombreuses étoiles faibles, la borne de 2,5 pixels reste. `shaders/gaia.vert` inchangé.
+
+**Essai image** (18 novembre 2026, carte partagée avec le grand calcul, vue « meilleur rendu », caméra sur le Soleil) :
+lumière moyenne de l'image, avant -> après : 78,3 -> 76,0 à 1 500 al ; 76,0 -> 73,5 à 8 000 al ; 62,2 -> 61,8 à 30 000 al.
+Images : `C:\tmp\natif\gaia-eclat\comparaison3-*.png` (non versées).

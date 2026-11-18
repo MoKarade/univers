@@ -287,7 +287,8 @@ def main():
     print(f'grilles prêtes ({time.time() - t0:.0f} s)')
 
     cat, ngaia = lumiere_cataloguee(gaia_bin, etoiles_bin, ecl2gal, sun, x, y, z, agrege)
-    manque = np.maximum(lum - cat, 0.0)
+    import lumiere_hors_gaia as lhg      # retrait lissé : la lumière Gaia d'une case sans modèle est retirée des cases voisines
+    manque = lum - lhg.retrait_lisse(lum, cat)[0]
     part = np.where(lum > 0, manque / np.maximum(lum, 1e-30), 0.0)      # ce qui manque, partagé entre vieilles et jeunes étoiles
     manque_v, manque_j = vieilles * part, jeunes * part
     manque_h = hii      # lumière du gaz, pas des étoiles : rien à retirer pour Gaia
