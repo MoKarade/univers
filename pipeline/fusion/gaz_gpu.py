@@ -17,8 +17,9 @@ Les voisines sont trouvées en descendant le même arbre binaire que la gravité
 chaque nœud porte sa boîte et la plus grande longueur de lissage de ses particules.
 
 Unités : celles du calcul (kpc, km/s, M☉) ; pression = (gamma - 1) rho u, ou rho cs² en isotherme.
-Simple précision sur la carte, positions comptées depuis le centre du nuage : à utiliser galaxie par galaxie (à
-800 kpc du centre, la simple précision ne distingue plus 60 pc).
+Simple précision sur la carte, positions comptées depuis le centre du nuage : à 800 kpc du centre, elle distingue
+encore 0,1 pc (800 kpc / 2^23), bien moins qu'une longueur de lissage : le gaz de toutes les galaxies peut être calculé
+ensemble. [Corrigé le 18/11/2026 : une première version de ce commentaire disait 60 pc, à tort.]
 
 Contrôles : pipeline/fusion/essai_gaz.py (gradient connu, tube à choc isotherme, effondrement d'Evrard).
 """

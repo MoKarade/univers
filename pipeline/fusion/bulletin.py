@@ -58,6 +58,9 @@ def main():
     calc['agitation_radiale_soleil_kms'] = float(vR[s].std())
     calc['vitesse_circulaire_soleil_kms'] = vitesse_circulaire(x, m, R0)
     calc['masse_gaz_msol'] = float(m[kind == 3].sum())
+    calc['vitesse_circulaire_5kpc_kms'] = vitesse_circulaire(x, m, 5.0)
+    col = (R > R0 - 0.5) & (R < R0 + 0.5) & (np.abs(x[:, 2]) < 1.1)      # toute la matière (noire comprise) à moins de 1,1 kpc du plan
+    calc['densite_surface_1p1kpc_soleil_msol_pc2'] = float(m[col].sum() / (math.pi * ((R0 + 0.5) ** 2 - (R0 - 0.5) ** 2)) / 1e6)
     calc['masse_etoiles_msol'] = float(m[(kind == 1) | (kind == 2) | (kind == 4) | (kind == 5)].sum())
     if len(sys.argv) > 2:
         rel = json.load(open(sys.argv[2], encoding='utf-8'))['releves']
@@ -67,14 +70,14 @@ def main():
         g = [r['gaz'] for r in rel if 'gaz' in r]
         if len(g) > 11: calc['naissance_etoiles_msol_an'] = float((g[-1]['nees_msol'] - g[-11]['nees_msol']) / ((g[-1]['t'] - g[-11]['t']) * 1e9))
     M = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resultats', 'mesures_voie_lactee.json'), encoding='utf-8'))['mesures']
-    print(f"{'mesure':34s} {'mesuré':>12s} {'marge':>10s} {'calcul':>12s} {'écart':>8s}  verdict")
+    print(f"{'mesure':38s} {'mesuré':>12s} {'marge':>10s} {'calcul':>12s} {'écart':>8s}  verdict")
     bilan = {}
     for nom, q in M.items():
-        if nom not in calc: print(f'{nom:34s} {q["valeur"]:12.4g} {q["marge"]:10.3g} {"—":>12s}'); continue
+        if nom not in calc: print(f'{nom:38s} {q["valeur"]:12.4g} {q["marge"]:10.3g} {"—":>12s}'); continue
         e = (calc[nom] - q['valeur']) / q['marge']
         verdict = 'dans la marge' if abs(e) <= 1 else ('proche' if abs(e) <= 2 else 'HORS MARGE')
         bilan[nom] = dict(calcul=calc[nom], ecart_en_marges=e, verdict=verdict)
-        print(f'{nom:34s} {q["valeur"]:12.4g} {q["marge"]:10.3g} {calc[nom]:12.4g} {e:+8.1f}  {verdict}')
+        print(f'{nom:38s} {q["valeur"]:12.4g} {q["marge"]:10.3g} {calc[nom]:12.4g} {e:+8.1f}  {verdict}' + ('   [vérification, non réglée]' if q.get('role') == 'verification' else ''))
     return bilan
 
 

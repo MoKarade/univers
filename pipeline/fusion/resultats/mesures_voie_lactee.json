@@ -1,14 +1,82 @@
 {
- "note": "Mesures de la Voie lactée auxquelles on compare la galaxie du calcul (bulletin.py). marge = incertitude publiée (1 sigma). statut : d'où vient la valeur et si elle a été relue en ligne.",
+ "note": "Mesures de la Voie lactée auxquelles on compare la galaxie du calcul (bulletin.py). marge = incertitude publiée (1 sigma). statut : d'où vient la valeur et si elle a été relue en ligne. role : « reglage » = mesure qu'on a le droit d'utiliser pour régler le calcul ; « verification » = mesure tenue à part, jamais utilisée pour régler, qui dit si le réglage vaut au-delà de ce qu'on a ajusté (conseil du rapport docs/monter-une-simulation-pro.md).",
  "mesures": {
-  "naissance_etoiles_msol_an": {"valeur": 1.65, "marge": 0.19, "src": "Licquia & Newman 2015 (ApJ 806, 96)", "statut": "relu en ligne le 18/11/2026 ; l'incertitude réelle (loi des masses des étoiles) peut atteindre 50 %"},
-  "masse_etoiles_msol": {"valeur": 6.08e10, "marge": 1.14e10, "src": "Licquia & Newman 2015", "statut": "relu en ligne le 18/11/2026"},
-  "barre_demi_longueur_kpc": {"valeur": 5.0, "marge": 0.2, "src": "Wegg, Gerhard & Portail 2015 (MNRAS 450, 4050)", "statut": "relu en ligne le 18/11/2026"},
-  "barre_vitesse_kms_kpc": {"valeur": 39.0, "marge": 3.5, "src": "Portail et al. 2017 (MNRAS 465, 1621)", "statut": "table unique (univers.json)"},
-  "vitesse_circulaire_soleil_kms": {"valeur": 233.1, "marge": 3.0, "src": "McMillan 2017 (MNRAS 465, 76)", "statut": "table unique ; marge à relire"},
-  "disque_mince_hauteur_kpc": {"valeur": 0.30, "marge": 0.05, "src": "Bland-Hawthorn & Gerhard 2016 (ARA&A 54, 529), § 5", "statut": "valeur de la table unique ; marge à relire"},
-  "disque_epais_hauteur_kpc": {"valeur": 0.90, "marge": 0.18, "src": "Bland-Hawthorn & Gerhard 2016, § 5", "statut": "valeur de la table unique ; marge à relire"},
-  "agitation_radiale_soleil_kms": {"valeur": 35.0, "marge": 5.0, "src": "Bland-Hawthorn & Gerhard 2016, § 5.4", "statut": "valeur de la table unique ; marge à relire"},
-  "masse_gaz_msol": {"valeur": 1.22e10, "marge": 0.3e10, "src": "McMillan 2017 (HI 1,1e10 + H2 1,2e9)", "statut": "table unique ; marge supposée (25 %)"}
+  "naissance_etoiles_msol_an": {
+   "valeur": 1.65,
+   "marge": 0.19,
+   "src": "Licquia & Newman 2015 (ApJ 806, 96)",
+   "statut": "relu en ligne le 18/11/2026 ; l'incertitude réelle (loi des masses des étoiles) peut atteindre 50 %",
+   "role": "reglage"
+  },
+  "masse_etoiles_msol": {
+   "valeur": 60800000000.0,
+   "marge": 11400000000.0,
+   "src": "Licquia & Newman 2015",
+   "statut": "relu en ligne le 18/11/2026",
+   "role": "reglage"
+  },
+  "barre_demi_longueur_kpc": {
+   "valeur": 5.0,
+   "marge": 0.2,
+   "src": "Wegg, Gerhard & Portail 2015 (MNRAS 450, 4050)",
+   "statut": "relu en ligne le 18/11/2026",
+   "role": "reglage"
+  },
+  "barre_vitesse_kms_kpc": {
+   "valeur": 39.0,
+   "marge": 3.5,
+   "src": "Portail et al. 2017 (MNRAS 465, 1621)",
+   "statut": "table unique (univers.json)",
+   "role": "reglage"
+  },
+  "vitesse_circulaire_soleil_kms": {
+   "valeur": 233.1,
+   "marge": 3.0,
+   "src": "McMillan 2017 (MNRAS 465, 76)",
+   "statut": "table unique ; marge à relire",
+   "role": "reglage"
+  },
+  "disque_mince_hauteur_kpc": {
+   "valeur": 0.3,
+   "marge": 0.05,
+   "src": "Bland-Hawthorn & Gerhard 2016 (ARA&A 54, 529), § 5",
+   "statut": "valeur de la table unique ; marge à relire",
+   "role": "reglage"
+  },
+  "disque_epais_hauteur_kpc": {
+   "valeur": 0.9,
+   "marge": 0.18,
+   "src": "Bland-Hawthorn & Gerhard 2016, § 5",
+   "statut": "valeur de la table unique ; marge à relire",
+   "role": "reglage"
+  },
+  "agitation_radiale_soleil_kms": {
+   "valeur": 35.0,
+   "marge": 5.0,
+   "src": "Bland-Hawthorn & Gerhard 2016, § 5.4",
+   "statut": "valeur de la table unique ; marge à relire",
+   "role": "reglage"
+  },
+  "masse_gaz_msol": {
+   "valeur": 12200000000.0,
+   "marge": 3000000000.0,
+   "src": "McMillan 2017 (HI 1,1e10 + H2 1,2e9)",
+   "statut": "table unique ; marge supposée (25 %)",
+   "role": "reglage"
+  },
+  "densite_surface_1p1kpc_soleil_msol_pc2": {
+   "valeur": 68.0,
+   "marge": 4.0,
+   "src": "Bovy & Rix 2013 (ApJ 779, 115) : masse par surface à moins de 1,1 kpc du plan, au Soleil",
+   "statut": "de mémoire, À RELIRE en ligne avant usage",
+   "role": "verification"
+  },
+  "vitesse_circulaire_5kpc_kms": {
+   "valeur": 226.0,
+   "marge": 6.0,
+   "src": "Eilers et al. 2019 (ApJ 871, 120) : courbe de rotation, pente -1,7 km/s/kpc depuis 229 km/s au Soleil",
+   "statut": "de mémoire, À RELIRE en ligne avant usage",
+   "role": "verification"
+  }
  }
 }
