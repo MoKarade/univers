@@ -179,5 +179,4 @@ la lumière de nombreuses étoiles faibles, la borne de 2,5 pixels reste. `shade
 
 **Essai image** (18 novembre 2026, carte partagée avec le grand calcul, vue « meilleur rendu », caméra sur le Soleil) :
 lumière moyenne de l'image, avant -> après : 78,3 -> 76,0 à 1 500 al ; 76,0 -> 73,5 à 8 000 al ; 62,2 -> 61,8 à 30 000 al.
-Images : `C:	mp
-atif\gaia-eclat\comparaison3-*.png` (non versées).
+Images : `C:\tmp\natif\gaia-eclat\comparaison3-*.png` (non versées).
