@@ -110,6 +110,25 @@ def main():
         p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}
         meta = json.loads(str(z['meta'])) if 'meta' in z else {}
     kind = p['kind']
+    if 'halo-tourne' in opts:
+        # Halo en rotation : une part des particules de matière noire qui tournent à l'envers du disque voient leur vitesse
+        # de rotation retournée (même énergie, même profil : l'équilibre est gardé). Un halo qui tourne avec le disque
+        # prend moins de moment cinétique à la barre, qui grossit et ralentit moins (Long, Shlosman & Heller 2014 ;
+        # Collier, Shlosman & Heller 2018). Les halos des simulations cosmologiques tournent (paramètre de rotation ~0,035).
+        f = float(opts['halo-tourne']); rng = np.random.default_rng(20261118)
+        x, v = p['pos'].astype(np.float64), p['vel'].astype(np.float64)
+        d = (kind == 1) | (kind == 4)
+        sens = np.sign(np.sum(x[d, 0] * v[d, 1] - x[d, 1] * v[d, 0]))
+        lz = x[:, 0] * v[:, 1] - x[:, 1] * v[:, 0]
+        tourne = (kind == 0) & (lz * sens < 0) & (rng.uniform(size=len(kind)) < f)
+        R2 = np.maximum(x[:, 0] ** 2 + x[:, 1] ** 2, 1e-12)
+        vphi = lz / R2      # vitesse angulaire ; retourner la part de rotation : v -> v - 2 vphi (-y, x)
+        v[tourne, 0] += 2 * vphi[tourne] * x[tourne, 1]; v[tourne, 1] -= 2 * vphi[tourne] * x[tourne, 0]
+        p['vel'] = v
+        h = kind == 0; r = np.linalg.norm(x[h], axis=1); dans = r < 200.0
+        J = abs(float(np.sum(p['m'][h][dans] * (x[h][dans, 0] * v[h][dans, 1] - x[h][dans, 1] * v[h][dans, 0])))); M = float(p['m'][h][dans].sum())
+        lam = J / (math.sqrt(2.0) * M * math.sqrt(G * M / 200.0) * 200.0)
+        print(f'halo en rotation : {int(tourne.sum())} particules retournées ; paramètre de rotation (Bullock, dans 200 kpc) {lam:.3f}', flush=True)
     pos = cp.asarray(p['pos'], dtype=cp.float64); vel = cp.asarray(p['vel'], dtype=cp.float64)
     m = cp.asarray(p['m'], dtype=cp.float64); eps = cp.asarray(p['eps'], dtype=cp.float64); mg = m * G
     dt = dt_ma * 1e-3 / T_UNIT
