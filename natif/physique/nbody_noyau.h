@@ -41,14 +41,48 @@ inline State initialState() {
     return s;
 }
 
-// Mouvement de Kepler exact pendant dt (anomalie excentrique, orbites liées).
+// Fonctions de Stumpff C(z) et S(z) (séries près de 0).
+inline void stumpff(double z, double& C, double& S) {
+    if (z > 1e-6) { const double q = std::sqrt(z); C = (1 - std::cos(q)) / z; S = (q - std::sin(q)) / (q * z); }
+    else if (z < -1e-6) { const double q = std::sqrt(-z); C = (std::cosh(q) - 1) / -z; S = (std::sinh(q) - q) / (q * -z); }
+    else { C = 0.5 - z / 24 + z * z / 720; S = 1.0 / 6 - z / 120 + z * z / 5040; }
+}
+
+// Mouvement de Kepler exact pendant dt en variable universelle : vaut pour toute orbite, liée ou non (revue S1 : secours
+// quand l'anomalie excentrique ne s'applique pas ou ne converge pas). false seulement si Newton échoue ici aussi.
+inline bool keplerUniversel(double* r, double* v, double mu, double dt) {
+    const double x0 = r[0], y0 = r[1], z0 = r[2], vx = v[0], vy = v[1], vz = v[2];
+    const double r0 = std::sqrt(x0 * x0 + y0 * y0 + z0 * z0), v2 = vx * vx + vy * vy + vz * vz, rv = x0 * vx + y0 * vy + z0 * vz;
+    const double alpha = 2 / r0 - v2 / mu, smu = std::sqrt(mu), sig0 = rv / smu;
+    double X = alpha > 0 ? smu * dt * alpha : smu * dt / r0, C = 0, S = 0, rr = r0; bool converge = false;
+    for (int k = 0; k < 50; k++) {
+        const double X2 = X * X; stumpff(alpha * X2, C, S);
+        const double F = sig0 * X2 * C + (1 - alpha * r0) * X2 * X * S + r0 * X - smu * dt;
+        rr = sig0 * X * (1 - alpha * X2 * S) + (1 - alpha * r0) * X2 * C + r0;
+        const double F2 = sig0 * (1 - alpha * X2 * C) + (1 - alpha * r0) * X * (1 - alpha * X2 * S);      // F''
+        const double rac = std::sqrt(std::fabs(16 * rr * rr - 20 * F * F2));      // Laguerre-Conway (n = 5) : converge aussi sur les hyperboles
+        const double d = 5 * F / (rr + (rr >= 0 ? rac : -rac)); X -= d;
+        if (std::fabs(d) <= 1e-13 * std::max(1.0, std::fabs(X))) { converge = true; break; }
+    }
+    if (!converge) return false;
+    const double X2 = X * X; stumpff(alpha * X2, C, S);
+    rr = sig0 * X * (1 - alpha * X2 * S) + (1 - alpha * r0) * X2 * C + r0;
+    const double f = 1 - X2 / r0 * C, g = dt - X2 * X / smu * S, fd = smu / (rr * r0) * X * (alpha * X2 * S - 1), gd = 1 - X2 / rr * C;
+    r[0] = f * x0 + g * vx; r[1] = f * y0 + g * vy; r[2] = f * z0 + g * vz;
+    v[0] = fd * x0 + gd * vx; v[1] = fd * y0 + gd * vy; v[2] = fd * z0 + gd * vz;
+    return true;
+}
+
+// Mouvement de Kepler exact pendant dt (anomalie excentrique, orbites liées). false sans rien changer si l'orbite n'est pas
+// liée ou si Newton ne converge pas : l'appelant passe alors par keplerUniversel.
 inline bool kepler(double* r, double* v, double mu, double dt) {
     const double x0 = r[0], y0 = r[1], z0 = r[2], vx = v[0], vy = v[1], vz = v[2];
     const double r0 = std::sqrt(x0 * x0 + y0 * y0 + z0 * z0), v2 = vx * vx + vy * vy + vz * vz, rv = x0 * vx + y0 * vy + z0 * vz;
     const double ia = 2 / r0 - v2 / mu; if (!(ia > 0)) return false;
     const double a = 1 / ia, sa = std::sqrt(a), n = std::sqrt(mu * ia * ia * ia), s0 = rv / std::sqrt(mu), c1 = 1 - r0 * ia, c2 = s0 / sa, M = n * dt;
-    double X = M;
-    for (int k = 0; k < 30; k++) { const double sx = std::sin(X), cx = std::cos(X), f = X - c1 * sx + c2 * (1 - cx) - M, fp = 1 - c1 * cx + c2 * sx, d = f / fp; X -= d; if (std::fabs(d) < 1e-14) break; }
+    double X = M; bool converge = false;
+    for (int k = 0; k < 30; k++) { const double sx = std::sin(X), cx = std::cos(X), f = X - c1 * sx + c2 * (1 - cx) - M, fp = 1 - c1 * cx + c2 * sx, d = f / fp; X -= d; if (std::fabs(d) < 1e-14) { converge = true; break; } }
+    if (!converge) return false;
     const double sx = std::sin(X), cx = std::cos(X), rr = a + (r0 - a) * cx + s0 * sa * sx;
     const double f = 1 - a / r0 * (1 - cx), g = dt + (sx - X) / n, fd = -std::sqrt(mu * a) * sx / (rr * r0), gd = 1 - a / rr * (1 - cx);
     r[0] = f * x0 + g * vx; r[1] = f * y0 + g * vy; r[2] = f * z0 + g * vz;
@@ -60,12 +94,15 @@ class Integrator {
 public:
     explicit Integrator(State s = initialState()) : s_(s) {}
     const State& state() const { return s_; }
+    long keplerEchecs() const { return keplerEchecs_; }      // pas où Kepler n'a pas pu avancer un corps (attendu : 0)
 
     // Avance de n pas de dt jours (dt < 0 : vers le passé ; le schéma est réversible).
     void step(double dt, long n) {
         for (long k = 0; k < n; k++) {
             jump(dt / 2); kick(dt / 2);
-            for (int i = 0; i < kN; i++) kepler(&s_.Q[3 * i], &s_.V[3 * i], kGmSun, dt);
+            for (int i = 0; i < kN; i++)
+                if (!kepler(&s_.Q[3 * i], &s_.V[3 * i], kGmSun, dt) && !keplerUniversel(&s_.Q[3 * i], &s_.V[3 * i], kGmSun, dt))
+                    ++keplerEchecs_;      // revue S1 : un échec n'est plus silencieux (le corps n'a pas bougé pendant ce pas)
             kick(dt / 2); jump(dt / 2);
         }
         s_.jd += dt * n;
@@ -97,6 +134,7 @@ public:
 
 private:
     State s_;
+    long keplerEchecs_ = 0;
 
     void jump(double h) {      // déplacement dû au mouvement du Soleil
         double px = 0, py = 0, pz = 0;

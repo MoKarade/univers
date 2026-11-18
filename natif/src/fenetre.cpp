@@ -574,7 +574,9 @@ int runWindow(const WindowOptions& opt) {
                 filmStars.reload(dt);
                 const long step = milkyWayStars.stepOf(shownYears);
                 const double tRaw = (milkyWayStars.yearsOfStep(step) - kStartYears) / 1.0e9, tStep = std::max(tRaw, 0.0);
-                const bool byFilm = filmStarsOk && tRaw > -2.0e-3 && filmStars.covers(tStep);
+                // Le pas d'aujourd'hui commence à l'époque de Gaia (2016), dix ans avant le départ du film : seul cet écart de
+                // quelques années est ramené à t = 0. Le pas d'avant (de −1 Ma à 0) reste sur les orbites de l'appli (revue F7).
+                const bool byFilm = filmStarsOk && tRaw > -1.0e-6 && filmStars.covers(tStep);
                 if (byFilm) {
                     if (step != filmStars.lastStep || !milkyWayStars.externalStates()) {
                         sim.ensureExact();      // le Soleil : son orbite selon l'appli (il n'est pas dans le film)
@@ -637,7 +639,7 @@ int runWindow(const WindowOptions& opt) {
                                           sim.ephemValid ? CalcMode::Precomputed : !sim.outer ? CalcMode::Hidden : direct ? CalcMode::Exact : table ? CalcMode::Approx : CalcMode::Hidden, 0,
                                           sim.ephemValid ? "éphémérides de la NASA (calcul ajusté sur les mesures), lues telles quelles"
                                           : !sim.outer ? "hors des dates connues"
-                                          : direct ? "calculé ici (gravité mutuelle), parti des éphémérides de la NASA ; les autres lunes ne sont pas montrées"
+                                          : direct ? "calculé ici (gravité mutuelle), parti des positions des éphémérides de la NASA, vitesses recalées pour retrouver leurs longitudes 400 ans plus loin ; les autres lunes ne sont pas montrées"
                                           : table ? "table d'orbites calculée à l'avance, relue entre ses points : place sur l'orbite de moins en moins sûre"
                                                   : "non montrées : au-delà de ce qui est calculé"});
             }
