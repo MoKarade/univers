@@ -144,6 +144,7 @@ def main():
     if 'gaz' in opts:
         import gaz_galaxie
         gaz = gaz_galaxie.Gaz(len(kind)); masse_gaz0 = float(p['m'][kind == 3].sum())
+        if opts.get('retour', '1') != '0': gaz.ages_de_depart(kind)      # --retour=0 : sans le gaz rendu par les étoiles qui vieillissent
 
     def forces(t):
         acc, phi = gravite_gpu.gravity(pos, mg, eps, theta=theta, quad=True)
@@ -194,7 +195,9 @@ def main():
             pos += dt * vel
         acc, phi = forces((s + 1) * dt_ma * 1e-3)
         vel += 0.5 * dt * acc
-        if gaz: gaz.naissances(kind_g, cp.where(kind_g == 3)[0], dt, (s + 1) * dt_ma * 1e-3)
+        if gaz:
+            gaz.naissances(kind_g, cp.where(kind_g == 3)[0], dt, (s + 1) * dt_ma * 1e-3)
+            gaz.retour(kind_g, dt, (s + 1) * dt_ma * 1e-3)
         if (s + 1) % every == 0: note((s + 1) * dt_ma * 1e-3)
         if inst and (s + 1) % inst == 0 and s + 1 < steps:      # --instantanes=0.5 : état gardé tous les 0,5 Ga, pour le bulletin à plusieurs dates
             if gaz: kind[:] = cp.asnumpy(kind_g)

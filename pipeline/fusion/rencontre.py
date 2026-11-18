@@ -122,6 +122,8 @@ class Calcul:
             self.gaz = gaz_galaxie.Gaz(len(p['kind']))
             if 'h_gaz' in p: self.gaz.h = cp.asarray(p['h_gaz'], dtype=cp.float64)
             if 'naissance' in p: self.gaz.naissance = np.array(p['naissance'], dtype=np.float64)
+            self.gaz.ages_de_depart(p['kind'])
+            if 'age0' in p: self.gaz.age0 = cp.asarray(p['age0'], dtype=cp.float64)
         self.forces()
 
     def forces(self):
@@ -149,7 +151,9 @@ class Calcul:
         self.forces()
         self.vel += 0.5 * dt * self.acc
         if self.gaz:
-            if self.gaz.naissances(self.kind_g, cp.where(self.kind_g == 3)[0], dt, t_ga): self.kind = cp.asnumpy(self.kind_g)
+            n1 = self.gaz.naissances(self.kind_g, cp.where(self.kind_g == 3)[0], dt, t_ga)
+            n2 = self.gaz.retour(self.kind_g, dt, t_ga)
+            if n1 or n2: self.kind = cp.asnumpy(self.kind_g)
 
     def centres(self):
         """Centre (sphère qui rétrécit, Power et al. 2003) et vitesse d'ensemble de chaque galaxie, sur ses étoiles."""
@@ -191,7 +195,7 @@ class Calcul:
     def etat(self):
         cp = self.cp
         e = dict(pos=cp.asnumpy(self.pos), vel=cp.asnumpy(self.vel), m=cp.asnumpy(self.m), eps=cp.asnumpy(self.eps), kind=cp.asnumpy(self.kind_g), gid=self.gid)
-        if self.gaz: e.update(h_gaz=cp.asnumpy(self.gaz.h).astype(np.float32), naissance=self.gaz.naissance)
+        if self.gaz: e.update(h_gaz=cp.asnumpy(self.gaz.h).astype(np.float32), naissance=self.gaz.naissance, age0=cp.asnumpy(self.gaz.age0).astype(np.float32))
         return e
 
 
@@ -477,7 +481,7 @@ def barre(sortie, opts, cible):
     """Compare, à t = 0, la barre de la masse (aujourdhui.npz) à celle des étoiles visibles, galaxie par galaxie, et
     écrit l'angle dont il faut tourner la galaxie de départ autour de son axe (--angles du mode « passe »)."""
     with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
-        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance') if k in z.files}
+        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0') if k in z.files}
     S0 = Calcul(p); cp_, _ = S0.centres(); del S0
     res = {}
     for g, nom in enumerate(ORDRE):
@@ -506,7 +510,7 @@ def futur(sortie, t_fin, opts, cible):
     releve_ma = float(opts.get('releve-ma', 10.0))
     if os.path.exists(reprise) and os.path.exists(os.path.join(film, 'film.json')):      # reprise après un arrêt
         with np.load(reprise) as z:
-            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance') if k in z.files}; t0 = float(z['t'])
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0') if k in z.files}; t0 = float(z['t'])
         meta = json.load(open(os.path.join(film, 'film.json'), encoding='utf-8'))
         journal = json.load(open(os.path.join(film, 'journal.json'), encoding='utf-8'))
         k = min(len(journal['t']), len(meta['t']))      # on repart du dernier instantané : les images d'après sont refaites
@@ -516,7 +520,7 @@ def futur(sortie, t_fin, opts, cible):
         meta['t'] = meta['t'][:k]
     else:
         with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
-            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance') if k in z.files}
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0') if k in z.files}
         t0, journal = 0.0, None
         S0 = Calcul(p, theta=float(opts.get('theta', 0.7)))
         cp_, cv = S0.centres(); del S0
@@ -546,6 +550,7 @@ def futur(sortie, t_fin, opts, cible):
             nt = sum(len(x) for x in ajout['m'])
             if 'h_gaz' in p: ajout['h_gaz'] = [np.full(nt, 0.2, np.float32)]      # champs du gaz : sans objet pour les étoiles visibles
             if 'naissance' in p: ajout['naissance'] = [np.full(nt, np.nan)]
+            if 'age0' in p: ajout['age0'] = [np.full(nt, np.nan, np.float32)]
             p = {k: np.concatenate([p[k]] + ajout[k]) for k in p}
     S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz='gaz' in opts)
     cp = S.cp

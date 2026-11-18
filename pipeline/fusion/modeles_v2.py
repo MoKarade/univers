@@ -108,7 +108,7 @@ except Exception as _e:      # table absente : on le dit dans le résumé du tir
     TABLE = None
 
 
-def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None, froid_centre=None):
+def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None, froid_centre=None, agitation=1.0):
     import agama
     agama.setUnits(mass=1, length=1, velocity=1)
     g = GALAXIES[nom]
@@ -198,7 +198,9 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
             _, s0, rsig = meilleur
             s0 *= d.get('sigma_soleil', 35.0) / 35.0
         elif 'sigma_soleil' in d:      # agitation mesurée au Soleil, profil exponentiel de longueur 2 Rd
-            s0 = d['sigma_soleil'] * math.exp(d['r_soleil'] / rsig)
+            # agitation : facteur de réglage sur l'agitation MESURÉE aujourd'hui. La naissance de la barre agite le disque
+            # (mesuré le 18/11 : 37 -> 47 km/s au Soleil en 0,5 Ga) ; partir un peu plus calme pour ARRIVER à la mesure.
+            s0 = agitation * d['sigma_soleil'] * math.exp(d['r_soleil'] / rsig)
         else:                        # non mesurée : la plus petite agitation qui donne Q >= q_min entre 1 et 4 Rd [modèle]
             zone = (R > d['rd']) & (R < 4 * d['rd'])
             sig_tot = sum(x['sigma0'] * np.exp(-R / x['rd']) for x in g['disques'])
@@ -240,7 +242,8 @@ def main():
     opts = dict(a[2:].split('=', 1) for a in sys.argv[4:] if a.startswith('--') and '=' in a)
     p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None,
                            froid=float(opts['froid']) if 'froid' in opts else None,
-                           froid_centre=float(opts['froid-centre']) if 'froid-centre' in opts else None)
+                           froid_centre=float(opts['froid-centre']) if 'froid-centre' in opts else None,
+                           agitation=float(opts.get('agitation', 1.0)))
     resume['options'] = opts
     resume['table_unique'] = TABLE
     np.savez_compressed(sortie, meta=json.dumps(resume, ensure_ascii=False), **p)

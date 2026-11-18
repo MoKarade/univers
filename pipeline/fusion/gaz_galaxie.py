@@ -18,6 +18,11 @@ Choix physiques, tous des modèles simples et publiés, à dire à l'écran :
   d'étoiles (sorte 5, « née pendant le calcul ») avec la probabilité 1 - exp(-EFFICACITE dt / t_chute), où t_chute est le
   temps de chute libre du gaz, sqrt(3 pi / (32 G rho)) (loi de Schmidt 1959 ; Katz 1992 ; EFFICACITE ~1 % par temps de
   chute libre, Krumholz & Tan 2007). La masse est conservée : la particule change de nature, pas de masse.
+- retour de masse : les étoiles rendent du gaz en vieillissant (retour_masse.py : 21 % de la masse d'une population à
+  100 Ma, 31 % à 1 Ga, 40 % à 10 Ga). Ici, à chaque pas, une particule d'étoiles redevient une particule de gaz avec la
+  probabilité (part rendue pendant le pas) / (part pas encore rendue) à son âge : en moyenne la bonne masse revient au gaz,
+  et la masse totale ne change pas. Âges des étoiles du départ [Supposition] : disque mince né à rythme constant depuis
+  10 Ga, disque épais entre 10 et 12 Ga, bulbe à 10 Ga ; étoiles nées pendant le calcul : leur date de naissance.
 Ce qui manque encore : chauffage par les explosions d'étoiles (rétroaction), gaz chaud, enrichissement chimique.
 
 Unités du calcul : kpc, km/s, M☉ ; temps en kpc/(km/s).
@@ -26,6 +31,9 @@ import math
 
 import numpy as np
 import cupy as cp
+
+import json
+import os
 
 import gaz_gpu
 
@@ -40,6 +48,7 @@ NH_PAR_MSOL_KPC3 = 0.76 * 40.46e-9
 EFFICACITE = 0.01
 H_MIN, H_MAX = 0.02, 2.0  # kpc
 SORTE_GAZ, SORTE_NEE = 3, 5
+AN_PAR_UNITE = 0.9778e9      # ans par unité de temps du calcul, kpc/(km/s)
 
 
 class Gaz:
@@ -52,6 +61,10 @@ class Gaz:
         self.rng = cp.random.default_rng(graine)
         self.cfl = 0.0; self.sous_pas = 0
         self._acc = None; self._taux = 0.0
+        self.age0 = None; self.rendues = 0
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resultats', 'retour_masse.json'), encoding='utf-8') as f:
+            r = json.load(f)
+        self._la = cp.asarray(np.log(np.array(r['ages_ans']))); self._pr = cp.asarray(np.array(r['part_rendue']))
         self.nees = 0
 
     def _sph(self, p, v, mm, h):
@@ -104,4 +117,36 @@ class Gaz:
             self._acc = None      # la liste des particules de gaz a changé : les forces seront recalculées
             self.naissance[cp.asnumpy(idx)] = t_ga
             self.nees += k
+        return k
+
+    def ages_de_depart(self, kind):
+        """Âge (Ga) à t = 0 des étoiles du départ, d'après leur sorte (tableau numpy). [Supposition, voir l'en-tête]"""
+        rng = np.random.default_rng(20261119)
+        n = len(kind); a = np.full(n, np.nan)
+        a[kind == 1] = rng.uniform(0.05, 10.0, int((kind == 1).sum()))
+        a[kind == 4] = rng.uniform(10.0, 12.0, int((kind == 4).sum()))
+        a[kind == 2] = 10.0
+        self.age0 = cp.asarray(a)
+
+    def retour(self, kind, dt, t_ga):
+        """Retour de masse : tire au sort les particules d'étoiles (sortes 1, 2, 4, 5) qui redeviennent du gaz pendant ce pas.
+        kind : tableau CuPy modifié sur place. Rend le nombre de particules rendues au gaz."""
+        if self.age0 is None: return 0
+        etoile = (kind == 1) | (kind == 2) | (kind == 4) | (kind == SORTE_NEE)
+        qui = cp.where(etoile)[0]
+        if int(qui.shape[0]) == 0: return 0
+        nee = cp.asarray(self.naissance)[qui]
+        age = cp.where(cp.isnan(nee), self.age0[qui] + t_ga, t_ga - nee) * 1e9      # ans
+        age = cp.maximum(age, 3.1e6); pas = dt * AN_PAR_UNITE
+        r0 = cp.interp(cp.log(age), self._la, self._pr); r1 = cp.interp(cp.log(age + pas), self._la, self._pr)
+        proba = cp.clip((r1 - r0) / (1.0 - r0), 0.0, 1.0)
+        rend = self.rng.random(int(qui.shape[0])) < proba
+        k = int(rend.sum())
+        if k:
+            idx = qui[rend]
+            kind[idx] = SORTE_GAZ
+            self.h[idx] = 0.2
+            self.naissance[cp.asnumpy(idx)] = np.nan
+            self.age0[idx] = cp.nan
+            self._acc = None; self.rendues += k
         return k
