@@ -32,6 +32,7 @@ import gravite_gpu
 
 G = 4.30091e-6
 T_UNIT = 0.9778      # Ga par unité de temps kpc/(km/s)
+K_LAMBDA = 0.00311179      # (km/s)²/kpc² : H0² Ω_Λ, la même valeur que rencontre.py (constantes.K_lambda) et que l'appli (OP_KL)
 ANNEAUX = [(0.5, 2), (2, 4), (4, 6), (6, 9), (9, 13)]      # kpc
 
 
@@ -146,6 +147,7 @@ def main():
 
     def forces(t):
         acc, phi = gravite_gpu.gravity(pos, mg, eps, theta=theta, quad=True)
+        acc += K_LAMBDA * (pos - cm_gpu())      # énergie noire : jamais négligée (règle de Marc), même si elle ne pèse ici que quelques millionièmes
         if gaz:
             qui = cp.where(kind_g == 3)[0]
             ah = gaz.acceleration(pos, vel, m, qui, dt)

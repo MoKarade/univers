@@ -66,6 +66,10 @@ def main():
         rel = json.load(open(sys.argv[2], encoding='utf-8'))['releves']
         t = np.array([r['t'] for r in rel]); ang = np.array([r['anneaux'][1]['angle_deg'] for r in rel])
         u = np.unwrap(np.radians(ang) * 2) / 2; n = min(len(t) - 1, 20)
+        pas = float(np.median(np.diff(t)))
+        # entre deux relevés, le motif à deux bras ne doit pas tourner de plus d'un demi-tour (pi pour l'angle doublé), sinon la
+        # vitesse lue est repliée : à 60 km/s/kpc au plus, il faut des relevés espacés de moins de 25 Ma (--releve-ma=10)
+        if 2 * 60.0 * 1.0227121650456 * pas > math.pi: raise SystemExit(f'ECHEC : relevés espacés de {pas * 1000:.0f} Ma, trop pour lire la vitesse de la barre (refaire avec --releve-ma=10)')
         calc['barre_vitesse_kms_kpc'] = float(abs(np.polyfit(t[-n:], u[-n:], 1)[0]) / 1.0227121650456)
         g = [r['gaz'] for r in rel if 'gaz' in r]
         if len(g) > 11: calc['naissance_etoiles_msol_an'] = float((g[-1]['nees_msol'] - g[-11]['nees_msol']) / ((g[-1]['t'] - g[-11]['t']) * 1e9))
