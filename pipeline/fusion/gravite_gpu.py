@@ -61,27 +61,31 @@ extern "C" __global__ void build(const u64* code, int n, int* left, int* right, 
    quad : 6 termes du moment quadripolaire sans trace retirée (somme m dx dx), autour du centre de masse. */
 extern "C" __global__ void upward(int n, const float* pos, const float* mass, const float* eps2,
                                   const int* left, const int* right, const int* parent, int* flag,
-                                  float* com, float* box, float* aux, float* quad, float inv_theta) {
+                                  float* com_w, float* box_w, float* aux_w, float* quad_w, float inv_theta) {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     int node = n - 1 + k;
-    com[4*node] = pos[3*k]; com[4*node+1] = pos[3*k+1]; com[4*node+2] = pos[3*k+2]; com[4*node+3] = mass[k];
-    for (int a = 0; a < 3; a++) { box[6*node+a] = pos[3*k+a]; box[6*node+3+a] = pos[3*k+a]; }
-    aux[2*node] = 0.f; aux[2*node+1] = eps2[k];
-    for (int a = 0; a < 6; a++) quad[6*node+a] = 0.f;
+    com_w[4*node] = pos[3*k]; com_w[4*node+1] = pos[3*k+1]; com_w[4*node+2] = pos[3*k+2]; com_w[4*node+3] = mass[k];
+    for (int a = 0; a < 3; a++) { box_w[6*node+a] = pos[3*k+a]; box_w[6*node+3+a] = pos[3*k+a]; }
+    aux_w[2*node] = 0.f; aux_w[2*node+1] = eps2[k];
+    for (int a = 0; a < 6; a++) quad_w[6*node+a] = 0.f;
     __threadfence();
     int cur = parent[node];
     while (cur >= 0) {
         if (atomicAdd(&flag[cur], 1) == 0) return;      /* premier arrivé : l'autre enfant n'est pas prêt */
         __threadfence();
         int L = left[cur], R = right[cur];
+        /* Les données des deux enfants ont été écrites par d'autres fils d'exécution : on les relit en mémoire par des
+           pointeurs « volatile », pour que le compilateur ne réutilise jamais une valeur lue avant la barrière
+           (__threadfence). [Revue de code du 18/11/2026, point N2.] */
+        const volatile float* com = com_w; const volatile float* box = box_w; const volatile float* aux = aux_w; const volatile float* quad = quad_w;
         double mL = com[4*L+3], mR = com[4*R+3], m = mL + mR;
         double c[3];
         for (int a = 0; a < 3; a++) c[a] = (mL * (double)com[4*L+a] + mR * (double)com[4*R+a]) / m;
         float ext = 0.f, off2 = 0.f;
         for (int a = 0; a < 3; a++) {
             float lo = fminf(box[6*L+a], box[6*R+a]), hi = fmaxf(box[6*L+3+a], box[6*R+3+a]);
-            box[6*cur+a] = lo; box[6*cur+3+a] = hi;
+            box_w[6*cur+a] = lo; box_w[6*cur+3+a] = hi;
             ext = fmaxf(ext, hi - lo);
             float o = (float)c[a] - 0.5f * (lo + hi); off2 += o * o;
         }
@@ -91,11 +95,11 @@ extern "C" __global__ void upward(int n, const float* pos, const float* mass, co
         for (int a = 0; a < 3; a++) { dl[a] = (double)com[4*L+a] - c[a]; dr[a] = (double)com[4*R+a] - c[a]; }
         const int ia[6] = {0, 1, 2, 0, 0, 1}, ib[6] = {0, 1, 2, 1, 2, 2};
         for (int q = 0; q < 6; q++)
-            quad[6*cur+q] = (float)((double)quad[6*L+q] + (double)quad[6*R+q] + mL * dl[ia[q]] * dl[ib[q]] + mR * dr[ia[q]] * dr[ib[q]]);
-        for (int a = 0; a < 3; a++) com[4*cur+a] = (float)c[a];
-        com[4*cur+3] = (float)m;
-        aux[2*cur] = ro * ro;
-        aux[2*cur+1] = (float)((mL * (double)aux[2*L+1] + mR * (double)aux[2*R+1]) / m);
+            quad_w[6*cur+q] = (float)((double)quad[6*L+q] + (double)quad[6*R+q] + mL * dl[ia[q]] * dl[ib[q]] + mR * dr[ia[q]] * dr[ib[q]]);
+        for (int a = 0; a < 3; a++) com_w[4*cur+a] = (float)c[a];
+        com_w[4*cur+3] = (float)m;
+        aux_w[2*cur] = ro * ro;
+        aux_w[2*cur+1] = (float)((mL * (double)aux[2*L+1] + mR * (double)aux[2*R+1]) / m);
         __threadfence();
         cur = parent[cur];
     }
@@ -104,7 +108,7 @@ extern "C" __global__ void upward(int n, const float* pos, const float* mass, co
 /* Descente : accélération et potentiel de chaque particule (dans l'ordre trié). G n'est pas appliqué ici. */
 extern "C" __global__ void walk(int n, const float* pos, const float* eps2, const int* left, const int* right,
                                 const float* com, const float* aux, const float* quad, int use_quad,
-                                float* acc, float* phi) {
+                                float* acc, float* phi, int* plein) {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     float px = pos[3*k], py = pos[3*k+1], pz = pos[3*k+2], e2 = eps2[k];
@@ -136,6 +140,7 @@ extern "C" __global__ void walk(int n, const float* pos, const float* eps2, cons
             }
         } else {
             if (sp < 158) { stack[sp++] = left[node]; stack[sp++] = right[node]; }
+            else atomicAdd(plein, 1);      /* pile pleine : ce nœud est abandonné ; compté, et gravity() s'arrête (point N3) */
         }
     }
     acc[3*k] = ax; acc[3*k+1] = ay; acc[3*k+2] = az; phi[k] = ph;
@@ -214,7 +219,9 @@ def gravity(pos, m, eps, theta=0.5, quad=True):
     _build(_grid(n - 1), (BLOCK,), (code, np.int32(n), left, right, parent))
     _upward(_grid(n), (BLOCK,), (np.int32(n), p32, m32, e2, left, right, parent, flag, com, box, aux, qd, np.float32(1.0 / theta)))
     acc = cp.empty(3 * n, cp.float32); phi = cp.empty(n, cp.float32)
-    _walk(_grid(n), (BLOCK,), (np.int32(n), p32, e2, left, right, com, aux, qd, np.int32(1 if quad else 0), acc, phi))
+    plein = cp.zeros(1, cp.int32)
+    _walk(_grid(n), (BLOCK,), (np.int32(n), p32, e2, left, right, com, aux, qd, np.int32(1 if quad else 0), acc, phi, plein))
+    if int(plein[0]): raise RuntimeError(f"gravité : pile pleine {int(plein[0])} fois dans la descente de l'arbre, des forces seraient fausses")
     out_a = cp.empty((n, 3), cp.float64); out_p = cp.empty(n, cp.float64)
     out_a[order] = acc.reshape(n, 3); out_p[order] = phi
     return out_a, out_p
