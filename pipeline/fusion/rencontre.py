@@ -544,7 +544,8 @@ def futur(sortie, t_fin, opts, cible):
                     meta.setdefault('vitesses_de_la_masse', {})[nom] = pris
                 ajout['pos'].append(tp); ajout['vel'].append(tv)
                 n = len(tp)
-                ajout['m'].append(np.full(n, 1e-6))      # « sans masse » : 1e-6 M☉ et non 0 (un nœud de l'arbre fait de traceurs seuls diviserait par 0) ; 8,5 M de traceurs pèsent 8,5 M☉ en tout (revue du 18/11, N4); ajout['eps'].append(np.full(n, 0.05)); ajout['kind'].append(np.full(n, 9, dtype=np.int8)); ajout['gid'].append(np.full(n, g, dtype=np.int8))
+                # « sans masse » : 1e-6 M☉ et non 0 (un nœud de l'arbre fait de traceurs seuls diviserait par 0) ; 8,5 M de traceurs pèsent 8,5 M☉ en tout (revue du 18/11, N4)
+                ajout['m'].append(np.full(n, 1e-6)); ajout['eps'].append(np.full(n, 0.05)); ajout['kind'].append(np.full(n, 9, dtype=np.int8)); ajout['gid'].append(np.full(n, g, dtype=np.int8))
                 meta['traceurs'][g] = n
                 meta['decalage_a_t0'][nom] = dict(position=((cp_[g] - cp_[0]) - mesure_p).round(3).tolist(), vitesse=((cv[g] - cv[0]) - mesure_v).round(3).tolist())
             nt = sum(len(x) for x in ajout['m'])
