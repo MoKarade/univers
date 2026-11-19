@@ -8,6 +8,8 @@
 set -u
 ICI="$(cd "$(dirname "$0")" && pwd)"
 PY=/c/tmp/venv-cupy/Scripts/python.exe
+PYU="$(cygpath -u "${LOCALAPPDATA:-C:/Users/marcr/AppData/Local}")/univers-venv/Scripts/python.exe"      # python des scripts sans carte graphique (chemin au format du shell : le chemin Windows brut échouait, 19/11)
+[ -x "$PYU" ] || PYU=/c/Users/marcr/AppData/Local/univers-venv/Scripts/python.exe
 G=C:/tmp/analyse-architecture/galaxies
 GAL="${UNIVERS_GALAXIES:-$G/plein}"      # dossier des cinq galaxies de départ
 ETAT="${UNIVERS_ETAT:-$G/etat_combine.json}"      # places et vitesses de départ des cinq galaxies (sortie des tirs de réglage)
@@ -56,9 +58,9 @@ if [ -n "${UNIVERS_CONTRAT:-}" ]; then
   fi
   if [ ! -f "$S/etoiles/vl_etoiles.bin" ]; then
     mkdir -p "$S/etoiles"
-    "$LOCALAPPDATA/univers-venv/Scripts/python.exe" ../natif/etoiles_visibles_masse.py "$UNIVERS_CONTRAT" "$S/aujourdhui.npz" C:/tmp/natif/gaia/gaia.bin,C:/tmp/natif/gaia/gaia_b.bin C:/tmp/natif/donnees/etoiles.bin C:/tmp/natif/gaia/gaia_agrege.bin "$S/etoiles" >> "$S/journal.txt" 2>&1 || { echo "ECHEC des étoiles visibles" >> "$S/journal.txt"; exit 1; }
+    "$PYU" ../natif/etoiles_visibles_masse.py "$UNIVERS_CONTRAT" "$S/aujourdhui.npz" C:/tmp/natif/gaia/gaia.bin,C:/tmp/natif/gaia/gaia_b.bin C:/tmp/natif/donnees/etoiles.bin C:/tmp/natif/gaia/gaia_agrege.bin "$S/etoiles" >> "$S/journal.txt" 2>&1 || { echo "ECHEC des étoiles visibles" >> "$S/journal.txt"; exit 1; }
     if [ -n "${UNIVERS_CONTRATS_VOISINES:-}" ]; then      # voisines posées sur leur masse aussi (etoiles_visibles_voisines_masse.py)
-      "$LOCALAPPDATA/univers-venv/Scripts/python.exe" ../natif/etoiles_visibles_voisines_masse.py "$UNIVERS_CONTRATS_VOISINES" "$S/aujourdhui.npz" "$GAL" "$S/etoiles" >> "$S/journal.txt" 2>&1 || { echo "ECHEC des étoiles visibles des voisines" >> "$S/journal.txt"; exit 1; }
+      "$PYU" ../natif/etoiles_visibles_voisines_masse.py "$UNIVERS_CONTRATS_VOISINES" "$S/aujourdhui.npz" "$GAL" "$S/etoiles" >> "$S/journal.txt" 2>&1 || { echo "ECHEC des étoiles visibles des voisines" >> "$S/journal.txt"; exit 1; }
     else
       for n in andromede triangle grand_nuage petit_nuage; do cp "$TR/etoiles_visibles_$n.npz" "$S/etoiles/"; done
     fi
