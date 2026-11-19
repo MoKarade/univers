@@ -17,9 +17,9 @@ import numpy as np
 H = float(sys.argv[2]) if len(sys.argv) > 2 else 0.6766
 BOITE = float(sys.argv[3]) if len(sys.argv) > 3 else 640.0
 CENTRE = np.full(3, BOITE / 2.0)
-# Vierge : 16,5 Mpc, SGL 102,9°, SGB −2,3° (repère supergalactique = axes de la boîte) [Probable]
+# Vierge : 16,5 Mpc (échelle de CF4, H0 = 74,6 → 12,3 Mpc/h), SGL 102,9°, SGB −2,3° ; axes de la boîte = repère supergalactique [Probable]
 _l, _b = np.radians(102.9), np.radians(-2.3)
-VIERGE = CENTRE + 16.5 * H * np.array([np.cos(_b) * np.cos(_l), np.cos(_b) * np.sin(_l), np.sin(_b)])
+VIERGE = CENTRE + 16.5 * 0.746 * np.array([np.cos(_b) * np.cos(_l), np.cos(_b) * np.sin(_l), np.sin(_b)])
 
 
 def periodique(dx: np.ndarray) -> np.ndarray:
