@@ -19,7 +19,7 @@ function Carte-Libre {
     $l = (& nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
     if (-not $l) { return $false }
     $v = $l -split ','
-    return ([int]$v[0] -lt 20) -and ([int]$v[1] -lt 4000)
+    return ([int]$v[0] -lt 35) -and ([int]$v[1] -lt 4000)      # 35 % : même seuil que le retrait du calcul ; le bureau seul monte à 25-30 % (vidéo, outils), un jeu dépasse et prend plus de 4 Go
 }
 
 while ($true) {
