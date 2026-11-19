@@ -18,6 +18,7 @@
 #include <span>
 #include <vector>
 
+#include "groupe_local_scenario.h"
 #include "simulation.h"
 
 namespace {
@@ -39,6 +40,13 @@ struct SandboxGalaxy {
         if (useCosmologyLambda) p.lambda = (c.h0 / 1000.0) * (c.h0 / 1000.0) * c.ode;
         return p;
     }
+    // Même réglage pour la rencontre du Groupe local (groupe_local_scenario.h) : masses des halos et énergie noire.
+    scenario::Settings groupSettings(const cosmo::Params& c) const {
+        scenario::Settings g;
+        g.massFactor = haloFactor;
+        if (useCosmologyLambda) g.K = (c.h0 / 1000.0) * (c.h0 / 1000.0) * c.ode;
+        return g;
+    }
 };
 
 struct ObjectTrack {
@@ -52,6 +60,9 @@ struct ObjectTrack {
     std::vector<float> r, rWhatIf;           // distance au centre (kpc) ou au Soleil (UA) : pour la courbe du panneau
     bool hasWhatIf = false;
     const char* note = "";
+    // Galaxies du Groupe local : la rencontre rejouée (valeurs mesurées, puis tes réglages), pour les dates du panneau.
+    scenario::Result groupBase, groupWhatIf;
+    int galaxyIndex = -1;
 
     // Réglages avec lesquels le tracé « et si… » a été calculé (comparés champ par champ).
     SandboxGalaxy usedSandbox;
@@ -69,8 +80,11 @@ struct ObjectTrack {
         if (kind == 1) frameShift = sim.sunShift();
     }
 
-    void update(const Sim& sim, const SandboxGalaxy& sb) {
+    // settling : un curseur est en train de bouger ; un changement de réglages attend qu'on le lâche (un calcul complet
+    // par image ralentirait la fenêtre).
+    void update(const Sim& sim, const SandboxGalaxy& sb, bool settling = false) {
         collect(sim.lastAdvance == 0.0);      // orbite recalculée à part : reprise dès qu'elle est prête (attendue à l'arrêt)
+        if (settling && sim.focus == focus && !sameSettings(sb, sim.cosmology)) return;
         const int f = sim.focus;
         const Body& b = sim.bodies[static_cast<size_t>(f)];
         const bool star = b.kind == Kind::Star || b.kind == Kind::Sun;
@@ -98,7 +112,7 @@ struct ObjectTrack {
         kind = -1;
         note = "";
         if (star) buildStar(sim, sb);
-        else if (b.kind == Kind::Galaxy) buildGalaxy(sim, b);
+        else if (b.kind == Kind::Galaxy) buildGalaxy(sim, b, sb);
         else if (b.kind == Kind::Probe) buildProbe(sim, b);
         else if (b.kind == Kind::Asteroid) buildAsteroid(sim);
     }
@@ -205,7 +219,7 @@ private:
         return sim.centres && sim.centres->ready && sim.centres->centre(ci, tGa, out);
     }
 
-    void buildGalaxy(const Sim& sim, const Body& b) {
+    void buildGalaxy(const Sim& sim, const Body& b, const SandboxGalaxy& sb) {
         const int ci = sim.centres && sim.centres->ready ? CentresReference::indexOf(b.name) : -1;
         if (ci < 0) {
             note = "Pas d'orbite calculée pour cette galaxie : seule sa position mesurée est connue.";
@@ -221,6 +235,34 @@ private:
             r.push_back(static_cast<float>(std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z)));
         }
         note = "Chemin autour de la Voie lactée, calculé (rencontre du Groupe local) ; distance au centre de la Voie lactée.";
+        galaxyIndex = ci;
+        // Rencontre rejouée : une fois avec les valeurs mesurées (référence, gardée), une fois avec tes réglages.
+        static scenario::Result base;
+        if (!base.ok) base = scenario::run(*sim.centres, scenario::Settings{});
+        groupBase = base;
+        groupWhatIf = scenario::Result{};
+        const cosmo::Params ref{};
+        const bool changed = std::fabs(sb.haloFactor - 1.0f) > 1e-4f ||
+                             (sb.useCosmologyLambda && (std::fabs(sim.cosmology.ode - ref.ode) > 1e-6 || std::fabs(sim.cosmology.h0 - ref.h0) > 1e-6));
+        if (!changed || !base.ok) return;
+        groupWhatIf = scenario::run(*sim.centres, sb.groupSettings(sim.cosmology));
+        if (!groupWhatIf.ok || groupWhatIf.tGa.size() < 2) return;
+        // Variante alignée sur les dates du tracé : le passé ne change pas (les réglages agissent à partir d'aujourd'hui).
+        const double step = groupWhatIf.tGa[1] - groupWhatIf.tGa[0];
+        for (size_t i = 0; i < t.size(); ++i) {
+            const double tg = (t[i] - kStartYears) / 1.0e9;
+            phys::Vec3 q = g[i];
+            if (tg >= 0) {
+                const double x = tg / step;
+                const size_t k = std::min(static_cast<size_t>(x), groupWhatIf.tGa.size() - 2);
+                const double u = std::clamp(x - static_cast<double>(k), 0.0, 1.0);
+                const phys::Vec3 a = groupWhatIf.pos[k][static_cast<size_t>(ci)], b2 = groupWhatIf.pos[k + 1][static_cast<size_t>(ci)];
+                q = {a.x + u * (b2.x - a.x), a.y + u * (b2.y - a.y), a.z + u * (b2.z - a.z)};
+            }
+            gWhatIf.push_back(q);
+            rWhatIf.push_back(static_cast<float>(std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z)));
+        }
+        hasWhatIf = true;
     }
 
     void buildProbe(const Sim& sim, const Body& b) {
