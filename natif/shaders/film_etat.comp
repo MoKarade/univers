@@ -1,0 +1,38 @@
+#version 450
+/* État de chaque étoile à la date EXACTE, tiré du film du Groupe local (film_carte.h). Même courbe que
+   FilmStars::states (film_etoiles.h) : Catmull-Rom sur les quatre images voisines pour la position, sa pente pour la
+   vitesse. Images brutes : 3 nombres sur 16 bits par étoile (kpc, relatifs au centre de la galaxie d'origine), dans
+   l'ordre du film, une case par image (slot : début de la case, en mots de 32 bits). ordre[s] : rang dans le film de
+   l'étoile s de l'appli. Sortie : le tampon d'états lu par gaia.vert (position kpc, 1 ; vitesse km/s, facteur de
+   lumière), le Soleil en dernier (rang n). */
+layout(local_size_x = 256) in;
+struct Etat { vec4 p; vec4 v; };
+layout(std430, set = 0, binding = 0) readonly buffer Brut { uint mot[]; };
+layout(std430, set = 0, binding = 1) readonly buffer Ordre { uint ordre[]; };
+layout(std430, set = 0, binding = 2) readonly buffer Gain { float gain[]; };
+layout(std430, set = 0, binding = 3) writeonly buffer Sortie { Etat e[]; };
+layout(push_constant) uniform Pc { uvec4 slot; vec4 w; vec4 d; vec4 sunP; vec4 sunV; uint n; float gaiaOff; uint hasGain; uint pad; } pc;
+
+float demi(uint base, uint h) {
+    vec2 two = unpackHalf2x16(mot[base + (h >> 1)]);
+    return (h & 1u) == 0u ? two.x : two.y;
+}
+
+void main() {
+    uint s = gl_GlobalInvocationID.x;
+    if (s > pc.n) return;
+    if (s == pc.n) {
+        e[s] = Etat(vec4(pc.sunP.xyz, 1.0), vec4(pc.sunV.xyz, 0.0));
+        return;
+    }
+    uint r = ordre[s] * 3u;
+    vec3 p = vec3(0.0), v = vec3(0.0);
+    for (int j = 0; j < 4; ++j) {
+        uint b = pc.slot[j];
+        vec3 q = vec3(demi(b, r), demi(b, r + 1u), demi(b, r + 2u));
+        p += pc.w[j] * q;
+        v += pc.d[j] * q;
+    }
+    float lum = (pc.hasGain == 0u || pc.gaiaOff <= 0.0) ? 0.0 : 1.0 + pc.gaiaOff * (gain[s] - 1.0);
+    e[s] = Etat(vec4(p, 1.0), vec4(v, lum));
+}

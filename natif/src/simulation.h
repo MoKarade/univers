@@ -187,6 +187,25 @@ struct Sim {
     int focus = 0;
     double years = kStartYears;          // années juliennes depuis J2000,0
     int rate = 2;
+    // Vitesse libre choisie au curseur (Marc, 18/11/2026 : « mettre ce que je veux comme temps par seconde »), en années par
+    // seconde ; 0 : c'est le cran kRates[rate] qui vaut. Plafond : 1 milliard d'années par seconde.
+    double speed = 0;
+    static constexpr double kMaxYearsPerSecond = 1.0e9;
+    double yearsPerSecond() const { return speed > 0 ? speed : kRates[rate].yearsPerSecond; }
+    // Cran suivant (d = +1) ou précédent (d = -1) à partir de la vitesse actuelle, même si elle vient du curseur.
+    void stepRate(int d) {
+        const double v = yearsPerSecond();
+        int i = d > 0 ? kRateCount - 1 : 0;
+        if (d > 0) {
+            for (int k = 0; k < kRateCount; ++k)
+                if (kRates[k].yearsPerSecond > v * 1.0001) { i = k; break; }
+        } else {
+            for (int k = kRateCount - 1; k >= 0; --k)
+                if (kRates[k].yearsPerSecond < v * 0.9999) { i = k; break; }
+        }
+        rate = i;
+        speed = 0;
+    }
     bool paused = false, backward = false;
     double yaw = -1.2, pitch = 0.55;     // direction d'où l'on regarde l'astre suivi (radians)
     double dist = 45.0 * kAuInLy;        // distance de la caméra à l'astre suivi (années-lumière) : au départ, tout le système solaire
@@ -223,6 +242,7 @@ struct Sim {
     // voisines et la place des étoiles visibles de la Voie lactée ; sinon les centres et les orbites de référence.
     const phys::film::FilmV2* film = nullptr;
     bool filmLeads = false;      // à cette image, les étoiles visibles suivent le film
+    double filmEdgeYears = 0;    // non nul : la date voulue dépasse le film calculé ; elle est arrêtée à ce bord (fenetre.cpp)
     double gaiaFilmOff = 0;      // part de Gaia éteinte parce que le film mène (0 à 1, revue F1 ; fenetre.cpp)
     bool filmCovers(double tGa) const { return film && film->images() >= 5 && tGa >= film->debutGa() && tGa <= film->date(film->images() - 2); }
     uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
@@ -854,7 +874,7 @@ struct Sim {
 
     void advance(double dt) {
         const double before = years;
-        if (!paused) years += (backward ? -1.0 : 1.0) * kRates[rate].yearsPerSecond * dt;
+        if (!paused) years += (backward ? -1.0 : 1.0) * yearsPerSecond() * dt;
         years = std::clamp(years, minYears(), maxYears());
         lastAdvance = years - before;
         if (!touched) yaw += 0.035 * dt;      // lent tour d'horizon, 2 degrés par seconde

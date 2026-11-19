@@ -13,6 +13,9 @@
 // Positions : repère du centre de masse du calcul ; on retranche le centre de la Voie lactée de la même image.
 #pragma once
 #include <algorithm>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -95,13 +98,14 @@ struct FusionCloud {
         }
         mag_ = uploadVertices(g, mag.data(), static_cast<VkDeviceSize>(n) * 4);
         col_ = uploadVertices(g, col.data(), static_cast<VkDeviceSize>(n) * 4);
-        for (int k = 0; k < 2; ++k) {
+        for (int k = 0; k < kBufs; ++k) {
             pos_[k] = createBuffer(g, static_cast<VkDeviceSize>(n) * 12, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
             void* p = nullptr;
             check(vkMapMemory(g.dev, pos_[k].mem, 0, static_cast<VkDeviceSize>(n) * 12, 0, &p), "images du calcul de la fusion");
             mapped_[k] = static_cast<float*>(p);
         }
         createPipeline(g, fmt);
+        worker_ = std::thread([this] { work(); });
         ready = true;
         return true;
     }
@@ -109,22 +113,33 @@ struct FusionCloud {
     double endGa() const { return (available_ - 1) * stepGa; }
 
     // À appeler avant le dessin : met sur la carte les deux images qui encadrent tGa (milliards d'années depuis aujourd'hui).
+    // Appelée APRÈS l'attente de la barrière de l'image précédente (fenetre.cpp) : la carte ne lit alors plus aucun tampon,
+    // on peut en réécrire sans vkDeviceWaitIdle. Quatre tampons : les deux images qui encadrent la date, et de la place pour
+    // qu'un fil à part prépare l'image suivante dans le sens du temps (lire une image dans les fichiers, au moment même,
+    // coûtait ~25 ms au fil principal). Une image absente est écrite tout de suite, comme avant ; mêmes valeurs.
     void update(const Gpu& g, double tGa, double share) {
+        (void)g;
         count = 0;
         if (!ready || share <= 0 || tGa < 0 || tGa > endGa()) return;
         const double x = tGa / stepGa;
         const long i = std::min(static_cast<long>(x), available_ - 2);
         frac_ = static_cast<float>(x - static_cast<double>(i));
-        // Les deux tampons gardent les images i et i + 1 ; en avançant d'une image, un seul tampon est réécrit.
-        if (held_[0] != i && held_[1] != i) {
-            vkDeviceWaitIdle(g.dev);
-            fill(held_[1] == i + 1 ? 0 : (held_[0] == i + 1 ? 1 : 0), i);
+        const int dir = tGa > lastT_ ? 1 : (tGa < lastT_ ? -1 : 0);
+        lastT_ = tGa;
+        std::unique_lock<std::mutex> l(m_);
+        a_ = obtain(l, i, find(i + 1));      // sans réécrire le tampon qui tient déjà i + 1
+        b_ = obtain(l, i + 1, a_);
+        // Lecture d'avance : l'image suivante dans le sens du temps, dans un tampon qui ne sert pas à cette image.
+        const long next = dir >= 0 ? i + 2 : i - 1;
+        if (dir != 0 && next >= 0 && next < available_ && jobImage_ < 0 && find(next) < 0) {
+            const int k = freeBuffer();
+            if (k >= 0) {
+                held_[k] = -1;
+                jobImage_ = next;
+                jobBuf_ = k;
+                cv_.notify_all();
+            }
         }
-        if (held_[0] != i + 1 && held_[1] != i + 1) {
-            vkDeviceWaitIdle(g.dev);
-            fill(held_[0] == i ? 1 : 0, i + 1);
-        }
-        lo_ = held_[0] == i ? 0 : 1;
         count = n;
     }
 
@@ -151,7 +166,7 @@ struct FusionCloud {
         vkCmdSetViewport(cmd, 0, 1, &vp);
         vkCmdSetScissor(cmd, 0, 1, &sc);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        const VkBuffer bufs[4] = {pos_[lo_].buf, pos_[1 - lo_].buf, mag_.buf, col_.buf};
+        const VkBuffer bufs[4] = {pos_[a_].buf, pos_[b_].buf, mag_.buf, col_.buf};
         const VkDeviceSize offs[4] = {0, 0, 0, 0};
         vkCmdBindVertexBuffers(cmd, 0, 4, bufs, offs);
         vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(p), &p);
@@ -159,6 +174,12 @@ struct FusionCloud {
     }
 
     void release(const Gpu& g) {
+        {
+            std::lock_guard<std::mutex> l(m_);
+            stop_ = true;
+        }
+        cv_.notify_all();
+        if (worker_.joinable()) worker_.join();
         if (ready) {
             vkDestroyPipeline(g.dev, pipeline_, nullptr);
             vkDestroyPipelineLayout(g.dev, layout_, nullptr);
@@ -194,10 +215,63 @@ private:
     std::vector<File> files_;
     std::vector<double> centres_;      // images x 4 galaxies x 3 (kpc, repère du centre de masse)
     long available_ = 0;
-    Buffer pos_[2], mag_, col_;
-    float* mapped_[2] = {};
-    long held_[2] = {-1, -1};          // image tenue par chaque tampon
-    int lo_ = 0;
+    static constexpr int kBufs = 4;
+    Buffer pos_[kBufs], mag_, col_;
+    float* mapped_[kBufs] = {};
+    long held_[kBufs] = {-1, -1, -1, -1};      // image tenue par chaque tampon (-1 : aucune, ou en cours d'écriture)
+    int a_ = 0, b_ = 1;                          // tampons des images i et i + 1 à cette image
+    double lastT_ = -1.0;
+    // Fil de lecture d'avance : une image à la fois (jobImage_ dans le tampon jobBuf_), sous m_.
+    std::thread worker_;
+    std::mutex m_;
+    std::condition_variable cv_;
+    long jobImage_ = -1;
+    int jobBuf_ = -1;
+    bool stop_ = false;
+
+    int find(long frame) const {
+        for (int k = 0; k < kBufs; ++k)
+            if (held_[k] == frame) return k;
+        return -1;
+    }
+    // Tampon libre : ni en cours d'écriture, ni tenant une image de cette image affichée.
+    int freeBuffer() const {
+        int best = -1;
+        for (int k = 0; k < kBufs; ++k) {
+            if (k == jobBuf_ || k == a_ || k == b_) continue;
+            if (best < 0 || held_[k] < 0) best = k;
+        }
+        return best;
+    }
+    // Tampon tenant l'image `frame` : déjà là, en cours de lecture par le fil (on l'attend), ou écrite tout de suite.
+    int obtain(std::unique_lock<std::mutex>& l, long frame, int keep) {
+        cv_.wait(l, [&] { return jobImage_ != frame; });
+        const int k = find(frame);
+        if (k >= 0) return k;
+        int best = -1;
+        for (int c = 0; c < kBufs; ++c) {
+            if (c == jobBuf_ || c == keep) continue;
+            if (best < 0 || held_[c] < 0) best = c;
+        }
+        fill(best, frame);
+        return best;
+    }
+    void work() {
+        std::unique_lock<std::mutex> l(m_);
+        for (;;) {
+            cv_.wait(l, [this] { return stop_ || (jobImage_ >= 0 && held_[jobBuf_] != jobImage_); });
+            if (stop_) return;
+            const long frame = jobImage_;
+            const int k = jobBuf_;
+            l.unlock();
+            fillInto(k, frame);
+            l.lock();
+            held_[k] = frame;
+            jobImage_ = -1;
+            jobBuf_ = -1;
+            cv_.notify_all();
+        }
+    }
     float frac_ = 0;
     VkPipeline pipeline_{};
     VkPipelineLayout layout_{};
@@ -205,6 +279,11 @@ private:
 
     // Écrit l'image `frame` dans le tampon k : kpc, par rapport au centre de la Voie lactée de cette image.
     void fill(int k, long frame) {
+        held_[k] = -1;
+        if (fillInto(k, frame)) held_[k] = frame;
+    }
+    // Écrit l'image dans le tampon k (sans toucher à held_) ; false si l'image n'est dans aucun fichier.
+    bool fillInto(int k, long frame) const {
         for (const File& f : files_) {
             if (frame < f.first || frame >= f.first + f.frames) continue;
             const int16_t* src = f.base + static_cast<size_t>(frame - f.first) * n * 3;
@@ -216,9 +295,9 @@ private:
                 dst[i * 3 + 1] = src[i * 3 + 1] * q - cy;
                 dst[i * 3 + 2] = src[i * 3 + 2] * q - cz;
             }
-            held_[k] = frame;
-            return;
+            return true;
         }
+        return false;
     }
 
     void createPipeline(const Gpu& g, VkFormat fmt) {

@@ -42,7 +42,9 @@ void main() {
     vec3 pos = uintBitsToFloat(r.xyz), move = vec3(0.0);
     uint flags = r.w >> 24;
     /* étoiles mesurées : une seule instance ; les autres instances du dessin (sous-nuages du modèle) ne les concernent pas */
-    if (gl_InstanceIndex > 0 && (flags & 16u) == 0u) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
+    /* sous-nuage replié (gaia.h, selectLeaves : feuille trop loin pour le distinguer) : une seule instance, d'indice GV_SOUS_NUAGE */
+    bool replie = uint(gl_InstanceIndex) >= GV_SOUS_NUAGE;
+    if (gl_InstanceIndex > 0 && !replie && (flags & 16u) == 0u) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
     /* meilleur rendu, vu de loin : flou angulaire (gaia_fiable.glsl) */
     if ((pc.cellBase & GF_MODE_RENDU) != 0u && (flags & 32u) == 0u) pos = gfFlou(pos, uint(gl_VertexIndex), gfPoidsLoin(pc.camHi.xyz + pc.camLo.xyz, pos));
     /* orbite pas fiable (drapeau 2 absent) : montrée seulement autour d'aujourd'hui (gaia_fiable.glsl) */
@@ -101,8 +103,8 @@ void main() {
     float part = 1.0;
     if ((flags & 16u) != 0u) {
         uint k = uint(gl_InstanceIndex) % GV_SOUS_NUAGE, graine = uint(gl_VertexIndex) * GV_SOUS_NUAGE + k;
-        part = GV_PART[(k + uint(gl_VertexIndex)) % GV_SOUS_NUAGE];
-        float ouvert = smoothstep(GV_LOIN, GV_PRES, length(p));
+        part = replie ? 1.0 : GV_PART[(k + uint(gl_VertexIndex)) % GV_SOUS_NUAGE];      /* replié : toute la lumière du traceur */
+        float ouvert = replie ? 0.0 : smoothstep(GV_LOIN, GV_PRES, length(p));
         if (ouvert > 0.0) {
             /* point dans une boule aplatie (disque : épaisseur moitié) : direction et rayon tirés de la graine */
             float u1 = gvUnif(graine * 3u), u2 = gvUnif(graine * 3u + 1u), u3 = gvUnif(graine * 3u + 2u);

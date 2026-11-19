@@ -146,10 +146,19 @@ public:
     // Distance (années-lumière) d'un décalage vers le rouge, par la même table que le shader (galaxies_formes.h) ; version :
     // change à chaque nouvelle table.
     double distanceLy(double z) const {
-        if (!mapped_) return 0;
+        return distanceAt(zPlace(z));
+    }
+    // Place d'un décalage z dans la table (case et fraction) : ne dépend pas de la date, se calcule une fois par galaxie.
+    struct ZPlace { int k; double f; };
+    static ZPlace zPlace(double z) {
         const double u = std::clamp(std::log(1.0 + z) / std::log(1.0 + kGalaxyZMax), 0.0, 1.0) * 256.0;
         const int k = std::min(static_cast<int>(u), 255);
-        return mapped_[k] + (mapped_[k + 1] - mapped_[k]) * (u - k);
+        return {k, u - k};
+    }
+    // Distance (années-lumière) pour une place calculée par zPlace : mêmes opérations que distanceLy, donc même résultat.
+    double distanceAt(ZPlace p) const {
+        if (!mapped_) return 0;
+        return table_cpu_[static_cast<size_t>(p.k)] + (table_cpu_[static_cast<size_t>(p.k) + 1] - table_cpu_[static_cast<size_t>(p.k)]) * p.f;
     }
     uint64_t tableVersion = 0;
 
@@ -158,7 +167,10 @@ public:
     void setCosmology(const cosmo::Params& p, double scale = 1.0) {
         if (!ready) return;
         const auto t = cosmo::distanceTable(p, kGalaxyZMax, 256);
-        for (int k = 0; k < 260; ++k) mapped_[k] = static_cast<float>(t[static_cast<size_t>(std::min(k, 256))] * cosmo::kMpcInLy * scale);
+        for (int k = 0; k < 260; ++k) {
+            table_cpu_[static_cast<size_t>(k)] = static_cast<float>(t[static_cast<size_t>(std::min(k, 256))] * cosmo::kMpcInLy * scale);
+            mapped_[k] = table_cpu_[static_cast<size_t>(k)];
+        }
         ++tableVersion;
     }
 
@@ -210,6 +222,10 @@ private:
     Buffer vb_[5];
     Buffer table_;
     float* mapped_ = nullptr;
+    // Copie de la table en mémoire du processeur, lue par distanceLy : mapped_ est de la mémoire partagée avec la carte, très
+    // lente à RELIRE depuis le processeur (532 427 galaxies de forme replacées : 100 ms, à chaque million d'années, donc à
+    // chaque image d'un trajet rapide). Mêmes nombres, donc mêmes distances.
+    std::array<float, 260> table_cpu_{};
     VkDescriptorSetLayout setLayout_{};
     VkDescriptorPool pool_{};
     VkDescriptorSet set_{};

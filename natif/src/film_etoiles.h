@@ -131,6 +131,8 @@ struct FilmStars {
         return true;
     }
 
+    uint64_t base() const { return base_; }      // rang, dans une image du film, de la première étoile suivie
+
 private:
     int first_ = 0, galaxies_ = 1;
     uint64_t base_ = 0;      // rang, dans une image du film, de la première étoile suivie

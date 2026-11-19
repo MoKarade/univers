@@ -21,6 +21,8 @@ struct WindowOptions {
     bool hasPath = false;
     double pathStart = 0;
     int pathRate = 0;
+    double pathSpeed = 0;       // --vitesse : vitesse libre du trajet (années par seconde), comme le curseur ; 0 : le cran pathRate
+    bool realClock = false;     // --horloge-reelle : le trajet suit l'horloge réelle (mesure de la vitesse obtenue et des images/s)
     int skyBand = -1;           // contrôle : rang de la lumière du ciel à montrer (-1 : visible)
     bool checkOrbits = false;   // contrôle : relit les orbites calculées sur la carte et les compare au calcul en double précision
 };
