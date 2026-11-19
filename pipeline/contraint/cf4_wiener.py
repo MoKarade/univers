@@ -27,8 +27,9 @@ C_KMS = 299792.458
 H0_CF4 = float(os.environ.get("H0_CF4", "74.6"))  # zéro des modules de distance de CF4 (Tully et al. 2023) [Probable]
 ESTIMATEUR = os.environ.get('ESTIMATEUR', 'ds')   # ds = Davis & Scrimgeour 2014 ; wf = Watkins & Feldman 2015
 POSITION = os.environ.get('POSITION', 'd')        # d = distance mesurée ; cz = distance de vitesse
+MALMQUIST = os.environ.get('MALMQUIST', 'aucun')  # aucun | homogene
 SIGMA_NL = 150.0         # agitation non linéaire résiduelle d'un groupe, km/s [Supposition, valeur courante]
-LISSAGE = 5.0            # Mpc/h, coupe les échelles non linéaires du modèle [Supposition]
+LISSAGE = float(os.environ.get("LISSAGE", "5.0"))            # Mpc/h, coupe les échelles non linéaires du modèle [Supposition]
 COTE, NGRILLE = 1000.0, 64
 RAW = os.path.join(os.environ['LOCALAPPDATA'], 'univers-raw')
 
@@ -55,6 +56,11 @@ def lire_groupes(cz_max: float) -> dict:
     dm, edm, cz, sgl, sgb = dm[garde], edm[garde], cz[garde], sgl[garde], sgb[garde]
 
     d_l = 10.0 ** ((dm - 25.0) / 5.0)                                  # Mpc, distance de luminosité
+    if MALMQUIST == 'homogene':
+        # biais de Malmquist homogène (Lynden-Bell et al. 1988) : erreur log-normale de largeur
+        # Δ = ln10/5 · e_DM, densité uniforme → E[d | DM] = d̂ · exp(3,5 Δ²) [Certain pour la formule]
+        delta = np.log(10.0) / 5.0 * edm
+        d_l = d_l * np.exp(3.5 * delta ** 2)
     q0 = 0.5 * PLANCK18['omega_m'] - (1.0 - PLANCK18['omega_m'])
     # d_L ≈ (c z / H0)(1 + (1 − q0) z / 2) : on résout pour z_cos (z < 0,05)
     a = (1.0 - q0) / 2.0
@@ -72,6 +78,12 @@ def lire_groupes(cz_max: float) -> dict:
     if POSITION == 'cz':
         # place le groupe à sa distance de vitesse (cz/H0) : réduit le biais de Malmquist sur la position
         d_com = np.maximum(cz, 100.0) / 100.0
+    if os.environ.get('MONOPOLE') == '1':
+        # zéro de H0 ajusté (paramètre de nuisance, comme Lilow & Nusser 2021) : on retire u = ε·H·d au moindre carré pondéré
+        wgt = 1.0 / (err ** 2 + SIGMA_NL ** 2)
+        eps = np.sum(wgt * u * d_com) / np.sum(wgt * d_com ** 2)
+        u = u - eps * d_com
+        print(f'monopole retiré : {eps:+.3f} km/s par Mpc/h (H0 effectif ajusté)')
     l, b = np.radians(sgl), np.radians(sgb)
     n = np.stack([np.cos(b) * np.cos(l), np.cos(b) * np.sin(l), np.sin(b)], axis=1)
     return dict(pos=n * d_com[:, None], n=n, u=u, err=err, d=d_com)
