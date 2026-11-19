@@ -26,6 +26,36 @@ def periodique(dx: np.ndarray) -> np.ndarray:
     return dx - BOITE * np.round(dx / BOITE)
 
 
+def vierge_depuis_particules(instantane: str) -> dict:
+    """La Vierge est hors de la zone fine : on la cherche dans TOUTES les particules (grossières comprises).
+
+    Masse dans des cases de 2 Mpc/h (blocs de 2×2×2 = sphère d'environ 2,5 Mpc) dans 7,5 Mpc autour de sa place ;
+    on garde le bloc le plus lourd. Mesure : masse viriale de la Vierge ~1,2 × 10¹⁵ M☉ [Probable, ordre de grandeur].
+    """
+    f = h5py.File(instantane, 'r')
+    tab = f['Header'].attrs['MassTable']
+    cote = 16.0 * H
+    pos, mas = [], []
+    for t in (1, 2, 3):
+        g = f.get(f'PartType{t}')
+        if g is None:
+            continue
+        p = periodique(g['Coordinates'][:] - VIERGE)
+        dedans = np.all(np.abs(p) < cote / 2, axis=1)
+        pos.append(p[dedans])
+        mas.append(g['Masses'][:][dedans] if 'Masses' in g else np.full(dedans.sum(), tab[t]))
+    pos, mas = np.concatenate(pos), np.concatenate(mas)
+    nb = int(cote / 2.0)
+    h3, _ = np.histogramdd(pos, bins=nb, range=[(-cote / 2, cote / 2)] * 3, weights=mas)
+    bloc = h3[:-1, :-1, :-1] + h3[1:, :-1, :-1] + h3[:-1, 1:, :-1] + h3[:-1, :-1, 1:] \
+        + h3[1:, 1:, :-1] + h3[1:, :-1, 1:] + h3[:-1, 1:, 1:] + h3[1:, 1:, 1:]
+    i = np.unravel_index(np.argmax(bloc), bloc.shape)
+    centre = (np.array(i) + 1.0) * (cote / nb) - cote / 2
+    moyenne = 0.3111 * 27.75 * (2 * cote / nb) ** 3                     # 1e10 M☉/h dans un bloc moyen
+    return dict(masse_bloc_msun=float(bloc[i] * 1e10 / H), surdensite=float(bloc[i] / moyenne),
+                ecart_mpc=float(np.linalg.norm(centre) / H))
+
+
 def main() -> None:
     f = h5py.File(sys.argv[1], 'r')
     a = f['Header'].attrs['Time']
@@ -62,9 +92,7 @@ def main() -> None:
                         decalage_centre_mpc=float(np.linalg.norm(periodique(milieu - CENTRE)) / H), score=float(score))
             if cand['isolee'] and (meilleure is None or score < meilleure['score']):
                 meilleure = cand
-    dv = np.linalg.norm(periodique(pos - VIERGE), axis=1)
-    k = np.argmax(np.where(dv < 7.5 * H, m200, 0.0))
-    vierge = dict(m200=float(m200[k]), ecart_mpc=float(dv[k] / H))
+    vierge = vierge_depuis_particules(sys.argv[1].replace('fof_subhalo_tab', 'snap'))
     bilan = dict(a=float(a), paire=meilleure, vierge=vierge)
     print(json.dumps(bilan, indent=1, ensure_ascii=False))
 
