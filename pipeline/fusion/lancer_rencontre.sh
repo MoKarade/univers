@@ -10,6 +10,8 @@ ICI="$(cd "$(dirname "$0")" && pwd)"
 PY=/c/tmp/venv-cupy/Scripts/python.exe
 G=C:/tmp/analyse-architecture/galaxies
 GAL="${UNIVERS_GALAXIES:-$G/plein}"      # dossier des cinq galaxies de départ
+ETAT="${UNIVERS_ETAT:-$G/etat_combine.json}"      # places et vitesses de départ des cinq galaxies (sortie des tirs de réglage)
+GAZ=""; [ "${UNIVERS_GAZ:-0}" = "1" ] && GAZ="--gaz=1"      # gaz, naissances d'étoiles, retour de masse (gaz_galaxie.py)
 TR="${UNIVERS_TRACEURS:-C:/tmp/natif/donnees/etoiles-visibles}"      # dossier des étoiles visibles
 S="${1:-C:/tmp/natif/groupe-local}"
 export PYTHONIOENCODING=utf-8 UNIVERS_AVANCEMENT=C:/dev/Univers-PC/avancement
@@ -24,7 +26,7 @@ if [ ! -f "$S/aujourdhui.npz" ]; then
   if [ ! -f "$S/angles.txt" ]; then
     # Premier passage : sert à savoir où pointe la barre de la masse aujourd'hui, pour la caler sur la barre mesurée.
     if [ ! -f "$S/passage1.npz" ]; then
-      "$PY" -u rencontre.py passe "$GAL" "$S" --etat="$G/etat_combine.json" --releve-ma=50 >> "$S/journal.txt" 2>&1 || { echo "ECHEC du passe" >> "$S/journal.txt"; exit 1; }
+      "$PY" -u rencontre.py passe "$GAL" "$S" --etat="$ETAT" $GAZ --releve-ma=50 >> "$S/journal.txt" 2>&1 || { echo "ECHEC du passe" >> "$S/journal.txt"; exit 1; }
       mv "$S/aujourdhui.npz" "$S/passage1.npz"
     fi
     cp "$S/passage1.npz" "$S/aujourdhui.npz"
@@ -34,7 +36,7 @@ if [ ! -f "$S/aujourdhui.npz" ]; then
     mv "$S/barre.json" "$S/barre_passage1.json"
   fi
   echo "=== passe avec la barre calée : $(cat "$S/angles.txt") ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
-  "$PY" -u rencontre.py passe "$GAL" "$S" --etat="$G/etat_combine.json" --releve-ma=50 --angles="$(cat "$S/angles.txt")" >> "$S/journal.txt" 2>&1 || { echo "ECHEC du passe" >> "$S/journal.txt"; exit 1; }
+  "$PY" -u rencontre.py passe "$GAL" "$S" --etat="$ETAT" $GAZ --releve-ma=50 --angles="$(cat "$S/angles.txt")" >> "$S/journal.txt" 2>&1 || { echo "ECHEC du passe" >> "$S/journal.txt"; exit 1; }
   "$PY" -u rencontre.py barre "$S" --traceurs="$TR" >> "$S/journal.txt" 2>&1
 fi
 # Contrôle de l'arrivée : on ne continue que si chaque galaxie est assez près de sa place mesurée.
@@ -55,11 +57,15 @@ if [ -n "${UNIVERS_CONTRAT:-}" ]; then
   if [ ! -f "$S/etoiles/vl_etoiles.bin" ]; then
     mkdir -p "$S/etoiles"
     "$LOCALAPPDATA/univers-venv/Scripts/python.exe" ../natif/etoiles_visibles_masse.py "$UNIVERS_CONTRAT" "$S/aujourdhui.npz" C:/tmp/natif/gaia/gaia.bin,C:/tmp/natif/gaia/gaia_b.bin C:/tmp/natif/donnees/etoiles.bin C:/tmp/natif/gaia/gaia_agrege.bin "$S/etoiles" >> "$S/journal.txt" 2>&1 || { echo "ECHEC des étoiles visibles" >> "$S/journal.txt"; exit 1; }
-    for n in andromede triangle grand_nuage petit_nuage; do cp "$TR/etoiles_visibles_$n.npz" "$S/etoiles/"; done
+    if [ -n "${UNIVERS_CONTRATS_VOISINES:-}" ]; then      # voisines posées sur leur masse aussi (etoiles_visibles_voisines_masse.py)
+      "$LOCALAPPDATA/univers-venv/Scripts/python.exe" ../natif/etoiles_visibles_voisines_masse.py "$UNIVERS_CONTRATS_VOISINES" "$S/aujourdhui.npz" "$GAL" "$S/etoiles" >> "$S/journal.txt" 2>&1 || { echo "ECHEC des étoiles visibles des voisines" >> "$S/journal.txt"; exit 1; }
+    else
+      for n in andromede triangle grand_nuage petit_nuage; do cp "$TR/etoiles_visibles_$n.npz" "$S/etoiles/"; done
+    fi
   fi
   TR="$S/etoiles"
 fi
 echo "=== futur : d'aujourd'hui à +10 Ga ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
-"$PY" -u rencontre.py futur "$S" 10.0 --traceurs="$TR" --releve-ma=10 --champ=2 >> "$S/journal.txt" 2>&1
+"$PY" -u rencontre.py futur "$S" "${UNIVERS_FIN_GA:-10.0}" $GAZ --traceurs="$TR" --releve-ma=10 --champ=2 >> "$S/journal.txt" 2>&1
 echo "=== fin ($(date '+%d/%m %H:%M')), code $?" >> "$S/journal.txt"
 rm -f "$VERROU"
