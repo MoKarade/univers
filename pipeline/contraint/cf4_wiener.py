@@ -24,7 +24,9 @@ from scipy.linalg import cho_factor, cho_solve
 from cosmo_lineaire import PLANCK18, CorrelationVitesses, Spectre, taux_croissance
 
 C_KMS = 299792.458
-H0_CF4 = 74.6            # zéro des modules de distance de CF4 (Tully et al. 2023) [Probable]
+H0_CF4 = float(os.environ.get("H0_CF4", "74.6"))  # zéro des modules de distance de CF4 (Tully et al. 2023) [Probable]
+ESTIMATEUR = os.environ.get('ESTIMATEUR', 'ds')   # ds = Davis & Scrimgeour 2014 ; wf = Watkins & Feldman 2015
+POSITION = os.environ.get('POSITION', 'd')        # d = distance mesurée ; cz = distance de vitesse
 SIGMA_NL = 150.0         # agitation non linéaire résiduelle d'un groupe, km/s [Supposition, valeur courante]
 LISSAGE = 5.0            # Mpc/h, coupe les échelles non linéaires du modèle [Supposition]
 COTE, NGRILLE = 1000.0, 64
@@ -62,6 +64,14 @@ def lire_groupes(cz_max: float) -> dict:
     u = C_KMS * (z_obs - z_cos) / (1.0 + z_cos)                       # Davis & Scrimgeour 2014
     d_com = d_l / (1.0 + z_cos) * H0_CF4 / 100.0                       # Mpc/h, comobile
     err = np.log(10.0) / 5.0 * edm * H0_CF4 * d_l / (1.0 + z_cos)
+    if ESTIMATEUR == 'wf':
+        # Watkins & Feldman 2015 : u = cz ln(cz / H0 d) a une erreur gaussienne (pas la différence cz − H0 d)
+        czp = np.maximum(cz, 100.0)
+        u = czp * np.log(czp / (H0_CF4 * d_l * (1.0 + z_cos)))
+        err = czp * np.log(10.0) / 5.0 * edm
+    if POSITION == 'cz':
+        # place le groupe à sa distance de vitesse (cz/H0) : réduit le biais de Malmquist sur la position
+        d_com = np.maximum(cz, 100.0) / 100.0
     l, b = np.radians(sgl), np.radians(sgb)
     n = np.stack([np.cos(b) * np.cos(l), np.cos(b) * np.sin(l), np.sin(b)], axis=1)
     return dict(pos=n * d_com[:, None], n=n, u=u, err=err, d=d_com)
