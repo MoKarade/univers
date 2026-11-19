@@ -62,12 +62,16 @@ def main() -> None:
     m200 = f['Group/Group_M_Crit200'][:] * 1e10 / H                     # M☉
     pos = f['Group/GroupPos'][:]
     vel = f['Group/GroupVel'][:]                                       # km/s [À vérifier : convention GADGET-4]
-    d_centre = np.linalg.norm(periodique(pos - CENTRE), axis=1)
-    proches = np.where((d_centre < 8.0 * H) & (m200 > 3e11))[0]
+    # la zone fine (particules de type 1) est l'endroit où le Groupe local a pu se former : on y cherche la paire
+    snap = h5py.File(sys.argv[1].replace('fof_subhalo_tab', 'snap'), 'r')
+    zone = CENTRE + np.median(periodique(snap['PartType1/Coordinates'][:] - CENTRE), axis=0)
+    print(f'zone fine à {np.linalg.norm(zone - CENTRE) / H:.1f} Mpc du centre (place de l observateur)')
+    d_centre = np.linalg.norm(periodique(pos - zone), axis=1)
+    proches = np.where((d_centre < 5.0 * H) & (m200 > 3e11))[0]
     proches = proches[np.argsort(-m200[proches])]
-    print(f'a = {a:.3f} ; {len(m200)} groupes ; halos > 3e11 M☉ à moins de 8 Mpc du centre : {len(proches)}')
+    print(f'a = {a:.3f} ; {len(m200)} groupes ; halos > 3e11 M☉ à moins de 5 Mpc de la zone fine : {len(proches)}')
     for i in proches[:8]:
-        print(f'  #{i:6d}  M200 {m200[i]:.2e} M☉  à {d_centre[i] / H:5.2f} Mpc du centre')
+        print(f'  #{i:6d}  M200 {m200[i]:.2e} M☉  à {d_centre[i] / H:5.2f} Mpc de la zone fine')
 
     meilleure = None
     for ii, i in enumerate(proches):

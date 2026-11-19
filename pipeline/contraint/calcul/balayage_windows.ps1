@@ -15,6 +15,9 @@ if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'univers-venv')) -and (Test-Pat
 $python = Join-Path $env:LOCALAPPDATA 'univers-venv\Scripts\python.exe'
 $env:PYTHONIOENCODING = 'utf-8'
 $env:MONOPOLE = '1'; $env:PAS_D = '4'; $env:R_D = '40'; $env:SIGMA_D = '0.25'; $env:PREFIXE = 'rcj'
+# Vierge imposée (δ_L = 1,8 dans 13 Mpc/h) : mesuré le 19/11, sans elle aucun amas ne se forme ; avec, rcv1 donne
+# 1,3e15 M☉ à 5,3 Mpc de sa place (mesure : ~1,2e15).
+$env:VIERGE_DL = '1.8'
 New-Item -ItemType Directory -Force 'resultats' | Out-Null
 for ($g = $Premiere; $g -le $Derniere; $g++) {
     while (Get-Process -Name 'cod' -ErrorAction SilentlyContinue) {

@@ -18,6 +18,15 @@ sed -e "s|^outname .*|outname ${NOM}|" \
     -e "s|^camb .*|camb $TRAVAIL/transfert_planck18_eh.dat|" \
     -e "s|^centre .*|centre ${CENTRE}|" \
     "$DEPOT/calcul/genetic_rc1_zoom.txt" | tr -d '\r' > genetic.txt
+# Modifications genetIC facultatives (ajustement du Groupe local) : lignes insérées avant « done »
+if [ -n "${MODS:-}" ] && [ -f "$MODS" ]; then
+  python3 - "$MODS" <<'EOF'
+import sys
+mods = open(sys.argv[1]).read().replace('\r', '').strip() + '\n'
+s = open('genetic.txt').read().replace('\ndone', '\n' + mods + 'done', 1)
+open('genetic.txt', 'w').write(s)
+EOF
+fi
 "$HOME/contraint/genetIC/genetIC/genetIC" genetic.txt > genetic.log 2>&1
 tr -d '\r' < "$DEPOT/calcul/gadget_param_rc1.txt" \
   | sed -e "s|^InitCondFile .*|InitCondFile ./${NOM}.gadget3|" -e "s|^OutputDir .*|OutputDir ./sortie|" \
