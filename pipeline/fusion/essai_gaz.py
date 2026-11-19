@@ -3,11 +3,12 @@
 
 1. Gradient connu : gaz uniforme, énergie interne qui croît le long de x, dilatation le long de x.
 2. Tube à choc isotherme : densité et vitesse exactes entre la détente et le choc.
-3. Effondrement d'Evrard (1988, MNRAS 235, 911) : sphère de gaz froid (masse 1, rayon 1, G = 1, rho en 1/r,
+3. Explosion de Sedov : rayon du choc d'une énergie déposée en un point (contrôle des explosions d'étoiles).
+4. Effondrement d'Evrard (1988, MNRAS 235, 911) : sphère de gaz froid (masse 1, rayon 1, G = 1, rho en 1/r,
    u = 0,05) qui s'effondre sous son poids, rebondit sur un choc et se met à l'équilibre. Gravité et gaz ensemble :
    l'énergie totale doit rester constante.
 
-Usage : python essai_gaz.py [gradient] [sod] [evrard]      (code de sortie 0 si tout passe)
+Usage : python essai_gaz.py [gradient] [sod] [sedov] [evrard]      (code de sortie 0 si tout passe)
 """
 import sys
 import time
@@ -80,6 +81,37 @@ def sod():
     return ok
 
 
+def sedov():
+    """Explosion ponctuelle de Sedov (1959) et Taylor (1950) : une énergie E déposée au centre d'un gaz uniforme froid. Le
+    choc est une sphère de rayon R = 1,1527 (E t² / rho)^(1/5) (gamma = 5/3). C'est le contrôle de toute rétroaction par
+    explosions d'étoiles : si ce rayon est faux, les supernovae du calcul pousseraient le gaz de travers."""
+    d = 1.0 / 48; marge = 4
+    B = verre(48 + 2 * marge, 48 + 2 * marge, 48 + 2 * marge, d, 3) - (marge + 24) * d
+    p = B[(np.abs(B) < 0.5).all(1)]; n = len(p)
+    r0 = np.linalg.norm(p, axis=1)
+    m = cp.full(n, d ** 3); u = np.full(n, 1e-5)
+    centre = np.argsort(r0)[:64]      # énergie E = 1 répartie sur les 64 particules centrales
+    u[centre] += 1.0 / (64 * d ** 3)
+    pos = cp.asarray(p); vel = cp.zeros((n, 3)); u = cp.asarray(u); h = cp.full(n, 1.2 * d)
+    g = 5.0 / 3.0; t, t_fin = 0.0, 0.06
+    r = gaz_gpu.sph(pos, vel, m, h, u=u, gamma=g); h = r['h']
+    while t < t_fin - 1e-12:
+        dt = min(0.25 * float((r['h'] / r['vsig']).min()), t_fin - t)      # pas de Courant commun à toutes les particules
+        vel += 0.5 * dt * r['acc']; ud = cp.maximum(u + 0.5 * dt * r['dudt'], 1e-7)
+        pos += dt * vel
+        r = gaz_gpu.sph(pos, vel + 0.5 * dt * r['acc'], m, h, u=cp.maximum(ud + 0.5 * dt * r['dudt'], 1e-7), gamma=g); h = r['h']
+        vel += 0.5 * dt * r['acc']; u = cp.maximum(ud + 0.5 * dt * r['dudt'], 1e-7)
+        t += dt
+    rr = np.linalg.norm(cp.asnumpy(pos), axis=1); rho = cp.asnumpy(r['rho'])
+    bords = np.linspace(0.05, 0.48, 44); mil = 0.5 * (bords[1:] + bords[:-1])
+    prof = np.array([np.median(rho[(rr >= a) & (rr < b)]) if ((rr >= a) & (rr < b)).sum() > 20 else 0 for a, b in zip(bords[:-1], bords[1:])])
+    R_calc = float(mil[int(np.argmax(prof))]); R_exact = 1.1527 * (1.0 * t ** 2 / 1.0) ** 0.2
+    E = float((m * u).sum() + 0.5 * (m * (vel ** 2).sum(1)).sum())
+    e = R_calc / R_exact - 1; ok = abs(e) < 0.06 and abs(E - 1.0) < 0.03 and float(prof.max()) > 2.0
+    print(f'Explosion de Sedov, {n} particules, t = {t:.3f} : rayon du choc {R_calc:.3f} (exact {R_exact:.3f}, écart {100 * e:+.1f} %) ; densité au choc {prof.max():.2f} (exact 4, lissée par la méthode) ; énergie {E:.4f} (départ 1)  {"bon" if ok else "MAUVAIS"}')
+    return ok
+
+
 def evrard(n=40000):
     rng = np.random.default_rng(1)
     r = rng.uniform(0, 1, n)        # rho en 1/r : masse dans r proportionnelle à r²  ->  r = sqrt(u) ... ici M(<r) = r², donc r = sqrt(u)
@@ -116,10 +148,11 @@ def evrard(n=40000):
 
 
 def main():
-    quoi = sys.argv[1:] or ['gradient', 'sod', 'evrard']
+    quoi = sys.argv[1:] or ['gradient', 'sod', 'sedov', 'evrard']
     ok = True
     if 'gradient' in quoi: ok &= gradient()
     if 'sod' in quoi: ok &= sod()
+    if 'sedov' in quoi: ok &= sedov()
     if 'evrard' in quoi: ok &= evrard()
     print('PASSE' if ok else 'ECHEC')
     sys.exit(0 if ok else 1)
