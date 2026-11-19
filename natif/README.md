@@ -102,3 +102,28 @@ l'univers, paramètres modifiables, orbite de n'importe quel objet.
 - Ne change pas : les formes des galaxies pendant la rencontre (film calculé à l'avance) et le mouvement des millions
   d'étoiles affichées. Le panneau le dit.
 - Pas vérifié : la fenêtre réellement affichée (captures en fenêtre cachée seulement), la souris sur la frise.
+
+## Grandes structures et nuage d'Oort (19 novembre 2026)
+
+Demande de Marc : il manquait le nuage d'Oort, Laniakea avec le Grand Attracteur et les vides cosmiques.
+
+- `pipeline/natif/structures.py` écrit `structures.bin` (44 Mo) et `structures_noms.tsv` (données dans
+  `%LOCALAPPDATA%\univers-raw`, installées par `installer.ps1`). Sources : bassins d'attraction de Dupuy et Courtois 2023
+  et champ de vitesses Cosmicflows-4 (frontière de Laniakea, 9 297 lignes de courant vers les six attracteurs) ; vides du
+  voisinage de Malandrino et al. 2026 (100, forme publiée, dont le Vide local, < 200 Mpc/h) ; vides SDSS DR7 de Douglass
+  et al. 2023 (VoidFinder, 200 à 330 Mpc/h) ; vides BOSS DR12 de Mao et al. 2017 (z = 0,2 à 0,7, sphère de même volume).
+  On généralise en s'éloignant : forme publiée près, union de sphères plus loin, sphère au plus loin.
+- Ordre des axes des grilles 64³ de Cosmicflows-4 (densité, vitesses) établi sur les données : (SGX, SGY, SGZ), à
+  l'inverse des grilles 128³ des bassins. Unité des vitesses déduite de la relation linéaire (57,7 km/s par unité) et
+  vérifiée sur le mouvement mesuré du Groupe local (610 contre 627 km/s, même direction à 20° près) [Probable].
+- `src/structures.h` dessine les trois couches en repères additifs (pas de la lumière ; l'interface le dit) :
+  surfaces vues en voile (plus vives de biais), flot en tirets qui avancent dans le sens de la chute, nuage d'Oort.
+  Montrées à partir de ~20 millions d'al regardés (structures) et entre ~1 000 UA et ~30 al du Soleil (Oort) ; ce qui
+  est bien plus loin que l'échelle regardée s'estompe. Menu : deux cases pour les cacher.
+- Nuage d'Oort : MODÈLE (aucune comète vue sur place) : un million de comètes, densité en r^-3,5 de 3 000 à 100 000 UA
+  (Duncan, Quinn et Tremaine 1987), extérieur isotrope, intérieur aplati [supposé], chacune sur son orbite képlérienne
+  calculée à la date montrée (`shaders/oort.vert`). Ignorés : marée galactique, étoiles qui passent.
+- Contrôle `essai_structures` (dans `controle.sh`) : surfaces fermées ; volume de Laniakea retrouvé (1,945 million de
+  (Mpc/h)³) ; 3 lignes sur 4 du flot de Laniakea au même puits (les autres s'arrêtent sur des cols) ; Vide local à
+  38,8 Mpc/h ; modèle d'Oort : pente -3,36 mesurée sur 200 000 tirages, extérieur isotrope, intérieur aplati.
+- Pas vérifié : la fenêtre réellement affichée (captures en fenêtre cachée seulement), la cadence avec Gaia chargé.

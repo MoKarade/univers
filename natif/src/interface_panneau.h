@@ -214,7 +214,7 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
         }
     }
     ImGui::Spacing();
-    ImGui::TextWrapped("%s", bt ? bt->text : kindText(static_cast<int>(b.kind)));
+    ImGui::TextWrapped("%s", bt ? bt->text : b.structure ? structureText() : kindText(static_cast<int>(b.kind)));
     ImGui::Spacing();
 
     // Orbite : courbe et analyse.

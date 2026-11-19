@@ -333,8 +333,8 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     } else if (fb.kind == Kind::Galaxy) {
         // En temps profond, la place vient du calcul de la rencontre avec Andromède (sauf le centre de la Voie lactée, origine du repère).
         const bool deepCalc = sim.deepTime() && fb.name != "Centre de la Voie lactée";
-        row(sim.deepTime() ? "Distance à la place actuelle du Soleil" : "Distance au Soleil", frDistance(dSun), deepCalc ? "calculé" : "mesuré", s);
-        ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
+        row(sim.deepTime() ? "Distance à la place actuelle du Soleil" : "Distance au Soleil", frDistance(dSun), deepCalc ? "calculé" : fb.structure ? "publié, catalogue cité" : "mesuré", s);
+        if (!fb.structure) ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
     } else {
         radiusRow(fb, s);
     }
@@ -352,6 +352,7 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     else if (fb.kind == Kind::Asteroid) ImGui::TextDisabled("Source : JPL Small-Body Database (NASA).");
     else if (fb.kind == Kind::Galaxy && sim.deepTime() && fb.name != "Centre de la Voie lactée")
         ImGui::TextDisabled("Position : calcul complet de la rencontre avec Andromède (scénario), parti des mesures de McConnachie 2012.");
+    else if (fb.kind == Kind::Galaxy && fb.structure) ImGui::TextDisabled("Sources : voir la description (place publiée, ramenée en années-lumière avec h = 0,674).");
     else if (fb.kind == Kind::Galaxy && fb.priority >= 9) ImGui::TextDisabled("Sources : Cosmicflows-4 (Tully et al. 2023, distances) ; OpenNGC (noms).");
     else if (fb.kind == Kind::Galaxy) ImGui::TextDisabled("Sources : Karachentsev et al. 2013 ; McConnachie 2012.");
     else ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");

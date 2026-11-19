@@ -25,6 +25,7 @@
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
 #include "galaxies_formes.h"
+#include "structures.h"
 #include "vieillissement.h"
 #include "film_etoiles.h"
 #include "film_carte.h"
@@ -381,6 +382,14 @@ int runWindow(const WindowOptions& opt) {
     GalaxyShapes galaxyShapes;
     galaxyShapes.create(g, dataDir + "/galaxies_formes.bin", HdrTarget::kFormat);
     sim.galaxyShapeCount = galaxyShapes.count;
+    // Grandes structures (Laniakea, flot, vides) et nuage d'Oort (modèle) : structures.h, structures.bin.
+    StructureRenderer structuresR;
+    const bool structuresOk = structuresR.create(g, dataDir, HdrTarget::kFormat);
+    sim.structures.loaded = structuresOk;
+    sim.structures.oortComets = structuresR.oortCount;
+    sim.structures.flowLines = structuresR.flowLines;
+    for (int k = 0; k < 5; ++k) sim.structures.triangles[k] = structuresR.meshTriangles[k];
+    double structuresClock = 0;
     AsteroidRenderer asteroids;
     asteroids.create(g, dataDir + "/asteroides.bin", HdrTarget::kFormat);
     sim.asteroidEpochJd = asteroids.ready ? asteroids.epochJd : 0;
@@ -872,6 +881,15 @@ int runWindow(const WindowOptions& opt) {
             galaxyShapes.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);
             sim.galaxyShapesShown = galaxyShapes.shown;
         }
+        // Grandes structures et nuage d'Oort : repères dessinés par-dessus la lumière des galaxies, selon l'échelle regardée.
+        structuresClock += dt;
+        {
+            const double camSun = std::sqrt(cam.pos.x * cam.pos.x + cam.pos.y * cam.pos.y + cam.pos.z * cam.pos.z);
+            sim.structures.oortShare = sim.structures.showOort ? structures::oortShare(camSun) : 0.0;
+            sim.structures.largeShare = sim.structures.showLarge && structuresOk ? structures::largeShare(sim.dist) : 0.0;
+            if (!skyOnly && (sim.structures.oortShare > 0 || sim.structures.largeShare > 0))
+                structuresR.draw(cmd, cam, sc.extent.width, sc.extent.height, sim.structures.oortShare, sim.structures.largeShare, sim.years, structuresClock, sim.dist);
+        }
         float ageLum[16], ageTeff[16];
         vieillissement.factors(sim.replayGa(), ageLum, ageTeff);
         sim.ageingShown = vieillissement.ready && std::fabs(sim.replayGa()) > 0.05;
@@ -1097,6 +1115,7 @@ int runWindow(const WindowOptions& opt) {
     asteroids.release(g);
     galaxies.release(g);
     galaxyShapes.release(g);
+    structuresR.release(g);
     spheres.release(g);
     if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
         const uint32_t n = std::min<uint32_t>(20000, orbits.count);
