@@ -8,8 +8,7 @@
 set -u
 ICI="$(cd "$(dirname "$0")" && pwd)"
 PY=/c/tmp/venv-cupy/Scripts/python.exe
-PYU="$(cygpath -u "${LOCALAPPDATA:-C:/Users/marcr/AppData/Local}")/univers-venv/Scripts/python.exe"      # python des scripts sans carte graphique (chemin au format du shell : le chemin Windows brut échouait, 19/11)
-[ -x "$PYU" ] || PYU=/c/Users/marcr/AppData/Local/univers-venv/Scripts/python.exe
+PYU="$PY"      # même python que les calculs : celui de AppData\Local est invisible depuis le terminal de l'appli Claude (dossier virtualisé, constaté le 19/11)
 G=C:/tmp/analyse-architecture/galaxies
 GAL="${UNIVERS_GALAXIES:-$G/plein}"      # dossier des cinq galaxies de départ
 ETAT="${UNIVERS_ETAT:-$G/etat_combine.json}"      # places et vitesses de départ des cinq galaxies (sortie des tirs de réglage)
