@@ -143,6 +143,7 @@ def main():
     gaz = None; kind_g = cp.asarray(kind)
     if 'gaz' in opts:
         import gaz_galaxie
+        if 'efficacite' in opts: gaz_galaxie.EFFICACITE = float(opts['efficacite'])      # réglage permis sur UNE mesure : les naissances d'étoiles (1,65 ± 0,19 M☉/an)
         gaz = gaz_galaxie.Gaz(len(kind)); masse_gaz0 = float(p['m'][kind == 3].sum())
         if opts.get('retour', '1') != '0': gaz.ages_de_depart(kind)      # --retour=0 : sans le gaz rendu par les étoiles qui vieillissent
 
