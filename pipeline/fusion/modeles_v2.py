@@ -18,7 +18,7 @@ Ce qui est mesuré, et ce qui ne l'est pas :
 - la barre n'est PAS posée ici : elle doit naître en laissant vieillir la galaxie seule, puis être comparée aux mesures
   (Voie lactée : 5,0 kpc, 39 km/s/kpc ; Andromède : 4,0 kpc, 40 km/s/kpc).
 
-Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7] [--froid=1.2] [--froid-centre=0.9]
+Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7] [--froid=1.2] [--froid-centre=0.9] [--agitation=0.75] [--halo-rho0= --halo-rs= --halo-coupure=]
   --rsig : longueur de décroissance de l'agitation des étoiles, en longueurs de disque (2 : disque très calme, sans barre ;
            3 ou 4 : centre plus froid, où une barre peut naître) ; --halo : part des particules donnée à la matière noire.
 """
@@ -108,11 +108,15 @@ except Exception as _e:      # table absente : on le dit dans le résumé du tir
     TABLE = None
 
 
-def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None, froid_centre=None, agitation=1.0):
+def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None, froid_centre=None, agitation=1.0, halo=None):
     import agama
     agama.setUnits(mass=1, length=1, velocity=1)
     g = GALAXIES[nom]
-    h = g['halo']
+    h = dict(g['halo'])
+    # halo : remplace des paramètres du halo de la table (rho0, rs, coupure). Sert à recaler les masses totales sans
+    # toucher à la courbe de rotation interne : la Voie lactée de la table pèse plus qu'Andromède (1,34 contre 1,07e12 M☉)
+    # alors que le rapport mesuré est 0,54 (+0,23 -0,17) (Peñarrubia et al. 2014 ; docs/lois-physiques/03).
+    if halo: h.update(halo)
     if 'hernquist' in h:
         ph = agama.Potential(type='Spheroid', densityNorm=h['hernquist'] / (2 * math.pi * h['a'] ** 3), gamma=1, beta=4, alpha=1, scaleRadius=h['a'],
                              outerCutoffRadius=h['coupure'], cutoffStrength=4)
@@ -243,7 +247,8 @@ def main():
     p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None,
                            froid=float(opts['froid']) if 'froid' in opts else None,
                            froid_centre=float(opts['froid-centre']) if 'froid-centre' in opts else None,
-                           agitation=float(opts.get('agitation', 1.0)))
+                           agitation=float(opts.get('agitation', 1.0)),
+                           halo={k[5:].replace('-', '_'): float(v) for k, v in opts.items() if k.startswith('halo-')} or None)
     resume['options'] = opts
     resume['table_unique'] = TABLE
     np.savez_compressed(sortie, meta=json.dumps(resume, ensure_ascii=False), **p)
