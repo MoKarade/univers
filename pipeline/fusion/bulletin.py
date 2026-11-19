@@ -38,17 +38,21 @@ def main():
     x = pos - c; v = vel - cv
     R = np.hypot(x[:, 0], x[:, 1]); phi = np.arctan2(x[:, 1], x[:, 0]); vR = (x[:, 0] * v[:, 0] + x[:, 1] * v[:, 1]) / np.maximum(R, 1e-9)
     calc = {}
-    # barre : phase du motif à deux bras par anneau de 0,5 kpc ; la barre finit là où la phase s'écarte de plus de 10° de
-    # celle du centre ou où la force tombe sous 0,1
+    # barre : force du motif à deux bras par anneau de 0,5 kpc ; la barre finit là où cette force retombe à la moitié de son
+    # maximum (au-delà du maximum), tant que la direction du motif reste à moins de 20° de celle du maximum. [L'ancien
+    # critère, 10° d'écart avec le centre, coupait la barre trop tôt dès qu'un bras s'y raccordait.]
     etoiles = (kind == 1) | (kind == 4) | (kind == 5)
-    ph0, fin = None, 0.0
-    for a in np.arange(1.0, 12.0, 0.5):
-        s = etoiles & (R >= a) & (R < a + 0.5)
-        z2 = np.mean(np.exp(2j * phi[s])); p = math.degrees(np.angle(z2)) / 2
-        if ph0 is None: ph0 = p
-        ecart = (p - ph0 + 90) % 180 - 90
-        if abs(z2) < 0.1 or abs(ecart) > 10: break
-        fin = a + 0.5
+    bords = np.arange(0.5, 12.0, 0.5); a2 = []; ph = []
+    for a in bords:
+        s_ = etoiles & (R >= a) & (R < a + 0.5)
+        z2 = np.mean(np.exp(2j * phi[s_])); a2.append(abs(z2)); ph.append(math.degrees(np.angle(z2)) / 2)
+    a2 = np.array(a2); k0 = int(np.argmax(a2[:14])); fin = float(bords[k0] + 0.5)
+    for k in range(k0 + 1, len(bords)):
+        ecart = (ph[k] - ph[k0] + 90) % 180 - 90
+        if a2[k] < 0.5 * a2[k0] or abs(ecart) > 20: break
+        fin = float(bords[k] + 0.5)
+    if a2[k0] < 0.1: fin = 0.0      # pas de barre
+    calc['barre_force_max'] = float(a2[k0])
     calc['barre_demi_longueur_kpc'] = fin
     sol = (R > R0 - 0.5) & (R < R0 + 0.5)
     for nom, k in (('disque_mince_hauteur_kpc', 1), ('disque_epais_hauteur_kpc', 4)):

@@ -104,6 +104,11 @@ try:
     for _cle in ('voie_lactee', 'andromede'):      # les variantes « barre » gardent le halo de la table
         GALAXIES[_cle + '_barre']['halo'] = dict(GALAXIES[_cle]['halo'])
     TABLE = _C.charger().get('date')
+    # Gaz du Grand Nuage : la table ne lui en donne pas, alors qu'il en a (hydrogène atomique (4,8 ± 0,2) x 10^8 M☉ à
+    # 50 kpc, Staveley-Smith et al. 2003, MNRAS 339, 87 ; x 1,33 pour l'hélium = 6,4 x 10^8 M☉ ; diamètre du disque de gaz
+    # 18,6 kpc). Longueur et hauteur du disque de gaz : [Supposition]. Sans lui, pas de naissance d'étoiles dans le Nuage.
+    if not any(d.get('kind') == 3 for d in GALAXIES['grand_nuage']['disques']):
+        GALAXIES['grand_nuage']['disques'] = list(GALAXIES['grand_nuage']['disques']) + [dict(kind=3, masse=6.4e8, rd=2.5, hz=0.2, q_min=1.5)]
 except Exception as _e:      # table absente : on le dit dans le résumé du tirage
     TABLE = None
 
