@@ -103,11 +103,15 @@ sans gaz, 1 M de particules, 1,5 Ga, 8 cœurs. Le candidat « halo tournant » e
 `v16/voie_lactee_barre_halo_tournant.npz` (429 076 vitesses retournées, paramètre de rotation 0,033–0,038) [Certain].
 Durée : 3 h 13 par tir (mesuré).
 
-| t (Ga) | Ωb, halo tournant : GADGET-4 | Ωb, témoin sans rotation : GADGET-4 | Ωb, notre moteur (variante 4, halo tournant, sans gaz) | Épaisseur 4–6 kpc : GADGET-4 tournant / témoin | Notre moteur |
-|---|---|---|---|---|---|
-| 0,5 | 48 (guide encore actif) | 40 | 38,1 | 0,28 / 0,26 | 0,25 |
-| 1,0 | 31,7 | 29,4 | 36,8 | 0,31 / 0,30 | 0,29 |
-| 1,5 | 30,2 | 29,4 | 34,8 | 0,33 / 0,32 | — |
+| t (Ga) | Ωb, halo tournant : GADGET-4 | Ωb, témoin sans rotation : GADGET-4 | Ωb, notre moteur (v16, halo tournant) | Épaisseur 4–6 kpc : GADGET-4 tournant / témoin |
+|---|---|---|---|---|
+| 0,5 | 48 (guide encore actif) | 40 | 42,2 | 0,28 / 0,26 |
+| 1,0 | 31,7 | 29,4 | 32,3 | 0,31 / 0,30 |
+| 1,5 | 30,2 | 29,4 | 29,9 | 0,33 / 0,32 |
+
+Correctif du 19/11 : une première version de ce tableau comparait à 38,1 / 36,8 / 34,8 km/s/kpc. Ces valeurs venaient
+d'un autre départ (v13 avec barre guide). Les chiffres de notre moteur pour ce même départ v16 sont 42,2 / 32,3 / 29,9
+(fil du calcul).
 
 Autres mesures GADGET-4, halo tournant à 1,5 Ga : force de la barre A2 = 0,33, longueur 4,8 kpc ; au Soleil, disque mince
 épais de 0,33 kpc (0,22 au départ), agitation radiale 52 km/s (28 au départ). Témoin : A2 0,37, longueur 5,8 kpc,
@@ -118,12 +122,33 @@ Lecture :
   0,45 → 0,55 kpc avec l'ancien départ v9 [Certain].
 - La barre est plus rapide qu'avec v9 : environ 30 km/s/kpc à 1,5 Ga dans GADGET-4, contre ~25 avant. Mais elle reste
   sous les 39 mesurés [Certain].
-- Écart entre les codes : GADGET-4 donne une barre plus lente de 5 km/s/kpc que notre moteur à 1 et 1,5 Ga. Dans
-  GADGET-4, la rotation du halo ne gagne que 1 à 2 km/s/kpc sur le témoin [Certain]. Causes possibles : la résolution
-  (1 M ici contre 3,5 M), une seule réalisation de chaque côté, ou un vrai effet du moteur [À vérifier]. Un tir GADGET-4
-  à 3,5 M sur 1,5 Ga (environ 13 h, estimation) trancherait.
+- Les deux codes sont d'accord sur ce départ : 31,7 / 30,2 km/s/kpc pour GADGET-4, 32,3 / 29,9 pour notre moteur à
+  1 et 1,5 Ga [Certain]. Le pas fixe de notre moteur n'y est pour rien [Probable]. Dans GADGET-4, la rotation du halo ne
+  gagne que 1 à 2 km/s/kpc sur le témoin [Certain].
 - À +0,5 Ga, la barre guide n'est pas encore éteinte (descente de 0,5 à 1,0 Ga) : la vitesse n'est pas encore celle de la
   barre faite par les étoiles elles-mêmes.
 
-Mesures complètes : `barre/mesures_vl_halo_tournant.json`, `barre/mesures_vl_temoin.json`. Suite de la file en cours :
-Andromède avec halo tournant, son témoin, puis `v13/centre` avec halo tournant.
+### Andromède v16, halo tournant (19/11, fini à 9 h 00, heure du Québec)
+
+Départ `v16/andromede_barre_halo_tournant.npz`, barre guide propre à Andromède (3e9 M☉, 4 kpc, 40 km/s/kpc, comme v9
+et v17). **GADGET-4 tourne sans gaz** ; le tir de notre moteur auquel on compare a du gaz et des naissances d'étoiles.
+
+| t (Ga) | Ωb GADGET-4 (sans gaz) | Ωb notre moteur (avec gaz) | A2 0,5–4 kpc | Longueur | Épaisseur 4–6 kpc |
+|---|---|---|---|---|---|
+| 0,5 | 29,7 (barre encore faible, A2 0,14) | 39,0 | 0,14 | 7,2 kpc | 0,46 kpc |
+| 1,0 | 17,6 | 36,1 | 0,27 | 6,8 kpc | 0,50 kpc |
+| 1,5 | 17,3 | 35,8 | 0,28 | 7,8 kpc | 0,50 kpc |
+
+Ce qui est mesuré [Certain] :
+- Sans gaz, la barre d'Andromède ralentit jusqu'à environ 17 km/s/kpc et s'allonge à 7–8 kpc. La valeur mesurée sur le
+  ciel est d'environ 40 km/s/kpc et 4 kpc.
+- Le disque s'épaissit de 0,37 à 0,50 kpc (4–6 kpc), et sa rotation moyenne y tombe de 210 à 134 km/s : il s'échauffe fortement.
+- Le disque reste dans le plan xy, et tourne dans le même sens que la barre guide (plan propre incliné de moins de 1°).
+
+Lecture : l'écart avec notre moteur (17 contre 36 km/s/kpc) est bien plus grand que pour la Voie lactée, où les deux
+codes s'accordent. La différence de physique est la cause la plus probable : avec le gaz, la barre reste rapide ; sans
+gaz, elle s'effondre [Probable]. Le témoin sans rotation du halo, qui tourne en ce moment, puis un tir de notre moteur
+sans gaz sur le même départ, permettraient de le confirmer [À vérifier].
+
+Mesures complètes : `barre/mesures_vl_halo_tournant.json`, `barre/mesures_vl_temoin.json`,
+`barre/mesures_m31_halo_tournant.json`. Suite de la file en cours : témoin d'Andromède, puis `v13/centre` avec halo tournant.
