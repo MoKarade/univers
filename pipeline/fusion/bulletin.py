@@ -4,7 +4,7 @@
 Pour chaque mesure de resultats/mesures_voie_lactee.json : la valeur du calcul, l'écart en nombre de marges d'erreur,
 et le verdict (dans la marge si l'écart est sous 1, proche sous 2, hors marge au-delà).
 
-Usage : python bulletin.py <galaxie.npz> [<tir.json de stabilite_tir.py>]
+Usage : python bulletin.py <galaxie.npz> [<tir.json de stabilite_tir.py> [date de l'instantané, Ga]]
 """
 import json
 import math
@@ -66,13 +66,16 @@ def main():
         rel = json.load(open(sys.argv[2], encoding='utf-8'))['releves']
         t = np.array([r['t'] for r in rel]); ang = np.array([r['anneaux'][1]['angle_deg'] for r in rel])
         u = np.unwrap(np.radians(ang) * 2) / 2; n = min(len(t) - 1, 20)
+        fin = len(t) if len(sys.argv) < 4 else int(np.searchsorted(t, float(sys.argv[3]) + 1e-9))      # 3e argument : date (Ga) de l'instantané
+        fin = max(fin, 6); n = min(n, fin - 1)
         pas = float(np.median(np.diff(t)))
         # entre deux relevés, le motif à deux bras ne doit pas tourner de plus d'un demi-tour (pi pour l'angle doublé), sinon la
         # vitesse lue est repliée : à 60 km/s/kpc au plus, il faut des relevés espacés de moins de 25 Ma (--releve-ma=10)
         if 2 * 60.0 * 1.0227121650456 * pas > math.pi: raise SystemExit(f'ECHEC : relevés espacés de {pas * 1000:.0f} Ma, trop pour lire la vitesse de la barre (refaire avec --releve-ma=10)')
-        calc['barre_vitesse_kms_kpc'] = float(abs(np.polyfit(t[-n:], u[-n:], 1)[0]) / 1.0227121650456)
-        g = [r['gaz'] for r in rel if 'gaz' in r]
-        if len(g) > 11: calc['naissance_etoiles_msol_an'] = float((g[-1]['nees_msol'] - g[-11]['nees_msol']) / ((g[-1]['t'] - g[-11]['t']) * 1e9))
+        calc['barre_vitesse_kms_kpc'] = float(abs(np.polyfit(t[fin - n:fin], u[fin - n:fin], 1)[0]) / 1.0227121650456)
+        g = [r['gaz'] for r in rel[:fin] if 'gaz' in r]
+        k = min(10, len(g) - 1)      # moyenne sur les 100 derniers Ma (ou moins au tout début)
+        if k >= 3: calc['naissance_etoiles_msol_an'] = float((g[-1]['nees_msol'] - g[-1 - k]['nees_msol']) / ((g[-1]['t'] - g[-1 - k]['t']) * 1e9))
     M = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resultats', 'mesures_voie_lactee.json'), encoding='utf-8'))['mesures']
     print(f"{'mesure':38s} {'mesuré':>12s} {'marge':>10s} {'calcul':>12s} {'écart':>8s}  verdict")
     bilan = {}
