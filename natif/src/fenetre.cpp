@@ -799,7 +799,11 @@ int runWindow(const WindowOptions& opt) {
         // Vue « meilleur rendu » seulement : ce sont des galaxies modèles, pas des étoiles mesurées une à une.
         companionShare = sim.bestLook && !sim.wholeGalaxy ? sim.starShare() * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0) : 0.0;
         sim.companionShare = companionShare;
-        fusionCloud.update(g, sim.replayGa(), std::max(fusionShare, companionShare));
+        // Le nuage n'est dessiné que si les étoiles visibles de la Voie lactée ne sont pas montrées avec celles des voisines
+        // (même condition que son dessin, plus bas : sim.milkyWayStarShare > 0 && neighbourStarsOk). Sinon il n'est pas lu du tout :
+        // en vue « meilleur rendu », le relire à chaque image coûtait ~25 ms par image nouvelle du nuage pendant un trajet.
+        const bool fusionCloudDrawn = milkyWayCentre >= 0 && !((milkyWayStarsOk && sim.bestLook) && neighbourStarsOk);
+        fusionCloud.update(g, sim.replayGa(), fusionCloudDrawn ? std::max(fusionShare, companionShare) : 0.0);
         loneShare = hasLoneGalaxy ? std::clamp((sim.years - kStartYears - ArmTracerPoints::kFullYears) / (ArmTracerPoints::kEndYears - ArmTracerPoints::kFullYears), 0.0, 1.0) *
                                         sim.starShare() * std::clamp(std::log10(std::max(sim.dist, 1.0)) - 3.5, 0.0, 1.0)
                                   : 0.0;
