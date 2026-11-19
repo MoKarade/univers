@@ -16,10 +16,10 @@ $lanceur = 'C:/tmp/analyse-architecture/univers/pipeline/fusion/lancer_rencontre
 $env:UNIVERS_CEDER = '1'
 
 function Carte-Libre {
-    $l = (& nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
-    if (-not $l) { return $false }
-    $v = $l -split ','
-    return ([int]$v[0] -lt 35) -and ([int]$v[1] -lt 4000)      # 35 % : même seuil que le retrait du calcul ; le bureau seul monte à 25-30 % (vidéo, outils), un jeu dépasse et prend plus de 4 Go
+    # Libre = aucun programme de Marc sur la carte (jeu, appli Univers) : même règle que le calcul (carte.py). Le taux
+    # d'occupation ne sert plus : le bureau seul le fait varier de 20 à 40 %.
+    & C:/tmp/venv-cupy/Scripts/python.exe (Join-Path $PSScriptRoot "carte.py") *> $null
+    return ($LASTEXITCODE -eq 0)
 }
 
 while ($true) {

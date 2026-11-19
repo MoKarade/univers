@@ -87,17 +87,13 @@ def guide_barre(cp, pos, t, g):
 
 
 def attendre(t_check):
+    """Rend la carte à Marc : s'il joue ou ouvre son appli (carte.py), on attend."""
     if time.time() - t_check < 30: return t_check
-    cp.cuda.Stream.null.synchronize()
+    import carte
     while True:
-        time.sleep(1.0)
-        try:
-            u = int(subprocess.run(['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=20,
-                                   creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout.split()[0])
-        except Exception:
-            break
-        if u < 35: break
-        print(f'  carte graphique occupée à {u} % par un autre programme : pause de 60 s', flush=True)
+        raison = carte.prise(cp.get_default_memory_pool().total_bytes() / 2 ** 20)
+        if not raison: break
+        print(f'  {raison} : pause de 60 s', flush=True)
         time.sleep(60)
     return time.time()
 

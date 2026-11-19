@@ -172,23 +172,18 @@ class Calcul:
         return np.array(out_p), np.array(out_v)
 
     def attendre(self):
-        """Rend la carte à Marc : si un autre programme l'occupe (son appli, un jeu), on attend."""
+        """Rend la carte à Marc : s'il joue ou ouvre son appli (carte.py), on attend, ou on se retire tout à fait."""
         if time.time() - self.t_check < 30: return
-        self.cp.cuda.Stream.null.synchronize()
+        import carte
         while True:
-            time.sleep(1.0)
-            try:
-                u = int(subprocess.run(['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=20,
-                                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout.split()[0])
-            except Exception:
-                break
-            if u < 35: break
+            raison = carte.prise(self.cp.get_default_memory_pool().total_bytes() / 2 ** 20)
+            if not raison: break
             if os.environ.get('UNIVERS_CEDER') == '1':
                 # Marc joue ou ouvre son appli : on rend TOUTE la carte (mémoire comprise) en s'arrêtant. Le veilleur
                 # (veilleur_calcul.ps1) relance le calcul depuis la dernière sauvegarde quand la carte est de nouveau libre.
-                print(f'  carte graphique occupée à {u} % par un autre programme : le calcul se retire, reprise à la dernière sauvegarde', flush=True)
+                print(f'  {raison} : le calcul se retire, reprise à la dernière sauvegarde', flush=True)
                 sys.exit(3)
-            print(f'  carte graphique occupée à {u} % par un autre programme : pause de 60 s', flush=True)
+            print(f'  {raison} : pause de 60 s', flush=True)
             time.sleep(60)
         self.t_check = time.time()
 
