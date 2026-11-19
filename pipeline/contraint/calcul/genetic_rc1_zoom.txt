@@ -1,0 +1,24 @@
+# Départ contraint CF4, graine 1, zoom léger sur la position de Lagrange du Groupe local
+Om 0.3111
+Ol 0.6889
+s8 0.8102
+ns 0.9665
+hubble 0.6766
+zin 99
+random_seed_real_space 1001
+camb ../transfert_planck18_eh.dat
+outname rc1_zoom
+outdir ./
+outformat 3
+base_grid 640.0 128
+gadget_particle_type 3
+centre 327.05 315.51 324.73
+select_sphere 20
+zoom_grid 8 64
+gadget_particle_type 2
+centre 327.05 315.51 324.73
+select_sphere 5
+zoom_grid 4 64
+gadget_particle_type 1
+import_level 0 ../rc_1_genetic_128.npy
+done
