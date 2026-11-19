@@ -11,8 +11,9 @@ le calcul fait évoluer. Ici, chaque traceur est un point de la photo :
 - lumière : magnitude absolue V publiée, partagée entre les traceurs (loi de Pareto, indice 1,5) [modèle] ;
 - vitesse : vitesse d'ensemble MESURÉE (module de distance, mouvement propre, vitesse radiale : mêmes valeurs que
   pipeline/fusion/groupe_local_clones.py, variante wu2026 ; Petit Nuage : Zivick et al. 2018, Graczyk et al. 2020),
-  plus la rotation du disque (courbe de rotation publiée) et l'agitation ; sens de rotation : côté du grand axe qui
-  s'approche [M31 : nord-est, certain ; les autres : à vérifier].
+  plus la rotation du disque (courbe de rotation publiée) et l'agitation ; sens de rotation : axe de
+  pipeline/constantes/univers.json [M31 : le côté nord-est s'éloigne et le sud-ouest s'approche, contrôle +167 km/s
+  du côté de l'angle de position ; les autres : à vérifier].
 Repère phys::galaxie de l'appli : centre de la Voie lactée à l'origine, Soleil à (-8,2 ; 0 ; 0) kpc, vitesse du Soleil
 (11,1 ; 245,04 ; 7,25) km/s (galaxie_orbites.h, table unique).
 Usage : python etoiles_visibles_photos.py <dossier galaxies-images> <dossier de sortie> [univers.json] [gaia.bin de référence (table des couleurs)]
@@ -24,6 +25,9 @@ import numpy as np
 
 PARETO_MAX = 10.0      # un traceur porte au plus 10 fois la lumière du plus faible : pas de point démesuré [modèle]
 from PIL import Image
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bras_mesures
+import galaxies_images
 import astropy.units as u
 from astropy.coordinates import SkyCoord, Galactocentric, CartesianDifferential, Distance
 
@@ -43,6 +47,80 @@ GALAXIES = {
 SOURCES = ('Sawala et al. 2025 et Wu et al. 2026 (distances, mouvements propres, vitesses radiales, comme '
            'groupe_local_clones.py) ; Petit Nuage : Kallivayalil et al. 2013, Graczyk et al. 2020 ; rotation : Chemin et al. '
            '2009 (M31), Corbelli et al. 2014 (M33), van der Marel & Kallivayalil 2014 (Grand Nuage), Stanimirović 2004 (Petit Nuage)')
+
+
+SIG_JEUNES = 10.0      # agitation des étoiles jeunes (km/s) : de l'ordre de celle du gaz [modèle]
+HZ_JEUNES = 0.10       # épaisseur des bras (kpc) ; le grand calcul la recalcule sur son disque de masse [modèle]
+# Tuiles fines des relevés (tuiles_bandes.py) : index sur le PC, paquets (gros) ailleurs. Sans elles, les bras de la photo restent.
+TUILES_INDEX = os.environ.get('UNIVERS_TUILES_INDEX', '')
+TUILES_PAQUETS = os.environ.get('UNIVERS_TUILES_PAQUETS', '')
+
+
+def vers_plan(lig_f: np.ndarray, col_f: np.ndarray, g: dict, D: float):
+    """Points d'une image du champ g (lig_f, col_f : fractions de la hauteur et de la largeur, nord en haut, est à gauche)
+    -> place dans le plan du disque (kpc, équatorial, relative au centre), d'après l'angle de position et
+    l'inclinaison publiés. Rend (direction du centre, grand axe, normale du disque, décalages)."""
+    ra, dec, pa, inc = (math.radians(g[x]) for x in ('ra', 'dec', 'pa', 'incl'))
+    u0 = np.array([math.cos(dec) * math.cos(ra), math.cos(dec) * math.sin(ra), math.sin(dec)])
+    est = np.array([-math.sin(ra), math.cos(ra), 0.0]); nord = np.cross(u0, est)
+    grand = math.cos(pa) * nord + math.sin(pa) * est; petit = -math.sin(pa) * nord + math.cos(pa) * est
+    nrm = np.cross(grand, math.cos(inc) * petit + math.sin(inc) * u0); nrm /= np.linalg.norm(nrm)
+    demi = math.tan(math.radians(g['champ']) / 2)
+    xi, eta = (0.5 - col_f) * 2 * demi, (0.5 - lig_f) * 2 * demi
+    d = u0[None] + xi[:, None] * est[None] + eta[:, None] * nord[None]
+    d /= np.linalg.norm(d, axis=1)[:, None]
+    centre_eq = u0 * D
+    t = (centre_eq @ nrm) / np.where(np.abs(d @ nrm) > 1e-3, d @ nrm, 1e-3)
+    return u0, grand, nrm, d * t[:, None] - centre_eq[None]
+
+
+def reconstruire_bras(src, fic, nom, g, D, R, off, grand, nrm, comp, teff, rbulbe, rng):
+    """Remplace, sur place (off, comp, teff), une part des traceurs du disque par des étoiles jeunes placées sur les bras
+    MESURÉS (cartes WISE 12 µm et GALEX ultraviolet lointain, bras_mesures.py). La part est celle de la lumière de la
+    photo qui n'est pas en anneau lisse, au moins le nombre d'étoiles jeunes que la couleur de la photo désignait déjà.
+    Rend la description écrite dans meta (None sans carte : rien ne change)."""
+    cartes, ecartees = {}, []
+    # même fenêtre que la photo (galaxies_images.py) : hors d'elle, la carte montre surtout la poussière de la Voie lactée
+    fen = galaxies_images.fenetre(bras_mesures.PIXELS, g['pa'], g['incl'], 1.0, galaxies_images.RAYON.get(fic, 0.75))
+    if TUILES_INDEX and TUILES_PAQUETS:
+        for k, releve, _ in bras_mesures.CARTES:
+            brut = bras_mesures.lire_tuiles(TUILES_INDEX, TUILES_PAQUETS, releve, g['ra'], g['dec'], g['champ'], bras_mesures.PIXELS)
+            if brut is None:
+                continue
+            couvert = float(np.isfinite(brut[fen > 0.5]).mean())
+            if couvert < bras_mesures.COUVERTURE_MIN:      # relevé incomplet sur la galaxie (GALEX : champs ronds épars)
+                ecartees.append(f'{releve} ({couvert:.0%} de la galaxie couverte)')
+                continue
+            c = bras_mesures.nettoyer(brut)
+            if c is not None:
+                cartes[k] = bras_mesures.combler_satellites(c, nom, g['ra'], g['dec'], g['champ']) * fen
+    if not cartes:
+        print(f'{nom} : aucune carte infrarouge ou ultraviolet, bras de la photo gardés')
+        return None
+    e2 = np.cross(nrm, grand)
+    phi = np.arctan2(off @ e2, off @ grand)
+    disque = np.flatnonzero(R >= rbulbe)
+    part = bras_mesures.part_hors_anneaux(R[disque], phi[disque], float(np.percentile(R, 99)))
+    n5 = min(max(int(round(part * len(R))), int((comp == 5).sum())), len(disque))
+    # tirage sur les cartes ; les points tombés dans le bulbe sont refusés (le bulbe reste lisse)
+    lf, cf, de = bras_mesures.tirer(cartes, int(n5 * 1.5) + 1000, rng)
+    _, _, _, o5 = vers_plan(lf, cf, g, D)
+    loin = np.linalg.norm(o5, axis=1) >= rbulbe
+    o5, de = o5[loin][:n5], de[loin][:n5]
+    n5 = len(o5)
+    o5 += nrm[None] * np.arctanh(rng.uniform(-0.999, 0.999, n5))[:, None] * HZ_JEUNES
+    t5, hii = bras_mesures.temperature(de, rng)
+    # les anciennes étoiles jeunes de la photo (place étirée par la remise à plat) rejoignent le disque lisse
+    comp[comp == 5] = 1
+    choix = rng.choice(disque, n5, replace=False)
+    off[choix] = o5
+    comp[choix] = 5
+    teff[choix] = t5
+    return dict(statut='reconstruit', cartes=[s for k, _, s in bras_mesures.CARTES if k in cartes],
+                cartes_ecartees=ecartees, part_hors_anneaux_photo=round(part, 4), etoiles_jeunes=int(n5), regions_hii=int(hii.sum()),
+                epaisseur_kpc=HZ_JEUNES, agitation_kms=SIG_JEUNES,
+                methode='place des bras : cartes 12 µm et UV lointain remises à plat (angle de position et inclinaison '
+                        'publiés) ; part de lumière : photo, au-dessus de la médiane des secteurs de chaque anneau')
 
 
 def lire_tsv(dossier):
@@ -77,24 +155,27 @@ def main():
         lin = img ** 2
         L = lin @ np.array([0.2126, 0.7152, 0.0722])
         h, w = L.shape
+        # galaxies satellites vues devant le disque (M32, NGC 205) : remplacées par le disque qui les entoure
+        img = bras_mesures.combler_satellites(img, nom, g['ra'], g['dec'], g['champ'])
+        L = bras_mesures.combler_satellites(L, nom, g['ra'], g['dec'], g['champ'])
         k = rng.choice(h * w, n, p=L.ravel() / L.sum())
         lig, col = k // w + rng.uniform(0, 1, n), k % w + rng.uniform(0, 1, n)
-        # direction de chaque point (équatorial), comme galaxies_images.h
-        ra, dec, pa, inc = (math.radians(g[x]) for x in ('ra', 'dec', 'pa', 'incl'))
-        u0 = np.array([math.cos(dec) * math.cos(ra), math.cos(dec) * math.sin(ra), math.sin(dec)])
-        est = np.array([-math.sin(ra), math.cos(ra), 0.0]); nord = np.cross(u0, est)
-        grand = math.cos(pa) * nord + math.sin(pa) * est; petit = -math.sin(pa) * nord + math.cos(pa) * est
-        nrm = np.cross(grand, math.cos(inc) * petit + math.sin(inc) * u0); nrm /= np.linalg.norm(nrm)
-        demi = math.tan(math.radians(g['champ']) / 2)
-        xi, eta = (0.5 - col / w) * 2 * demi, (0.5 - lig / h) * 2 * demi
-        d = u0[None] + xi[:, None] * est[None] + eta[:, None] * nord[None]
-        d /= np.linalg.norm(d, axis=1)[:, None]
         D = 10 ** (dmod / 5 + 1) / 1000.0                      # kpc
-        centre_eq = u0 * D
-        t = (centre_eq @ nrm) / np.where(np.abs(d @ nrm) > 1e-3, d @ nrm, 1e-3)
-        off = d * t[:, None] - centre_eq[None]                 # dans le plan du disque (kpc, équatorial)
+        u0, grand, nrm, off = vers_plan(lig / h, col / w, g, D)
         off += nrm[None] * np.arctanh(rng.uniform(-0.999, 0.999, n))[:, None] * hz      # épaisseur [modèle]
         R = np.linalg.norm(off, axis=1)
+        # couleur et composante depuis la photo
+        pix = img[np.clip(lig.astype(int), 0, h - 1), np.clip(col.astype(int), 0, w - 1)]
+        r_br = (pix[:, 2] + 0.02) / (pix[:, 0] + 0.02)
+        teff = np.clip(5000.0 * r_br ** 1.5, 3200.0, 25000.0)
+        rouge = (pix[:, 0] > 1.25 * pix[:, 2]) & (pix[:, 0] > 1.2 * pix[:, 1]) & (R > 2.0)
+        comp = np.where(R < rbulbe, 2, 1).astype(np.int8)
+        comp[rouge | (teff > 9000)] = 5
+        teff[rouge] = 2400.0
+        # bras et anneaux MESURÉS (bras_mesures.py) : quand les cartes infrarouge / ultraviolet sont là, toute la forme
+        # non lisse passe en composante 5, placée d'après ces cartes ; les composantes 1 et 2 restent lisses (le grand
+        # calcul les remplace par ses particules de masse).
+        bras = reconstruire_bras(src, fic, nom, g, D, R, off, grand, nrm, comp, teff, rbulbe, rng)
         # rotation : côté +grand axe qui s'approche (vitesse vers le Soleil, -u0)
         vphi = vrot * np.clip(R / rrot, 0, 1)
         # vitesse d'ensemble mesurée -> phys::galaxie
@@ -127,22 +208,15 @@ def main():
             spin_g = n_photo * (1.0 if np.dot(axe_calcul, n_photo) >= 0 else -1.0)
 
         tang = np.cross(spin_g[None], off_g); tang /= np.maximum(np.linalg.norm(tang, axis=1), 1e-9)[:, None]
-        vel_int = tang * vphi[:, None] + rng.normal(0, sig, (n, 3))
+        agitation = np.where(comp == 5, SIG_JEUNES, sig)      # étoiles jeunes : disque froid [modèle]
+        vel_int = tang * vphi[:, None] + rng.normal(0, 1, (n, 3)) * agitation[:, None]
         pos = c_pos[None] + off_g
         vel = c_vel[None] + vel_int
         # contrôle : vitesse le long de la ligne de visée (vue du Soleil) du côté +grand axe (vers l'angle de position)
         ligne = E2G @ u0
         cote = (off @ grand) > 0.3 * np.percentile(np.abs(off @ grand), 90)
         v_cote = float(np.mean(vel_int[cote] @ ligne))
-        # couleur et composante
-        pix = img[np.clip(lig.astype(int), 0, h - 1), np.clip(col.astype(int), 0, w - 1)]
-        r_br = (pix[:, 2] + 0.02) / (pix[:, 0] + 0.02)
-        teff = np.clip(5000.0 * r_br ** 1.5, 3200.0, 25000.0)
-        rouge = (pix[:, 0] > 1.25 * pix[:, 2]) & (pix[:, 0] > 1.2 * pix[:, 1]) & (R > 2.0)
-        comp = np.where(R < rbulbe, 2, 1).astype(np.int8)
-        comp[rouge | (teff > 9000)] = 5
-        teff[rouge] = 2400.0
-        lv = 10 ** (-0.4 * (g['mv'] - 4.83))
+        lv =10 ** (-0.4 * (g['mv'] - 4.83))
         wts = np.minimum(rng.pareto(1.5, n) + 1.0, PARETO_MAX)
         lum = (lv * wts / wts.sum()).astype(np.float32)
         graine = rng.integers(0, 2 ** 32, n, dtype=np.uint64).astype(np.uint32)
@@ -150,7 +224,8 @@ def main():
                     photo=f'{fic}.png ({"Mellinger 2009" if fic in ("lmc", "smc") else "DSS2"}, SkyView)', distance_kpc=D,
                     centre_kpc=c_pos.tolist(), vitesse_kms=c_vel.tolist(), source_ensemble=source_ens,
                     axe_rotation=spin_g.tolist(), axe_du_calcul=axe_calcul.tolist(), accord_axe_plan_photo=accord, vitesse_visee_cote_angle_position_kms=v_cote, nombre={str(c): int((comp == c).sum()) for c in (1, 2, 5)},
-                    sources=SOURCES, modele='épaisseur, lumière par traceur, couleur depuis la photo, sens de rotation hors M31')
+                    sources=SOURCES, modele='épaisseur, lumière par traceur, couleur depuis la photo, sens de rotation hors M31',
+                    bras=bras, barre_angle_deg=None)
         np.savez_compressed(os.path.join(sortie, f'etoiles_visibles_{nom}.npz'), pos=pos, vel=vel, lum=lum, teff=teff.astype(np.float32),
                             comp=comp, graine=graine, meta=json.dumps(meta, ensure_ascii=False))
         sens = "s'éloigne" if v_cote > 0 else "s'approche"
