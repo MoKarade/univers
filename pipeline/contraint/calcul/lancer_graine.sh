@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Lance un calcul contraint complet pour une graine, sous WSL : genetIC (départ zoom) puis GADGET-4 (z=99 -> 0).
-# Usage : bash lancer_graine.sh PREFIXE GRAINE [FILS=8] [CENTRE="327.05 315.51 324.73"]
+# Usage : bash lancer_graine.sh PREFIXE GRAINE [FILS=8] [CENTRE="324.30 309.60 326.65"]
 #   PREFIXE : rc (vitesses CF4) ou rcj (vitesses CF4 + densité 2MRS) ; le fichier
 #   pipeline/contraint/resultats/<PREFIXE>_<GRAINE>_genetic_128.npy doit exister (exporter_genetic.py).
 # Durée mesurée : 30 min sur 8 fils (graine rc 1, 19/11/2026).
 set -euo pipefail
-PREFIXE=$1; GRAINE=$2; FILS=${3:-8}; CENTRE=${4:-"327.05 315.51 324.73"}
+PREFIXE=$1; GRAINE=$2; FILS=${3:-8}; CENTRE=${4:-"324.30 309.60 326.65"}
 DEPOT=/mnt/c/dev/univers-contraint/pipeline/contraint
 TRAVAIL=$HOME/contraint/rc
 NOM=${PREFIXE}${GRAINE}
