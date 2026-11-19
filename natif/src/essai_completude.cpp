@@ -165,5 +165,24 @@ int main(int argc, char** argv) {
     verifie(completude::groupe_local::kManquantesN > 0 ? r[3].manques[0].find(completude::groupe_local::kManquantes[0].nom) != std::string::npos
                                                        : r[3].manques[0].find("galaxies naines") == std::string::npos,
             "Groupe local : les manquantes sont nommées, et aucune ligne vide quand il n'en manque aucune");
+    {      // grandes structures et nuage d'Oort : lignes dites, avec leur nature (modèle = « supposé »)
+        Comptes cs = c;
+        cs.structures = true;
+        cs.lignesFlot = 9297;
+        cs.cometesOortModele = 1000000;
+        const auto rs = rapport(cs);
+        bool oort = false, vides = false, laniakea = false;
+        for (const Ligne& l : rs[0].lignes) oort = oort || (l.quoi == "Nuage d'Oort" && l.nature == Nature::Suppose);
+        for (const Ligne& l : rs[4].lignes) {
+            vides = vides || l.quoi.find("Vides du voisinage") == 0;
+            laniakea = laniakea || l.quoi.find("Laniakea") == 0;
+        }
+        verifie(oort, "nuage d'Oort : dit comme modèle (supposé)");
+        verifie(vides && laniakea, "univers lointain : Laniakea et les vides listés quand structures.bin est chargé");
+        verifie(std::fabs(rs[0].part - r[0].part) < 1e-15, "le modèle du nuage d'Oort ne compte pas dans la part des objets connus");
+        bool absent = false;
+        for (const std::string& m : r[4].manques) absent = absent || m.find("structures.bin absent") != std::string::npos;
+        verifie(c.structures || absent, "sans structures.bin : dit comme manque");
+    }
     return gEchecs ? 1 : 0;
 }

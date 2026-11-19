@@ -62,6 +62,12 @@ constexpr double kGaiaVitessesRadiales = 25878867;         // gaia.bin du 12/11/
 constexpr double kEtoilesVoieLacteeMin = 1.0e11, kEtoilesVoieLacteeMax = 4.0e11;   // NASA Goddard (Blueshift) : estimation
 constexpr double kGalaxiesGroupeLocal = 113;               // Local Volume Database v1.1.2 (Pace, 04/11/2026) : confirmées, < 1 Mpc
 constexpr double kGalaxiesMin = 2.0e11, kGalaxiesMax = 2.0e12;     // Lauer et al. 2021 (centaines de milliards) ; Conselice et al. 2016
+// Grandes structures (structures.bin, pipeline/natif/structures.py, 19/11/2026).
+constexpr int kVidesVoisinage = 100;        // Malandrino et al. 2026 (A&A 705, A160) : vides à 5 sigma, moins de 200 Mpc/h
+constexpr int kVidesSdss = 1163, kVidesSdssMontres = 899;      // Douglass et al. 2023 (VoidFinder, Planck 2018) ; montrés : au-delà de 200 Mpc/h
+constexpr int kVidesBoss = 1228;            // Mao et al. 2017 (ApJ 835, 161), VizieR J/ApJ/835/161
+constexpr int kBassinsPublies = 6;          // Dupuy et Courtois 2023, table 1 : Laniakea et 5 voisins
+constexpr double kCometesOortMin = 1.0e11, kCometesOortMax = 1.0e12;      // estimation publiée (NASA), aucune vue sur place
 
 // Précision du fichier d'étoiles et de galaxies (pipeline/natif/etoiles.py, galaxies.py) : entiers de 16 bits.
 constexpr double kPasLongitudeArcsec = 360.0 * 3600.0 / 65535.0;    // 19,8″
@@ -95,6 +101,9 @@ struct Comptes {
                                        // radiale nulle (< 0,2 km/s) dans etoiles.bin (ancien fichier, approché)
     int galaxiesGroupeLocal = 0;       // galaxies nommées à moins de 1 Mpc du Soleil
     uint64_t galaxiesReleves = 0;      // galaxies et quasars des relevés (galaxies.bin)
+    bool structures = false;           // structures.bin chargé (Laniakea, flot, vides)
+    uint32_t lignesFlot = 0;           // lignes de courant du champ de vitesses Cosmicflows-4
+    uint64_t cometesOortModele = 0;    // comètes du MODÈLE du nuage d'Oort dessinées (structures.h)
 };
 
 inline int lunesPresentes(const Comptes& c) {
@@ -259,6 +268,9 @@ Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia 
     if (sim.hasGaia && !fichierAgrege.empty()) c = lireAgrege(c, fichierAgrege);
     if (sim.hasGaia && !fichierGaia.empty()) c = lireGaiaVoisinage(c, fichierGaia);
     c.asteroides = sim.asteroidCount;
+    c.structures = sim.structures.loaded;
+    c.lignesFlot = sim.structures.flowLines;
+    c.cometesOortModele = sim.structures.oortComets;
     if (sim.asteroidCat) {      // les comètes, quand le catalogue en contient, ne sont pas des astéroïdes
         uint64_t k = 0;
         for (uint64_t i = 0; i < sim.asteroidCat->n; ++i) k += sim.asteroidCat->isComet(static_cast<size_t>(i)) ? 1 : 0;
@@ -379,6 +391,12 @@ inline Echelle systemeSolaire(const Comptes& c) {
         "Orbites des astéroïdes : ajouter l'attraction des planètes (écart actuel jusqu'à 300 000 km)",
         "Mesurer l'écart de Triton avec un fichier plus récent (255 km aujourd'hui)",
     };
+    if (c.cometesOortModele) {
+        e.lignes.push_back({"Nuage d'Oort", entier(double(c.cometesOortModele)) + " comètes d'un modèle (densité en r^-3,5 de 3 000 à 100 000 UA, nuage intérieur aplati), "
+                            "chacune sur son orbite ; on en estime 100 à 1 000 milliards", Nature::Suppose,
+                            "modèle : Duncan, Quinn et Tremaine 1987 ; Oort 1950 ; aplatissement intérieur supposé (Kaib et Quinn 2008)"});
+        e.manques.push_back("Nuage d'Oort : aucune de ses comètes n'a été vue sur place ; le modèle ignore la marée de la Galaxie et les étoiles qui passent");
+    }
     if (asteroidesAbsents > 0)
         e.manques.insert(e.manques.begin() + 1, entier(asteroidesAbsents) +
                          " astéroïdes de la base du JPL absents (orbite non elliptique, ou découverts depuis le téléchargement : retélécharger)");
@@ -593,11 +611,30 @@ inline Echelle lointain(const Comptes& c) {
         {"Distance", "calculée d'après le décalage et la cosmologie réglable", Nature::Calcule, "cosmologie.h"},
         {"Mouvement propre des galaxies", "ignoré dans la distance ; erreur non chiffrée", Nature::Inconnu, ""},
     };
+    if (c.structures) {
+        e.lignes.push_back({"Laniakea et ses 5 bassins voisins", "frontières publiées (" + entier(kBassinsPublies) + " sur " + entier(kBassinsPublies) +
+                            ")", Nature::Ajuste, "Dupuy et Courtois 2023, bassins d'attraction du champ de vitesses Cosmicflows-4"});
+        e.lignes.push_back({"Flot vers les attracteurs", entier(c.lignesFlot) + " lignes de courant ; chaque bassin finit sur un seul point, à 17 à 33 Mpc/h "
+                            "de l'attracteur publié", Nature::Calcule, "champ de vitesses Cosmicflows-4 (Courtois et al. 2023), pipeline/natif/structures.py"});
+        e.lignes.push_back({"Vides du voisinage (< 200 Mpc/h, tout le ciel)", sur(kVidesVoisinage, kVidesVoisinage) + ", forme publiée, dont le Vide local",
+                            Nature::Ajuste, "Malandrino et al. 2026, reconstruction Manticore du relevé 2M++"});
+        e.lignes.push_back({"Vides SDSS DR7 (200 à 330 Mpc/h, ciel du Nord)", entier(kVidesSdssMontres) + " (les " + entier(kVidesSdss - kVidesSdssMontres) +
+                            " plus proches sont déjà dans le voisinage), forme publiée", Nature::Calcule, "Douglass et al. 2023, VoidFinder sur les galaxies mesurées"});
+        e.lignes.push_back({"Vides BOSS DR12 (z = 0,2 à 0,7)", sur(kVidesBoss, kVidesBoss) + " ; sphère de même volume (forme non publiée)", Nature::Calcule,
+                            "Mao et al. 2017, VIDE sur les galaxies mesurées"});
+    }
     e.manques = {
         "Distances mesurées sans le décalage (céphéides, supernovæ : catalogue Cosmicflows)",
         "Éclat et forme de chaque galaxie",
         "Relevés plus récents (DESI après la DR1)",
     };
+    if (c.structures) {
+        e.manques.push_back("Vides entre 330 Mpc/h et z = 0,2, et au-delà de 200 Mpc/h dans le ciel du Sud : aucun catalogue chargé");
+        e.manques.push_back("Superamas au-delà des bassins voisins de Laniakea (le champ de Cosmicflows-4 s'arrête vers z = 0,08)");
+        e.manques.push_back("Forme réelle des vides BOSS (sphère de même volume aujourd'hui)");
+    } else {
+        e.manques.push_back("Laniakea, son flot et les vides cosmiques : structures.bin absent");
+    }
     return e;
 }
 

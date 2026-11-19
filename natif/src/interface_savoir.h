@@ -81,6 +81,13 @@ const char* kindText(int kind) {
     }
 }
 
+// Repères des grandes structures (structures_noms.tsv) : ni galaxie ni lumière.
+const char* structureText() {
+    return "Grande structure de l'univers. Ce qui est dessiné ici est un repère, pas de la lumière : un vide est noir et la frontière "
+           "d'un superamas ne se voit pas. Formes et places viennent des catalogues cités dans la description ; le flot doré montre "
+           "le sens dans lequel les galaxies tombent (champ de vitesses Cosmicflows-4).";
+}
+
 const BodyText* bodyText(const std::string& name) {
     for (const BodyText& t : kBodyTexts)
         if (name == t.name) return &t;

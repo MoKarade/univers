@@ -222,7 +222,8 @@ private:
     void buildGalaxy(const Sim& sim, const Body& b, const SandboxGalaxy& sb) {
         const int ci = sim.centres && sim.centres->ready ? CentresReference::indexOf(b.name) : -1;
         if (ci < 0) {
-            note = "Pas d'orbite calculée pour cette galaxie : seule sa position mesurée est connue.";
+            note = b.structure ? "Grande structure : pas d'orbite (elle bouge avec l'expansion de l'univers)."
+                               : "Pas d'orbite calculée pour cette galaxie : seule sa position mesurée est connue.";
             return;
         }
         kind = 1;

@@ -70,6 +70,15 @@ Univers lointain
 - Distances mesurées sans le décalage (Cosmicflows) ; éclat et forme ; relevés plus récents ; chiffrer l'effet du
   mouvement propre des galaxies sur leur distance.
 
+## Grandes structures et nuage d'Oort (19/11/2026)
+
+- Système solaire : ligne « Nuage d'Oort », nature « supposé » (modèle d'un million de comètes ; 100 à 1 000 milliards
+  estimées). Il ne compte pas dans la part des objets connus.
+- Univers lointain : Laniakea et ses 5 bassins voisins (6 sur 6, ajusté sur des mesures), flot (calculé), vides du
+  voisinage (100 sur 100), SDSS (899 montrés, les 264 plus proches déjà dans le voisinage), BOSS (1 228 sur 1 228).
+- Manques dits : vides entre 330 Mpc/h et z = 0,2 et dans le ciel du Sud au-delà de 200 Mpc/h ; superamas au-delà des
+  bassins voisins ; forme réelle des vides BOSS.
+
 ## Mettre à jour
 
 Changer une valeur de référence : la constante dans `completude.h`, avec sa source et sa date, puis ce fichier.

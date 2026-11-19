@@ -38,7 +38,7 @@ find_program(GLSLANG glslang REQUIRED)
 set(SPV_DIR ${CMAKE_BINARY_DIR}/spv)
 file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
-foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp film_etat.comp ciel_bandes.frag fusion_nuage.vert ciel_sources.vert ciel_sources.frag gaia_ciel.vert galaxie_formes.vert)
+foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp film_etat.comp ciel_bandes.frag fusion_nuage.vert ciel_sources.vert ciel_sources.frag gaia_ciel.vert galaxie_formes.vert oort.vert oort.frag structures_maille.vert structures_maille.frag structures_flot.vert structures_flot.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet -I${CMAKE_SOURCE_DIR}/shaders ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
     DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_acc.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_fiable.glsl VERBATIM)
@@ -105,6 +105,12 @@ add_executable(essai_completude src/essai_completude.cpp)
 target_link_libraries(essai_completude PRIVATE volk imgui univers_physique)
 target_compile_options(essai_completude PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(essai_completude PRIVATE -static)
+
+# Contrôle des grandes structures (structures.bin) et du modèle du nuage d'Oort (structures.h).
+add_executable(essai_structures src/essai_structures.cpp)
+target_link_libraries(essai_structures PRIVATE volk)
+target_compile_options(essai_structures PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_structures PRIVATE -static)
 
 add_subdirectory(physique)
 

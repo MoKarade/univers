@@ -58,6 +58,7 @@ struct Body {
     std::string natureText;     // galaxie : genre lu dans le fichier
     Vec3 fixedPos{0, 0, 0};     // galaxie : position mesurée (années-lumière), immobile pour l'instant
     int priority = 1;           // galaxie : 1 = nom montré dès qu'on sort de la Voie lactée
+    bool structure = false;     // repère de structures_noms.tsv (superamas, attracteur, vide) : pas une galaxie
     const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
 };
 
@@ -255,6 +256,15 @@ struct Sim {
     double exposureEv = 0, photoGain = 1;
     uint32_t galaxyShapeCount = 0, galaxyShapesShown = 0;      // galaxies de forme mesurée (galaxies_formes.h), montrées en particules
     uint64_t neighbourStarCount = 0;   // étoiles des galaxies voisines (voisines_etoiles.bin), montrées à toute date
+    // Grandes structures (Laniakea et son flot, vides cosmiques) et nuage d'Oort (modèle) : structures.h. Repères dessinés,
+    // pas de la lumière ; montrés par défaut (Marc, 19/11/2026), cachables dans le Menu.
+    struct StructuresState {
+        bool loaded = false;           // structures.bin lu
+        bool showLarge = true, showOort = true;
+        double largeShare = 0, oortShare = 0;      // parts montrées à la dernière image
+        uint32_t oortComets = 0, flowLines = 0;
+        uint32_t triangles[5] = {};    // par genre : 1 Laniakea, 2 vides du voisinage, 3 vides SDSS, 4 vides BOSS
+    } structures;
     bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
     double cloneMergeProbability = 0, cloneMergeGa[3] = {0, 0, 0};
     std::vector<CalcState> calcStates;
@@ -432,7 +442,10 @@ struct Sim {
         const std::string cf4Path = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "galaxies_cf4.tsv";
         // Puis galaxies_formes_noms.tsv : Messier, NGC et IC de forme mesurée (pipeline/natif/galaxies_formes.py), cherchables.
         const std::string formesPath = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "galaxies_formes_noms.tsv";
-        for (const std::string& path : {galaxiesPath, cf4Path, formesPath})
+        // Puis structures_noms.tsv : Laniakea, Grand Attracteur, bassins voisins, Vide local et vides du voisinage
+        // (pipeline/natif/structures.py).
+        const std::string structuresPath = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "structures_noms.tsv";
+        for (const std::string& path : {galaxiesPath, cf4Path, formesPath, structuresPath})
         for (std::ifstream gf(path); std::getline(gf, line);) {
             std::vector<std::string> cols;
             size_t from = 0;
@@ -445,6 +458,7 @@ struct Sim {
             body.fixedPos = {std::atof(cols[1].c_str()), std::atof(cols[2].c_str()), std::atof(cols[3].c_str())};
             body.natureText = cols[4];
             body.priority = std::atoi(cols[5].c_str());
+            body.structure = path == structuresPath;
             bodies.push_back(body);
         }
         // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
