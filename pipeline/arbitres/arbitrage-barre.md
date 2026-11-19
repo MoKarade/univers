@@ -128,7 +128,14 @@ Lecture :
 - À +0,5 Ga, la barre guide n'est pas encore éteinte (descente de 0,5 à 1,0 Ga) : la vitesse n'est pas encore celle de la
   barre faite par les étoiles elles-mêmes.
 
-### Andromède v16, halo tournant (19/11, fini à 9 h 00, heure du Québec)
+> **ANNULÉ (19/11, 13 h 40)** : les deux tirs Andromède ci-dessous sont faux. Le bulbe d'Andromède (sorte 2,
+> 1,18e10 M☉) manquait dans la conversion, et les adoucissements étaient ceux de la Voie lactée (0,1299 / 0,0325 kpc au
+> lieu de 0,1243 / 0,0311). Leurs chiffres ne doivent pas servir. Conversion corrigée (bulbe → type 5, adoucissements relus
+> dans chaque départ, arrêt sur une sorte non prévue) ; les deux tirs sont relancés. La Voie lactée et v13/centre ne sont
+> pas touchés (pas de sorte 2, mêmes adoucissements) [Certain]. Le départ fautif est exporté pour contrôle :
+> `C:\tmp\arbitres\andromede_1M_halo_tournant_tir-19-11_sans-bulbe.npz`.
+
+### Andromède v16, halo tournant (19/11, fini à 9 h 00, heure du Québec) — ANNULÉ, voir ci-dessus
 
 Départ `v16/andromede_barre_halo_tournant.npz`, barre guide propre à Andromède (3e9 M☉, 4 kpc, 40 km/s/kpc, comme v9
 et v17). **GADGET-4 tourne sans gaz** ; le tir de notre moteur auquel on compare a du gaz et des naissances d'étoiles.
@@ -150,7 +157,7 @@ codes s'accordent. La différence de physique est la cause la plus probable : av
 gaz, elle s'effondre [Probable]. Le témoin sans rotation du halo, qui tourne en ce moment, puis un tir de notre moteur
 sans gaz sur le même départ, permettraient de le confirmer [À vérifier].
 
-### Andromède v16, témoin sans rotation du halo (fini à 10 h 41, heure du Québec)
+### Andromède v16, témoin sans rotation du halo (fini à 10 h 41, heure du Québec) — ANNULÉ, voir plus haut
 
 Même départ et même guide, sans rotation du halo, sans gaz : Ωb = 24,1 / 15,6 / 14,9 km/s/kpc à 0,5 / 1 / 1,5 Ga ;
 A2 = 0,20 / 0,21 / 0,24 ; longueur 4,8 kpc ; épaisseur 4–6 kpc 0,37 → 0,50 kpc [Certain].

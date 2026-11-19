@@ -7,7 +7,7 @@
   ou bien où la phase s'écarte de plus de 10° de celle de la barre (le plus petit des deux) ;
 - épaisseur (médiane de |z|) des vieilles étoiles (sortes 1 et 4) et des jeunes (sorte 3, disque froid), anneau 4–9 kpc,
   dans le plan propre du disque (perpendiculaire au moment cinétique des étoiles à moins de 10 kpc) ET dans le plan xy.
-Types GADGET → sortes : 1 → 0 (matière noire), 2 → 1, 3 → 3, 4 → 4 (voir npz_vers_gadget.py).
+Types GADGET → sortes : 1 → 0 (matière noire), 2 → 1, 3 → 3, 4 → 4, 5 → 2 (bulbe) (voir npz_vers_gadget.py).
 Le même calcul est aussi appliqué à notre tir GPU (fichier .json de stabilite_tir.py) pour la vitesse de la barre.
 Usage : python3 mesurer.py <dossier output> <sortie.json>
 """
@@ -22,7 +22,7 @@ import numpy as np
 T_UNIT = 0.9778      # Ga par unité de temps
 KMS_KPC = 1.0227121650456      # (km/s/kpc) -> rad/Ga
 ANNEAUX = [(0.5, 2), (2, 4), (4, 6), (6, 9), (9, 13)]
-KIND_DE_TYPE = {1: 0, 2: 1, 3: 3, 4: 4}
+KIND_DE_TYPE = {1: 0, 2: 1, 3: 3, 4: 4, 5: 2}
 
 
 def releve(pos, vel, m, kind, t, e_rel, cm):

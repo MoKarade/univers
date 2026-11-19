@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Convertit un départ .npz de modeles_v2.py / stabilite_tir.py (M☉, kpc, km/s) en conditions de départ GADGET-4
 (HDF5, ICFormat 3 ; unités kpc, km/s, 1e10 M☉). Un type GADGET par sorte (kind) : 0 → type 1 (matière noire),
-1 → type 2 (disque mince), 3 → type 3 (« gaz » froid traité en étoiles), 4 → type 4 (disque épais). Le type 0 (gaz SPH)
-reste vide. Le centre de masse est ramené à l'origine, au repos (la barre guide est centrée sur l'origine).
+1 → type 2 (disque mince), 3 → type 3 (« gaz » froid traité en étoiles), 4 → type 4 (disque épais), 2 → type 5 (bulbe).
+Le type 0 (gaz SPH) reste vide. Une sorte sans type prévu arrête la conversion (le bulbe d'Andromède avait été oublié
+ainsi le 19/11 : corrigé). Écrit aussi adoucissements.txt (« type eps » par ligne), relu par preparer.sh. Le centre de masse est ramené à l'origine, au repos (la barre guide est centrée sur l'origine).
 Option --sous-echantillon=N : tirage au hasard de N particules, mêmes proportions par sorte, masses multipliées d'autant.
-Usage : python3 npz_vers_gadget.py <depart.npz> <sortie.hdf5> [--sous-echantillon=N] [--graine=1]"""
+Option --npz-sortie=<fichier.npz> : écrit aussi le départ converti au format habituel (pos, vel, m en M☉, eps, kind, meta).
+Usage : python3 npz_vers_gadget.py <depart.npz> <sortie.hdf5> [--sous-echantillon=N] [--graine=1] [--halo-tourne=f] [--npz-sortie=…]"""
 import json
 import sys
 
 import h5py
 import numpy as np
 
-TYPE_DE_KIND = {0: 1, 1: 2, 3: 3, 4: 4}
+TYPE_DE_KIND = {0: 1, 1: 2, 3: 3, 4: 4, 2: 5}
 
 
 def main():
@@ -19,6 +21,9 @@ def main():
     opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--'))
     z = np.load(args[0])
     pos, vel, m, eps, kind = z['pos'], z['vel'], z['m'], z['eps'], z['kind']
+    inconnues = set(np.unique(kind).tolist()) - set(TYPE_DE_KIND)
+    if inconnues:
+        sys.exit(f'sortes sans type GADGET : {sorted(inconnues)}')
     if 'halo-tourne' in opts:
         # Copie de stabilite_tir.py (--halo-tourne) : même tirage (graine 20261118), mêmes particules retournées.
         f = float(opts['halo-tourne']); rng = np.random.default_rng(20261118)
@@ -64,6 +69,15 @@ def main():
         h.attrs['NumPart_Total_HighWord'] = np.zeros(6, dtype=np.int64)
         h.attrs['MassTable'] = np.zeros(6); h.attrs['Time'] = 0.0; h.attrs['Redshift'] = 0.0
         h.attrs['BoxSize'] = 0.0; h.attrs['NumFilesPerSnapshot'] = 1
+    with open('adoucissements.txt', 'w') as fa:
+        for t, e in sorted(adouc.items()):
+            if len(e) != 1:
+                sys.exit(f'type {t} : plusieurs adoucissements {e}')
+            fa.write(f'{t} {e[0]}' + chr(10))
+    if 'npz-sortie' in opts:
+        meta = json.loads(str(z['meta'])) if 'meta' in z.files else {}
+        meta['conversion_gadget'] = dict(source=args[0], options=opts, centre_retire=c.tolist())
+        np.savez_compressed(opts['npz-sortie'], pos=pos, vel=vel, m=m, eps=eps, kind=kind, meta=json.dumps(meta, ensure_ascii=False))
     print(json.dumps(dict(particules=int(npart.sum()), par_type=npart.tolist(), adoucissement_par_type=adouc,
                           centre_retire=c.round(4).tolist()), ensure_ascii=False))
 

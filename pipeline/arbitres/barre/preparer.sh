@@ -13,6 +13,18 @@ cp ~/arbitres/gadget4/$EXE Gadget4-barre
 python3 $B/npz_vers_gadget.py $NPZ depart.hdf5 $OPT
 TMAX=$(python3 -c "print(round($DUREE/0.9778, 6))")
 sed "s|__IC__|depart|; s|__TLIM__|$TLIM|; s|__TMAX__|$TMAX|" $B/param_modele.txt > param.txt
+# Adoucissements : ceux du .npz, un par type (adoucissements.txt écrit par la conversion), remplacent ceux du modèle
+python3 - <<'PY'
+e = dict(l.split() for l in open('adoucissements.txt'))
+defaut = min(e.values(), key=float)
+lignes = [l for l in open('param.txt') if not l.startswith('Softening')]
+for t in range(6):
+    lignes.append(f'SofteningComovingClass{t}     {e.get(str(t), defaut)}' + chr(10))
+    lignes.append(f'SofteningMaxPhysClass{t}      {e.get(str(t), defaut)}' + chr(10))
+    lignes.append(f'SofteningClassOfPartType{t}    {t}' + chr(10))
+open('param.txt', 'w').writelines(lignes)
+PY
+grep -E "^SofteningComoving" param.txt
 # Sorties : toutes les 50 Ma, plus une 10 Ma après chacune (vitesse de la barre sans ambiguïté de demi-tour)
 python3 -c "
 T=0.9778; n=int(round($DUREE/0.05))
