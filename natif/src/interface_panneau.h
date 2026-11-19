@@ -143,6 +143,26 @@ OrbitFacts starFacts(const std::vector<phys::Vec3>& g, const std::vector<double>
 
 // ---------------------------------------------------------------- onglet Astre
 
+// Dates de la rencontre rejouée (groupe_local_scenario.h) : valeurs mesurées, puis tes réglages.
+std::string mergeText(const scenario::Result& r) {
+    return r.mergeM31Ga > 0 ? "dans " + frNum(r.mergeM31Ga, 3) + " milliards d'années" : "pas avant 10 milliards d'années";
+}
+
+void groupFacts(const UiState& ui, const ObjectTrack& tr) {
+    if (!tr.groupBase.ok) return;
+    row("Voie lactée et Andromède fusionnent", mergeText(tr.groupBase), "calculé, valeurs mesurées", ui.s);
+    if (tr.groupWhatIf.ok) {
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(kWhatIf), "Et si… (tes réglages)");
+        row("Elles fusionnent", mergeText(tr.groupWhatIf), "calculé", ui.s);
+        if (tr.groupWhatIf.periM31Ga > 0)
+            row("Premier passage d'Andromède", "dans " + frNum(tr.groupWhatIf.periM31Ga, 3) + " milliards d'années, à " +
+                frNum(tr.groupWhatIf.periM31Kpc * orbite::kKpcLy / 1000.0, 3) + " milliers d'al", "calculé", ui.s);
+        note("Modèle simplifié : centres des cinq galaxies seulement (pas leurs formes), même physique que la référence de l'appli.");
+    } else {
+        note("Onglet Réglages : change l'énergie noire ou la matière noire pour voir la rencontre « et si… ».");
+    }
+}
+
 // Les gestes de l'ancienne fiche : s'approcher, revenir, prochaine éclipse, revenir au Soleil.
 void bodyActions(Sim& sim, UiState& ui, int f) {
     const Body& b = sim.bodies[static_cast<size_t>(f)];
@@ -204,7 +224,7 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
 
 // Courbe de l'orbite de l'astre suivi et son analyse (réelle, et « et si… » avec les réglages).
 void bodyOrbit(Sim& sim, UiState& ui, const Body& b, int f) {
-    gBac.track.update(sim, gBac.sandbox);
+    gBac.track.update(sim, gBac.sandbox, ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::IsAnyItemActive());
     ObjectTrack& tr = gBac.track;
     const bool planet = b.kind == Kind::Planet;
     ImGui::Checkbox("Tracer son orbite dans la vue", &gBac.showOrbit);
@@ -259,8 +279,9 @@ void bodyOrbit(Sim& sim, UiState& ui, const Body& b, int f) {
         }
     } else if (tr.kind == 1) {
         ImGui::TextUnformatted("Distance au centre de la Voie lactée");
-        plotSeries(ui, "##orb", tr.t, tr.r, nullptr, sim.years, "Ga", 1e-9, "kpc", px(ui, 140), kStartYears);
+        plotSeries(ui, "##orb", tr.t, tr.r, tr.hasWhatIf ? &tr.rWhatIf : nullptr, sim.years, "Ga", 1e-9, "kpc", px(ui, 140), kStartYears);
         note("Axe : milliards d'années depuis aujourd'hui ; trait blanc : date montrée.");
+        groupFacts(ui, tr);
         // Premier rapprochement après aujourd'hui (premier minimum de la distance).
         for (size_t i = 1; i + 1 < tr.r.size(); ++i)
             if (tr.t[i] > sim.years && tr.r[i] < tr.r[i - 1] && tr.r[i] <= tr.r[i + 1]) {
@@ -414,15 +435,35 @@ void tabSettings(Sim& sim, UiState& ui) {
     }
     note("w0 = -1 et wa = 0 : énergie noire constante. Mesuré : Planck 2018.");
     ImGui::SeparatorText("Notre galaxie");
-    ImGui::SliderFloat("##halo", &gBac.sandbox.haloFactor, 0.2f, 3.0f, "Matière noire de la Voie lactée : x %.2f");
+    ImGui::SliderFloat("##halo", &gBac.sandbox.haloFactor, 0.2f, 3.0f, "Matière noire des galaxies : x %.2f");
     ImGui::Checkbox("Barre au centre de la Voie lactée", &gBac.sandbox.bar);
     ImGui::Checkbox("L'énergie noire agit aussi dans la galaxie", &gBac.sandbox.useCosmologyLambda);
     if (ImGui::Button("Galaxie comme mesurée")) gBac.sandbox = SandboxGalaxy{};
     ImGui::PopItemWidth();
-    note("Ces trois réglages changent l'orbite « et si… » de l'étoile suivie (et du Soleil), en bleu pointillé.");
-    ImGui::SeparatorText("Ce qui ne change pas encore");
-    ImGui::TextWrapped("La rencontre avec Andromède et le mouvement des millions d'étoiles affichées viennent de calculs faits à l'avance "
-                       "(plusieurs heures sur la carte graphique) avec les valeurs mesurées : tes réglages ne les modifient pas.");
+    note("Ces réglages changent l'orbite « et si… » de l'astre suivi (étoile, Soleil ou galaxie du Groupe local), en bleu pointillé.");
+    ImGui::SeparatorText("Rencontre avec Andromède");
+    {
+        static scenario::Result base, what;
+        static scenario::Settings used{-1, -1};
+        const bool moving = ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::IsAnyItemActive();
+        const scenario::Settings now = gBac.sandbox.groupSettings(c);
+        if (sim.centres && sim.centres->ready && !moving && (now.massFactor != used.massFactor || now.K != used.K)) {
+            if (!base.ok) base = scenario::run(*sim.centres, scenario::Settings{});
+            what = scenario::run(*sim.centres, now);
+            used = now;
+        }
+        if (base.ok) {
+            row("Fusion, valeurs mesurées", mergeText(base), "calculé", ui.s);
+            if (what.ok) row("Fusion, tes réglages", mergeText(what), "calculé", ui.s);
+            note("Rejouée en direct : centres des cinq galaxies du Groupe local (même physique que la référence de l'appli). "
+                 "Choisis Andromède pour voir son chemin « et si… ».");
+        } else {
+            note("Centres de référence absents : rencontre non rejouée.");
+        }
+    }
+    ImGui::SeparatorText("Ce qui ne change pas");
+    ImGui::TextWrapped("Les formes des galaxies pendant la rencontre (film calculé à l'avance, plusieurs heures sur la carte graphique) "
+                       "et le mouvement des millions d'étoiles affichées restent ceux des valeurs mesurées.");
 }
 
 // ---------------------------------------------------------------- panneau et colonne
@@ -431,7 +472,7 @@ void drawObjectOrbit(Sim& sim, UiState& ui, const Camera& cam, float w, float h)
     if (!gBac.showOrbit) return;
     const Body& b = sim.bodies[static_cast<size_t>(sim.focus)];
     if (b.kind == Kind::Planet) return;      // déjà tracée par drawOrbits
-    gBac.track.update(sim, gBac.sandbox);
+    gBac.track.update(sim, gBac.sandbox, ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::IsAnyItemActive());
     const ObjectTrack& tr = gBac.track;
     if (tr.kind < 0 || tr.g.size() < 2) return;
     // Une orbite autour de la Galaxie (des dizaines de milliers d'al) n'est tracée que vue d'assez loin : de près, elle

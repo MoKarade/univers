@@ -94,6 +94,11 @@ l'univers, paramètres modifiables, orbite de n'importe quel objet.
   formule approchée de Caldwell 2003, 3 % ; 1/a = 1076 à 380 000 ans (Planck : z* = 1090).
 - Contrôle sans fenêtre : `UNIVERS_PANNEAU=astre | univers[:<époque>] | reglages | ferme`, suivi au besoin de
   `,halo:<x>`, `,w0:<x>`, `,ode:<x>`, `,om:<x>`.
-- Ne change pas : le film de la rencontre avec Andromède et le mouvement des millions d'étoiles affichées (calculés à
-  l'avance avec les valeurs mesurées). Le panneau le dit.
+- `src/groupe_local_scenario.h` (19/11/2026) : la rencontre du Groupe local rejouée en direct avec les réglages
+  (énergie noire, matière noire des halos) : même physique que `pipeline/fusion/groupe_local_reference.py`, départ
+  d'aujourd'hui lu dans `centres_reference.bin`, 10 Ga en quelques dizaines de ms. Contrôle : rejouée avec les valeurs
+  mesurées, elle retombe sur la référence (passage d'Andromède 5,543 Ga et 29,8 kpc, fusion 6,902 Ga, écart de position
+  0,006 kpc sur 0 à 5 Ga). Montrée : date de fusion et chemin « et si… » de la galaxie suivie.
+- Ne change pas : les formes des galaxies pendant la rencontre (film calculé à l'avance) et le mouvement des millions
+  d'étoiles affichées. Le panneau le dit.
 - Pas vérifié : la fenêtre réellement affichée (captures en fenêtre cachée seulement), la souris sur la frise.

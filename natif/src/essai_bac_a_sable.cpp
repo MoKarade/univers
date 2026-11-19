@@ -9,9 +9,12 @@
 //    néglige la matière dans l'avenir) ; tolérance 5 %.
 // 4. Planck 2018 : 380 000 ans après le Big Bang, l'univers était environ 1 100 fois plus petit (décalage du fond
 //    diffus z* = 1 090, Planck 2018) : 1 / a entre 1 050 et 1 120.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
+#include "groupe_local_scenario.h"
 #include "interface_cosmo_courbes.h"
 
 namespace {
@@ -22,7 +25,7 @@ bool check(const char* what, double got, double want, double tol) {
 }
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
     bool ok = true;
     const cosmo::Params planck;
     cosmo::Params dense = planck, phantom = planck, closed = planck;
@@ -55,6 +58,40 @@ int main() {
         const bool good = inv > 1050 && inv < 1120;
         std::printf("%-44s %10.1f (attendu 1050 à 1120) -> %s\n", "Planck : 1/a à 380 000 ans", inv, good ? "PASSE" : "ECHEC");
         ok &= good;
+    }
+    // 5. Rencontre du Groupe local rejouée (groupe_local_scenario.h) avec les valeurs mesurées : elle doit retomber sur la
+    //    référence de l'appli (centres_reference.npz, « resume » : passage d'Andromède à 5,543 Ga et 29,8 kpc, fusion à
+    //    6,902 Ga) et sur ses positions (écart d'Andromède sur 0 à 5 Ga). Puis plus d'énergie noire : fusion plus tardive.
+    if (argc > 1) {
+        CentresReference ref;
+        if (!ref.load(std::string(argv[1]) + "/centres_reference.bin")) {
+            std::printf("centres_reference.bin illisible -> ECHEC\n");
+            ok = false;
+        } else {
+            const scenario::Result r = scenario::run(ref, scenario::Settings{});
+            ok &= check("rejeu : premier passage d'Andromède (Ga)", r.periM31Ga, 5.543, 4e-3);
+            ok &= check("rejeu : distance au passage (kpc)", r.periM31Kpc, 29.8, 3e-2);
+            ok &= check("rejeu : fusion Voie lactée-Andromède (Ga)", r.mergeM31Ga, 6.902, 4e-3);
+            double worst = 0;
+            for (size_t i = 0; i < r.tGa.size(); ++i) {
+                if (r.tGa[i] > 5.0) break;
+                phys::Vec3 g;
+                if (!ref.centre(1, r.tGa[i], g)) continue;
+                const phys::Vec3 q = r.pos[i][1];
+                worst = std::max(worst, std::sqrt((q.x - g.x) * (q.x - g.x) + (q.y - g.y) * (q.y - g.y) + (q.z - g.z) * (q.z - g.z)));
+            }
+            const bool good = worst < 2.0;
+            std::printf("%-44s %10.3f (attendu < 2 kpc) -> %s\n", "rejeu : écart d'Andromède 0-5 Ga (kpc)", worst, good ? "PASSE" : "ECHEC");
+            ok &= good;
+            scenario::Settings more;
+            more.K *= 3.0;
+            const scenario::Result r3 = scenario::run(ref, more);
+            const bool later = r3.mergeM31Ga < 0 || r3.mergeM31Ga > r.mergeM31Ga;
+            std::printf("%-44s %10.3f (plus tard que %.3f, ou jamais) -> %s\n", "énergie noire x 3 : fusion (Ga)", r3.mergeM31Ga, r.mergeM31Ga, later ? "PASSE" : "ECHEC");
+            ok &= later;
+        }
+    } else {
+        std::printf("Sans dossier de données : rejeu du Groupe local non contrôlé.\n");
     }
     std::printf("%s\n", ok ? "PASSE" : "ECHEC");
     return ok ? 0 : 1;

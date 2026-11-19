@@ -43,6 +43,15 @@ public:
     double firstGa() const { return t0_; }
     double lastGa() const { return t0_ + dt_ * (n_ - 1); }
 
+    // État d'aujourd'hui (ligne du fichier où t = 0 exactement) : position (kpc) et vitesse (km/s) relatives à la Voie lactée.
+    bool today(int k, phys::Vec3& p, phys::Vec3& v) const {
+        if (!ready || k < 0 || static_cast<uint32_t>(k) >= g_ || today_ >= n_) return false;
+        const size_t o = (static_cast<size_t>(today_) * g_ + static_cast<size_t>(k)) * 3;
+        p = {pos_[o], pos_[o + 1], pos_[o + 2]};
+        v = {vel_[o], vel_[o + 1], vel_[o + 2]};
+        return true;
+    }
+
     // Centre de la galaxie k à tGa (milliards d'années depuis aujourd'hui), kpc relatifs au centre de la Voie lactée.
     // Rend false hors de la plage calculée.
     bool centre(int k, double tGa, phys::Vec3& out) const {
