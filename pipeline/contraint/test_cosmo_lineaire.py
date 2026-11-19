@@ -43,3 +43,12 @@ def test_correlation_decroit():
     c = CorrelationVitesses(Spectre(), taux_croissance())
     par, perp = c(np.array([1.0, 50.0, 200.0]))
     assert perp[0] > perp[1] > perp[2]
+
+
+def test_densite_variance_lissee():
+    # xi(0) avec lissage gaussien 8 Mpc/h doit être proche de sigma8² (fenêtres différentes : ±20 %) [Probable]
+    from cosmo_lineaire import CorrelationDensite
+    c = CorrelationDensite(Spectre(), taux_croissance(), lissage=8.0 / np.sqrt(5.0))
+    xi0, g0 = c(0.0)
+    assert 0.6 < xi0 / PLANCK18['sigma8'] ** 2 < 1.4
+    assert abs(g0) < 1e-6                     # pas de corrélation densité-vitesse à distance nulle

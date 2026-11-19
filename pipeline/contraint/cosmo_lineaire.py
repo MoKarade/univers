@@ -109,3 +109,29 @@ class CorrelationVitesses:
     def __call__(self, r):
         r = np.asarray(r)
         return np.interp(r, self.r, self.par), np.interp(r, self.r, self.perp)
+
+
+class CorrelationDensite:
+    """Corrélations du contraste lissé δ_s (P_s = P·exp(−k²R²)) avec lui-même et avec la vitesse.
+
+    xi(r) = <δ_s(x) δ_s(x+r)> = ∫ k² dk/(2π²) P_s j0(kr)
+    g(r)  : <δ_s(x) v_s(x+r)> = −f H r̂ g(r),  g(r) = ∫ k dk/(2π²) P_s j1(kr)   (vitesse dirigée vers la surdensité)
+    """
+
+    def __init__(self, spectre, f, lissage=0.0, rmax=1500.0, n=4000):
+        k = spectre.k
+        pk = spectre.p * np.exp(-(k * lissage) ** 2)
+        self.f = f
+        self.r = np.concatenate([[0.0], np.logspace(-2, np.log10(rmax), n)])
+        lnk = np.log(k)
+        xi, gg = [], []
+        for r in self.r:
+            kr = k * r
+            xi.append(np.trapezoid(pk * _j0(kr) * k ** 3, lnk))
+            gg.append(np.trapezoid(pk * _j1_sur_x(kr) * kr * k ** 2, lnk))
+        self.xi = np.array(xi) / (2.0 * np.pi ** 2)
+        self.g = np.array(gg) / (2.0 * np.pi ** 2)
+
+    def __call__(self, r):
+        r = np.asarray(r)
+        return np.interp(r, self.r, self.xi), np.interp(r, self.r, self.g)

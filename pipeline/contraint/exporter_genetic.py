@@ -14,6 +14,8 @@ import numpy as np
 from scipy.integrate import quad
 
 from cosmo_lineaire import PLANCK18
+import os
+PREFIXE = os.environ.get('PREFIXE', 'rc')          # rc = vitesses seules ; rcj = vitesses + densité 2MRS
 
 
 def croissance(z: float, om: float = PLANCK18['omega_m']) -> float:
@@ -37,11 +39,11 @@ def reduire(dk: np.ndarray, n: int, m: int) -> np.ndarray:
 def main() -> None:
     graine, m = int(sys.argv[1]), int(sys.argv[2])
     z_in = float(sys.argv[3]) if len(sys.argv) > 3 else 99.0
-    r = np.load(f'resultats/rc_{graine}.npz')
+    r = np.load(f'resultats/{PREFIXE}_{graine}.npz')
     n, cote = int(r['n']), float(r['cote'])
     dk = reduire(r['delta_k'].astype(np.complex128), n, m)
     delta = np.fft.irfftn(dk, s=(m,) * 3, axes=(0, 1, 2)) * croissance(z_in)
-    sortie = f'resultats/rc_{graine}_genetic_{m}.npy'
+    sortie = f'resultats/{PREFIXE}_{graine}_genetic_{m}.npy'
     np.save(sortie, delta.astype(np.float64))
     print(f'{sortie} : boîte {cote:.0f} Mpc/h, {m}³, z_in {z_in:g}, D = {croissance(z_in):.5f}, écart-type {delta.std():.5f}')
 
