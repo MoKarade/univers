@@ -167,3 +167,23 @@ trouvée par notre moteur [Probable] ; seul un tir de notre moteur sans gaz sur 
 
 Mesures complètes : `barre/mesures_vl_halo_tournant.json`, `barre/mesures_vl_temoin.json`,
 `barre/mesures_m31_halo_tournant.json`, `barre/mesures_m31_temoin.json`. En cours : `v13/centre` avec halo tournant.
+
+### v13/centre avec halo tournant (Voie lactée, GADGET-4 sans gaz, premier tir fini vers 14 h 10)
+
+Départ `v13/centre.npz`, rotation du halo 0,35 (même graine), barre guide de la Voie lactée, 1 M de particules, 1,5 Ga.
+
+| t (Ga) | Ωb GADGET-4 | Ωb notre moteur (v13 avec barre guide) | A2 0,5–4 kpc | Longueur | Épaisseur 4–6 kpc | Soleil : disque mince, σR |
+|---|---|---|---|---|---|---|
+| 0,5 | 32,4 | 38,1 | 0,33 | 5,2 kpc | 0,28 kpc | 0,25 kpc, 47 km/s |
+| 1,0 | 40,6 (barre faible, A2 0,17 : mesure peu sûre) | 36,8 | 0,17 | 3,8 kpc | 0,30 kpc | 0,29 kpc, 50 km/s |
+| 1,5 | 27,4 | 34,8 | 0,25 | 4,2 kpc | 0,32 kpc | 0,29 kpc, 50 km/s |
+
+[Certain pour les chiffres GADGET-4.] Le disque reste mince (0,25 → 0,32 kpc) et la barre courte (4 à 5 kpc, proche des
+5 mesurés), mais à 1,5 Ga elle tourne à 27 km/s/kpc dans GADGET-4, contre 35 dans notre moteur. Écart à confirmer : une
+seule réalisation, résolution 1 M contre 3,5 M, et la barre est encore en train de se reformer après le retrait du guide
+[À vérifier].
+
+Incident : en corrigeant les fins de ligne d'un script pendant que ce tir tournait, j'ai fait relancer le calcul en
+double à 14 h 14 (bash relit un script modifié en cours de route). Le doublon a été arrêté à 15 h 58. Les instantanés du
+premier tir, complet, ont été regroupés (`premier_tir/`) et ce sont eux qui sont mesurés ici. Mesures :
+`barre/mesures_centre_v13_halo_tournant.json`.
