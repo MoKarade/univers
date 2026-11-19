@@ -150,5 +150,13 @@ codes s'accordent. La différence de physique est la cause la plus probable : av
 gaz, elle s'effondre [Probable]. Le témoin sans rotation du halo, qui tourne en ce moment, puis un tir de notre moteur
 sans gaz sur le même départ, permettraient de le confirmer [À vérifier].
 
+### Andromède v16, témoin sans rotation du halo (fini à 10 h 41, heure du Québec)
+
+Même départ et même guide, sans rotation du halo, sans gaz : Ωb = 24,1 / 15,6 / 14,9 km/s/kpc à 0,5 / 1 / 1,5 Ga ;
+A2 = 0,20 / 0,21 / 0,24 ; longueur 4,8 kpc ; épaisseur 4–6 kpc 0,37 → 0,50 kpc [Certain].
+Lecture : la rotation du halo gagne 2 à 6 km/s/kpc (17,3 contre 14,9 à 1,5 Ga), mais sans gaz la barre d'Andromède
+reste à moins de la moitié des ~40 mesurés [Certain]. Le gaz reste l'explication la plus probable de la vitesse de 36
+trouvée par notre moteur [Probable] ; seul un tir de notre moteur sans gaz sur ce départ le prouverait [À vérifier].
+
 Mesures complètes : `barre/mesures_vl_halo_tournant.json`, `barre/mesures_vl_temoin.json`,
-`barre/mesures_m31_halo_tournant.json`. Suite de la file en cours : témoin d'Andromède, puis `v13/centre` avec halo tournant.
+`barre/mesures_m31_halo_tournant.json`, `barre/mesures_m31_temoin.json`. En cours : `v13/centre` avec halo tournant.
