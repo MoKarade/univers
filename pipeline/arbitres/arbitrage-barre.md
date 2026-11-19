@@ -95,3 +95,35 @@ donner au halo une rotation, partir d'un disque plus mince (mûrissement plus co
   - `mesurer.py` (mêmes mesures que stabilite_tir.py), `resume_gpu.py`, `comparer.py` (tableau ci-dessus) ;
   - `mesures_gadget_1M.json` : toutes les mesures GADGET-4, toutes les 50 Ma (+ paires à 10 Ma).
 - Les instantanés (121 fichiers, ~3,9 Go) restent dans `~/arbitres/barre-1M/output` sous Ubuntu : ils ne vont pas dans le dépôt.
+
+## Suite (nuit du 18 au 19/11) : candidats corrigés, vérifiés par GADGET-4
+
+Départs `v16` : masses recalées (Voie lactée 1,07e12 M☉), centre calme. Même barre guide que plus haut, gravité seule,
+sans gaz, 1 M de particules, 1,5 Ga, 8 cœurs. Le candidat « halo tournant » est identique, particule par particule, à
+`v16/voie_lactee_barre_halo_tournant.npz` (429 076 vitesses retournées, paramètre de rotation 0,033–0,038) [Certain].
+Durée : 3 h 13 par tir (mesuré).
+
+| t (Ga) | Ωb, halo tournant : GADGET-4 | Ωb, témoin sans rotation : GADGET-4 | Ωb, notre moteur (variante 4, halo tournant, sans gaz) | Épaisseur 4–6 kpc : GADGET-4 tournant / témoin | Notre moteur |
+|---|---|---|---|---|---|
+| 0,5 | 48 (guide encore actif) | 40 | 38,1 | 0,28 / 0,26 | 0,25 |
+| 1,0 | 31,7 | 29,4 | 36,8 | 0,31 / 0,30 | 0,29 |
+| 1,5 | 30,2 | 29,4 | 34,8 | 0,33 / 0,32 | — |
+
+Autres mesures GADGET-4, halo tournant à 1,5 Ga : force de la barre A2 = 0,33, longueur 4,8 kpc ; au Soleil, disque mince
+épais de 0,33 kpc (0,22 au départ), agitation radiale 52 km/s (28 au départ). Témoin : A2 0,37, longueur 5,8 kpc,
+0,30 kpc, 51 km/s [Certain].
+
+Lecture :
+- Le nouveau modèle corrige l'essentiel de l'épaississement. Dans les deux codes, le disque reste près de 0,3 kpc, contre
+  0,45 → 0,55 kpc avec l'ancien départ v9 [Certain].
+- La barre est plus rapide qu'avec v9 : environ 30 km/s/kpc à 1,5 Ga dans GADGET-4, contre ~25 avant. Mais elle reste
+  sous les 39 mesurés [Certain].
+- Écart entre les codes : GADGET-4 donne une barre plus lente de 5 km/s/kpc que notre moteur à 1 et 1,5 Ga. Dans
+  GADGET-4, la rotation du halo ne gagne que 1 à 2 km/s/kpc sur le témoin [Certain]. Causes possibles : la résolution
+  (1 M ici contre 3,5 M), une seule réalisation de chaque côté, ou un vrai effet du moteur [À vérifier]. Un tir GADGET-4
+  à 3,5 M sur 1,5 Ga (environ 13 h, estimation) trancherait.
+- À +0,5 Ga, la barre guide n'est pas encore éteinte (descente de 0,5 à 1,0 Ga) : la vitesse n'est pas encore celle de la
+  barre faite par les étoiles elles-mêmes.
+
+Mesures complètes : `barre/mesures_vl_halo_tournant.json`, `barre/mesures_vl_temoin.json`. Suite de la file en cours :
+Andromède avec halo tournant, son témoin, puis `v13/centre` avec halo tournant.

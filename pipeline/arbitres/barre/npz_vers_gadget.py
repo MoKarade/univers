@@ -19,6 +19,19 @@ def main():
     opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--'))
     z = np.load(args[0])
     pos, vel, m, eps, kind = z['pos'], z['vel'], z['m'], z['eps'], z['kind']
+    if 'halo-tourne' in opts:
+        # Copie de stabilite_tir.py (--halo-tourne) : même tirage (graine 20261118), mêmes particules retournées.
+        f = float(opts['halo-tourne']); rng = np.random.default_rng(20261118)
+        x, v = pos.astype(np.float64), vel.astype(np.float64).copy()
+        d = (kind == 1) | (kind == 4)
+        sens = np.sign(np.sum(x[d, 0] * v[d, 1] - x[d, 1] * v[d, 0]))
+        lz = x[:, 0] * v[:, 1] - x[:, 1] * v[:, 0]
+        tourne = (kind == 0) & (lz * sens < 0) & (rng.uniform(size=len(kind)) < f)
+        R2 = np.maximum(x[:, 0] ** 2 + x[:, 1] ** 2, 1e-12)
+        vphi = lz / R2
+        v[tourne, 0] += 2 * vphi[tourne] * x[tourne, 1]; v[tourne, 1] -= 2 * vphi[tourne] * x[tourne, 0]
+        vel = v
+        print(f'halo en rotation : {int(tourne.sum())} particules retournées', file=sys.stderr)
     if 'sous-echantillon' in opts:
         rng = np.random.default_rng(int(opts.get('graine', 1)))
         n_vise = int(opts['sous-echantillon']); garde = []

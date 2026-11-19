@@ -115,6 +115,15 @@ def epaisseurs(pos, m, kind, c, rot):
     return out
 
 
+def soleil(pos, vel, m, kind, c, vc, rot):
+    """Au Soleil (anneau 7,7–8,7 kpc, plan propre) : épaisseur médiane |z| du disque mince (sorte 1) et agitation radiale."""
+    s = kind == 1
+    p = (pos[s] - c) @ rot.T; v = (vel[s] - vc) @ rot.T
+    R = np.hypot(p[:, 0], p[:, 1]); k = (R >= 7.7) & (R < 8.7)
+    vR = (p[k, 0] * v[k, 0] + p[k, 1] * v[k, 1]) / R[k]
+    return dict(soleil_epaisseur_mince_kpc=round(float(np.median(np.abs(p[k, 2]))), 3), soleil_sigma_r_kms=round(float(np.std(vR)), 1))
+
+
 def vitesse_barre(t1, a1, t2, a2):
     """Vitesse de rotation (km/s/kpc) entre deux angles de barre (définis à π près), écart supposé < π/2."""
     d = (a2 - a1 + np.pi / 2) % np.pi - np.pi / 2
@@ -139,7 +148,7 @@ def main():
         a2p, angp, lonp, _ = barre(pos, m, kind, c, rot)
         r.update(a2_barre=round(a2, 4), angle_barre_deg=round(np.degrees(ang), 2), longueur_barre_kpc=lon,
                  a2_barre_plan_propre=round(a2p, 4), longueur_barre_plan_propre_kpc=lonp, inclinaison_plan_deg=round(incl, 2),
-                 profil_a2=prof, **epaisseurs(pos, m, kind, c, rot))
+                 profil_a2=prof, **epaisseurs(pos, m, kind, c, rot), **soleil(pos, vel, m, kind, c, vc, rot))
         if prec is not None and 0 < t - prec[0] < 0.0151:      # paire espacée de 10 Ma
             r['vitesse_barre_kms_kpc'] = round(float(vitesse_barre(prec[0], prec[1], t, angp)), 1)
         prec = (t, angp)
