@@ -250,3 +250,24 @@ Conversion : 60° pour 900 px, soit 1,16 × 10⁻³ radian par pixel.
 
 Correction d'une erreur du premier jet : les « deux points » de Sirius n'ont pas été confirmés. Sur Arcturus et
 Canopus, le cercle orange de l'interface coupait le point en deux dans ma mesure ; ce n'étaient pas deux étoiles.
+
+## 7. Avancement et nouveaux retours de Marc (20 novembre, fin d'après-midi)
+
+Fait :
+- PR 121 (fusionnée) : B1 à B5, D1, A6, C4.
+- PR 122 : A2 (pose automatique contre la saturation), relève de pose aux échelles des galaxies (A4, A5), fond diffus de
+  Planck sur le bord de l'univers observable, sphères approchées cachées par défaut, amas et superamas nommés comme tels,
+  rayon de l'univers observable, remarques de relecture du lot 1a.
+- En cours (branche `corrections-zoom`) : C2 (fondus du ciel seul), C5 (fondu des bras), C6 (galaxie de forme non
+  dessinée), D2 (noms derrière les planètes), E1 (disques coupés), renfort d'éclat en d/30 au lieu de (d/30)², et un
+  outil de balayage du zoom en un seul lancement (`UNIVERS_BALAYAGE`).
+
+Nouveaux retours de Marc, avec ce qui a été trouvé :
+
+| Retour | Mesure ou cause | Statut |
+|---|---|---|
+| « Les vues changent quand je zoome, l'éclairage aussi » | zoom complet en 41 vues : éclat ×13 de 30 à 300 al (renfort en (d/30)²), coupure du ciel seul à 100 al (−7 %), bras dessinés qui apparaissent de 1 000 à 10 000 al, Voie lactée qui s'efface vers 1 Mal | renfort adouci, fondus ajoutés ; balayage fin de contrôle |
+| « Laniakea quasi aucune galaxie, c'est vide » | galaxies des relevés au vrai éclat en 1/d², rien ne compensait au-delà de 300 al ; voiles des vides plus brillants que les galaxies | pose relevée (×10 à ×100 mesuré), repères à éclat fixe (PR 122) |
+| « Des boules » au-delà de Laniakea | sphères « forme généralisée » des vides SDSS/BOSS et des superstructures | cachées par défaut (PR 122) |
+| « Je veux voir le CMB » | la sphère du fond diffus était unie | carte SMICA de Planck posée dessus (PR 122) |
+| « Le superamas c'est une seule galaxie » | `galaxies_noms.tsv` range 11 amas et superamas sous « galaxie » | nommés et décrits comme amas ou superamas, sources citées (PR 122) |
