@@ -69,7 +69,7 @@ std::string dureeFr(double secondes) {
 
 void groupeCalcule(const Sim& sim, const UiState& ui, int f) {
     const Body& b = sim.bodies[static_cast<size_t>(f)];
-    if (b.structure && b.name == "Univers observable") return;      // sphère centrée sur nous : pas de direction
+    if (b.structure && (b.name == "Univers observable" || b.name == "Fond diffus cosmologique")) return;      // sphère centrée sur nous : pas de direction
     const bool proche = b.kind == Kind::Planet || b.kind == Kind::Asteroid || b.kind == Kind::Probe;
     int terre = -1;
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)

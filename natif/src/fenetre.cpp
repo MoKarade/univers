@@ -30,6 +30,7 @@
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
 #include "galaxies_formes.h"
+#include "galaxies_pose.h"
 #include "structures.h"
 #include "chrono.h"
 #include "vieillissement.h"
@@ -384,6 +385,14 @@ int runWindow(const WindowOptions& opt) {
     sim.gaiaCellDispersionKms = gaiaOk ? gaia.cellDispersionKms : 0;
     sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
     sim.gaiaCount = gaiaOk ? gaia.count + (gaiaBOk ? gaiaB.count : 0) : 0;
+    // Clic sur une étoile de Gaia : recherche dans les deux fichiers projetés en mémoire, au clic seulement (rien par image).
+    if (gaiaOk)
+        sim.gaiaPick = [&gaia, &gaiaB, gaiaBOk, &sim](const Camera& c, double px, double py, double w, double h, double maxPx, double mLim, GaiaHit& hit, bool& setB) {
+            bool found = pickGaiaStar(gaia.file(), c, px, py, w, h, maxPx, mLim, sim.years, hit);
+            setB = false;
+            if (gaiaBOk && pickGaiaStar(gaiaB.file(), c, px, py, w, h, maxPx, mLim, sim.years, hit)) { found = true; setB = true; }
+            return found;
+        };
     sim.gaiaReliableCount = gaiaOk ? gaia.reliableCount : 0;
     sim.gaiaReliableLight = gaiaOk ? gaia.reliableLight : 0;
     sim.gaiaRebalancedCount = gaiaOk ? gaia.rebalancedCount : 0;
@@ -972,8 +981,12 @@ int runWindow(const WindowOptions& opt) {
         sim.autoPose = autoPose.pose;
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
         // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
-        if (sim.cosmologyDirty || std::fabs(sim.years - galaxyScaleAt) > 1.0e6) {
+        // Tous les 100 000 ans (avant : un million) : M77, à 44 millions d'al, avance alors d'environ 300 al par pas au lieu
+        // de 3 000 ; le nom et la caméra prennent le même facteur (sim.galaxyScale), ils ne glissent plus sur la forme.
+        if (sim.cosmologyDirty || std::fabs(sim.years - galaxyScaleAt) > 1.0e5) {
             galaxies.setCosmology(sim.cosmology, cosmo::scaleFactorAt(sim.cosmology, (sim.years - kStartYears) / 1.0e9));
+            sim.galaxyScale = galaxies.scale;
+            sim.refreshGalaxies();
             galaxyScaleAt = sim.years;
             sim.cosmologyDirty = false;
         }
@@ -1126,14 +1139,19 @@ int runWindow(const WindowOptions& opt) {
         chrono.gpu(cmd, "Gaia (calcul des points)");
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
-        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);      // même exposition que les étoiles
+        // Pose propre aux galaxies aux grandes échelles (galaxies_pose.h) : la pose totale des galaxies vaut
+        // max(pose de l'écran, gain de la distance de vue) ; près de la Voie lactée, rien ne change.
+        const float galFactor = static_cast<float>(galaxies_pose::facteur(sim.dist, sim.autoPose));
+        sim.galaxyPose = galaxies_pose::gain(sim.dist);
+        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], galFactor, sim.dist);      // exposition des étoiles, relevée aux grandes échelles
         chrono.gpu(cmd, "ciel et galaxies lointaines");
         if (!skyOnly && galaxyShapes.ready) {
+            galaxyShapes.deepTime = sim.deepTime();
             galaxyShapes.prepare(cam, galaxies, sc.extent.height);
             float aL[16], aT[16];
             vieillissement.factors(sim.replayGa(), aL, aT);
             galaxyShapes.ageing[0] = aL[1]; galaxyShapes.ageing[1] = aL[2]; galaxyShapes.ageing[2] = aT[1]; galaxyShapes.ageing[3] = aT[2];
-            galaxyShapes.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);
+            galaxyShapes.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * galFactor);
             sim.galaxyShapesShown = galaxyShapes.shown;
         }
         chrono.gpu(cmd, "formes des galaxies");

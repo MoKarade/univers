@@ -87,6 +87,13 @@ const BodyText kBodyTexts[] = {
      "Région de forte densité au cœur de Laniakea, vers laquelle tombent les galaxies de notre voisinage, à environ "
      "250 millions d'années-lumière, en partie cachée derrière la Voie lactée. Ce n'est pas une galaxie. Sources : "
      "Lynden-Bell et al. 1988 ; Tully et al. 2014."},
+    {"Fond diffus cosmologique", nullptr,
+     "La plus vieille lumière de l'univers, partie 380 000 ans après le Big Bang (z = 1 090), quand l'univers est devenu "
+     "transparent. Elle nous arrive de partout, d'une sphère de 45 milliards d'années-lumière de rayon aujourd'hui (distance "
+     "comobile). La carte posée sur cette sphère est celle MESURÉE par le satellite Planck (SMICA 2018), en fausses couleurs : "
+     "bleu plus froid, rouge plus chaud, à ±300 millionièmes de degré autour de 2,7255 K. Ce rayonnement est en micro-ondes : "
+     "l'œil ne le verrait pas. Les taches sont les graines des futurs amas de galaxies. Sources : Planck Collaboration 2020 "
+     "(A&A 641, A1, A4 et A6) ; Fixsen 2009."},
     {"Univers observable", nullptr,
      "Tout ce dont la lumière a eu le temps de nous parvenir depuis le Big Bang : une sphère de 46 milliards "
      "d'années-lumière de rayon aujourd'hui (distance comobile, cosmologie Planck 2018). Juste en dedans, la surface d'où est "

@@ -176,8 +176,10 @@ public:
         ++tableVersion;
     }
 
-    // À appeler dans la passe en grande dynamique. exposure : celle des étoiles (même loi d'éclat, galaxies.vert).
-    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure) const {
+    // À appeler dans la passe en grande dynamique. exposure : celle des étoiles (même loi d'éclat, galaxies.vert) ;
+    // gain : pose propre aux galaxies (galaxies_pose.h), appliquée jusque vers viewDist (al, distance de vue).
+    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, float gain = 1.0f,
+              double viewDist = 1.0) const {
         if (!ready || exposure <= 0) return;
         GalaxyPush pc{};
         const auto m = cam.viewProj();
@@ -185,11 +187,11 @@ public:
         pc.cam[0] = static_cast<float>(cam.pos.x);
         pc.cam[1] = static_cast<float>(cam.pos.y);
         pc.cam[2] = static_cast<float>(cam.pos.z);
-        pc.cam[3] = 0.0f;
+        pc.cam[3] = gain;
         pc.par[0] = exposure;
         pc.par[1] = static_cast<float>(height);
         pc.par[2] = static_cast<float>(1.0 / std::log(1.0 + kGalaxyZMax));
-        pc.par[3] = 2.0f;
+        pc.par[3] = static_cast<float>(viewDist);
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
         vkCmdSetViewport(cmd, 0, 1, &vp);

@@ -153,6 +153,9 @@ void drawStatus(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     else if (sim.autoPose > 1.05)
         ImGui::TextDisabled("Pose relevée ×%s : %s", frNum(sim.autoPose, sim.autoPose < 10 ? 1 : 0).c_str(),
                             sim.dist > 1.0e7 ? "vues de si loin, les galaxies sont très faibles (comme une longue pose photo)." : "la scène est sombre (comme l'œil qui s'habitue au noir).");
+    if (sim.galaxyPose > 1.05 && sim.galaxyPose > sim.autoPose)      // la pose des galaxies est dite, comme celle de l'écran
+        ImGui::TextDisabled("Galaxies en longue pose ×%s : chaque galaxie est à sa place mesurée ; éclats relatifs réels, mais tous relevés pour être vus de si loin.",
+                            frNum(sim.galaxyPose, 0).c_str());
     if (const int k = eclipseNow(sim.years); k >= 0) ImGui::TextDisabled("%s, de Soleil : %s.", kEclipses[k].label, kEclipseStatus);
     if (!ui.details) {      // interface minimaliste : seules les hypothèses du « meilleur rendu » restent toujours écrites
         ImGui::PopTextWrapPos();
@@ -478,7 +481,26 @@ void clickAsteroid(Sim& sim, UiState& ui, const Camera& cam, float w, float h, i
     // son point vaut au moins 1/20 (pose : renfort, champ, pose automatique)
     const double pose = kExposure * sim.brightnessBoost() * sim.fieldGain() * sim.photoGain * std::pow(2.0, sim.exposureEv) * sim.autoPose;
     if (sim.dist >= 0.02) {      // dans le système solaire, les étoiles ne se cliquent pas (comme les étoiles nommées)
-        const int64_t k = sim.nearestCatalogStar(cam, m.x, m.y, w, h, 12.0 * ui.s, 2.5 * std::log10(std::max(pose * 20.0, 1.0)));
+        const double mLim = 2.5 * std::log10(std::max(pose * 20.0, 1.0));
+        const int64_t k = sim.nearestCatalogStar(cam, m.x, m.y, w, h, 12.0 * ui.s, mLim);
+        // Étoiles de Gaia (192 millions, Marc 20/11/2026 : « tout doit être sélectionnable ») : la plus brillante sous le clic,
+        // cherchée au clic seulement ; elle l'emporte si elle paraît plus brillante que l'étoile du catalogue trouvée.
+        GaiaHit gh;
+        bool setB = false;
+        double catMag = 99;
+        if (k >= 0) {
+            const int64_t kk = k;
+            const Vec3 p{sim.stars->x()[kk] + sim.stars->vel(0)[kk] * sim.years * kKmsToLyPerYear, sim.stars->y()[kk] + sim.stars->vel(1)[kk] * sim.years * kKmsToLyPerYear,
+                         sim.stars->z()[kk] + sim.stars->vel(2)[kk] * sim.years * kKmsToLyPerYear};
+            const Vec3 d = p - cam.pos;
+            catMag = sim.stars->mag()[kk] + 5.0 * std::log10(std::max(std::sqrt(dot(d, d)), 1e-12) / 3.2615638) - 5.0;
+        }
+        gh.appMag = catMag;
+        if (sim.gaiaPick && std::fabs(sim.years - kStartYears) <= Sim::kGaiaPickYears && sim.gaiaPick(cam, m.x, m.y, w, h, 12.0 * ui.s, mLim, gh, setB)) {
+            const int i = sim.selectGaiaStar(gh, setB);
+            if (i >= 0 && sim.visible(i)) goToBody(sim, ui, i);
+            return;
+        }
         if (k >= 0) {
             const int i = sim.selectCatalogStar(k);
             if (i >= 0 && sim.visible(i)) goToBody(sim, ui, i);

@@ -111,6 +111,10 @@ target_compile_options(essai_cycle PRIVATE -Wall -Wextra)
 target_link_options(essai_cycle PRIVATE -static)
 
 # Contrôle de la complétude par échelle (completude.h) sur le vrai fichier d'étoiles.
+add_executable(essai_selection src/essai_selection.cpp)
+target_link_libraries(essai_selection PRIVATE volk imgui univers_physique)
+target_compile_options(essai_selection PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_selection PRIVATE -static)
 add_executable(essai_completude src/essai_completude.cpp)
 target_link_libraries(essai_completude PRIVATE volk imgui univers_physique)
 target_compile_options(essai_completude PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)

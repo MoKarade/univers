@@ -382,10 +382,12 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     } else if (fb.kind == Kind::Galaxy) {
         // En temps profond, la place vient du calcul de la rencontre avec Andromède (sauf le centre de la Voie lactée, origine du repère).
         // audit D1 : loin d'aujourd'hui, c'est la distance au Soleil de la date montrée, et la place du Soleil est calculée.
-        if (fb.structure && fb.name == "Univers observable")      // sphère centrée sur nous : son rayon, pas une distance au Soleil
-            row("Rayon aujourd'hui", "46,2 milliards d'années-lumière", "calculé (Planck 2018)", s);
+        if (fb.structure && (fb.name == "Univers observable" || fb.name == "Fond diffus cosmologique"))      // sphère centrée sur nous : son rayon, pas une distance au Soleil
+            row("Rayon aujourd'hui", fb.name == "Univers observable" ? "46,2 milliards d'années-lumière" : "45,3 milliards d'années-lumière (z = 1 090)", "calculé (Planck 2018)", s);
         else
         row(sim.deepTime() ? "Distance au Soleil à cette date" : "Distance au Soleil", frDistance(dSun), sim.deepTime() ? "calculé" : fb.structure ? "publié, catalogue cité" : "mesuré", s);
+        if (sim.expandsOnly(f) && sim.galaxyScale > 0 && std::fabs(sim.galaxyScale - 1.0) > 1e-9)      // M77 et toutes les galaxies lointaines
+            row("Mouvement", "suit l'expansion de l'univers : distances × " + frNum(sim.galaxyScale, 5) + " par rapport à aujourd'hui", "calculé (Friedmann, cosmologie choisie)", s);
         if (!fb.blackHoleText.empty()) row("Trou noir central", fb.blackHoleText, "mesuré", s);
         if (!fb.shapeNote.empty()) ImGui::TextWrapped("%s", fb.shapeNote.c_str());
         else if (!fb.structure) ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
@@ -404,6 +406,12 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     else if (fb.kind == Kind::Asteroid && sim.asteroidCat && sim.asteroidSel >= 0 && sim.asteroidCat->isComet(static_cast<size_t>(sim.asteroidSel)))
         ImGui::TextDisabled("Source : orbite à jour de JPL Horizons (NASA).");
     else if (fb.kind == Kind::Asteroid) ImGui::TextDisabled("Source : JPL Small-Body Database (NASA).");
+    else if (fb.nebula)
+        ImGui::TextDisabled("Sources : voir la description (nébuleuses planétaires : Chornay et Walton 2021, distance de l'étoile centrale par Gaia ; nuages : Zucker et al. 2020).");
+    else if (fb.kind == Kind::Galaxy && sim.expandsOnly(f) && !fb.structure)      // M77 : pas dans le calcul de la rencontre (Marc, 20/11)
+        ImGui::TextDisabled("%s", ("Position : direction et distance d'aujourd'hui (voir la description), puis l'expansion de l'univers calculée ici ; "
+                             "sa vitesse propre (quelques dizaines à centaines de km/s) n'est pas suivie. "
+                             + std::string(fb.natureText.find("SGA-2020") != std::string::npos ? "Forme : Siena Galaxy Atlas 2020 (Moustakas et al. 2023)." : "")).c_str());
     else if (fb.kind == Kind::Galaxy && sim.deepTime() && fb.name != "Centre de la Voie lactée")
         ImGui::TextDisabled("Position : calcul complet de la rencontre avec Andromède (scénario), parti des mesures de McConnachie 2012.");
     else if (fb.kind == Kind::Galaxy && fb.structure) ImGui::TextDisabled("Sources : voir la description (place publiée, ramenée en années-lumière avec h = 0,674).");
