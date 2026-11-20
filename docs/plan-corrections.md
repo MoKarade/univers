@@ -7,10 +7,10 @@ fait l'audit et le plan. **Rien n'est corrigé ici.**
 
 - **25 nouveaux bugs visibles** trouvés, en plus des 6 que Marc a déjà signalés (corrigés dans le fil « Corriger les
   saccades et afficher les grandes structures », dit ici **fil correcteur**).
-- Les trois plus graves : **(1)** de près, une étoile n'est pas là où la caméra la vise, et parfois elle est en double ;
+- Les trois plus graves : **(1)** de près, une étoile n'est pas là où la caméra la vise, et l'écart grandit avec sa distance au Soleil et avec la date ;
   **(2)** l'éclat de tout le ciel dépend du zoom (×100 dès qu'on recule de 300 années-lumière de l'astre suivi), ce qui
   blanchit Andromède de près ; **(3)** de très loin (univers observable) l'écran est noir, et la Voie lactée disparaît
-  vue d'au-delà de quelques millions d'années-lumière.
+  plus loin que 10 milliards d'années-lumière.
 - Plan en 5 lots, du plus visible au moins visible (section 4). Effort total estimé : environ 60 à 80 heures de
   travail de Claude, [Supposition] : chiffres tirés de la taille des changements, pas d'une mesure de cas semblables.
 
@@ -49,46 +49,55 @@ Effort en heures de travail de Claude [Supposition], hors attente des contrôles
 
 ### Lot A : ce qui casse la crédibilité au premier coup d'œil
 
-**A1. De près, l'étoile n'est pas sous son cercle ; parfois deux points ; la caméra vise le vide.**
-- Captures : `27_sirius_proche`, `28_betelgeuse_proche`, `33_sirius_a` et `34_sirius_b` (même étoile à 9,46 puis
-  9,93 millions de km : un des deux points a bougé), `49_proxima` (le cercle est vide).
-- Cause [Certain] code, [Probable] lien avec la capture : les états d'orbite des étoiles sont en nombres simple
-  précision, en kpc, autour du centre de la Galaxie (`shaders/orbites_pas.comp`), puis la place relative au Soleil
-  est la différence de deux grands nombres en simple précision (`gaia.vert:99`, `gaia_agrege.vert:57`,
-  `etoiles_orbite.vert:41`, `orbite_galactique.glsl:77`). Pas d'environ 200 UA à 8 kpc. La caméra, elle, suit la
-  place calculée en double (`Sim::position`). L'étoile du catalogue brillant et sa copie Gaia sont deux points à deux
-  places arrondies différemment : d'où le doublon [Probable].
-- Correctif : intégrer et stocker les orbites dans un repère centré sur le Soleil (Soleil avancé en double sur le
-  processeur), ou en paires haute/basse précision ; pour l'astre suivi, dessiner son point à la place double du
-  processeur et masquer sa copie Gaia. 10 à 14 h. **Recoupe « étoile qui gigote » : à faire par le fil correcteur.**
+**A1. De près, l'étoile n'est pas sous son cercle de visée : la caméra vise le vide.**
+- Mesuré (section 6) : écart entre le centre de l'écran (où la caméra vise) et le point de l'étoile, aujourd'hui :
+  Proxima et Sirius < 0,02 UA ; Bételgeuse (498 al) **0,7 à 1,1 UA** ; Alnilam (1 977 al) **1,6 UA** ; Deneb
+  (1 412 al) hors du champ à 0,0001 al. Dans le temps, Sirius : 0 à +1 000 ans, **17 UA à +100 000 ans, 25 UA à
+  +1 Ma**, hors du champ à +10 Ma. Images : `m_betelgeuse_zoom.jpg`, `m_sirius_dates.jpg`, `27`, `28`, `49`.
+- Quand on zoome de 2 % en 2 %, le point se déplace de 4 à 8 px au lieu de rester au centre (`m_betelgeuse_zoom`) :
+  c'est le « gigotement » signalé par Marc.
+- Cause aujourd'hui [Certain] : la place de chaque étoile est rangée en simple précision, en années-lumière depuis le
+  Soleil (`etoiles.vert`, `inX/inY/inZ`) ; arrondi = |x| × 6 × 10⁻⁸, soit 1,9 UA à 500 al (mesuré : 0,7 à 1,1 UA,
+  c'est bien la moitié d'un pas). La soustraction de la caméra en deux temps (`camHi`/`camLo`) ne rattrape pas une
+  place déjà arrondie. La caméra suit la place en double (`Sim::position`).
+- Cause dans le temps [Certain] code, [Probable] part de chacune : orbites intégrées et rangées en simple précision
+  en kpc autour du centre de la Galaxie (`orbites_pas.comp`), puis différence étoile − Soleil en simple précision
+  (`gaia.vert:99`, `gaia_agrege.vert:57`, `etoiles_orbite.vert:41`, `orbite_galactique.glsl:77`) : pas d'environ
+  200 UA à 8 kpc.
+- Correctif : (a) l'astre suivi est dessiné à part, à sa place en double calculée par le processeur, et son point
+  dans le nuage est masqué (règle aussi le zoom) ; (b) places rangées en paires haute/basse précision ;
+  (c) orbites intégrées dans un repère centré sur le Soleil. (a) seul : 3 h et règle ce que Marc voit ; (b)+(c) :
+  10 à 12 h. **Recoupe « étoile qui gigote » : à voir avec le fil correcteur (PR 118 fusionnée).**
 
 **A2. L'éclat de tout le ciel dépend du zoom : Andromède devient un écran blanc de près.**
-- Captures : `25_andromede_2e4` (écran blanc, aucune forme), `12_soleil_100al` et `13_soleil_1000al` (le ciel se
-  remplit d'étoiles en reculant de 30 à 1 000 al du Soleil).
+- Mesuré (section 6) : éclat moyen de l'image, Soleil suivi, vue fixe : 6,1 à 30 al, 22,5 à 100 al, **77,8 à
+  300 al** (×13). Andromède suivie : **47 % de l'image saturée en blanc à 20 000 al**, 42 % à 50 000 al, 31 % à
+  100 000 al, 3 % à 300 000 al. Images : `m_eclat_zoom.jpg`, `m_andromede_sature.jpg`.
 - Cause [Certain] : `Sim::brightnessBoost()` (`simulation.h:865`) multiplie l'éclat de **toutes** les étoiles par
-  (distance à l'astre suivi / 30 al)², jusqu'à ×100 dès 300 al. La distance utilisée est celle de la caméra à l'astre
-  suivi, pas celle des étoiles : à 20 000 al d'Andromède, ses étoiles proches reçoivent ×100 et saturent. Les
-  nombres de l'image (16 bits) peuvent alors déborder (au-delà de 65 504) et donner des points noirs
-  (`ecran.frag:20`) [À vérifier].
-- Correctif : régler la pose sur la lumière réellement à l'écran (pose automatique mesurée sur l'image de la frame
-  précédente, lissée sur ~1 s, comme un appareil photo), et borner les valeurs avant la conversion. 6 à 8 h.
+  (distance caméra → astre suivi / 30 al)², au plus ×100 ; et `fieldGain()` (`simulation.h:922`) multiplie encore par
+  (60° / champ)², jusqu'à ×10 000 quand on grossit au Ctrl + molette. La pose dépend donc du zoom, pas de la lumière
+  à l'écran : à 20 000 al d'Andromède, ses étoiles reçoivent ×100 et saturent.
+- Correctif : pose automatique mesurée sur l'image précédente (moyenne en logarithme des pixels éclairés), lissée sur
+  ~1 s, bornée ; on garde le réglage à la main par crans. Plus une borne des valeurs avant la conversion
+  (`ecran.frag`). 6 à 8 h.
 
-**A3. La Voie lactée disparaît vue de loin.**
-- Captures : `17_soleil_1e6` (petit trait visible), `18_soleil_5e6` et `41_gl_4ga` (rien à la place du Soleil,
-  alors qu'Andromède, plus loin de la caméra, est visible).
-- Cause [À vérifier] : aucune forme de secours pour notre galaxie quand ses couches d'étoiles (Gaia, modèle) passent
-  sous un pixel ; Andromède, elle, a une forme dans `galaxies_formes.bin`.
-- Correctif : donner à la Voie lactée la même forme lointaine qu'aux autres galaxies, avec la lumière totale de ses
-  étoiles (raccord d'éclat contrôlé à 1 et 5 Mal). 4 à 6 h.
+**A3. La Voie lactée vue de loin est bien plus pâle qu'Andromède.** (rétrogradé après mesure)
+- Captures : `18_soleil_5e6`, `41_gl_4ga`, puis `m4_vl_5e6` (vue fixe, interface fermée) : elle est là, mais en
+  petite tache bien plus faible qu'Andromède à distance comparable. Ma première lecture (« elle disparaît ») était
+  trop forte.
+- Cause [À vérifier] : ses étoiles affichées sont la somme Gaia + modèle « ce qui manque » ; sa lumière totale n'a
+  jamais été comparée à sa magnitude publiée (M_V ≈ −20,9). Correctif : mesurer cette somme, puis corriger
+  l'éclat du modèle si elle est trop basse. 2 h de mesure, puis 2 à 4 h.
 
-**A4. Univers observable : écran noir.**
-- Captures : `22_soleil_3e10`, `23_soleil_1e11` (une tache au centre, le reste noir, alors que le cadre annonce
-  18,3 millions de galaxies et quasars).
-- Cause [À vérifier] : les galaxies lointaines sont des points d'un pixel dont l'éclat baisse en 1/d², sans lumière
-  regroupée au-delà d'une taille d'écran (contrairement aux étoiles). Pas non plus de fond diffus cosmologique à
-  cette échelle (`ciel_cmb.bin` existe).
-- Correctif : lumière regroupée par cellule (comme `gaia_agrege`) pour les relevés lointains, et sphère du fond
-  diffus au bord de l'univers observable. 8 à 10 h. **Recoupe le fil correcteur.**
+**A4. Univers observable : l'image s'éteint en s'éloignant.**
+- Mesuré : éclat moyen 40 à 1 milliard d'al, 17 à 3, 8,6 à 10, 2,5 à 30, **0,5 à 90 milliards d'al** (noir), alors
+  que le cadre annonce 18,3 millions de galaxies. Image : `m_univers_loin.jpg`, captures `22`, `23`.
+- Cause [Certain] code, [Probable] part : chaque galaxie lointaine est un point dont l'éclat baisse en 1/d² vu de la
+  caméra (`galaxies.vert`, `(dCom / dc)²`), et le renfort d'éclat s'arrête à ×100 dès 300 al (`brightnessBoost`) ;
+  rien ne compense ensuite. Les mêmes 18 millions de points éclairent donc de moins en moins, en 1/d.
+- Correctif : la pose automatique d'A2 règle l'essentiel ; plus la lumière regroupée par cellule (comme
+  `gaia_agrege`) pour les relevés lointains, et le fond diffus (`ciel_cmb.bin`) au bord. 4 à 6 h après A2.
+  **Recoupe le fil correcteur.**
 
 **A5. Des noms sans rien dessous entre 3 et 100 millions d'al.**
 - Captures : `19_soleil_3e7`, `46_vierge_3e7` (Amas de la Vierge vu de 30 Mal), `47_soleil_1e8`.
@@ -145,12 +154,15 @@ fixe (plus l'expansion) à toute date. 1 h.
 1,6 milliard de sources sans distance passe de 37 % à 0 en une image ; et elle est retirée de tout le ciel dès que
 les tuiles fines s'activent, avant qu'elles soient lues [Probable]. Correctif : fondus en distance (100 → 200 al)
 et en temps (1 → 3 Ma) ; garder l'ancien ciel tant que les tuiles ne sont pas toutes lues. 3 à 4 h.
+Mesuré : de 99 à 101 al du Soleil l'image perd 7 % d'éclat d'un coup (24,4 → 22,8) ; de 2,99 à 3,01 Ma, aucun écart
+mesurable dans cette vue : la coupure en temps n'est pas vue, seulement lue dans le code.
 
 **C3. La lueur des étoiles faibles s'éteint par plaques quand on grossit (Ctrl + molette).** [Certain] ligne,
 [Probable] effet. `gaia.h:618` (et `gaia_agrege.vert:76`) : au-delà de 512 px, la lumière de la feuille est jetée.
 Correctif : étaler avec une taille plafonnée en gardant la lumière. 3 h.
 
-**C4. Les astéroïdes disparaissent d'un coup à ±300 ans.** [Certain] `simulation.h:883`. Rampe de 250 à 350 ans.
+**C4. Les astéroïdes disparaissent d'un coup à ±300 ans.** [Certain] `simulation.h:883`. Mesuré : éclat moyen 50,4 à
++320 ans, 5,4 à +330 ans (image `m_asteroides_300ans.jpg`). Rampe de 250 à 350 ans.
 0,5 h.
 
 **C5. Les bras dessinés disparaissent d'un coup à ±3 Ma en « meilleur rendu ».** [Certain] `fenetre.cpp:827`.
@@ -210,6 +222,31 @@ Chaque lot : une PR vers `appli-pc`, avec des captures avant/après aux mêmes �
 
 ## 5. Limites
 
-- Les causes marquées [À vérifier] (A3, A4, E4) demandent une petite enquête avant le correctif.
-- Rien n'a été vu en direct à la souris, ni avec le temps qui défile : les sauts de C2, C4, C5 sont déduits du code.
+- Les causes marquées [À vérifier] (A3, E4) demandent une petite enquête avant le correctif.
+- Rien n'a été vu à la souris. Le temps qui défile a été essayé sur trois trajets (section 6) : même image qu'en
+  sautant à la date.
 - Les efforts sont des estimations sans mesure de cas semblables.
+
+## 6. Mesures du 20 novembre après-midi
+
+Demande de Marc : « va voir plus loin, plus précis ». 65 captures de plus, vue fixe (`--vue 30,20` ou `30,40`),
+panneau fermé (`UNIVERS_PANNEAU=ferme`), mesurées par programme : place des points blancs près du centre de l'écran
+(`blobs.py`) et éclat moyen de la zone sans interface (`lum.py`), dans `C:	mp
+atifudit-cap`.
+Conversion : 60° pour 900 px, soit 1,16 × 10⁻³ radian par pixel.
+
+| Mesure | Résultat | Conclusion |
+|---|---|---|
+| Écart étoile / visée, 8 étoiles de 4 à 1 977 al, caméra à 10⁻³ et 10⁻⁴ al | < 0,02 UA jusqu'à 25 al ; 0,7 à 1,1 UA à 498 al ; 1,6 UA à 1 977 al ; Deneb hors champ | A1 confirmé, écart proportionnel à la distance au Soleil |
+| Sirius à +10³, +10⁵, +10⁶, +10⁷, +10⁸ ans | 0 ; 17 UA ; 25 UA ; hors champ ; hors champ | A1 s'aggrave avec la date |
+| Bételgeuse, zoom par pas de 2 % | le point bouge de 4 à 8 px à chaque pas | c'est le « gigotement » |
+| Éclat moyen, Soleil vu de 10 à 1 000 al | 11,7 ; 6,1 ; 12,5 ; 22,5 ; 77,8 ; 88,6 | A2 confirmé (×13 de 30 à 300 al) |
+| Andromède vue de 3 × 10⁵ à 2 × 10⁴ al | 3 % ; 31 % ; 42 % ; 47 % de pixels saturés | A2 confirmé |
+| Univers de 3 × 10⁸ à 9 × 10¹⁰ al | 38,9 ; 40,1 ; 17,1 ; 8,6 ; 2,5 ; 0,5 | A4 confirmé, baisse en 1/d |
+| Astéroïdes à +320 et +330 ans | 50,4 puis 5,4 | C4 confirmé |
+| Ciel à 99 et 101 al ; à 2,99 et 3,01 Ma | −7 % d'un coup ; aucun écart | C2 en distance vu ; en temps, non vu |
+| Saut à la date contre temps qui défile (Voie lactée +100 Ma, Soleil +5 Ma, Grand Nuage +300 Ma) | écart moyen 0 ; 1,6 ; 0 (sur 255) | pas de bug de ce côté |
+| Voie lactée et Andromède vues de 1 à 20 Mal | Voie lactée présente mais pâle | A3 rétrogradé |
+
+Correction d'une erreur du premier jet : les « deux points » de Sirius n'ont pas été confirmés. Sur Arcturus et
+Canopus, le cercle orange de l'interface coupait le point en deux dans ma mesure ; ce n'étaient pas deux étoiles.
