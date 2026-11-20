@@ -41,6 +41,26 @@ void main() {
     vec3 t0 = (lo - u.camGrid.xyz) * inv, t1 = (hi - u.camGrid.xyz) * inv;
     vec3 tmin = min(t0, t1), tmax = max(t0, t1);
     float a = max(max(max(tmin.x, tmin.y), tmin.z), 0.0), b = min(min(tmax.x, tmax.y), tmax.z);
+    if (u.frame.w > 0.5) {      /* poussière seule (carte mesurée locale) : transmission, multipliée à l'image (voie_lactee.h) */
+        vec3 sunL = vec3(u.grid.z, u.grid.w, u.sunZ.x);
+        vec3 half_ = vec3(u.sunZ.z, u.sunZ.w, u.bar2.w) * u.sunZ.y * 0.5e-3;
+        vec3 l0 = sunL - half_, l1 = sunL + half_;
+        vec3 s0 = (l0 - u.camGrid.xyz) * inv, s1 = (l1 - u.camGrid.xyz) * inv;
+        vec3 smin = min(s0, s1), smax = max(s0, s1);
+        float la = max(max(max(smin.x, smin.y), smin.z), 0.0), lb = min(min(smax.x, smax.y), smax.z);
+        if (lb <= la) { o = vec4(1.0); return; }
+        float ds = (lb - la) / float(STEPS);
+        float s = la + ds * hash(gl_FragCoord.xy);
+        float avd = 0.0;
+        for (int i = 0; i < STEPS; ++i, s += ds) {
+            vec3 p = u.camGrid.xyz + dir * s;
+            vec3 l = (p - sunL) / half_ * 0.5 + 0.5;
+            if (length(p - sunL) < 1.24) avd += texture(local, l).r * ds * 1e3;      /* A_V par pc × pc */
+        }
+        float t = mix(1.0, pow(10.0, -0.4 * avd), u.color.w);
+        o = vec4(t, t, t, 1.0);
+        return;
+    }
     if (b <= a) { o = vec4(0.0); return; }
     float dt = (b - a) / float(STEPS);
     float t = a + dt * hash(gl_FragCoord.xy);
