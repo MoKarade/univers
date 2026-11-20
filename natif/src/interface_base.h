@@ -403,6 +403,8 @@ int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, floa
         // clique pas non plus ; sinon un clic dans le vide faisait voler vers un point invisible.
         // Inventaire du 20/11 : une galaxie dont la forme se voit (rayon dessiné d'au moins 6 px) se clique même si son nom est
         // caché à cette échelle ; avant, 4 180 galaxies de forme mesurée ne se cliquaient qu'à moins de 3 Mal.
+        // nébuleuses : dessinées tant que la caméra est à moins de 30 000 al du Soleil (nebuleuses.h, fenetre.cpp)
+        if (b.nebula && std::sqrt(dot(cam.pos, cam.pos)) > 3.0e4) continue;
         const double disc = std::min(discRadiusPx(sim, cam, i, h), 1.0e6);
         // Les grandes structures (vides, bassins : 121 points nommés) ne passent pas par ce filtre des 55 000 galaxies de
         // Cosmicflows-4 : leur nom n'est montré qu'au survol, mais elles se cliquent (inventaire : 100 sur 121 ne se cliquaient pas).
@@ -431,6 +433,11 @@ bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, fl
     if (b.kind == Kind::Planet && b.parent > 0 && b.naif != eph::kMoon && b.radiusKm < 100 && !ui.details) return false;      // minimaliste : petites lunes nommées au survol
     if (b.kind == Kind::Probe) return sim.dist < 0.3;
     if (b.kind == Kind::Asteroid) return sim.dist < 0.05;
+    if (b.nebula) {      // nébuleuse : nommée quand on est dans son voisinage (à moins de 2 000 al), comme le sont ses étoiles
+        const Vec3 p = sim.position(i);
+        const Vec3 d{p.x - cam.pos.x, p.y - cam.pos.y, p.z - cam.pos.z};
+        return std::sqrt(dot(d, d)) < 2.0e3;
+    }
     if (b.kind == Kind::Galaxy && b.priority >= 9) {      // Cosmicflows-4 (55 637) : seulement quand on est tout près
         const Vec3 p = sim.position(i);
         const Vec3 d{p.x - cam.pos.x, p.y - cam.pos.y, p.z - cam.pos.z};

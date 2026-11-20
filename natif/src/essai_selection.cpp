@@ -8,12 +8,14 @@
 // 3. Inventaire : chaque galaxie nommée et placée, vue de face à 8 fois son rayon dessiné (Soleil suivi), doit se choisir
 //    d'un clic sur son centre ET à mi-rayon. Les échecs sont comptés par famille et les premiers sont nommés.
 // Usage : essai_selection <dossier des données de l'appli, par ex. C:\dev\Univers-PC>
+#include <chrono>
 #include <cstdio>
 #include <map>
 #include <set>
 
 #include "interface_base.h"
 #include "galaxies_formes.h"
+#include "gaia.h"
 
 namespace {
 
@@ -26,6 +28,7 @@ void verifie(bool ok, const std::string& quoi) {
 
 // Famille d'une galaxie, d'après son fichier d'origine (texte de la fiche).
 std::string famille(const Body& b) {
+    if (b.nebula) return "nébuleuses";
     if (b.structure) return "structures";
     if (b.cluster) return "amas";
     if (b.natureText.find("SGA-2020") != std::string::npos) return "formes mesurées (SGA-2020)";
@@ -116,7 +119,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
         const Body& b = sim.bodies[static_cast<size_t>(i)];
         if (b.kind != Kind::Galaxy || !sim.visible(i) || b.name == "Centre de la Voie lactée") continue;
-        ++noms[b.name];
+        if (!b.nebula) ++noms[b.name];      // une nébuleuse peut porter le nom d'une galaxie (Hercules : nuage et naine)
         const Vec3 at = sim.position(i);
         const double r = sim.drawnRadiusLy(i);
         // vue : la galaxie de face, à 8 fois son rayon dessiné (forme), ou à sa distance d'arrivée (nom seul)
@@ -163,6 +166,63 @@ int main(int argc, char** argv) {
         }
     std::printf("      noms de galaxies portés par plusieurs astres visibles : %d\n", doubles);
     verifie(doubles <= 3, "doublons de noms de galaxies : 3 au plus (avant : 25)");
+    int nNeb = 0;
+    for (const Body& b : sim.bodies) nNeb += b.nebula && b.drawnRadiusLy > 0;
+    verifie(nNeb == 317, "nébuleuses chargées comme astres, avec leur rayon dessiné : " + std::to_string(nNeb) + " sur 317");
+
+    // ---- 4. étoiles de Gaia : clic au clic seulement, dans les feuilles traversées par la ligne de visée
+    GaiaFile gf;
+    if (!openGaia(dir + "/gaia.bin", gf)) {
+        verifie(false, "gaia.bin ouvert");
+    } else {
+        sim.years = kStartYears;
+        const double since = sim.years - (static_cast<double>(gf.epoch) - 2000.0), kv = 0.05 * kKmsToLyPerYear;
+        int essais = 0, bons = 0, memes = 0;
+        double pire = 0, total = 0;
+        const uint32_t pas = std::max(1u, gf.leafCount / 300);
+        for (uint32_t l = 0; l < gf.leafCount; l += pas) {
+            const uint64_t k = gf.leaves[l].first;      // la plus brillante de la feuille
+            float xyz[3];
+            int16_t v[3];
+            uint16_t hm;
+            std::memcpy(xyz, gf.stars + k * 16, 12);
+            std::memcpy(v, gf.velocities + k * 8, 6);
+            std::memcpy(&hm, gf.stars + k * 16 + 12, 2);
+            const Vec3 p{xyz[0] + v[0] * kv * since, xyz[1] + v[1] * kv * since, xyz[2] + v[2] * kv * since};
+            // deux vues : depuis le Soleil (ciel d'aujourd'hui), et de côté à 20 al de l'étoile
+            for (int vue = 0; vue < 2; ++vue) {
+                const double np = std::sqrt(dot(p, p));
+                Vec3 eye{0, 0, 0};
+                if (vue == 1) {
+                    Vec3 s{-p.y, p.x, 0.0};
+                    const double ns = std::max(std::sqrt(dot(s, s)), 1e-9);
+                    eye = {p.x + s.x / ns * 20.0, p.y + s.y / ns * 20.0, p.z + s.z / ns * 20.0};
+                }
+                if (vue == 0 && np < 1.0) continue;
+                const Camera cam = lookAt(eye, p, 60.0, w / h);
+                double x = 0, y = 0;
+                if (!cam.project(p, w, h, x, y)) continue;
+                const Vec3 d = p - eye;
+                const double app = halfToFloat(hm) + 5.0 * std::log10(std::sqrt(dot(d, d)) / 3.2615638) - 5.0;
+                GaiaHit hit;
+                const auto t0 = std::chrono::steady_clock::now();
+                const bool ok = pickGaiaStar(gf, cam, x, y, w, h, 12.0, 99.0, sim.years, hit);
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+                pire = std::max(pire, ms);
+                total += ms;
+                ++essais;
+                double hx = 0, hy = 0;
+                const Vec3 hp{hit.posJ2000.x + hit.velLy.x * sim.years, hit.posJ2000.y + hit.velLy.y * sim.years, hit.posJ2000.z + hit.velLy.z * sim.years};
+                const bool dedans = ok && cam.project(hp, w, h, hx, hy) && std::hypot(hx - x, hy - y) <= 12.0;
+                if (dedans && hit.appMag <= app + 1e-6) ++bons;
+                if (ok && hit.index == k) ++memes;
+            }
+        }
+        std::printf("      Gaia : %d clics, %d justes (l'étoile visée ou une plus brillante sous le clic), %d sur l'étoile visée ; "
+                    "durée moyenne %.1f ms, pire %.1f ms (au clic seulement, rien par image)\n", essais, bons, memes, total / std::max(essais, 1), pire);
+        verifie(essais > 300 && bons == essais, "étoiles de Gaia : chaque clic choisit l'étoile visée ou une plus brillante sous le curseur");
+        verifie(pire < 500.0, "étoiles de Gaia : un clic répond en moins d'une demi-seconde");
+    }
     std::printf(gEchecs ? "ECHEC (%d)\n" : "PASSE\n", gEchecs);
     return gEchecs ? 1 : 0;
 }

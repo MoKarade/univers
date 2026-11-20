@@ -46,3 +46,17 @@ Reste non cliquable, connu et non traité ici (dit tel quel) :
 - `essai_selection` (nouveau, dans `controle.sh`) : PASSE sur les données avec le nouveau `galaxies_cf4.tsv`.
 - `controle.sh` complet : PASSE (18 essais, 28 cassures de continuité, référence 29).
 - Pas vérifié à l'écran : la carte graphique est prise par le grand calcul.
+
+## Suite (même soir) : étoiles Gaia et nébuleuses
+
+| Couche | Avant | Après |
+|---|---|---|
+| Étoiles Gaia (gaia.bin 98 M, gaia_b.bin 94 M) | non cliquables (seules celles aussi dans etoiles.bin) | un clic choisit l'étoile Gaia la plus brillante sous le curseur (12 px), si elle paraît plus brillante que l'étoile du catalogue trouvée ; fiche « Étoile Gaia n° … » : magnitude absolue G, couleur → température, vitesse radiale mesurée ou non, rayon calculé (approché) |
+| Nébuleuses (223 planétaires, 94 nuages moléculaires) | dessinées, sans nom ni fiche ni clic | astres nommés (nebuleuses_noms.tsv, qui existait sans être lu), cliquables sur toute leur tache dessinée, fiche avec la source (Chornay et Walton 2021 ; Zucker et al. 2020) |
+
+Coût : rien par image. La recherche Gaia ne tourne qu'au clic et ne lit que les feuilles de l'arbre traversées par la ligne
+de visée : mesuré sur 610 clics, 1,2 ms en moyenne, 8,2 ms au pire (`essai_selection`).
+
+Limites dites telles quelles : une étoile Gaia se choisit à 100 000 ans au plus d'aujourd'hui (comme les étoiles du catalogue)
+et suit alors une ligne droite ; pas de nom au survol pour elle (seulement au clic). Une nébuleuse au-delà de 30 000 al du
+Soleil n'est pas dessinée, donc pas cliquable (PM 1-308, à 34 000 al).

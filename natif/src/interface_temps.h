@@ -406,6 +406,8 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     else if (fb.kind == Kind::Asteroid && sim.asteroidCat && sim.asteroidSel >= 0 && sim.asteroidCat->isComet(static_cast<size_t>(sim.asteroidSel)))
         ImGui::TextDisabled("Source : orbite à jour de JPL Horizons (NASA).");
     else if (fb.kind == Kind::Asteroid) ImGui::TextDisabled("Source : JPL Small-Body Database (NASA).");
+    else if (fb.nebula)
+        ImGui::TextDisabled("Sources : voir la description (nébuleuses planétaires : Chornay et Walton 2021, distance de l'étoile centrale par Gaia ; nuages : Zucker et al. 2020).");
     else if (fb.kind == Kind::Galaxy && sim.expandsOnly(f) && !fb.structure)      // M77 : pas dans le calcul de la rencontre (Marc, 20/11)
         ImGui::TextDisabled("%s", ("Position : direction et distance d'aujourd'hui (voir la description), puis l'expansion de l'univers calculée ici ; "
                              "sa vitesse propre (quelques dizaines à centaines de km/s) n'est pas suivie. "
