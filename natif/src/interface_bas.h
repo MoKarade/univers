@@ -215,7 +215,14 @@ void drawWelcome(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed
     ImGui::TextDisabled("Quand le temps avance ou recule, leur place est calculée : le bouton « i » du temps dit comment.");
     ImGui::TextDisabled("Clique sur un astre pour y aller. Molette pour zoomer, glisser pour tourner, tape un nom pour chercher.");
     ImGui::Spacing();
-    if (ImGui::Button("  Visite guidée (une minute et demie)  ")) startTour(sim, ui, 0);
+    ImGui::PushStyleColor(ImGuiCol_Button, theme::v4(theme::alpha(theme::kAccent, 0.85f)));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(theme::kAccent));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(IM_COL32(16, 18, 26, 255)));
+    if (ImGui::Button("  Découvrir : visites guidées  ")) {
+        ui.welcome = false;
+        ui.discover = true;
+    }
+    ImGui::PopStyleColor(3);
     ImGui::SameLine();
     if (ImGui::Button("  Explorer seul  ")) {
         ui.welcome = false;
@@ -260,17 +267,88 @@ void drawTour(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     }
     ImGui::SetNextWindowPos({w * 0.5f, std::min(h - px(ui, 120), ui.dockTop - px(ui, 14))}, 0, {0.5f, 1});
     ImGui::Begin("visite", nullptr, fixed);
-    ImGui::TextDisabled("Visite guidée   •   étape %d sur %d", ui.tour + 1, kTourCount);
+    ImGui::TextDisabled("%s   •   étape %d sur %d", kTours[ui.tourSet].title, ui.tour + 1, kTours[ui.tourSet].count);
     ImGui::PushFont(ui.big);
     ImGui::TextUnformatted(sim.bodies[static_cast<size_t>(sim.focus)].name.c_str());
     ImGui::PopFont();
-    ImGui::TextUnformatted(tourCaption(sim, ui.tour).c_str());
+    {
+        const char* c = kTours[ui.tourSet].stops[ui.tour].caption;
+        ImGui::TextUnformatted(c ? c : tourCaption(sim, ui.tour).c_str());
+    }
     ImGui::ProgressBar(static_cast<float>(ui.tourClock / total), {px(ui, 520), px(ui, 4)}, "");
-    if (ImGui::Button("← Précédente") && ui.tour > 0) startTour(sim, ui, ui.tour - 1);
+    if (ImGui::Button("← Précédente") && ui.tour > 0) startTour(sim, ui, ui.tour - 1, -1);
     ImGui::SameLine();
     if (ImGui::Button("Suivante →")) startTour(sim, ui, ui.tour + 1);
     ImGui::SameLine();
     if (ImGui::Button("Arrêter la visite")) ui.tour = -1;
+    ImGui::End();
+}
+
+// Une carte cliquable de la fenêtre « Découvrir » : titre, phrase, pied de carte. Rend vrai au clic.
+bool discoverCard(const UiState& ui, const char* id, const char* icon, const char* title, const char* blurb, const std::string& foot, float w, float h) {
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const bool hit = ImGui::InvisibleButton(id, {w, h});
+    const bool hov = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float r = px(ui, 12), pad = px(ui, 14);
+    dl->AddRectFilled(p, {p.x + w, p.y + h}, hov ? IM_COL32(255, 186, 96, 30) : IM_COL32(255, 255, 255, 12), r);
+    dl->AddRect(p, {p.x + w, p.y + h}, hov ? theme::alpha(theme::kAccent, 0.7f) : theme::kLine, r, 0, 1.2f);
+    float y = p.y + pad;
+    if (gIcons) {
+        dl->AddText({p.x + pad, y}, theme::kAccent, icon);
+        y += ImGui::GetTextLineHeight() + px(ui, 6);
+    }
+    ImFont* fb = gFontBold ? gFontBold : ImGui::GetFont();
+    ImFont* fs = gFontSmall ? gFontSmall : ImGui::GetFont();
+    const float sc = ImGui::GetIO().FontGlobalScale;
+    dl->AddText(fb, fb->FontSize * sc, {p.x + pad, y}, theme::kText, title);
+    y += fb->FontSize * sc + px(ui, 4);
+    dl->AddText(fs, fs->FontSize * sc, {p.x + pad, y}, theme::kMuted, blurb, nullptr, w - 2 * pad);
+    dl->AddText(fs, fs->FontSize * sc, {p.x + pad, p.y + h - pad - fs->FontSize * sc}, hov ? theme::kAccent : theme::kFaint, foot.c_str());
+    if (hov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    return hit;
+}
+
+// « Découvrir » : les visites guidées à thème et quelques moments à revivre, en cartes. Ouvert depuis le mot d'accueil
+// ou le bouton « Visite » de la barre d'outils.
+void drawDiscover(Sim& sim, UiState& ui, float w, float h) {
+    if (!ui.discover) return;
+    ImGui::SetNextWindowPos({w * 0.5f, std::min(h * 0.45f, ui.dockTop - px(ui, 14))}, ImGuiCond_Always, {0.5f, ui.dockTop - px(ui, 14) < h * 0.45f ? 1.0f : 0.5f});
+    ImGui::SetNextWindowBgAlpha(0.96f);
+    ImGui::Begin("Découvrir", &ui.discover, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize |
+                                                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar);
+    cardShadow();
+    ImGui::PushFont(ui.big);
+    ImGui::TextUnformatted("Découvrir");
+    ImGui::PopFont();
+    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - ImGui::GetFrameHeight());
+    if (iconButton("fermer-decouvrir", ico::kClose, "x", "Fermer")) ui.discover = false;
+    ImGui::TextDisabled("Choisis une visite : la caméra vole d'étape en étape, avec une légende. Un clic sur le ciel l'arrête.");
+    ImGui::Spacing();
+    sectionLabel("Visites guidées");
+    const float gap = px(ui, 10), cw = px(ui, 250), ch = px(ui, 132);
+    for (int k = 0; k < kTourSetCount; ++k) {
+        if (k % 2) ImGui::SameLine(0, gap);
+        int n = 0;
+        for (int j = 0; j < kTours[k].count; ++j) n += bodyByName(sim, kTours[k].stops[j].body) >= 0;
+        const std::string foot = std::to_string(n) + " étapes  ·  environ " + frInt(n * (Sim::kFlySeconds + kTourHoldSeconds) / 60.0 + 0.4) + " min";
+        if (discoverCard(ui, kTours[k].title, ico::kTour, kTours[k].title, kTours[k].blurb, foot, cw, ch)) {
+            ui.discover = false;
+            startTourSet(sim, ui, k);
+        }
+    }
+    ImGui::Spacing();
+    sectionLabel("Moments à revivre");
+    const int totalEclipse = 1;      // kEclipses[1] : éclipse totale du 12 août 2026
+    if (discoverCard(ui, "eclipse", ico::kSun, "Éclipse totale de Soleil", "12 août 2026 : l'ombre de la Lune traverse l'Europe", "voir l'ombre sur la Terre", cw, ch)) {
+        ui.discover = false;
+        showEclipse(sim, ui, totalEclipse);
+    }
+    ImGui::SameLine(0, gap);
+    if (discoverCard(ui, "voyager", ico::kLocation, "Voyager 1 et Jupiter", "5 mars 1979 : la sonde frôle la plus grande planète", "trajectoire du JPL", cw, ch)) {
+        ui.discover = false;
+        showVoyagerJupiter(sim, ui);
+    }
     ImGui::End();
 }
 

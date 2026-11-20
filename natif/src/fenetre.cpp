@@ -34,6 +34,7 @@
 #include "film_carte.h"
 #include "rendu_fenetre.h"
 #include "pose_auto.h"
+#include "chargement.h"
 #include "nebuleuses.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -121,6 +122,9 @@ static std::string sansAccents(const std::string& t) {
 int runWindow(const WindowOptions& opt) {
     const bool test = opt.testFrames > 0;
     gWindowMode = !test;      // dès le début : même un fichier d'étoiles absent est dit à l'écran
+    chargement::Ecran ecran;      // écran de chargement (chargement.h) : rien ne s'ouvre en contrôle
+    ecran.ouvrir(!test);
+    ecran.etape(L"Catalogue d'étoiles", 0.01f);
     const Stars stars = openStars(opt.starsPath.c_str());
 
     // Les données sont rangées à côté du fichier d'étoiles : noms des étoiles, éphémérides de la NASA.
@@ -128,6 +132,7 @@ int runWindow(const WindowOptions& opt) {
     const std::string dataDir = cut == std::string::npos ? std::string(".") : opt.starsPath.substr(0, cut);
     eph::Set spk;
     std::string spkError;
+    ecran.etape(L"Éphémérides de la NASA", 0.04f);
     const bool hasSpk = spk.add(dataDir + "/de440.bsp", spkError);      // absent : le simulateur le dit à l'écran et montre les étoiles
     if (hasSpk)      // lunes : chaque fichier présent ajoute les siennes ; un fichier absent ne bloque rien
         for (const char* f : {"mar099s.bsp", "jup365.bsp", "sat441.bsp", "nep097.bsp", "plu060.bsp",      // grandes lunes
@@ -169,6 +174,7 @@ int runWindow(const WindowOptions& opt) {
             }
         });
     gFiches.demarrer(dataDir);      // fiches complètes des astres (fiches/*.tsv), lues en tâche de fond
+    ecran.etape(L"Planètes, lunes, étoiles et galaxies nommées", 0.08f);
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
     loadGravWaves(dataDir + "/ondes_gravitationnelles.tsv");
     sim.chaosRun.load(dataDir + "/chaos_futur_60ma.bin");      // orbite de la Terre de 10 à 60 millions d'années (fil physique)      // ondes gravitationnelles (GWOSC) : fenêtre ouverte depuis « Aller à »
@@ -252,14 +258,8 @@ int runWindow(const WindowOptions& opt) {
                                 nullptr, wc.hInstance, nullptr);
     if (!hwnd) fail("création de la fenêtre");
     SetWindowLongPtrA(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&input));
-    if (!test) {
-        // Deux appels : Windows impose au premier l'état demandé par le lanceur (un raccourci « réduit » donnait une
-        // fenêtre réduite, sans surface à dessiner). Le second s'applique toujours. En contrôle, rien ne s'ouvre.
-        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
-        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
-        SetForegroundWindow(hwnd);
-    }
 
+    ecran.etape(L"Carte graphique", 0.14f);
     const Gpu g = createGpu(true);
     VkWin32SurfaceCreateInfoKHR sci{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
     sci.hinstance = wc.hInstance;
@@ -279,13 +279,16 @@ int runWindow(const WindowOptions& opt) {
     }
     // Étoiles Gaia (98 millions) et Voie lactée en volume (fil « Voie lactée et étoiles Gaia ») : facultatifs. Quand Gaia est
     // là, le dessin d'origine ne garde que le catalogue principal (Gaia en a retiré les doublons).
+    ecran.etape(L"Étoiles Gaia : 98 millions, une par une", 0.20f);
     GaiaRenderer gaia;
     const bool gaiaOk = gaia.create(g, dataDir + "/gaia.bin", HdrTarget::kFormat);
+    ecran.etape(L"Étoiles Gaia : 94 millions de plus", 0.36f);
     GaiaRenderer gaiaB;      // 93,9 M étoiles à parallaxe entre 5 et 10 erreurs (gaia_b.bin), si le fichier est là
     const bool gaiaBOk = gaiaOk && gaiaB.create(g, dataDir + "/gaia_b.bin", HdrTarget::kFormat, false);
     // Voie lactée faite d'étoiles (Marc, 13/11/2026 : « pas une image ») : 4 M étoiles visibles du modèle
     // (pipeline/natif/etoiles_visibles.py, contrat docs/contrat-etoiles-visibles.md), au format de Gaia : niveaux de
     // détail par l'arbre en huit, orbites exactes sur la carte graphique, sans lumière additionnée en double.
+    ecran.etape(L"Voie lactée : étoiles du modèle", 0.50f);
     GaiaRenderer milkyWayStars;
     const bool milkyWayStarsOk = milkyWayStars.create(g, dataDir + "/vl_etoiles.bin", HdrTarget::kFormat, true, false);
     sim.milkyWayStarCount = milkyWayStarsOk ? milkyWayStars.count : 0;
@@ -294,6 +297,7 @@ int runWindow(const WindowOptions& opt) {
     vieillissement.load(dataDir + "/vieillissement.tsv");
     if (milkyWayStarsOk) milkyWayStars.enableSubClouds(16);      // chaque traceur : 16 étoiles en s'approchant (gaia.vert)
     // Film du Groupe local (film_etoiles.h) : s'il est là, ces étoiles le suivent aux dates qu'il couvre.
+    ecran.etape(L"Film de la rencontre avec Andromède", 0.62f);
     FilmStars filmStars;
     std::vector<float> filmStates;
     const bool filmStarsOk = milkyWayStarsOk && milkyWayStars.externalStatesFit() && filmStars.load(dataDir, milkyWayStars.starCount());
@@ -391,6 +395,7 @@ int runWindow(const WindowOptions& opt) {
     // Galaxies naines nommées sans forme ni photo : nuage tiré de leurs paramètres mesurés (galaxies_naines.h).
     // Planètes des autres étoiles (exoplanetes.h) : liste dans la fiche de leur étoile, dessin quand on s'en approche.
     Exoplanets exoplanets;
+    ecran.etape(L"Exoplanètes, trous noirs, galaxies naines", 0.76f);
     if (exoplanets.load(dataDir + "/exoplanetes_app.tsv")) {
         exoplanets.mergeDoubles(sim.starDoubles);      // planètes d'un double rangées sous l'étoile du catalogue principal
         exoplanets.create(g);
@@ -421,6 +426,7 @@ int runWindow(const WindowOptions& opt) {
     if (openGalaxies(dataDir + "/galaxies.bin", galaxyFile)) galaxies.create(g, galaxyFile, HdrTarget::kFormat);
     // Galaxies de forme mesurée faites de particules (galaxies_formes.h) : 532 427 du SGA-2020 et d'HyperLEDA.
     GalaxyShapes galaxyShapes;
+    ecran.etape(L"Galaxies : formes et tailles mesurées", 0.85f);
     galaxyShapes.create(g, dataDir + "/galaxies_formes.bin", HdrTarget::kFormat);
     sim.galaxyShapeCount = galaxyShapes.count;
     galaxies.setCosmology(sim.cosmology, 1.0);      // table d'aujourd'hui, pour poser les noms sur les formes
@@ -498,6 +504,7 @@ int runWindow(const WindowOptions& opt) {
     autoPose.bindSource(g, hdr.view);
 
     // Interface.
+    ecran.etape(L"Interface", 0.95f);
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;      // aucun fichier de réglages écrit sur le disque
@@ -635,6 +642,17 @@ int runWindow(const WindowOptions& opt) {
     long pathFrames = 0;
     double titleTimer = 0;
     bool drawable = true;
+    // Tout est chargé : l'écran de chargement se ferme, la fenêtre de l'appli apparaît à sa place.
+    ecran.etape(L"Prêt", 1.0f);
+    ecran.fermer();
+    if (!test) {
+        // Deux appels : Windows impose au premier l'état demandé par le lanceur (un raccourci « réduit » donnait une
+        // fenêtre réduite, sans surface à dessiner). Le second s'applique toujours. En contrôle, rien ne s'ouvre.
+        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+        SetForegroundWindow(hwnd);
+        input.resized = true;      // la fenêtre a pris sa vraie taille : refaire la surface de dessin
+    }
     while (!input.quit) {
         pumpMessages();
         if (input.resized || !drawable) {

@@ -92,6 +92,8 @@ int main() {
     const double ech[] = {45.0 / 63241.077, 30.0, 300.0, 5.0e6, 5.0e9};
     expect(positionEchelle(30.0, ech, 5) == 1.0 && positionEchelle(1.0e12, ech, 5) == 4.0 && positionEchelle(1.0e-9, ech, 5) == 0.0, "échelle : bornes");
     expect(near(positionEchelle(std::sqrt(30.0 * 300.0), ech, 5), 1.5), "échelle : milieu logarithmique");
+    expect(majuscules("Température") == "TEMPÉRATURE" && majuscules("à revivre, ça") == "À REVIVRE, ÇA", "majuscules accentuées");
+    expect(majuscules("1 ÷ 2") == "1 ÷ 2", "majuscules : le signe ÷ reste tel quel");
     std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
     return failures ? 1 : 0;
 }

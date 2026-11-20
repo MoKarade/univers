@@ -61,6 +61,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     drawLightLegend(sim, ui, freeRight, hUp, fixed);
     drawArmCard(sim, ui, cam, freeRight, hUp, fixed);
     drawWelcome(sim, ui, freeRight, hUp, fixed);
+    drawDiscover(sim, ui, freeRight, h);
     drawHelp(ui, w, h);
     drawGravWaves(ui, w, hUp);
     drawFieldChip(sim, ui, freeRight, hUp, fixed);

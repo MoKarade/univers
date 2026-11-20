@@ -14,6 +14,7 @@
 #include "interface_images.h"
 #include "interface_savoir.h"
 #include "interface_temps.h"
+#include "interface_tuiles.h"
 #include "orbites_objet.h"
 
 namespace {
@@ -230,6 +231,9 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
     ImGui::Spacing();
     bodyActions(sim, ui, f);
     ImGui::Spacing();
+    // L'essentiel d'abord : les chiffres-clés en tuiles (survol : d'où vient chaque chiffre).
+    drawKeyFacts(sim, ui, f);
+    ImGui::Spacing();
     const BodyText* bt = bodyText(b.name);
     if (bt && bt->image && gUiImages) {
         if (const UiImages::Entry* e = gUiImages->get(bt->image)) {
@@ -243,13 +247,11 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
         }
     }
     ImGui::Spacing();
-    ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextUnformatted(bt ? bt->text : b.cluster ? clusterText() : b.structure ? structureText() : kindText(static_cast<int>(b.kind)));
-    ImGui::PopTextWrapPos();
+    drawSummaryText(bt ? bt->text : b.cluster ? clusterText() : b.structure ? structureText() : kindText(static_cast<int>(b.kind)), f);
     ImGui::Spacing();
 
-    // Orbite : courbe et analyse.
-    if (ImGui::CollapsingHeader("Orbite", ImGuiTreeNodeFlags_DefaultOpen)) bodyOrbit(sim, ui, b, f);
+    // Le détail ensuite, replié : la courbe de l'orbite, puis toutes les valeurs avec leur source.
+    if (ImGui::CollapsingHeader("Orbite : courbe et analyse")) bodyOrbit(sim, ui, b, f);
     if (ImGui::CollapsingHeader("Valeurs", ImGuiTreeNodeFlags_DefaultOpen)) cardRows(sim, ui, cam, f);
     drawFiche(sim, ui, f);      // fiche complète : données publiées (fiches/*.tsv) et grandeurs calculées ici
 }

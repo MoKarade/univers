@@ -380,9 +380,9 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     ImGui::SameLine();
     if (iconButton("expo", ico::kSun, "Exposition", "Exposition de l'image : plus claire, plus sombre, automatique", sim.exposureEv != 0)) popupUnder(ui, "exposition");
     toolbarDivider(ui);
-    if (iconButton("visite", ico::kTour, "Visite", "Visite guidée : de la Terre à l'univers lointain (1 min 30)", ui.tour >= 0)) {
+    if (iconButton("visite", ico::kTour, "Découvrir", ui.tour >= 0 ? "Arrêter la visite guidée" : "Découvrir : visites guidées et moments à revivre", ui.tour >= 0 || ui.discover)) {
         if (ui.tour >= 0) ui.tour = -1;
-        else startTour(sim, ui, 0);
+        else ui.discover = !ui.discover;
     }
     ImGui::SameLine();
     if (iconButton("aide", ico::kHelp, "Aide", "Toutes les commandes (F1)", ui.help)) ui.help = !ui.help;

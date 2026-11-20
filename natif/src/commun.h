@@ -39,7 +39,7 @@ inline bool gWindowMode = false;
             std::fprintf(f, "%s\n", msg.c_str());
             std::fclose(f);
         }
-        MessageBoxA(nullptr, msg.c_str(), "Univers", MB_OK | MB_ICONERROR);
+        MessageBoxA(nullptr, msg.c_str(), "Univers", MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);      // au-dessus de l'écran de chargement
     }
     std::exit(1);
 }

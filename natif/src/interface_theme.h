@@ -258,9 +258,7 @@ void smallNote(const char* text, ImU32 col = theme::kMuted) {
 void sectionLabel(const char* text) {
     ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
     ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(theme::kFaint));
-    std::string up;
-    for (const char* p = text; *p; ++p) up += (*p >= 'a' && *p <= 'z') ? static_cast<char>(*p - 32) : *p;
-    ImGui::TextUnformatted(up.c_str());
+    ImGui::TextUnformatted(ui_outils::majuscules(text).c_str());
     ImGui::PopStyleColor();
     ImGui::PopFont();
 }
@@ -279,7 +277,7 @@ void row(const char* label, const std::string& value, const char* status, float 
     const float labelBottom = ImGui::GetCursorPosY();
     ImGui::SameLine(x0 + col);
     const float vx = ImGui::GetCursorPosX();
-    ImGui::PushTextWrapPos(x0 + avail);
+    ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(value.c_str());
     ImGui::PopTextWrapPos();
     const ui_outils::Statut st = ui_outils::statutDe(status);
@@ -297,7 +295,7 @@ void row(const char* label, const std::string& value, const char* status, float 
         ImGui::SetCursorPosX(vx);
         ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
         ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(theme::kFaint));
-        ImGui::PushTextWrapPos(x0 + avail);
+        ImGui::PushTextWrapPos(0.0f);
         ImGui::TextUnformatted(rest.c_str());
         ImGui::PopTextWrapPos();
         ImGui::PopStyleColor();

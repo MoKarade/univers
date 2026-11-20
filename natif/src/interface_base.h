@@ -84,17 +84,57 @@ const Scale kScales[] = {{"Système solaire", 45.0 * kAuInLy},
                          {"Univers lointain", 5.0e9}};
 constexpr int kScaleCount = 5;
 
-// Visite guidée : chaque étape vole vers un astre, puis reste quelques secondes avec une légende.
+// Visites guidées (2e tour de l'interface, 20/11/2026 : « une expérience qui engage ») : plusieurs visites à thème.
+// Chaque étape vole vers un astre, puis reste quelques secondes avec une légende. Une légende vide : celle calculée par
+// tourCaption (visite express, légendes qui citent les données chargées). Un astre absent des données est sauté.
 struct TourStop {
     const char* body;
-    double distLy;      // 0 : distance d'arrivée habituelle
+    double distLy;          // 0 : distance d'arrivée habituelle
+    const char* caption;    // nullptr : légende calculée (tourCaption)
 };
-const TourStop kTour[] = {{"Terre", 0},          {"Lune", 0},
-                          {"Soleil", 45.0 * kAuInLy}, {"Jupiter", 0},
-                          {"Saturne", 0},        {"Soleil", 30.0},
-                          {"Soleil", 300.0},    {"Andromède (M31)", 0},
-                          {"Soleil", 5.0e9}};
-constexpr int kTourCount = static_cast<int>(sizeof(kTour) / sizeof(kTour[0]));
+struct TourDef {
+    const char* title;
+    const char* blurb;
+    const TourStop* stops;
+    int count;
+};
+const TourStop kTourExpress[] = {{"Terre", 0, nullptr},          {"Lune", 0, nullptr},
+                                 {"Soleil", 45.0 * kAuInLy, nullptr}, {"Jupiter", 0, nullptr},
+                                 {"Saturne", 0, nullptr},        {"Soleil", 30.0, nullptr},
+                                 {"Soleil", 300.0, nullptr},    {"Andromède (M31)", 0, nullptr},
+                                 {"Soleil", 5.0e9, nullptr}};
+const TourStop kTourSolaire[] = {
+    {"Terre", 0, "La Terre, éclairée par le Soleil à la date affichée."},
+    {"Lune", 0, "La Lune, à la place donnée par les éphémérides de la NASA."},
+    {"Mars", 0, "Mars, la planète rouge, et ses deux petites lunes, Phobos et Déimos."},
+    {"Jupiter", 0, "Jupiter, la plus grande planète du système solaire."},
+    {"Europe", 0, "Europe, lune de Jupiter : sous sa glace, un océan d'eau liquide, d'après les mesures des sondes Galileo."},
+    {"Saturne", 0, "Saturne et ses anneaux de glace."},
+    {"Titan", 0, "Titan, la plus grande lune de Saturne, cachée sous une épaisse atmosphère."},
+    {"Soleil", 45.0 * kAuInLy, "Le système solaire vu de loin : orbites tirées des éphémérides de la NASA."}};
+const TourStop kTourEtoiles[] = {
+    {"Soleil", 30.0, "Les étoiles à moins de 30 années-lumière du Soleil, à leur distance mesurée."},
+    {"Proxima du Centaure", 0, "Proxima du Centaure, l'étoile la plus proche du Soleil : environ 4,2 années-lumière."},
+    {"Sirius", 0, "Sirius, l'étoile la plus brillante de notre ciel de nuit."},
+    {"Véga", 0, "Véga, l'une des étoiles les plus brillantes de l'été."},
+    {"Bételgeuse", 0, "Bételgeuse, supergéante rouge de la constellation d'Orion."},
+    {"Rigel", 0, "Rigel, supergéante bleue d'Orion."},
+    {"Soleil", 300.0, "Les étoiles mesurées autour du Soleil : Hipparcos et Gaia."}};
+const TourStop kTourGalaxies[] = {
+    {"Centre de la Voie lactée", 0, "Le centre de notre galaxie, la Voie lactée."},
+    {"Grand Nuage de Magellan", 0, "Le Grand Nuage de Magellan, galaxie compagne de la Voie lactée."},
+    {"Andromède (M31)", 0, "Andromède, la grande galaxie voisine, à sa distance mesurée."},
+    {"Galaxie du Triangle (M33)", 0, "La galaxie du Triangle, troisième grande galaxie du Groupe local."},
+    {"Soleil", 5.0e6, "Le Groupe local : la Voie lactée, Andromède, le Triangle et des dizaines de galaxies naines."},
+    {"Laniakea", 0, "Laniakea, le superamas de galaxies dont fait partie la Voie lactée (Tully et al. 2014)."},
+    {"Soleil", 5.0e9, "Des millions de galaxies et de quasars, placés d'après leur décalage vers le rouge mesuré."}};
+#define UNIVERS_TOUR(t) t, static_cast<int>(sizeof(t) / sizeof(t[0]))
+const TourDef kTours[] = {{"Visite express", "De la Terre à l'univers lointain", UNIVERS_TOUR(kTourExpress)},
+                          {"Le système solaire", "Planètes, lunes et anneaux", UNIVERS_TOUR(kTourSolaire)},
+                          {"Les étoiles voisines", "Proxima, Sirius, Bételgeuse…", UNIVERS_TOUR(kTourEtoiles)},
+                          {"Les galaxies", "De la Voie lactée à Laniakea", UNIVERS_TOUR(kTourGalaxies)}};
+#undef UNIVERS_TOUR
+constexpr int kTourSetCount = static_cast<int>(sizeof(kTours) / sizeof(kTours[0]));
 constexpr double kTourHoldSeconds = 7.0;
 
 struct UiState {
@@ -124,6 +164,8 @@ struct UiState {
     int cardClosedFor = -1;         // fiche fermée pour cet astre
     int armSel = -1;                // traceur de bras spiral choisi au clic (-1 : aucun)
     int tour = -1;                  // étape de la visite guidée (-1 : pas de visite)
+    int tourSet = 0;                // quelle visite (kTours)
+    bool discover = false;          // fenêtre « Découvrir » ouverte
     int gwCount = 0;                // ondes gravitationnelles chargées (interface_ondes.h)
     bool gwOpen = false;            // leur fenêtre est ouverte
     bool details = false;           // interface minimaliste (Marc, 13/11/2026) : textes détaillés à l'écran seulement sur demande
@@ -221,18 +263,25 @@ void showEclipse(Sim& sim, UiState& ui, int k) {
     sim.pitch = std::asin(std::clamp(look.z / r, -1.0, 1.0));
 }
 
-void startTour(Sim& sim, UiState& ui, int step) {
+// Étape `step` de la visite `ui.tourSet` (étapes d'astres absents sautées, en avançant comme en reculant).
+void startTour(Sim& sim, UiState& ui, int step, int dir = +1) {
     ui.welcome = false;
-    for (; step < kTourCount; ++step) {
-        const int i = bodyByName(sim, kTour[step].body);
+    const TourDef& t = kTours[std::clamp(ui.tourSet, 0, kTourSetCount - 1)];
+    for (; step >= 0 && step < t.count; step += dir) {
+        const int i = bodyByName(sim, t.stops[step].body);
         if (i >= 0 && sim.visible(i)) {
             ui.tour = step;
             ui.tourClock = 0;
-            sim.flyTo(i, kTour[step].distLy);
+            sim.flyTo(i, t.stops[step].distLy);
             return;
         }
     }
     ui.tour = -1;      // plus d'étape possible : fin de la visite
+}
+
+void startTourSet(Sim& sim, UiState& ui, int set) {
+    ui.tourSet = std::clamp(set, 0, kTourSetCount - 1);
+    startTour(sim, ui, 0);
 }
 
 void showVoyagerJupiter(Sim& sim, UiState& ui);
@@ -252,6 +301,7 @@ void firstFrame(Sim& sim, UiState& ui) {
     if (e == "calculs") ui.tasksOpen = true;
     if (e == "menu") ui.keepGoTo = true;
     if (e == "details") ui.details = true;
+    if (e == "decouvrir") ui.discover = true;
     if (e != "fiche") ui.cardClosedFor = sim.focus;      // minimaliste : la fiche s'ouvre au clic sur un astre, pas au départ
     if (e.rfind("recherche:", 0) == 0) std::snprintf(ui.search, sizeof(ui.search), "%s", e.substr(10).c_str());
     if (e.rfind("visite:", 0) == 0) {
