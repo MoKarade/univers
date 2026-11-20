@@ -9,8 +9,8 @@
 // fondu jusqu'à 8 pixels, la lumière totale conservée. Nombre de particules selon la taille à l'écran, plafonné.
 #pragma once
 #include "gaia.h"
-#include "parallele.h"
 #include "galaxies.h"
+#include <unordered_map>
 
 namespace {
 
@@ -64,23 +64,29 @@ public:
             // fraction) est calculée une fois (byZ_) : mêmes opérations que distanceLy, mêmes distances, 10 ms -> ~1 ms.
             const bool first = version_ == ~0ull;
             version_ = cat.tableVersion;
+            // Distance mesurée : agrandie elle aussi par l'expansion au-delà de 10 Mal, comme le nom et le point de la galaxie
+            // (simulation.h, refreshGalaxies). Avant, la forme restait à sa place d'aujourd'hui pendant que son nom et son
+            // point s'éloignaient avec l'univers : M77 « se baladait » (Marc, 20/11/2026).
+            const double k = cat.scale;
+            for (uint32_t i = 0; i < count; ++i) {
+                const Rec& r = recs_[i];
+                if (r.d <= 0) continue;
+                const double d = r.d > 1.0e7 ? r.d * k : r.d;
+                world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
+            }
             if (first) {
-                parallele::pour(count, [&](uint64_t a, uint64_t b, unsigned) {
-                    for (uint64_t i = a; i < b; ++i) {
-                        const Rec& r = recs_[i];
-                        const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
-                        world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
-                    }
-                });
+                for (uint32_t i = 0; i < count; ++i) {
+                    const Rec& r = recs_[i];
+                    if (r.d > 0) continue;
+                    const double d = cat.distanceLy(r.z);
+                    world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
+                }
             } else {
-                parallele::pour(byZ_.size(), [&](uint64_t a, uint64_t b, unsigned) {
-                    for (uint64_t k = a; k < b; ++k) {
-                        const ByZ& z = byZ_[k];
-                        const Rec& r = recs_[z.i];
-                        const double d = cat.distanceAt(z.p);
-                        world_[z.i] = {r.ux * d, r.uy * d, r.uz * d, d};
-                    }
-                });
+                for (const ByZ& b : byZ_) {
+                    const Rec& r = recs_[b.i];
+                    const double d = cat.distanceAt(b.p);
+                    world_[b.i] = {r.ux * d, r.uy * d, r.uz * d, d};
+                }
             }
         }
         const double pxPerRad = height / (2.0 * cam.tanHalf);
@@ -92,48 +98,119 @@ public:
         shown = 0;
         particles = 0;
         maxSurface = 0;
-        // Partagé entre les cœurs (parallele.h ; cadence, 20/11/2026) : chaque galaxie à part, ses candidates (plus de 2 pixels)
-        // rangées par tranche ; puis les plafonds (kMaxShown, kMaxParticles) appliqués dans l'ordre des galaxies, comme avant.
-        const unsigned nt = parallele::morceaux(count);
-        candidates_.resize(nt);
-        parallele::pour(count, [&](uint64_t a, uint64_t b, unsigned k) {
-            std::vector<Candidate>& out = candidates_[k];
-            out.clear();
-            for (uint32_t i = static_cast<uint32_t>(a); i < b; ++i) {
-                const W& w = world_[i];
-                const double rx = w.x - cam.pos.x, ry = w.y - cam.pos.y, rz = w.z - cam.pos.z;
-                pos[i * 4] = static_cast<float>(rx);
-                pos[i * 4 + 1] = static_cast<float>(ry);
-                pos[i * 4 + 2] = static_cast<float>(rz);
-                pos[i * 4 + 3] = static_cast<float>(w.d);
-                np[i] = 0;
-                const double dc = std::sqrt(rx * rx + ry * ry + rz * rz);
-                const double size = recs_[i].diam * 2.9088821e-4 * w.d;      // diamètre (al)
-                const double px = size / std::max(dc, 1.0) * pxPerRad;
-                if (px < 2.0) continue;
-                Candidate c{i, 0, -1.0};
-                if (px > 40.0) {      // galaxie bien résolue (plus de 40 pixels) : flux vu de la caméra / surface de son disque à l'écran
-                    const double fl = std::pow(10.0, -0.4 * recs_[i].r) * (w.d / std::max(dc, 1.0)) * (w.d / std::max(dc, 1.0));
-                    c.surface = fl / (0.785398 * px * px * std::max(static_cast<double>(recs_[i].ba), 0.2));
+        for (uint32_t i = 0; i < count; ++i) {
+            const W& w = world_[i];
+            const double rx = w.x - cam.pos.x, ry = w.y - cam.pos.y, rz = w.z - cam.pos.z;
+            pos[i * 4] = static_cast<float>(rx);
+            pos[i * 4 + 1] = static_cast<float>(ry);
+            pos[i * 4 + 2] = static_cast<float>(rz);
+            pos[i * 4 + 3] = static_cast<float>(w.d);
+            np[i] = 0;
+            if (!hidden_.empty() && hidden_[i]) {      // distance inconnue : ni point ni forme (flux nul : P.w = 0)
+                pos[i * 4 + 3] = 0.0f;
+                continue;
+            }
+            const double dc = std::sqrt(rx * rx + ry * ry + rz * rz);
+            const double size = recs_[i].diam * 2.9088821e-4 * w.d;      // diamètre (al)
+            const double px = size / std::max(dc, 1.0) * pxPerRad;
+            if (px < 2.0 || shown >= kMaxShown) continue;
+            if (px > 40.0) {      // galaxie bien résolue (plus de 40 pixels) : flux vu de la caméra / surface de son disque à l'écran
+                const double fl = std::pow(10.0, -0.4 * recs_[i].r) * (w.d / std::max(dc, 1.0)) * (w.d / std::max(dc, 1.0));
+                maxSurface = std::max(maxSurface, fl / (0.785398 * px * px * std::max(static_cast<double>(recs_[i].ba), 0.2)));
+            }
+            // dans le champ (avec la marge de la taille de la galaxie)
+            const double f = rx * cam.fwd.x + ry * cam.fwd.y + rz * cam.fwd.z;
+            if (f < -size) continue;
+            const double x = rx * cam.right.x + ry * cam.right.y + rz * cam.right.z, y = rx * cam.up.x + ry * cam.up.y + rz * cam.up.z;
+            const double fz = std::max(f, 1.0);
+            if (std::fabs(x) > fz * tx + size || std::fabs(y) > fz * ty + size) continue;
+            const uint32_t n = static_cast<uint32_t>(std::clamp(px * px * 0.3, 64.0, 30000.0));
+            if (particles + n > kMaxParticles) continue;
+            np[i] = n;
+            particles += n;
+            ind[shown++] = {n, 1, 0, i};      // une instance : la galaxie i (gl_InstanceIndex)
+        }
+    }
+
+    // Galaxies proches placées d'après leur décalage vers le rouge : sous cz ≈ 1 500 km/s, la vitesse propre de la galaxie
+    // domine et la distance tirée de z est fausse (NGC 2976 posée à 68 000 al, en satellite de la Voie lactée, alors que
+    // Cosmicflows-4 la mesure à 3,6 Mpc). Quand une galaxie de Cosmicflows-4 (distance mesurée : Tully-Fisher, céphéides,
+    // pointe des géantes rouges…) est dans la même direction (moins de 0,1°), sa distance mesurée remplace celle de z.
+    // À appeler avant snapNames. Rend le nombre de distances remplacées.
+    static constexpr double kZInconnue = 0.001;
+    int fixNearbyDistances(const std::vector<Body>& bodies) {
+        if (!ready) return 0;
+        constexpr double kZMax = 0.005, kCos = 0.99999847691;      // cos(0,1°)
+        // sous z = 0,001 (cz < 300 km/s), z ne dit rien de la distance (vitesses propres et chute vers le Groupe local)
+        std::vector<std::pair<Vec3, double>> cf4;
+        for (const Body& b : bodies)
+            if (b.kind == Kind::Galaxy && b.natureText.find("Cosmicflows-4") != std::string::npos) {
+                const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
+                if (n > 0) cf4.push_back({{b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n}, n});
+            }
+        int fixed = 0;
+        for (uint32_t i = 0; i < count; ++i) {
+            Rec& r = recs_[i];
+            if (r.d > 0 || !(r.z < kZMax)) continue;
+            double best = kCos, d = 0;
+            for (const auto& [u, n] : cf4) {
+                const double c = u.x * r.ux + u.y * r.uy + u.z * r.uz;
+                if (c > best) { best = c; d = n; }
+            }
+            if (d > 0) {
+                r.d = static_cast<float>(d);
+                ++fixed;
+            } else if (r.z < kZInconnue) {      // ni distance mesurée ni z exploitable : distance inconnue, non dessinée
+                if (hidden_.empty()) hidden_.assign(count, 0);
+                hidden_[i] = 1;
+            }
+        }
+        if (fixed) {      // les distances remplacées ne suivent plus la table des décalages vers le rouge
+            byZ_.erase(std::remove_if(byZ_.begin(), byZ_.end(), [&](const ByZ& b) { return recs_[b.i].d > 0; }), byZ_.end());
+            version_ = ~0ull;
+        }
+        return fixed;
+    }
+
+    // Le nom d'une galaxie de forme (galaxies_formes_noms.tsv) est posé exactement au centre de sa forme : sa place
+    // d'aujourd'hui devient celle de la forme (même direction, même distance que le dessin). Avant, le nom et la caméra
+    // visaient un point décalé d'environ un tiers du rayon (M77 : ~20 000 al à 55 Mal ; Marc, 20/11/2026). Rend le nombre
+    // de noms posés.
+    int snapNames(std::vector<Body>& bodies, const GalaxyRenderer& cat) const {
+        if (!ready) return 0;
+        constexpr double kBin = 0.5 * 3.14159265358979 / 180.0;      // cases de 0,5° en latitude et longitude
+        auto key = [&](double ux, double uy, double uz, int dl, int db) {
+            const long b = static_cast<long>(std::floor(std::asin(std::clamp(uz, -1.0, 1.0)) / kBin)) + db;
+            const long l = static_cast<long>(std::floor((std::atan2(uy, ux) + 3.14159265358979) / kBin)) + dl;
+            return static_cast<uint64_t>((b + 1000) * 4000 + ((l % 720) + 720) % 720);
+        };
+        std::unordered_map<uint64_t, std::vector<uint32_t>> grid;
+        for (uint32_t i = 0; i < count; ++i) grid[key(recs_[i].ux, recs_[i].uy, recs_[i].uz, 0, 0)].push_back(i);
+        int snapped = 0;
+        for (Body& b : bodies) {
+            if (b.kind != Kind::Galaxy || b.natureText.find("SGA-2020") == std::string::npos) continue;
+            const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
+            if (n <= 0) continue;
+            const double ux = b.fixedPos.x / n, uy = b.fixedPos.y / n, uz = b.fixedPos.z / n;
+            double best = std::cos(0.1 * 3.14159265358979 / 180.0);      // à moins de 0,1°
+            int bi = -1;
+            for (int db = -1; db <= 1; ++db)
+                for (int dl = -1; dl <= 1; ++dl) {
+                    const auto it = grid.find(key(ux, uy, uz, dl, db));
+                    if (it == grid.end()) continue;
+                    for (uint32_t i : it->second) {
+                        const double c = ux * recs_[i].ux + uy * recs_[i].uy + uz * recs_[i].uz;
+                        if (c > best) { best = c; bi = static_cast<int>(i); }
+                    }
                 }
-                // dans le champ (avec la marge de la taille de la galaxie) ; n = 0 : hors du champ
-                const double f = rx * cam.fwd.x + ry * cam.fwd.y + rz * cam.fwd.z;
-                const double x = rx * cam.right.x + ry * cam.right.y + rz * cam.right.z, y = rx * cam.up.x + ry * cam.up.y + rz * cam.up.z;
-                const double fz = std::max(f, 1.0);
-                if (!(f < -size) && !(std::fabs(x) > fz * tx + size || std::fabs(y) > fz * ty + size))
-                    c.n = static_cast<uint32_t>(std::clamp(px * px * 0.3, 64.0, 30000.0));
-                out.push_back(c);
-            }
-        });
-        for (const auto& part : candidates_)
-            for (const Candidate& c : part) {
-                if (shown >= kMaxShown) break;
-                if (c.surface >= 0) maxSurface = std::max(maxSurface, c.surface);
-                if (c.n == 0 || particles + c.n > kMaxParticles) continue;
-                np[c.i] = c.n;
-                particles += c.n;
-                ind[shown++] = {c.n, 1, 0, c.i};      // une instance : la galaxie i (gl_InstanceIndex)
-            }
+            if (bi < 0) continue;
+            const Rec& r = recs_[static_cast<size_t>(bi)];
+            const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
+            if (!(d > 0)) continue;
+            b.fixedPos = {r.ux * d, r.uy * d, r.uz * d};
+            ++snapped;
+        }
+        return snapped;
     }
 
     void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure) {
@@ -279,11 +356,6 @@ private:
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_), "dessin des galaxies de forme");
     }
 
-    struct Candidate {      // galaxie de plus de 2 pixels (prepare) : particules voulues (0 : hors du champ), brillance (-1 : non résolue)
-        uint32_t i, n;
-        double surface;
-    };
-    std::vector<std::vector<Candidate>> candidates_;
     std::vector<Rec> recs_;
     std::vector<W> world_;
     struct ByZ { uint32_t i; GalaxyRenderer::ZPlace p; };
@@ -292,6 +364,7 @@ private:
     double pxPerRad_ = 1;
     int ring_ = 0;
     Buffer recBuf_, pos_[kRing], np_[kRing], ind_[kRing];
+    std::vector<char> hidden_;      // galaxies de distance inconnue (fixNearbyDistances), non dessinées
     void* posMap_[kRing] = {};
     void* npMap_[kRing] = {};
     void* indMap_[kRing] = {};

@@ -38,7 +38,7 @@ find_program(GLSLANG glslang REQUIRED)
 set(SPV_DIR ${CMAKE_BINARY_DIR}/spv)
 file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
-foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_traceur.comp gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp film_etat.comp ciel_bandes.frag fusion_nuage.vert ciel_sources.vert ciel_sources.frag gaia_ciel.vert galaxie_formes.vert oort.vert oort.frag structures_maille.vert structures_maille.frag structures_flot.vert structures_flot.frag pose.comp structures_cmb.frag)
+foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_traceur.comp gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp film_etat.comp ciel_bandes.frag fusion_nuage.vert ciel_sources.vert ciel_sources.frag gaia_ciel.vert galaxie_formes.vert oort.vert oort.frag structures_maille.vert structures_maille.frag structures_flot.vert structures_flot.frag pose.comp structures_cmb.frag nebuleuse.vert nebuleuse.frag cycle_nebuleuse.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet -I${CMAKE_SOURCE_DIR}/shaders ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
     DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_acc.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_fiable.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_corps.glsl VERBATIM)
@@ -64,7 +64,7 @@ target_link_libraries(imgui PUBLIC volk dwmapi gdi32)
 foreach(T univers UniversPC)
   add_executable(${T} src/univers.cpp src/fenetre.cpp src/stb_impl.cpp)
   target_include_directories(${T} PRIVATE ${stb_SOURCE_DIR})
-  target_link_libraries(${T} PRIVATE volk imgui univers_physique)
+  target_link_libraries(${T} PRIVATE volk imgui univers_physique msimg32)      # msimg32 : dégradé de l'écran de chargement
   target_compile_options(${T} PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
   add_dependencies(${T} shaders)
 endforeach()
@@ -96,9 +96,19 @@ target_compile_options(essai_cosmologie PRIVATE -Wall -Wextra)
 target_link_options(essai_cosmologie PRIVATE -static)
 
 # Contrôle des outils de texte de l'interface (recherche, dates tapées).
+# Contrôle des fiches complètes des astres (fiches.h). Aucune carte graphique.
+add_executable(essai_fiches src/essai_fiches.cpp)
+target_compile_options(essai_fiches PRIVATE -Wall -Wextra)
+target_link_options(essai_fiches PRIVATE -static)
+
 add_executable(essai_interface src/essai_interface.cpp)
 target_compile_options(essai_interface PRIVATE -Wall -Wextra)
 target_link_options(essai_interface PRIVATE -static)
+
+# Contrôle du cycle de vie des étoiles (cycle_etoile.h, cycle_matiere.h) sur vie_cycle.bin.
+add_executable(essai_cycle src/essai_cycle.cpp)
+target_compile_options(essai_cycle PRIVATE -Wall -Wextra)
+target_link_options(essai_cycle PRIVATE -static)
 
 # Contrôle de la complétude par échelle (completude.h) sur le vrai fichier d'étoiles.
 add_executable(essai_completude src/essai_completude.cpp)

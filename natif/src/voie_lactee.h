@@ -32,7 +32,7 @@ struct MilkyWayUbo {      // std140 : tout en vec4
     float bulge[4];        // luminosité / (8π hx hy hz), en L_sol/pc³ ; puis hx, hy, hz (kpc)
     float bar[4];          // luminosité de la barre longue ; demi-longueur ; hauteur mince ; hauteur très mince
     float bar2[4];         // part très mince ; cos et sin de l'angle de la barre ; nombre de cases locales z
-    float frame[4];        // hauteur de l'image en pixels ; tan(champ/2) ; aléa de l'image ; rien
+    float frame[4];        // hauteur de l'image en pixels ; tan(champ/2) ; aléa de l'image ; 1 = poussière seule
     float colorBulge[4];   // couleur du bulbe et de la barre ; w : nombre de valeurs par case de la grille (2 ou 4)
     float colorYoung[4];   // couleur des jeunes étoiles des bras
     float colorHii[4];     // couleur des régions HII
@@ -92,8 +92,13 @@ public:
     double barAngle(double years) const { return phys::galaxie::barAngleAt(years * 1e-9); }
 
     // Dans la passe en grande dynamique, avant les étoiles. exposure : la même que pour les étoiles.
-    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, double years) {
-        if (!ready) return;
+    // gasOnly : seulement le gaz ionisé des régions HII (quatrième canal de la grille), éteint par la poussière rencontrée ;
+    // ni lueur des étoiles, ni bulbe, ni barre : elles sont déjà dessinées une à une (étoiles du modèle et de Gaia).
+    // dustOnly : seulement la poussière MESURÉE (carte 3D d'Edenhofer et al. 2024, grille locale à moins de 1,24 kpc du
+    // Soleil) : la transmission le long de chaque rayon multiplie ce qui est déjà dessiné (exposure : part montrée, 0 à 1).
+    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, double years, bool gasOnly = false,
+              bool dustOnly = false) {
+        if (!ready || (gasOnly && channels_ != 4) || (dustOnly && !dustPipeline_)) return;
         auto toGal = [&](Vec3 v) {      // écliptique -> galactique : transposée de gal2ecl
             const float* m = par.gal2ecl;
             return Vec3{m[0] * v.x + m[3] * v.y + m[6] * v.z, m[1] * v.x + m[4] * v.y + m[7] * v.z, m[2] * v.x + m[5] * v.y + m[8] * v.z};
@@ -122,6 +127,8 @@ public:
         for (int i = 0; i < 3; ++i) u.color[i] = color_[i];
         u.color[3] = static_cast<float>(k);
         for (int i = 0; i < 3; ++i) { u.colorBulge[i] = colorBulge_[i]; u.colorYoung[i] = colorYoung_[i]; u.colorHii[i] = colorHii_[i]; }
+        if (gasOnly)
+            for (int i = 0; i < 3; ++i) u.color[i] = u.colorBulge[i] = u.colorYoung[i] = 0.0f;
         u.colorBulge[3] = static_cast<float>(channels_);
         u.grid[0] = par.halfXY;
         u.grid[1] = par.halfZ;
@@ -145,13 +152,15 @@ public:
         u.frame[0] = static_cast<float>(height);
         u.frame[1] = static_cast<float>(cam.tanHalf);
         u.frame[2] = static_cast<float>(frame_++ % 64);
+        u.frame[3] = dustOnly ? 1.0f : 0.0f;
+        if (dustOnly) u.color[3] = exposure;      // part montrée (fondu), pas une exposition
         std::memcpy(mapped_[ring_], &u, sizeof(u));
 
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
         vkCmdSetViewport(cmd, 0, 1, &vp);
         vkCmdSetScissor(cmd, 0, 1, &sc);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, dustOnly ? dustPipeline_ : pipeline_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &sets_[ring_], 0, nullptr);
         vkCmdDraw(cmd, 3, 1, 0, 0);
         ring_ = (ring_ + 1) % kRing;
@@ -160,6 +169,7 @@ public:
     void release(const Gpu& g) {
         if (!ready) return;
         vkDestroyPipeline(g.dev, pipeline_, nullptr);
+        if (dustPipeline_) vkDestroyPipeline(g.dev, dustPipeline_, nullptr);
         vkDestroyPipelineLayout(g.dev, layout_, nullptr);
         vkDestroyDescriptorPool(g.dev, pool_, nullptr);
         vkDestroyDescriptorSetLayout(g.dev, setLayout_, nullptr);
@@ -194,7 +204,7 @@ private:
     float color_[3]{1, 1, 1}, colorBulge_[3]{1, 1, 1}, colorYoung_[3]{1, 1, 1}, colorHii_[3]{1, 1, 1};
     int channels_ = 2;
     VkSampler sampler_{};
-    VkPipeline pipeline_{};
+    VkPipeline pipeline_{}, dustPipeline_{};      // dustPipeline_ : mélange multiplicatif (poussière seule)
     VkPipelineLayout layout_{};
     VkDescriptorSetLayout setLayout_{};
     VkDescriptorPool pool_{};
@@ -341,6 +351,12 @@ private:
         pci.pDynamicState = &ds;
         pci.layout = layout_;
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_), "pipeline de la Voie lactée");
+        // poussière seule : l'image × la transmission (couleur rendue par voie_lactee.frag quand frame.w = 1)
+        att.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+        att.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
+        att.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &dustPipeline_), "pipeline de la poussière");
     }
 };
 

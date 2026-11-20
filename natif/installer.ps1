@@ -36,7 +36,7 @@ if (Test-Path "$Donnees\textures") { New-Item -ItemType Directory -Force "$Cible
 # tient en mémoire n'est donc pas touché ; un fichier changé et tenu ouvert est signalé, sans arrêter l'installation.
 # Galaxies de forme mesurée (pipeline/natif/galaxies_formes.py) : leur fichier et le catalogue où leurs points sont marqués.
 if (Test-Path "$Donnees\galaxies-formes\galaxies_formes.bin") { Copier-SiChange "$Donnees\galaxies-formes\galaxies_formes.bin" "$Cible\galaxies_formes.bin"; Copier-SiChange "$Donnees\galaxies-formes\galaxies.bin" "$Cible\galaxies.bin"; Copier-SiChange "$Donnees\galaxies-formes\galaxies_formes_noms.tsv" "$Cible\galaxies_formes_noms.tsv" } elseif (Test-Path "$Donnees\galaxies.bin") { Copier-SiChange "$Donnees\galaxies.bin" "$Cible\galaxies.bin" }
-foreach ($f in 'etoiles.bin', 'etoiles.json', 'etoiles_noms.tsv', 'etoiles_sans_vr.txt', 'galaxies_noms.tsv', 'galaxies_cf4.tsv', 'ondes_gravitationnelles.tsv', 'chaos_futur_60ma.bin', 'gaia_tuiles.idx', 'gaia_tuiles_centres.bin', 'traceurs_bras.tsv', 'asteroides.bin', 'asteroides_noms.txt', 'planetes.tsv', 'lunes.tsv', 'orbites_planetes.bin', 'sondes.bin', 'structures.bin', 'structures_noms.tsv', 'superstructures.bin', 'superstructures_noms.tsv', 'naines.tsv', 'trous_noirs.tsv', 'exoplanetes_app.tsv', 'etoiles_planetes_noms.tsv', 'film_ancres.bin') { if (Test-Path "$Donnees\$f") { Copier-SiChange "$Donnees\$f" "$Cible\$f" } }
+foreach ($f in 'etoiles.bin', 'etoiles.json', 'etoiles_noms.tsv', 'etoiles_sans_vr.txt', 'galaxies_noms.tsv', 'galaxies_cf4.tsv', 'ondes_gravitationnelles.tsv', 'chaos_futur_60ma.bin', 'gaia_tuiles.idx', 'gaia_tuiles_centres.bin', 'traceurs_bras.tsv', 'asteroides.bin', 'asteroides_noms.txt', 'planetes.tsv', 'lunes.tsv', 'orbites_planetes.bin', 'sondes.bin', 'structures.bin', 'structures_noms.tsv', 'superstructures.bin', 'superstructures_noms.tsv', 'naines.tsv', 'trous_noirs.tsv', 'exoplanetes_app.tsv', 'etoiles_planetes_noms.tsv', 'film_ancres.bin', 'nebuleuses.bin', 'nebuleuses_noms.tsv') { if (Test-Path "$Donnees\$f") { Copier-SiChange "$Donnees\$f" "$Cible\$f" } }
 # Éphémérides de la NASA (JPL DE440), téléchargées du NAIF : 114 Mo, lues telles quelles par le simulateur.
 if (Test-Path "$Ephem") { Copier-SiChange "$Ephem" "$Cible\de440.bsp" }
 # Éphémérides des lunes (NAIF), si elles ont été téléchargées à côté de celles des planètes.
@@ -61,6 +61,9 @@ Get-ChildItem "$Donnees\tuiles" -Directory -ErrorAction SilentlyContinue | ForEa
 }
 # Centres de référence des galaxies du Groupe local (pipeline/natif/centres_bin.py), s'ils ont été préparés.
 if (Test-Path "$Donnees\vieillissement.tsv") { Copier-SiChange "$Donnees\vieillissement.tsv" "$Cible\vieillissement.tsv" }
+# Cycle de vie des étoiles (pipeline/natif/vie_cycle.py : MIST v1.2 + naines blanches de Montréal)
+if (Test-Path "$Donnees\vie_cycle.bin") { Copier-SiChange "$Donnees\vie_cycle.bin" "$Cible\vie_cycle.bin" }
+Copier-SiChange "$PSScriptRoot\etoiles_cycle.tsv" "$Cible\etoiles_cycle.tsv"      # étoiles massives et températures publiées (dans le dépôt)
 if (Test-Path "$Donnees\centres_reference.bin") { Copier-SiChange "$Donnees\centres_reference.bin" "$Cible\centres_reference.bin" }
 # Étoiles visibles du modèle de la Voie lactée (pipeline/natif/etoiles_visibles.py), si elles ont été préparées.
 if (Test-Path "$Donnees\etoiles-visibles\voisines_etoiles.bin") { Copier-SiChange "$Donnees\etoiles-visibles\voisines_etoiles.bin" "$Cible\voisines_etoiles.bin" }
