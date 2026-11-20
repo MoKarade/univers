@@ -50,6 +50,19 @@ Captures comparées à l'appli d'avant, mêmes vues (3 dates × 3 distances) :
   de plus de 1 %, un point qui tombe dans le pixel voisin (arrondi d'un calcul fait ailleurs) ;
 - aujourd'hui : seuls l'heure affichée et un trait de l'interface qui suit l'horloge réelle changent.
 
+## Après la PR 137
+
+- PR 138 : la mise à jour du cycle de vie des étoiles (PR 136) coûtait 10 à 14 ms par image sur un seul cœur ; sur tous les
+  cœurs : 1,6 ms [mesuré].
+- Lecture de l'état d'orbite sautée quand son poids vaut zéro (près d'aujourd'hui) : 32 octets de moins par étoile Gaia, soit
+  ~4,5 Go par image vers 10 000 al ; image identique [mesuré sur captures ; gain de temps non mesuré carte seule : le grand
+  calcul occupait la carte jusqu'à minuit].
+- Essai : étoiles Gaia ajoutées par un calcul dans une somme exacte par pixel (`gaia_points.h`, `shaders/gaia_points.comp`),
+  au lieu du tracé de points. Carte libre : 10 à 30 % plus rapide sur ce dessin, image quasi identique (un peu plus claire,
+  +0,7 % au plus : les étoiles très faibles ne se perdent plus à l'addition en demi-flottants). Carte partagée avec le grand
+  calcul : 0,3 image/s contre 4 avec le tracé de points (le calcul de l'appli passe après celui du grand calcul). Gardé
+  seulement derrière `UNIVERS_POINTS=calcul` ; le tracé de points reste la règle.
+
 ## Ce qui reste
 
 - Vers 10 000 al d'aujourd'hui, la carte dessine 140 millions de points Gaia (79 M + 62 M) : 11 ms, autant à 800 × 450 qu'à
