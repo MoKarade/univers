@@ -34,7 +34,7 @@ void cycleSection(Sim& sim, UiState& ui, int f) {
     const cycle::Etat& s = a->vu.modele;
     const double now = sim.years - kStartYears;
     const bool massive = v.massive();
-    row("Étape", cycle::nomEtape(s.etape, massive), "modèle", ui.s);
+    row("Étape", cycle::nomEtape(s.etape, massive, a->vu.teff), "modèle", ui.s);
     if (s.age >= 0) row("Âge", dureeAns(s.age), v.source == 1 ? "mesuré aujourd'hui, puis calculé" : "calculé, modèle", ui.s);
     if (s.masse > 0) row("Masse", frNum(s.masse, 3) + " M☉ (née avec " + frNum(v.m0, 3) + " M☉)", "calculé, modèle", ui.s);
     if (a->vu.rayonKm > 0) {

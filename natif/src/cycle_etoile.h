@@ -55,7 +55,10 @@ enum class Etape : uint8_t {
     Supernova, EtoileNeutrons, TrouNoir, WolfRayet, AuDela
 };
 
-inline const char* nomEtape(Etape e, bool massive) {
+// teff : température de surface (K), pour dire « supergéante rouge, jaune ou bleue ».
+inline const char* nomEtape(Etape e, bool massive, double teff = 0) {
+    if (massive && (e == Etape::Geante || e == Etape::Helium || e == Etape::AGB) && teff > 0)
+        return teff < 5000 ? "supergéante rouge" : teff < 10000 ? "supergéante jaune" : "supergéante bleue";
     switch (e) {
         case Etape::Rien: return "pas encore là";
         case Etape::Nuage: return "cœur de nuage qui se resserre";
