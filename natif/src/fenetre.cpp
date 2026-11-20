@@ -913,7 +913,7 @@ int runWindow(const WindowOptions& opt) {
         spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
         uiImages.uploadPending(g);      // au plus une image du panneau par image affichée
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
-        planets.update(sim, cam, asSphere);
+        planets.update(sim, cam, asSphere, spheres.nearestDist());
         dwarfGalaxies.update(sim);
         blackHoles.update(sim, cam);
         exoplanets.update(sim, cam);
@@ -1083,6 +1083,10 @@ int runWindow(const WindowOptions& opt) {
         if (!skyOnly) blackHoles.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
         if (!skyOnly) exoplanets.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
+        if (planets.count > planets.backCount) {      // lunes et planètes devant la sphère la plus proche (audit E2)
+            sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
+            planets.draw(cmd, true);
+        }
         vkCmdEndRendering(cmd);
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
