@@ -270,6 +270,13 @@ struct Vie {
     Etat etat(double a) const;
     // Date (âge du modèle) du début de chaque grande étape, pour les boutons du panneau ; -1 si l'étape n'existe pas.
     double debutEtape(Etape e) const;
+    double debutEtapeCalcule(Etape e) const;
+    double debuts[16] = {};
+    bool debutsPrets = false;
+    void calculerDebuts() {
+        for (int k = 0; k < 16; ++k) debuts[k] = debutEtapeCalcule(static_cast<Etape>(k));
+        debutsPrets = true;
+    }
 };
 
 // Refroidissement d'une naine blanche : table de Montréal la plus proche en masse, interpolation linéaire entre deux.
@@ -396,7 +403,9 @@ inline Etat Vie::etat(double a) const {
             default: s.etape = Etape::Sequence;
         }
         if (fin == 3 && a >= ageFin()) s.etape = Etape::AuDela;
-    } else if (fin == 3) {
+    } else if (fin == 3) {      // trace arrêtée en pleine séquence principale : l'étoile garde son dernier état (elle évolue très lentement)
+        s = etat(ageFin());
+        s.age = a;
         s.etape = Etape::AuDela;
         return s;
     } else if (fin == 2) {
@@ -488,6 +497,10 @@ inline Etat Vie::etat(double a) const {
 
 
 inline double Vie::debutEtape(Etape e) const {
+    if (debutsPrets && static_cast<int>(e) < 16) return debuts[static_cast<int>(e)];
+    return debutEtapeCalcule(e);
+}
+inline double Vie::debutEtapeCalcule(Etape e) const {
     if (!ok()) return -1;
     switch (e) {
         case Etape::Nuage: return -kAccretionAns - kCondensationAns;
@@ -580,6 +593,7 @@ inline Vie vieEtoile(const Grille& g, bool soleil, double absMagV, double bv) {
         v.lumMes = 1.0;
         v.teffMes = rayon_etoile::kTsoleil;
         v.rayonMes = 1.0;
+        v.calculerDebuts();
         return v;
     }
     const double r = rayon_etoile::rayonKm(absMagV, bv);
@@ -598,6 +612,7 @@ inline Vie vieEtoile(const Grille& g, bool soleil, double absMagV, double bv) {
     v.lumMes = l;
     v.teffMes = t;
     v.rayonMes = r / kRsunKm;
+    v.calculerDebuts();
     return v;
 }
 
@@ -616,18 +631,16 @@ inline Vu vuA(const Vie& v, double ansDepuisAujourdhui) {
     const Etat& s = o.modele;
     o.etoile = s.age >= 0 && s.age <= v.ageMort() && s.etape != Etape::NaineBlanche;
     if (s.rayon <= 0 && s.magV >= 99) return o;
-    if (o.etoile && now.rayon > 0 && s.rayon > 0) {
-        o.rayonKm = v.rayonMes * kRsunKm * s.rayon / now.rayon;
-        o.teff = v.teffMes * s.teff / now.teff;
-        const double lum = v.lumMes * s.lum / now.lum;
-        o.magV = magV(lum, o.teff);
-    } else {
-        o.rayonKm = s.rayon * kRsunKm;
-        o.teff = s.teff;
-        o.magV = s.magV;
-    }
+    // Rapports mesure / modèle d'aujourd'hui : gardés à toute date (avant la naissance, après la mort) pour qu'aucune
+    // forme ne saute ; sauf pour ce qui ne vient plus de la surface de l'étoile : photosphère de la supernova, étoile à
+    // neutrons, ombre d'un trou noir (modèle seul). Aujourd'hui : exactement la mesure.
+    const bool calee = now.rayon > 0 && now.teff > 0 && now.lum > 0 && s.etape != Etape::Supernova && s.etape != Etape::EtoileNeutrons &&
+                       s.etape != Etape::TrouNoir;
+    const double fR = calee ? v.rayonMes / now.rayon : 1.0, fT = calee ? v.teffMes / now.teff : 1.0, fL = calee ? v.lumMes / now.lum : 1.0;
+    o.rayonKm = s.rayon * kRsunKm * fR;
+    o.teff = s.teff * fT;
+    o.magV = s.lum > 0 && o.teff > 0 ? magV(s.lum * fL, o.teff) : s.magV;
     o.bv = o.teff > 0 ? bvDeT(o.teff) : s.bv;
     return o;
 }
-
 }  // namespace cycle

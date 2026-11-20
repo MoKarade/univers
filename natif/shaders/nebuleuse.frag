@@ -37,5 +37,8 @@ void main() {
         tau += prof.v[extAt + k] * l;
     }
     if (pc.par.w < 0.5) o = vec4(vec3(exp(-tau)), 1.0);
-    else o = vec4(em * pc.par.z, 1.0);
+    else {
+        float c = max(dot(d, pc.avant.xyz), 0.0);      /* angle solide d'un pixel hors du centre de l'image : pixel² cos³θ */
+        o = vec4(em * pc.par.z * c * c * c, 1.0);
+    }
 }

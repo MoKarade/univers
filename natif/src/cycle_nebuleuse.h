@@ -10,7 +10,7 @@ namespace {
 class NebuleuseRenderer {
 public:
     static constexpr int kMax = 16;
-    static constexpr int kFloats = 2 * cycle::kCouchesMax + 1 + 3 * cycle::kCouchesMax + 3;      // 65 + 192 + 64, arrondi
+    static constexpr int kFloats = 2 * cycle::kCouchesMax + 1 + 3 * cycle::kCouchesMax + 3;      // r (n + 1), teintes (3 n), extinction (n), arrondi
     int shown = 0;      // nébuleuses dessinées à la dernière image
 
     void create(const Gpu& g, VkFormat hdrFormat) {

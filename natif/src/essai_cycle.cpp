@@ -117,6 +117,16 @@ int main(int argc, char** argv) {
     std::printf("       Bételgeuse placée : %.1f M☉ (%.1f à %.1f), fin dans %.0f à %.0f milliers d'années\n", bet.m0, bet.mBas, bet.mHaut, bet.finBas / 1e3, bet.finHaut / 1e3);
     verifie(bet.ok() && bet.m0 > 10 && bet.fin == 2, "Bételgeuse : plus de 10 M☉, finit en supernova", bet.m0);
 
+    // ---- étoile placée : pas de saut quand elle devient naine blanche (rapport mesure / modèle gardé)
+    const cycle::Vie sir = cycle::vieEtoile(g, false, 1.45, 0.01);
+    {
+        const double t = sir.ageMort() - sir.ageAujourdhui;
+        const cycle::Vu x = cycle::vuA(sir, t - 0.5), y = cycle::vuA(sir, t + 0.5);
+        verifie(std::fabs(std::log10(y.rayonKm / x.rayonKm)) < 0.05, "Sirius placée : rayon continu à l'entrée en naine blanche", std::log10(y.rayonKm / x.rayonKm));
+    }
+    const cycle::Vie wolf = cycle::vieEtoile(g, false, 16.56, 2.0);
+    verifie(cycle::vuA(wolf, 9.0e9).rayonKm > 0, "naine rouge : toujours là dans 9 Ga (trace MIST arrêtée, état gardé)", cycle::vuA(wolf, 9.0e9).rayonKm);
+
     std::printf("%s (%d échec%s)\n", echecs ? "ÉCHEC" : "TOUT PASSE", echecs, echecs > 1 ? "s" : "");
     return echecs ? 1 : 0;
 }

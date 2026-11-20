@@ -30,7 +30,7 @@ constexpr double kAlbedo = 0.6;
 constexpr double kAlphaB = 2.59e-13;
 constexpr double kCkms = 299792.458;
 constexpr double kChocVisible = 1.0e-4;
-constexpr int kCouchesMax = 64;
+constexpr int kCouchesMax = 128;      // anneaux de 10 % sur cinq décades : plus fins que la coquille d'une nébuleuse
 constexpr double kVitesseCoquilleKms = 25.0;
 
 struct Paquet {      // matière perdue entre deux dates de la vie (âges du modèle, ans)

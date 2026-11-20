@@ -108,7 +108,7 @@ public:
         for (Astre& a : astres) {
             const Body& b = sim.bodies[static_cast<size_t>(a.body)];
             const uint32_t idx = b.kind == Kind::Sun ? sr.count - 1 : static_cast<uint32_t>(b.star);
-            if (idx >= sr.count) continue;
+            if (idx >= sr.count || (b.kind != Kind::Sun && idx >= sr.count - 1)) continue;      // la dernière case est celle du Soleil
             if (a.pointMag == a.writtenMag && a.pointRgba == a.writtenRgba) continue;
             vkCmdUpdateBuffer(cmd, sr.vb[3].buf, 4ull * idx, 4, &a.pointMag);
             vkCmdUpdateBuffer(cmd, sr.vb[4].buf, 4ull * idx, 4, &a.pointRgba);
