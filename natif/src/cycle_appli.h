@@ -117,31 +117,6 @@ public:
         }
     }
 
-    // Pose « photo » (fenetre.cpp) : brillance moyenne, par unité d'exposition, de la nébuleuse la plus brillante à
-    // l'écran (dans le rayon qui contient la moitié de sa lumière), quand son étoile est encore un point. Même échelle que
-    // les points des étoiles (cycle_nebuleuse.h) ; 0 : aucune.
-    double maxSurface(const Sim& sim, const Camera& cam, double pixel) const {
-        double best = 0;
-        for (const Astre& a : astres) {
-            if (!a.profilOk || a.profil.lumiere <= 0) continue;
-            const cycle::Profil& p = a.profil;
-            double cum = 0, rDemi = p.r[p.n];
-            for (int k = 0; k < p.n; ++k) {
-                const double vk = 4.0 / 3.0 * cycle::kPi * (static_cast<double>(p.r[k + 1]) * p.r[k + 1] * p.r[k + 1] - static_cast<double>(p.r[k]) * p.r[k] * p.r[k]);
-                cum += (p.rgb[k][0] + p.rgb[k][1] + p.rgb[k][2]) / 3.0 * vk;
-                if (cum >= 0.5 * p.lumiere) { rDemi = p.r[k + 1]; break; }
-            }
-            const Vec3 c = sim.position(a.body) - cam.pos;
-            const double dist = std::sqrt(dot(c, c));
-            if (dist <= 0 || rDemi <= 0) continue;
-            const double rPx = rDemi / dist / pixel, starPx = sim.bodies[static_cast<size_t>(a.body)].lifeRadiusKm / kLyInKm / dist / pixel;
-            if (rPx < 3.0 || starPx > 1.5 || (dot(c, cam.fwd) <= 0 && dist > rDemi)) continue;
-            const double surface = std::pow(10.0, -0.4 * 4.83) * 32.6156 * 32.6156 * pixel * pixel * 0.5 * p.lumiere / (cycle::kPi * rDemi * rDemi);
-            best = std::max(best, surface);
-        }
-        return best;
-    }
-
     // Réécrit l'éclat et la couleur des points de ces étoiles dans les colonnes du catalogue (avant la passe de dessin).
     // Seuls les mots qui changent partent à la carte graphique.
     void recordPoints(VkCommandBuffer cmd, const Sim& sim, StarRenderer& sr) {
