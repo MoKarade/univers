@@ -243,6 +243,13 @@ public:
         }
     }
 
+    // Distance de la sphère la plus proche dessinée à cette image (infinie s'il n'y en a pas).
+    double nearestDist() const {
+        double d = 1e300;
+        for (const Draw& x : draws_) d = std::min(d, x.dist);
+        return d;
+    }
+
     bool allLoaded() const {
         for (const auto& t : textures_)
             if (!t.ready) return false;
