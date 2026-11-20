@@ -5,6 +5,7 @@
 #include "avancement.h"
 #include "arrivee.h"
 #include "rayon_etoile.h"
+#include "doublons.h"
 #include "centres_reference.h"
 #include "film_v2.h"
 #include "film_ancres.h"
@@ -477,15 +478,18 @@ struct Sim {
         // Étoiles qui ont des planètes connues (pipeline/natif/exoplanetes_app.py, NASA Exoplanet Archive) : cherchables par
         // le nom de l'hôte ; une étoile déjà nommée garde son nom.
         {
-            std::ifstream hf(namesPath.substr(0, namesPath.find_last_of("/\\") + 1) + "etoiles_planetes_noms.tsv");
+            const std::string hostsPath = namesPath.substr(0, namesPath.find_last_of("/\\") + 1) + "etoiles_planetes_noms.tsv";
+            starDoubles = doublons::hotes(stars->x(), stars->y(), stars->z(), stars->mag(), stars->n, hostsPath);      // doublons.h
+            std::ifstream hf(hostsPath);
             for (std::string hl; std::getline(hf, hl);) {
                 std::vector<std::string> c;
                 size_t from = 0;
                 for (size_t tab; (tab = hl.find('\t', from)) != std::string::npos; from = tab + 1) c.push_back(hl.substr(from, tab - from));
                 c.push_back(hl.substr(from));
                 if (c.size() < 4) continue;
-                const int64_t idx = std::strtoll(c[0].c_str(), nullptr, 10);
+                int64_t idx = std::strtoll(c[0].c_str(), nullptr, 10);
                 if (idx < 0 || static_cast<uint64_t>(idx) >= stars->n) continue;
+                if (const auto d = starDoubles.find(idx); d != starDoubles.end()) idx = d->second;      // le double : l'étoile du catalogue principal
                 bool known = false;
                 for (const Body& b : bodies) known = known || (b.kind == Kind::Star && !b.emptySlot && b.star == idx);
                 if (known) continue;
@@ -1110,6 +1114,9 @@ struct Sim {
     // Suivre l'astre i tout de suite, sans vol (départ du programme, contrôles).
     // ---------------------------------------------------------------- étoile désignée au clic
     int pickedStarBody = -1;
+    // Étoiles en double (partie Gaia -> catalogue principal), repérées par les hôtes d'exoplanètes (doublons.h) : le point
+    // Gaia n'est pas dessiné (commun.h), et ses planètes sont rangées sous l'étoile du catalogue principal (exoplanetes.h).
+    std::unordered_map<int64_t, int64_t> starDoubles;
     // L'étoile du catalogue la plus brillante dessinée à moins de maxPx pixels d'un point de l'écran ; -1 si aucune.
     // mLim : magnitude apparente au-delà de laquelle l'étoile n'est pas visible à l'écran (elle n'est pas proposée).
     // Seulement à moins de 100 000 ans d'aujourd'hui (ligne droite, même place que le dessin) ; partagé entre les cœurs.
