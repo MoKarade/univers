@@ -96,12 +96,18 @@ bool gvTraceur(uint idx, uvec4 r, uint flags, out vec3 p, out float garde, out f
                raccord sans seuil avec la ligne droite mesurée, comme etoiles_orbite.vert */
             float u = pc.par.w * 1.0e9 / OG_RACCORD_ANS, w = 1.0 - exp(-u * u);
             float tEtat = pc.par.w - pc.frac * 1.0e-3, h = pc.frac * 1.0e-3 * OP_K;
+            /* raccord nul (à moins de ~70 ans des mesures, w vaut exactement 0 en simple précision) : mix(ligne droite, orbite, 0)
+               rend la ligne droite telle quelle ; l'orbite, multipliée par zéro, n'est ni lue ni calculée (cadence, 20/11/2026 :
+               32 octets par étoile, 4,5 Go par image pour 140 millions d'étoiles). L'état n'est lu que pour le gain du film. */
+            if (w == 0.0) {
+                move = v * pc.par.z;
+                if ((flags & 16u) != 0u) {
+                    Etat a = orb[idx];
+                    if (a.v.w > 0.0) gainFilm = a.v.w;      /* film : lumière que Gaia, éteint, ne porte plus (film_etoiles.h) */
+                }
+            } else {
             Etat a = orb[idx];
             if ((flags & 16u) != 0u && a.v.w > 0.0) gainFilm = a.v.w;      /* film : lumière que Gaia, éteint, ne porte plus (film_etoiles.h) */
-            /* raccord nul (à moins de ~70 ans des mesures, w vaut exactement 0 en simple précision) : mix(ligne droite, orbite, 0)
-               rend la ligne droite telle quelle ; l'orbite, multipliée par zéro, n'est pas calculée (cadence, 20/11/2026). */
-            if (w == 0.0) move = v * pc.par.z;
-            else {
             Etat s = orb[pc.sun];
             /* h = 0 (film sur la carte : état écrit à la date exacte) : la position est l'état lui-même ; l'accélération,
                multipliée par zéro, n'est pas calculée (cadence, 20/11/2026). */

@@ -355,10 +355,12 @@ int runWindow(const WindowOptions& opt) {
     if (milkyWayStarsOk) milkyWayStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     if (gaiaOk) gaia.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     if (gaiaBOk) gaiaB.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
-    // Étoiles Gaia calculées dans une somme par pixel plutôt que tracées en points (gaia_points.h ; cadence, 20/11/2026).
-    // UNIVERS_POINTS=carte : tracé de points d'avant (comparaison, contrôle).
+    // Étoiles Gaia calculées dans une somme par pixel plutôt que tracées en points (gaia_points.h ; cadence, 20/11/2026) :
+    // seulement avec UNIVERS_POINTS=calcul. Mesuré : à peine plus rapide carte libre (10 à 30 %), mais quand un autre
+    // programme calcule sur la carte (le grand calcul), ce calcul-ci passe après lui et l'image tombe à 0,3 image/s contre 4
+    // pour le tracé de points. Le tracé de points reste donc la règle.
     GaiaPointsSum gaiaSum;
-    if (!(std::getenv("UNIVERS_POINTS") && std::string(std::getenv("UNIVERS_POINTS")) == "carte")) gaiaSum.create(g, HdrTarget::kFormat);
+    if (std::getenv("UNIVERS_POINTS") && std::string(std::getenv("UNIVERS_POINTS")) == "calcul") gaiaSum.create(g, HdrTarget::kFormat);
     if (neighbourStarsOk) neighbourStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     // Galaxies voisines faites de leurs étoiles (Marc, 13/11/2026 : « plus aucune galaxie en image ») : table par galaxie pour
     // gaia.vert (centre à t = 0 et à la date montrée, axe et vitesse de rotation) ; rang = ordre de etoiles_visibles_photos.py.
