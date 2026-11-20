@@ -1,0 +1,35 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+/* Précalcul par image des étoiles du MODÈLE (drapeau 16) : la partie propre à chaque étoile (gvTraceur, gaia_corps.glsl),
+   une fois, au lieu d'une fois par étoile de son sous-nuage dans gaia.vert (cadence, 20/11/2026 : orbite, 16 lectures de
+   poussière et vieillissement refaits 16 fois). Mêmes constantes, mêmes tampons, même calcul que le dessin. */
+#define GV_CACHE_ACCES writeonly
+#define GV_PUSH_SUITE uint plageBase;      /* case de l'anneau des plages (gaia.h, CachePush) */
+#include "gaia_corps.glsl"
+/* Plages d'étoiles dessinées à cette image (gaia.h, precompute) : [0] = (nombre de plages, total) ; puis (début, nombre, rang
+   du premier fil) par plage. Seules ces étoiles sont calculées. */
+layout(std430, set = 0, binding = 7) readonly buffer Plages { uvec4 plage[]; };
+layout(local_size_x = 256) in;
+void main() {
+    uint fil = gl_GlobalInvocationID.x;
+    uvec4 tete = plage[pc.plageBase];
+    if (fil >= tete.y) return;
+    uint lo = 0u, hi = tete.x - 1u;      /* dernière plage dont le premier fil est <= fil */
+    while (lo < hi) {
+        uint m = (lo + hi + 1u) / 2u;
+        if (plage[pc.plageBase + 1u + m].z <= fil) lo = m; else hi = m - 1u;
+    }
+    uvec4 pl = plage[pc.plageBase + 1u + lo];
+    uint idx = pl.x + (fil - pl.z);
+    uvec4 r = star[idx];
+    uint flags = r.w >> 24;
+    if ((flags & 16u) == 0u) return;
+    vec3 p, teinte, poussiere;
+    float garde, gainFilm, mDec, fAge;
+    if (!gvTraceur(idx, r, flags, p, garde, gainFilm, mDec, fAge, teinte, poussiere)) {
+        cache[2u * idx + 1u] = vec4(0.0, 0.0, 0.0, -1.0);
+        return;
+    }
+    cache[2u * idx] = vec4(p, mDec);
+    cache[2u * idx + 1u] = vec4(teinte * poussiere, garde * gainFilm * fAge);
+}

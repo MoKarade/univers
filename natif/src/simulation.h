@@ -1,6 +1,7 @@
 // Appli PC « Univers » : l'état du simulateur (temps, astres, objet suivi, caméra), sans rien qui dépende de l'affichage.
 #pragma once
 #include "asteroides_catalogue.h"
+#include <climits>
 #include <thread>
 #include "avancement.h"
 #include "arrivee.h"
@@ -150,6 +151,7 @@ struct ExactOrbits {
         g0.push_back({pg.x / orbite::kKpcLy + s.x, pg.y / orbite::kKpcLy + s.y, pg.z / orbite::kKpcLy + s.z});
         v0.push_back({vg.x + sv.x, vg.y + sv.y, vg.z + sv.z});
         built = false;
+        prevIdx = LONG_MIN;      // les pas gardés ne valent plus (une étoile de plus)
         return static_cast<int>(g0.size()) - 1;
     }
     void read(std::vector<phys::Vec3>& p, std::vector<phys::Vec3>& v) const {
@@ -160,17 +162,31 @@ struct ExactOrbits {
             v[k] = o.vitesse(k);
         }
     }
+    // Les deux derniers pas calculés sont gardés : autour d'une limite de pas (aujourd'hui en est à 27 ans), la vitesse du Soleil
+    // prise par différence sur ±1 000 ans demandait les deux pas tour à tour, et toutes les orbites étaient refaites deux fois
+    // par image (cadence, 20/11/2026 : ~3 ms).
+    mutable long prevIdx = LONG_MIN;
+    mutable std::vector<phys::Vec3> ppa, pva, ppb, pvb;
     void ensure(double years) const {
         const long n = static_cast<long>(std::floor(years / 1.0e6));
         if (built && n == idx) return;
+        if (built && n == prevIdx) {
+            std::swap(pa, ppa); std::swap(va, pva); std::swap(pb, ppb); std::swap(vb, pvb);
+            std::swap(idx, prevIdx);
+            return;
+        }
+        if (built) { ppa = pa; pva = va; ppb = pb; pvb = vb; prevIdx = idx; }
         if (!built || std::labs(n) + 1 < std::labs(n - at)) {      // premier appel, ou plus court en repartant d'aujourd'hui
             o = phys::galaxie::Orbites(g0, v0);
             at = 0;
             built = true;
         }
-        o.avance(static_cast<double>(n) * 1.0e-3, 1);
+        // Étoiles indépendantes (potentiel fixe) : partagées entre les cœurs, mêmes résultats (cadence, 20/11/2026 : 16 ms par image
+        // sur un seul cœur quand le temps défile à 100 Ma/s).
+        const unsigned fils = std::clamp(std::thread::hardware_concurrency() / 2, 1u, 16u);
+        o.avance(static_cast<double>(n) * 1.0e-3, fils);
         read(pa, va);
-        o.avance(static_cast<double>(n + 1) * 1.0e-3, 1);
+        o.avance(static_cast<double>(n + 1) * 1.0e-3, fils);
         read(pb, vb);
         at = n + 1;
         idx = n;
