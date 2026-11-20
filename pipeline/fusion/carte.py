@@ -54,6 +54,9 @@ def prise(memoire_a_moi_mo=0.0):
         noms = _smi(['--query-compute-apps=name', '--format=csv,noheader']).lower()
         for j in JEUX:
             if j in noms: return f'programme de Marc sur la carte ({j})'
+        # Un essai caché d'un autre fil (univers.exe, jusqu'à 10 Go) est sur la carte : la règle de mémoire ne dit plus rien de
+        # Marc, on ne l'applique pas (20/11 : sept retraits d'affilée, le compteur Windows par programme répondait trop tard).
+        if 'univers.exe' in noms: return None
         utilisee = float(_smi(['--query-gpu=memory.used', '--format=csv,noheader,nounits']).split()[0])
         import os
         exacte = memoire_de(os.getpid())
