@@ -60,6 +60,9 @@ struct Body {
     Vec3 fixedPos{0, 0, 0};     // galaxie : position mesurée (années-lumière), immobile pour l'instant
     int priority = 1;           // galaxie : 1 = nom montré dès qu'on sort de la Voie lactée
     int dwarfModel = -1;        // galaxie naine dessinée d'après ses paramètres mesurés (galaxies_naines.h) ; -1 : non
+    int blackHole = -1;         // trou noir central de masse mesurée (trous_noirs.h) ; -1 : aucun relié
+    double blackHoleRsLy = 0;   // son rayon de Schwarzschild (années-lumière)
+    std::string blackHoleText;  // sa masse mesurée, la méthode et la source (panneau)
     double shapeRadiusLy = 0;   // rayon de demi-lumière mesuré, si la forme est dessinée d'après lui (galaxies_naines.h)
     std::string shapeNote;      // ce qui est dessiné de sa forme, et d'où viennent les valeurs (galaxies_naines.h)
     bool structure = false;     // repère de structures_noms.tsv (superamas, attracteur, vide) : pas une galaxie
@@ -268,7 +271,7 @@ struct Sim {
         bool showLarge = true, showOort = true;
         double largeShare = 0, oortShare = 0;      // parts montrées à la dernière image
         uint32_t oortComets = 0, flowLines = 0;
-        uint32_t triangles[5] = {};    // par genre : 1 Laniakea, 2 vides du voisinage, 3 vides SDSS, 4 vides BOSS
+        uint32_t triangles[9] = {};    // par genre : 1 Laniakea, 2 vides du voisinage, 3 vides SDSS, 4 vides BOSS, 5 superamas SDSS, 6 superstructures nommées, 7 univers observable, 8 fond diffus
     } structures;
     bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
     double cloneMergeProbability = 0, cloneMergeGa[3] = {0, 0, 0};
@@ -450,7 +453,10 @@ struct Sim {
         // Puis structures_noms.tsv : Laniakea, Grand Attracteur, bassins voisins, Vide local et vides du voisinage
         // (pipeline/natif/structures.py).
         const std::string structuresPath = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "structures_noms.tsv";
-        for (const std::string& path : {galaxiesPath, cf4Path, formesPath, structuresPath})
+        // Puis superstructures_noms.tsv : murs et superamas nommés des articles, bord de l'univers observable
+        // (pipeline/natif/superstructures_bin.py).
+        const std::string superPath = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "superstructures_noms.tsv";
+        for (const std::string& path : {galaxiesPath, cf4Path, formesPath, structuresPath, superPath})
         for (std::ifstream gf(path); std::getline(gf, line);) {
             std::vector<std::string> cols;
             size_t from = 0;
@@ -463,7 +469,7 @@ struct Sim {
             body.fixedPos = {std::atof(cols[1].c_str()), std::atof(cols[2].c_str()), std::atof(cols[3].c_str())};
             body.natureText = cols[4];
             body.priority = std::atoi(cols[5].c_str());
-            body.structure = path == structuresPath;
+            body.structure = path == structuresPath || path == superPath;
             bodies.push_back(body);
         }
         // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
@@ -847,6 +853,7 @@ struct Sim {
         if (b.kind == Kind::Probe) arrive = 3.0e6 / kLyInKm;                  // sonde (un point) : on voit son voisinage, à 3 millions de km
         double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
+        if (b.kind == Kind::Galaxy && b.structure && b.name == "Univers observable") d = 1.1e11;      // la sphère entière dans le champ
         if (b.kind == Kind::Galaxy && b.shapeRadiusLy > 0) d = std::clamp(12.0 * b.shapeRadiusLy, 1.0e3, 3.0e5);      // naine dessinée : on la voit entière
         return d;
     }
@@ -944,11 +951,13 @@ struct Sim {
         }
     }
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy && bodies[static_cast<size_t>(i)].blackHole >= 0)
+            return 3.0 * bodies[static_cast<size_t>(i)].blackHoleRsLy;      // on peut descendre jusqu'à son trou noir central
         if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return bodies[static_cast<size_t>(i)].shapeRadiusLy > 0 ? std::min(1.0e3, bodies[static_cast<size_t>(i)].shapeRadiusLy) : 1.0e3;
         if (bodies[static_cast<size_t>(i)].kind == Kind::Probe || bodies[static_cast<size_t>(i)].kind == Kind::Asteroid) return 1.0e-10;      // environ 1 000 km
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }
-    static constexpr double kMaxDist = 9.0e10;      // un peu plus que la distance des objets les plus lointains (z = 7)
+    static constexpr double kMaxDist = 1.2e11;      // de quoi voir tout l'univers observable (rayon comobile 46 milliards d'al)
     // Champ de vision (Ctrl + molette) : de 60° à 0,5°. Grossit ce qui n'a pas de profondeur (cartes du ciel « Lumière »,
     // ciel lointain), comme une lunette ; la molette seule rapproche la caméra.
     static constexpr double kFovMax = 60.0, kFovMin = 0.5;

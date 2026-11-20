@@ -22,6 +22,7 @@
 #include "interface.h"
 #include "points_planetes.h"
 #include "galaxies_naines.h"
+#include "trous_noirs.h"
 #include "spheres.h"
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
@@ -381,6 +382,10 @@ int runWindow(const WindowOptions& opt) {
     PlanetPoints planets;
     planets.create(g);
     // Galaxies naines nommées sans forme ni photo : nuage tiré de leurs paramètres mesurés (galaxies_naines.h).
+    // Trous noirs centraux de masse mesurée (trous_noirs.h).
+    BlackHoles blackHoles;
+    if (blackHoles.load(dataDir + "/trous_noirs.tsv", sim)) blackHoles.create(g);
+    std::printf("trous noirs de masse mesuree relies a une galaxie : %zu\n", blackHoles.holes.size());
     DwarfGalaxies dwarfGalaxies;
     const bool dwarfsOk = dwarfGalaxies.load(g, dataDir + "/naines.tsv", sim);
     std::printf("galaxies naines dessinees d'apres leurs mesures : %zu\n", dwarfsOk ? dwarfGalaxies.dwarfs.size() : size_t{0});
@@ -397,7 +402,7 @@ int runWindow(const WindowOptions& opt) {
     sim.structures.loaded = structuresOk;
     sim.structures.oortComets = structuresR.oortCount;
     sim.structures.flowLines = structuresR.flowLines;
-    for (int k = 0; k < 5; ++k) sim.structures.triangles[k] = structuresR.meshTriangles[k];
+    for (int k = 0; k < 9; ++k) sim.structures.triangles[k] = structuresR.meshTriangles[k];
     double structuresClock = 0;
     AsteroidRenderer asteroids;
     asteroids.create(g, dataDir + "/asteroides.bin", HdrTarget::kFormat);
@@ -847,6 +852,7 @@ int runWindow(const WindowOptions& opt) {
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
         planets.update(sim, cam, asSphere);
         dwarfGalaxies.update(sim);
+        blackHoles.update(sim, cam);
 
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -996,6 +1002,7 @@ int runWindow(const WindowOptions& opt) {
         sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
         planets.draw(cmd);
         if (!skyOnly) dwarfGalaxies.draw(cmd);
+        if (!skyOnly) blackHoles.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
         vkCmdEndRendering(cmd);
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1122,6 +1129,7 @@ int runWindow(const WindowOptions& opt) {
     screen.release(g);
     planets.release(g);
     dwarfGalaxies.release(g);
+    blackHoles.release(g);
     gaiaSky.destroy(g);
     if (gaiaBOk) gaiaB.release(g);
     filmGpu.release(g);

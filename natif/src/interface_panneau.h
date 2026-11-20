@@ -172,6 +172,11 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
         next();
         if (ImGui::Button("S'en approcher")) goToBody(sim, ui, f);
     }
+    // Trou noir central de masse mesurée (trous_noirs.h) : vol jusqu'à 40 rayons de Schwarzschild, l'anneau de photons en vue.
+    if (b.blackHole >= 0 && sim.dist > 400.0 * b.blackHoleRsLy && !sim.flying) {
+        next();
+        if (ImGui::Button("Voir son trou noir")) sim.flyTo(f, 40.0 * b.blackHoleRsLy);
+    }
     if (!sim.history.empty()) {
         next();
         if (ImGui::Button("← Retour")) {

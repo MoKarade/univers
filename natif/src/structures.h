@@ -178,7 +178,7 @@ namespace {
 class StructureRenderer {
 public:
     bool ready = false, oortReady = false;
-    uint32_t meshTriangles[5] = {}, flowLines = 0, oortCount = 0;      // par genre (1 à 4) : comptés au chargement
+    uint32_t meshTriangles[9] = {}, flowLines = 0, oortCount = 0;      // par genre (1 à 8) : comptés au chargement
     uint32_t flowLinesPerBasin[7] = {};
 
     // Shaders : structures_maille.vert/frag (surfaces), structures_flot.vert/frag (lignes), oort.vert/frag (points).
@@ -191,8 +191,12 @@ public:
         oortReady = true;
         structures::File f;
         if (!structures::readFile(dataDir + "/structures.bin", f)) return false;
+        // Superstructures et univers observable (pipeline/natif/superstructures_bin.py), même format, facultatif.
+        structures::File sup;
+        if (structures::readFile(dataDir + "/superstructures.bin", sup))
+            for (auto& m : sup.meshes) f.meshes.push_back(std::move(m));
         for (const auto& m : f.meshes) {
-            if (m.kind < 1 || m.kind > 4 || m.idx.empty()) continue;
+            if (m.kind < 1 || m.kind > 8 || m.idx.empty()) continue;
             Part p;
             p.kind = m.kind;
             p.vb = upload(g, m.verts.data(), m.verts.size() * 4, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
