@@ -173,6 +173,7 @@ int runWindow(const WindowOptions& opt) {
                 outerReady = true;
             }
         });
+    gFiches.demarrer(dataDir);      // fiches complètes des astres (fiches/*.tsv), lues en tâche de fond
     ecran.etape(L"Planètes, lunes, étoiles et galaxies nommées", 0.08f);
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
     loadGravWaves(dataDir + "/ondes_gravitationnelles.tsv");
@@ -373,7 +374,10 @@ int runWindow(const WindowOptions& opt) {
     sim.gaiaRebalancedShift = gaiaOk ? gaia.rebalancedShift : 0;
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
-    sr.create(g, stars, HdrTarget::kFormat, gaiaOk);
+    std::vector<int64_t> starDoublesHidden;
+    for (const auto& [gaiaIdx, mainIdx] : sim.starDoubles) starDoublesHidden.push_back(gaiaIdx);
+    std::printf("etoiles en double (hotes d'exoplanetes) : %zu points Gaia caches\n", starDoublesHidden.size());
+    sr.create(g, stars, HdrTarget::kFormat, gaiaOk, &starDoublesHidden);
     // Ciel dans une autre lumière (radio, infrarouge, X…) : cartes mesurées ciel_NOM.bin, une à la fois (fil longueurs d'onde).
     SkyBandRenderer sky;
     sky.create(g, HdrTarget::kFormat);
@@ -393,6 +397,7 @@ int runWindow(const WindowOptions& opt) {
     Exoplanets exoplanets;
     ecran.etape(L"Exoplanètes, trous noirs, galaxies naines", 0.76f);
     if (exoplanets.load(dataDir + "/exoplanetes_app.tsv")) {
+        exoplanets.mergeDoubles(sim.starDoubles);      // planètes d'un double rangées sous l'étoile du catalogue principal
         exoplanets.create(g);
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
             if (const auto* ps = exoplanets.of(sim, i)) {
@@ -593,6 +598,7 @@ int runWindow(const WindowOptions& opt) {
         double d0 = 0, d1 = 0;
         int n = 0, k = -1;
         std::string dir;
+        std::vector<double> dates;      // balayage dans le temps (UNIVERS_BALAYAGE_DATES) : une vue par date, distance fixe
         bool next(const Gpu& gg, const Target& img, VkExtent2D ext, Sim& s) {
             if (n <= 0) return false;
             if (k >= 0) {
@@ -600,13 +606,30 @@ int runWindow(const WindowOptions& opt) {
                 char name[32];
                 std::snprintf(name, sizeof(name), "/b_%03d.ppm", k);
                 writeCapture(gg, img, ext, dir + name);
-                std::printf("balayage %d : distance %.4g al, pose automatique %.4g\n", k, s.dist, s.autoPose);
+                std::printf("balayage %d : distance %.4g al, date %.6g, pose automatique %.4g\n", k, s.dist, s.years, s.autoPose);
             }
             if (++k >= n) return false;
-            s.dist = n > 1 ? d0 * std::pow(d1 / d0, static_cast<double>(k) / (n - 1)) : d0;
+            if (!dates.empty()) s.years = dates[static_cast<size_t>(k)];
+            else s.dist = n > 1 ? d0 * std::pow(d1 / d0, static_cast<double>(k) / (n - 1)) : d0;
             return true;
         }
     } sweep;
+    // UNIVERS_BALAYAGE_DATES=<dossier>|<date>,<date>,... : une vue par date (années depuis J2000), à la distance de départ
+    if (const char* b = std::getenv("UNIVERS_BALAYAGE_DATES"); b && test) {
+        const std::string s = b;
+        const size_t bar = s.find('|');
+        if (bar != std::string::npos) {
+            sweep.dir = s.substr(0, bar);
+            for (size_t from = bar + 1; from < s.size();) {
+                const size_t c = s.find(',', from);
+                sweep.dates.push_back(std::atof(s.substr(from, c == std::string::npos ? std::string::npos : c - from).c_str()));
+                if (c == std::string::npos) break;
+                from = c + 1;
+            }
+            sweep.n = static_cast<int>(sweep.dates.size());
+            sweep.next(g, final, sc.extent, sim);
+        }
+    }
     if (const char* b = std::getenv("UNIVERS_BALAYAGE"); b && test) {
         char dir[512] = {};
         if (std::sscanf(b, "%lf:%lf:%d:%511s", &sweep.d0, &sweep.d1, &sweep.n, dir) == 4 && sweep.d0 > 0 && sweep.d1 > 0) {
@@ -1111,6 +1134,12 @@ int runWindow(const WindowOptions& opt) {
             const double part = std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0) *
                                 std::clamp((6.0e4 - camSun) / 3.0e4, 0.0, 1.0);
             nebulae.draw(cmd, cam, sc.extent.width, sc.extent.height, part);
+            // Poussière MESURÉE en 3D (Edenhofer et al. 2024, grille locale de voie_lactee.bin) : vue de loin (plus de 4 000 al
+            // du Soleil, fondu jusqu'à 6 500), ses nuages assombrissent les étoiles derrière eux. Pas de près : les magnitudes
+            // mesurées contiennent déjà la poussière vue du Soleil, elle serait comptée deux fois.
+            const double dustPart = std::clamp((camSun - 4000.0) / 2500.0, 0.0, 1.0) * std::clamp((2.0e5 - camSun) / 1.0e5, 0.0, 1.0) *
+                                    std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0);
+            if (dustPart > 0.002) milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(dustPart), sim.years, false, true);
             sr.bind(cmd, pc, sc.extent.width, sc.extent.height);      // le dessin des étoiles reprend ensuite
         }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,

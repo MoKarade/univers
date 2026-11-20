@@ -355,7 +355,8 @@ struct StarRenderer {
 
     // mainOnly : seulement le catalogue principal de la page (étoiles brillantes, noms) ; les autres étoiles viennent
     // alors de Gaia DR3 (gaia.h), qui en a retiré les doublons de ce catalogue.
-    void create(const Gpu& g, const Stars& stars, VkFormat fmt, bool mainOnly = false) {
+    // hidden : rangs d'étoiles à ne pas dessiner (doubles du catalogue principal, doublons.h) : magnitude 99
+    void create(const Gpu& g, const Stars& stars, VkFormat fmt, bool mainOnly = false, const std::vector<int64_t>* hidden = nullptr) {
         uint32_t mainCount = 0;
         std::memcpy(&mainCount, stars.base + 16, 4);
         const size_t nCat = mainOnly ? std::min<size_t>(mainCount, stars.n) : static_cast<size_t>(stars.n);
@@ -377,7 +378,14 @@ struct StarRenderer {
         vb[0] = column(stars.x(), 0);
         vb[1] = column(stars.y(), 0);
         vb[2] = column(stars.z(), 0);
-        vb[3] = column(stars.mag(), kSunAbsMag);
+        {
+            std::memcpy(tmp.data(), stars.mag(), nCat * 4);
+            tmp[n - 1] = kSunAbsMag;
+            if (hidden)
+                for (const int64_t k : *hidden)
+                    if (k >= 0 && static_cast<size_t>(k) < nCat) tmp[static_cast<size_t>(k)] = 99.0f;
+            vb[3] = uploadVertices(g, tmp.data(), n * 4);
+        }
         vb[4] = uploadVertices(g, colors.data(), n * 4);
         for (int a = 0; a < 3; ++a) vb[5 + a] = column(stars.vel(a), 0);
 

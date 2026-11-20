@@ -16,3 +16,15 @@ du Soleil (fondu jusqu'à 60 000) et autour d'aujourd'hui (fondu de 1 à 3 Ma). 
 Vu à l'écran : la nébuleuse de l'Hélice (`captures-nebuleuses/`). **Pas encore vu** : l'effet des nuages sombres (petits à
 l'écran avec l'étendue des lignes de visée : rayon médian 19 al à 1 600 al, soit ~0,7°) ; à vérifier au prochain créneau
 de carte graphique. Non fait : leurs noms dans la recherche (il faudra un genre d'astre « nébuleuse »).
+
+## Poussière : la carte 3D mesurée (20 novembre, soir)
+
+Les nuages de Zucker et al. 2020 dessinés en taches étaient bien trop petits (étendue tirée des seules lignes de visée) et
+presque invisibles. Ils sont remplacés par la carte 3D de la poussière d'Edenhofer et al. 2024 (déjà dans
+`voie_lactee.bin`, grille locale de cases de 15,6 pc jusqu'à 1,24 kpc du Soleil) : pour chaque pixel, l'extinction A_V
+est sommée le long du rayon et la transmission 10^(−0,4 A_V) multiplie ce qui est déjà dessiné (`voie_lactee.frag`,
+mode « poussière seule »). Montrée vue de loin (au-delà de 4 000 al du Soleil, fondu jusqu'à 6 500) : de près, les
+magnitudes mesurées des étoiles contiennent déjà cette poussière vue du Soleil, elle serait comptée deux fois.
+Approché : une étoile placée devant un nuage est assombrie elle aussi (pas de profondeur dans l'image).
+Captures : `captures-nebuleuses/P3D_6000.jpg`, `P3D_8000_plan.jpg` (filaments sombres autour du Soleil, vus à 6 000 et
+8 000 al).

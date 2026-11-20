@@ -10,6 +10,7 @@
 #include <cstdarg>
 
 #include "interface_cosmo_courbes.h"
+#include "interface_fiche.h"
 #include "interface_images.h"
 #include "interface_savoir.h"
 #include "interface_temps.h"
@@ -252,6 +253,7 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
     // Le détail ensuite, replié : la courbe de l'orbite, puis toutes les valeurs avec leur source.
     if (ImGui::CollapsingHeader("Orbite : courbe et analyse")) bodyOrbit(sim, ui, b, f);
     if (ImGui::CollapsingHeader("Valeurs", ImGuiTreeNodeFlags_DefaultOpen)) cardRows(sim, ui, cam, f);
+    drawFiche(sim, ui, f);      // fiche complète : données publiées (fiches/*.tsv) et grandeurs calculées ici
 }
 
 // Courbe de l'orbite de l'astre suivi et son analyse (réelle, et « et si… » avec les réglages).

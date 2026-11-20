@@ -71,7 +71,9 @@ public:
         pc.par[1] = static_cast<float>(height);
         pc.par[2] = static_cast<float>(height / (2.0 * cam.tanHalf));
         const VkDeviceSize off = 0;
-        for (const int genre : {2, 1}) {
+        // les nuages moléculaires (genre 2) ne sont plus dessinés en taches : leur étendue venait des seules lignes de visée,
+        // bien plus petite que les nuages ; la poussière est maintenant la carte 3D mesurée (voie_lactee.h, dustOnly)
+        for (const int genre : {1}) {
             pc.par[3] = static_cast<float>(genre);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, genre == 2 ? mulPipe_ : addPipe_);
             vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
