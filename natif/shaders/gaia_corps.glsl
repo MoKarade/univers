@@ -16,7 +16,7 @@ layout(std430, set = 0, binding = 5) readonly buffer Voisines { GalVoisine voisi
    facteur de lumière (négatif : étoile effacée). */
 layout(std430, set = 0, binding = 6) GV_CACHE_ACCES buffer Cache { vec4 cache[]; };
 const uint GV_CACHE = 0x20000000u;      /* bit de cellBase : cache à jour pour ce dessin (gaia.h, precompute) */
-layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; uint sun; float frac; float exact; uint cellBase; vec4 hide; } pc;   /* hide : copie de l'étoile suivie (gaia.h, setHide) */   /* par : exposition, hauteur en pixels, temps en al par (km/s), temps en Ga */
+layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; uint sun; float frac; float exact; uint cellBase; vec4 hide; GV_PUSH_SUITE } pc;   /* hide : copie de l'étoile suivie (gaia.h, setHide) */   /* par : exposition, hauteur en pixels, temps en al par (km/s), temps en Ga */
 const float LY_PER_PC = 3.2615638;
 #include "gaia_acc.glsl"
 #include "gaia_fiable.glsl"

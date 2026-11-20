@@ -2,6 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 /* Étoiles Gaia DR3 et étoiles du modèle (gaia.h). En-tête, tampons et partie propre à chaque étoile : gaia_corps.glsl. */
 #define GV_CACHE_ACCES readonly
+#define GV_PUSH_SUITE
 #include "gaia_corps.glsl"
 layout(location = 0) out vec3 vCol;
 /* Étoile par étoile : la partie propre à l'étoile (gvTraceur), lue dans le cache pour les étoiles du MODÈLE quand il est à

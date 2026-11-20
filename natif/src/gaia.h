@@ -227,21 +227,39 @@ public:
     }
 
     // Précalcul des étoiles du MODÈLE (gaia_traceur.comp ; cadence, 20/11/2026) : hors de toute passe de dessin, après le calcul
-    // du film et avant draw, à CHAQUE image (want = false : rien, et le dessin refait tout lui-même). Seulement quand des
-    // sous-nuages étaient ouverts à l'image d'avant : repliés, chaque étoile n'est dessinée qu'une fois et le cache ne
-    // gagnerait rien. Même caméra et même date que draw.
-    void precompute(VkCommandBuffer cmd, const Camera& cam, uint32_t height, double years, bool want) {
+    // du film et avant draw, à CHAQUE image (want = false : rien, et le dessin refait tout lui-même). Le choix des feuilles et
+    // des étoiles dessinées est fait ici, avec la même caméra, la même exposition et la même date que draw (qui le reprend
+    // tel quel) : seules les étoiles qui seront dessinées sont calculées.
+    void precompute(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, double years, bool want) {
         cacheReady_ = false;
-        if (!ready || !cacheOn_ || !want || openLeaves_ == 0) return;
-        const GaiaPush gp = makePush(cam, 1.0f, height, years);      // l'exposition ne sert pas au précalcul
+        selected_ = false;
+        if (!ready || !cacheOn_ || !want) return;
+        (void)width;
+        select(cam, exposure, height, years);
+        // plages d'étoiles dessinées (début, nombre, rang du premier fil), précédées de leur nombre et du total
+        auto* pl = static_cast<uint32_t*>(plagesMap_) + static_cast<size_t>(ring_) * (file_.leafCount + 1) * 4;
+        const auto* cmds = static_cast<const VkDrawIndirectCommand*>(mapped_[ring_]);
+        uint32_t np = 0, total = 0;
+        auto add = [&](const VkDrawIndirectCommand& c) {
+            if (c.vertexCount == 0) return;
+            uint32_t* q = pl + 4 * (1 + np++);
+            q[0] = c.firstVertex; q[1] = c.vertexCount; q[2] = total; q[3] = 0;
+            total += c.vertexCount;
+        };
+        for (uint32_t k = 0; k < selN_; ++k) add(cmds[k]);
+        for (uint32_t k = 0; k < epicycleLeaves_; ++k) add(cmds[file_.leafCount - epicycleLeaves_ + k]);
+        pl[0] = np; pl[1] = total; pl[2] = pl[3] = 0;
+        if (total == 0) return;
+        CachePush cp{makePush(cam, 1.0f, height, years), static_cast<uint32_t>(ring_) * (file_.leafCount + 1), {0, 0, 0}};      // l'exposition ne sert pas au calcul
+        const GaiaPush& gp = cp.g;
         VkMemoryBarrier b{VK_STRUCTURE_TYPE_MEMORY_BARRIER};      // états écrits par le calcul du film (film_carte.h) -> lus ici
         b.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
         b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &b, 0, nullptr, 0, nullptr);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cachePipeline_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cacheLayout_, 0, 1, &set_, 0, nullptr);
-        vkCmdPushConstants(cmd, cacheLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(gp), &gp);
-        vkCmdDispatch(cmd, static_cast<uint32_t>((file_.n + 255) / 256), 1, 1);
+        vkCmdPushConstants(cmd, cacheLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(cp), &cp);
+        vkCmdDispatch(cmd, (total + 255) / 256, 1, 1);
         VkBufferMemoryBarrier bb{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
         bb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
         bb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -252,12 +270,23 @@ public:
         cacheReady_ = true;
         cacheExact_ = gp.exact;
     }
+    // Choix des feuilles et des étoiles dessinées à cette image (listes de l'anneau ring_).
+    void select(const Camera& cam, float exposure, uint32_t height, double years) {
+        const double since = years - (static_cast<double>(file_.epoch) - 2000.0);
+        selN_ = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
+                             file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
+        selected_ = true;
+    }
     // Cache des étoiles du modèle : n'a de sens que pour un fichier aux sous-nuages (étoiles du MODÈLE). 32 octets par étoile.
     void enableCache(const Gpu& g) {
         if (!ready || cacheOn_) return;
         destroy(g, cache_);
         cache_ = createBuffer(g, std::max<VkDeviceSize>(32, file_.n * 32ull), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         bindCache(g);
+        plages_ = createBuffer(g, static_cast<VkDeviceSize>(kRing) * (file_.leafCount + 1) * 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        check(vkMapMemory(g.dev, plages_.mem, 0, VK_WHOLE_SIZE, 0, &plagesMap_), "plages du précalcul");
+        bindPlages(g);
         cacheOn_ = true;
     }
 
@@ -268,8 +297,9 @@ public:
         GaiaPush gp = makePush(cam, exposure, height, years);
         // Cache des étoiles du modèle à jour (precompute) et calculé avec la même orbite (exacte ou épicycles) : lu par gaia.vert.
         if (cacheReady_ && gp.exact == cacheExact_) gp.cellBase |= kCacheBit;
-        const uint32_t n = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
-                                        file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
+        if (!selected_) select(cam, exposure, height, years);      // sinon : choix déjà fait par precompute, même caméra, même date
+        selected_ = false;
+        const uint32_t n = selN_;
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
         vkCmdSetViewport(cmd, 0, 1, &vp);
@@ -446,6 +476,8 @@ public:
         vkDestroyPipelineLayout(g.dev, cacheLayout_, nullptr);
         vkDestroyShaderModule(g.dev, cacheCs_, nullptr);
         destroy(g, cache_);
+        if (plagesMap_) vkUnmapMemory(g.dev, plages_.mem);
+        destroy(g, plages_);
         vkDestroyDescriptorPool(g.dev, pool_, nullptr);
         vkDestroyDescriptorSetLayout(g.dev, setLayout_, nullptr);
         vkDestroyShaderModule(g.dev, vs_, nullptr);
@@ -520,7 +552,26 @@ private:
     Buffer cache_{};
     bool cacheOn_ = false, cacheReady_ = false;
     float cacheExact_ = 0.0f;
-    uint64_t openLeaves_ = 0;
+    bool selected_ = false;      // choix des feuilles déjà fait à cette image (precompute)
+    uint32_t selN_ = 0;
+    Buffer plages_{};            // plages d'étoiles dessinées (precompute), une part par case de l'anneau ; liaison 7
+    void* plagesMap_ = nullptr;
+    struct CachePush {           // constantes du précalcul : celles du dessin, puis la case de l'anneau des plages
+        GaiaPush g;
+        uint32_t base;
+        uint32_t pad[3];
+    };
+    void bindPlages(const Gpu& g) {
+        const VkDescriptorBufferInfo pi{plages_.buf, 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        w.dstSet = set_;
+        w.dstBinding = 7;
+        w.descriptorCount = 1;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.pBufferInfo = &pi;
+        vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
+        if (aggSet_) { w.dstSet = aggSet_; vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr); }
+    }
     VkPipeline cachePipeline_{};
     VkPipelineLayout cacheLayout_{};
     VkShaderModule cacheCs_{};
@@ -696,7 +747,6 @@ private:
             collapsedLeaves += T.repliees;
         }
         epicycleLeaves_ = kb;
-        openLeaves_ = subClouds_ > 1 ? visible_.size() - collapsedLeaves : 0;
         return k;
     }
 
@@ -744,16 +794,17 @@ private:
         // 3 : états des orbites exactes ; 4 : poussière 3D (attachDust) ; 5 : galaxies voisines ; 6 : cache des étoiles du modèle
         // (precompute). Vues aussi par le précalcul (gaia_traceur.comp).
         constexpr VkShaderStageFlags st = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
-        VkDescriptorSetLayoutBinding binds[7];
+        VkDescriptorSetLayoutBinding binds[8];
         for (uint32_t i = 0; i < 4; ++i) binds[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, st, nullptr};
         binds[4] = {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, st, nullptr};
         binds[5] = {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, st, nullptr};
         binds[6] = {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, st, nullptr};
+        binds[7] = {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, st, nullptr};      // plages d'étoiles du précalcul
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        dl.bindingCount = 7;
+        dl.bindingCount = 8;
         dl.pBindings = binds;
         check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &setLayout_), "agencement Gaia");
-        const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 14}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}};
+        const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 16}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}};
         VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         dp.maxSets = 2;
         dp.poolSizeCount = 2;
@@ -816,8 +867,10 @@ private:
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout_), "agencement Gaia");
         cache_ = createBuffer(g, 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         bindCache(g);
+        plages_ = createBuffer(g, 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        bindPlages(g);
         {      // précalcul des étoiles du modèle : même jeu de tampons, constantes vues par le calcul
-            const VkPushConstantRange cr{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(GaiaPush)};
+            const VkPushConstantRange cr{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CachePush)};
             VkPipelineLayoutCreateInfo cl = li;
             cl.pPushConstantRanges = &cr;
             check(vkCreatePipelineLayout(g.dev, &cl, nullptr, &cacheLayout_), "agencement du précalcul Gaia");

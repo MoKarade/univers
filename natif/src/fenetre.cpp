@@ -588,10 +588,10 @@ int runWindow(const WindowOptions& opt) {
         bool next(const Gpu& gg, const Target& img, VkExtent2D ext, Sim& s) {
             if (n <= 0) return false;
             if (k >= 0) {
-                vkDeviceWaitIdle(gg.dev);
+                if (dir != "-") vkDeviceWaitIdle(gg.dev);
                 char name[32];
                 std::snprintf(name, sizeof(name), "/b_%03d.ppm", k);
-                writeCapture(gg, img, ext, dir + name);
+                if (dir != "-") writeCapture(gg, img, ext, dir + name);      /* « - » : zoom continu sans images (mesure des saccades) */
                 std::printf("balayage %d : distance %.4g al, pose automatique %.4g\n", k, s.dist, s.autoPose);
             }
             if (++k >= n) return false;
@@ -679,6 +679,7 @@ int runWindow(const WindowOptions& opt) {
                               // étoiles visibles du modèle : leurs orbites exactes rattrapent la date même quand Gaia est à jour
                               (milkyWayStarsOk && !filmAtWanted &&
                                (static_cast<long>(std::floor((wanted - off) / OrbitGpu::kStepYears)) != milkyWayStars.orbitStep() || milkyWayStars.orbitLagSteps() != 0));
+            chrono.cpu("dates (preparation)");
             if (need) {
                 VkCommandBuffer once = beginOnce(g);
                 if (gaiaLive) {
@@ -695,6 +696,7 @@ int runWindow(const WindowOptions& opt) {
                 if (orbits.lagSteps) shownYears = std::clamp(shownYears, lo, lo + OrbitGpu::kStepYears - 1.0);
                 endOnce(g, once);
             }
+            chrono.cpu("orbites (rattrapage)");
             // Étoiles visibles du modèle : leurs orbites exactes avancent à CHAQUE image (le calcul ne fait que les feuilles
             // dessinées à l'image d'avant, et retombe à « à jour » dès qu'il n'en voit pas) ; tant qu'une feuille n'a pas
             // rattrapé la date, elle est dessinée en épicycles, valables seulement près d'aujourd'hui.
@@ -769,6 +771,7 @@ int runWindow(const WindowOptions& opt) {
                     }
                 }
             }
+            chrono.cpu("film et etoiles visibles");
             holdOn = shownYears != wanted;
             holdGoal = wanted;
             if (shownYears != sim.years) {
@@ -971,8 +974,27 @@ int runWindow(const WindowOptions& opt) {
         const bool skyOnly = sim.skyBand >= 0 && sky.loaded;
         // Étoiles du modèle (Voie lactée, voisines) : leur partie propre à chaque étoile, calculée une fois avant le dessin
         // (gaia.h, precompute) ; mêmes conditions que leur dessin plus bas.
-        if (milkyWayStarsOk) milkyWayStars.precompute(cmd, cam, sc.extent.height, sim.years, !skyOnly && sim.bestLook);
-        if (neighbourStarsOk) neighbourStars.precompute(cmd, cam, sc.extent.height, sim.years, !skyOnly && sim.bestLook);
+        // Table des galaxies voisines (centres, axes, film) : posée avant le choix des feuilles du précalcul, qui la lit.
+        if (!skyOnly && neighbourStarsOk && sim.bestLook) {
+            float table[4 * 16] = {};
+            for (int k = 0; k < 4; ++k) {
+                const Voisine& v = voisines[k];
+                Vec3 ct = v.body >= 0 && sim.visible(v.body) ? sim.position(v.body) : v.c0;
+                // Film : base = centre écrit par la courbe des étoiles (Sim::filmStarBase), pas l'ancre que suit la caméra ;
+                // sinon une galaxie déchirée, au centre écrit bruité, faisait trembler toutes ses étoiles (Marc, 20/11/2026).
+                if (neighbourStars.externalStates()) sim.filmStarBase(v.nom, ct);
+                const Vec3 a = orbite::versEcliptique({v.axe[0], v.axe[1], v.axe[2]});      // axe galactique -> écliptique
+                const float row[16] = {static_cast<float>(v.c0.x), static_cast<float>(v.c0.y), static_cast<float>(v.c0.z), 0,
+                                       static_cast<float>(ct.x), static_cast<float>(ct.y), static_cast<float>(ct.z), 0,
+                                       static_cast<float>(a.x), static_cast<float>(a.y), static_cast<float>(a.z), v.vrot,
+                                       v.rrot, v.agit, neighbourStars.externalStates() ? 1.0f : 0.0f, 0};      // 1 : le film mène (gaia.vert)
+                std::memcpy(table + k * 16, row, sizeof(row));
+            }
+            neighbourStars.setGalaxies(table, 4);
+            neighbourStars.setFreeNeighbours(neighbourStars.externalStates());
+        }
+        if (milkyWayStarsOk) milkyWayStars.precompute(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years, !skyOnly && sim.bestLook);
+        if (neighbourStarsOk) neighbourStars.precompute(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years, !skyOnly && sim.bestLook);
         chrono.gpu(cmd, "precalcul des etoiles du modele");
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
@@ -1006,22 +1028,6 @@ int runWindow(const WindowOptions& opt) {
         if (milkyWayStarsOk) { milkyWayStars.setAgeing(ageLum, ageTeff); milkyWayStars.setSunGalacto(sim.sunGalacto()); }
         if (neighbourStarsOk) neighbourStars.setAgeing(ageLum, ageTeff);
         if (!skyOnly && neighbourStarsOk && sim.bestLook) {      // galaxies voisines faites d'étoiles, à toute date (gaia.vert, drapeau 32)
-            float table[4 * 16] = {};
-            for (int k = 0; k < 4; ++k) {
-                const Voisine& v = voisines[k];
-                Vec3 ct = v.body >= 0 && sim.visible(v.body) ? sim.position(v.body) : v.c0;
-                // Film : base = centre écrit par la courbe des étoiles (Sim::filmStarBase), pas l'ancre que suit la caméra ;
-                // sinon une galaxie déchirée, au centre écrit bruité, faisait trembler toutes ses étoiles (Marc, 20/11/2026).
-                if (neighbourStars.externalStates()) sim.filmStarBase(v.nom, ct);
-                const Vec3 a = orbite::versEcliptique({v.axe[0], v.axe[1], v.axe[2]});      // axe galactique -> écliptique
-                const float row[16] = {static_cast<float>(v.c0.x), static_cast<float>(v.c0.y), static_cast<float>(v.c0.z), 0,
-                                       static_cast<float>(ct.x), static_cast<float>(ct.y), static_cast<float>(ct.z), 0,
-                                       static_cast<float>(a.x), static_cast<float>(a.y), static_cast<float>(a.z), v.vrot,
-                                       v.rrot, v.agit, neighbourStars.externalStates() ? 1.0f : 0.0f, 0};      // 1 : le film mène (gaia.vert)
-                std::memcpy(table + k * 16, row, sizeof(row));
-            }
-            neighbourStars.setGalaxies(table, 4);
-            neighbourStars.setFreeNeighbours(neighbourStars.externalStates());
             neighbourStars.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years);
         }
         chrono.gpu(cmd, "etoiles des voisines");

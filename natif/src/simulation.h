@@ -158,9 +158,12 @@ struct ExactOrbits {
             at = 0;
             built = true;
         }
-        o.avance(static_cast<double>(n) * 1.0e-3, 1);
+        // Étoiles indépendantes (potentiel fixe) : partagées entre les cœurs, mêmes résultats (cadence, 20/11/2026 : 16 ms par image
+        // sur un seul cœur quand le temps défile à 100 Ma/s).
+        const unsigned fils = std::clamp(std::thread::hardware_concurrency() / 2, 1u, 16u);
+        o.avance(static_cast<double>(n) * 1.0e-3, fils);
         read(pa, va);
-        o.avance(static_cast<double>(n + 1) * 1.0e-3, 1);
+        o.avance(static_cast<double>(n + 1) * 1.0e-3, fils);
         read(pb, vb);
         at = n + 1;
         idx = n;
