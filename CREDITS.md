@@ -42,6 +42,9 @@ Une licence marquée [À vérifier] n'a pas été confirmée auprès de la sourc
 |---|---|---|---|
 | Traces d'évolution stellaire MIST v1.2 | `pipeline/raw/mist_v1.2_feh0_00100M.track.eep` (dans le dépôt) | Citation requise | Choi J. et al., 2016, ApJ 823, 102 ; Dotter A., 2016, ApJS 222, 8 |
 | Fonctions colorimétriques CIE 1931 | `pipeline/ref/` (dans le dépôt) | Libre | Colour & Vision Research Laboratory (CVRL), UCL |
+| Gabarits spectraux de galaxies Kinney-Calzetti | `pipeline/ref/kc96_*` (dans le dépôt) | Citation requise | Kinney A. L. et al., 1996, ApJ 467, 38 ; Calzetti D. et al., 1994, ApJ 429, 582 |
+| Gabarit spectral de quasar SDSS (spDR2-029) | `pipeline/ref/sdss_spDR2-029_qso.fit` (dans le dépôt) | Mention requise | Sloan Digital Sky Survey |
+| Carte 3D de la poussière | `pipeline/ref/edenhofer2024_readme.md` (dans le dépôt), `app/gen/data20.js` | Citation requise | Edenhofer G. et al., 2024, A&A 685, A82 |
 | Densités de partons CT18NNLO | `pipeline/quantique/proton_pdf.py` | Citation requise | Hou T.-J. et al., 2021, Phys. Rev. D 103, 014013 ; LHAPDF |
 | Ondes gravitationnelles | `app/gen/data18.js` | CC BY 4.0 | Gravitational Wave Open Science Center (GWOSC), LIGO, Virgo et KAGRA |
 | Planck | `app/gen/data19.js` | Mention requise | ESA et Planck Collaboration |
