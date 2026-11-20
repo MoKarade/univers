@@ -215,6 +215,7 @@ private:
         const int ci = sim.centres && sim.centres->ready ? CentresReference::indexOf(b.name) : -1;
         if (ci < 0) {
             note = b.structure ? "Grande structure : pas d'orbite (elle bouge avec l'expansion de l'univers)."
+                 : b.cluster   ? "Amas de galaxies : pas d'orbite calculée, seule sa position mesurée est connue."
                                : "Pas d'orbite calculée pour cette galaxie : seule sa position mesurée est connue.";
             return;
         }

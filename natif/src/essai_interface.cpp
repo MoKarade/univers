@@ -51,8 +51,17 @@ int main() {
     expect(lan > 7.3e8 && lan < 7.6e8, "Laniakea : diamètre de 7,4 × 10^8 al");
     const double vide = arrivee::structureSizeLy("vide ; rayon 33 Mpc/h, centre à 160 Mpc/h (Malandrino et al. 2026)");
     expect(vide > 3.18e8 && vide < 3.21e8, "vide de rayon 33 Mpc/h : diamètre 3,19 × 10^8 al (le centre à 160 Mpc/h n'est pas pris)");
-    const double mur = arrivee::structureSizeLy("superstructure ; 13 amas ; taille publiée : 1.37 milliard d'années-lumière (Gott et al. 2005) ; 1.14 milliards dâannées-lumière ; source");
-    expect(mur > 1.13e9 && mur < 1.15e9, "Grand Mur de Sloan : 1,14 × 10^9 al");
+    // superstructures : « taille publiée : … » est la taille ; « 1.14 milliards d'années-lumière » plus loin est la distance
+    const double mur = arrivee::structureSizeLy("superstructure ; 13 amas membres publiés, une bulle chacun ; taille publiée : 1.37 milliard d'années-lumière (Gott et al. 2005) ; 1.14 milliards dâannées-lumière ; source : Gott et al. 2005");
+    expect(mur > 1.36e9 && mur < 1.38e9, "Grand Mur de Sloan : taille publiée 1,37 × 10^9 al (pas sa distance)");
+    const double cfa = arrivee::structureSizeLy("superstructure ; sphère de la taille publiée (forme généralisée) ; taille publiée : étendue minimale 60 h^-1 Mpc x 170 h^-1 Mpc ; 0.34 milliards dâannées-lumière ; source");
+    expect(cfa > 8.2e8 && cfa < 8.25e8, "Grand Mur CfA2 : 170 Mpc/h = 8,23 × 10^8 al");
+    expect(arrivee::structureSizeLy("superstructure ; taille publiée : non chiffrée ici ; 0.33 milliards dâannées-lumière ; source") == arrivee::kDefautLy,
+           "Superamas de Coma : taille non chiffrée -> défaut (pas sa distance)");
+    const double sar = arrivee::structureSizeLy("superstructure ; 48 amas ; taille publiée : au moins 200 Mpc ; 43 amas riches, ~2e16 Msun ; 3.76 milliards dâannées-lumière ; source");
+    expect(sar > 6.5e8 && sar < 6.55e8, "Saraswati : au moins 200 Mpc = 6,5 × 10^8 al");
+    const double vela = arrivee::structureSizeLy("superstructure ; taille publiée : au moins 25 deg x 20 deg ~ 115 x 90 h70^-1 Mpc, cz ~ 18000 km/s ; 0.86 milliards dâannées-lumière");
+    expect(vela == arrivee::kDefautLy, "Vela : « h70^-1 Mpc » non lu (défaut), et jamais « 1 Mpc »");
     expect(arrivee::structureSizeLy("Grand Attracteur") == arrivee::kDefautLy, "sans taille : 3 × 10^8 al");
     std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
     return failures ? 1 : 0;

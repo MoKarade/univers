@@ -177,7 +177,7 @@ namespace {
 
 class StructureRenderer {
 public:
-    bool ready = false, oortReady = false;
+    bool ready = false, oortReady = false, cmbReady = false;
     uint32_t meshTriangles[9] = {}, flowLines = 0, oortCount = 0;      // par genre (1 à 8) : comptés au chargement
     uint32_t flowLinesPerBasin[7] = {};
 
@@ -195,6 +195,7 @@ public:
         structures::File sup;
         if (structures::readFile(dataDir + "/superstructures.bin", sup))
             for (auto& m : sup.meshes) f.meshes.push_back(std::move(m));
+        loadCmb(g, dataDir + "/ciel_cmb.bin");      // facultatif : sans la carte, la sphère du fond diffus reste un voile
         for (const auto& m : f.meshes) {
             if (m.kind < 1 || m.kind > 8 || m.idx.empty()) continue;
             Part p;
@@ -219,8 +220,9 @@ public:
 
     // oort, large : parts montrées (0 à 1) ; years : date (années depuis J2000) ; clock : temps réel (s) pour le sens du flot ;
     // viewDistLy : distance de la caméra à l'astre suivi (les structures bien plus loin que cette échelle s'estompent).
+    // spheres : montrer aussi les formes approchées en sphères (genres 3 à 6)
     void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, double oort, double large, double years, double clock,
-              double viewDistLy) {
+              double viewDistLy, bool spheres = false) {
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
         vkCmdSetViewport(cmd, 0, 1, &vp);
@@ -250,7 +252,19 @@ public:
         pc.par[2] = static_cast<float>(std::fmod(clock, 1000.0));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipe_);
         for (const Part& p : parts_) {
+            if (!spheres && p.kind >= 3 && p.kind <= 6) continue;
             pc.par[3] = static_cast<float>(p.kind);
+            if (p.kind == 8 && cmbReady) {      // fond diffus : la carte de Planck (structures_cmb.frag)
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, cmbPipe_);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, cmbLayout_, 0, 1, &cmbSet_, 0, nullptr);
+                vkCmdPushConstants(cmd, cmbLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+                const VkDeviceSize off = 0;
+                vkCmdBindVertexBuffers(cmd, 0, 1, &p.vb.buf, &off);
+                vkCmdBindIndexBuffer(cmd, p.ib.buf, 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(cmd, p.count, 1, 0, 0, 0);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipe_);
+                continue;
+            }
             vkCmdPushConstants(cmd, meshLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
             const VkDeviceSize off = 0;
             vkCmdBindVertexBuffers(cmd, 0, 1, &p.vb.buf, &off);
@@ -274,6 +288,14 @@ public:
         parts_.clear();
         if (lineVerts_) destroy(g, lineBuf_);
         if (oortReady) destroy(g, oortBuf_);
+        if (cmbReady) {
+            vkDestroyPipeline(g.dev, cmbPipe_, nullptr);
+            vkDestroyPipelineLayout(g.dev, cmbLayout_, nullptr);
+            vkDestroyDescriptorPool(g.dev, cmbPool_, nullptr);
+            vkDestroyDescriptorSetLayout(g.dev, cmbSetLayout_, nullptr);
+            destroy(g, cmbBuf_);
+            cmbReady = false;
+        }
         for (VkPipeline p : {meshPipe_, linePipe_, oortPipe_}) vkDestroyPipeline(g.dev, p, nullptr);
         for (VkPipelineLayout l : {meshLayout_, lineLayout_, oortLayout_}) vkDestroyPipelineLayout(g.dev, l, nullptr);
         for (VkShaderModule m : modules_) vkDestroyShaderModule(g.dev, m, nullptr);
@@ -289,6 +311,68 @@ private:
     VkPipeline meshPipe_{}, linePipe_{}, oortPipe_{};
     VkPipelineLayout meshLayout_{}, lineLayout_{}, oortLayout_{};
     std::vector<VkShaderModule> modules_;
+    // Fond diffus (carte de Planck en Nside 256, 786 432 flottants) : structures_cmb.frag.
+    Buffer cmbBuf_;
+    VkDescriptorSetLayout cmbSetLayout_{};
+    VkDescriptorPool cmbPool_{};
+    VkDescriptorSet cmbSet_{};
+    VkPipeline cmbPipe_{};
+    VkPipelineLayout cmbLayout_{};
+    VkFormat fmt_{};
+
+    // ciel_cmb.bin (format de ciel_bandes.h : « UNIVSKY1 », Nside, repère, longueur de la fiche, fiche, zéros jusqu'à 16
+    // octets, 12 Nside² flottants en HEALPix emboîté, repère galactique). Moyenné en Nside 256 : en emboîté, les
+    // (Nside/128)² pixels fins d'un pixel grossier se suivent ; les pixels sans mesure (NaN) sont laissés de côté.
+    void loadCmb(const Gpu& g, const std::string& path) {
+        constexpr uint32_t kOut = 256;
+        std::ifstream in(path, std::ios::binary);
+        char magic[8];
+        uint32_t h[4];
+        in.read(magic, 8);
+        in.read(reinterpret_cast<char*>(h), sizeof(h));
+        if (!in || std::memcmp(magic, "UNIVSKY1", 8) != 0 || h[1] != 1 || h[0] < kOut || (h[0] & (h[0] - 1)) != 0) return;
+        const uint64_t head = 8 + sizeof(h) + h[2];
+        in.seekg(static_cast<std::streamoff>((head + 15) / 16 * 16));
+        const uint64_t group = static_cast<uint64_t>(h[0] / kOut) * (h[0] / kOut), nOut = 12ull * kOut * kOut;
+        std::vector<float> fine(group), out(nOut, 0.0f);
+        for (uint64_t i = 0; i < nOut; ++i) {
+            in.read(reinterpret_cast<char*>(fine.data()), static_cast<std::streamsize>(group * sizeof(float)));
+            if (!in) return;
+            double s = 0;
+            uint64_t n = 0;
+            for (float v : fine)
+                if (std::isfinite(v)) { s += v; ++n; }
+            out[i] = n ? static_cast<float>(s / static_cast<double>(n)) : 0.0f;
+        }
+        cmbBuf_ = upload(g, out.data(), out.size() * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        const VkDescriptorSetLayoutBinding b{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+        VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        dl.bindingCount = 1;
+        dl.pBindings = &b;
+        check(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &cmbSetLayout_), "fond diffus : agencement");
+        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
+        VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        dp.maxSets = 1;
+        dp.poolSizeCount = 1;
+        dp.pPoolSizes = &ps;
+        check(vkCreateDescriptorPool(g.dev, &dp, nullptr, &cmbPool_), "fond diffus : réserve");
+        VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        da.descriptorPool = cmbPool_;
+        da.descriptorSetCount = 1;
+        da.pSetLayouts = &cmbSetLayout_;
+        check(vkAllocateDescriptorSets(g.dev, &da, &cmbSet_), "fond diffus : jeu");
+        const VkDescriptorBufferInfo bi{cmbBuf_.buf, 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        w.dstSet = cmbSet_;
+        w.dstBinding = 0;
+        w.descriptorCount = 1;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.pBufferInfo = &bi;
+        vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
+        pipeline(g, fmt_, "structures_maille.vert.spv", "structures_cmb.frag.spv", VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                 {VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32_SFLOAT}, 24, cmbPipe_, cmbLayout_, cmbSetLayout_);
+        cmbReady = true;
+    }
 
     static Buffer upload(const Gpu& g, const void* data, VkDeviceSize size, VkBufferUsageFlags usage) {
         Buffer staging = createBuffer(g, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -307,7 +391,8 @@ private:
 
     // Un pipeline additif (même mélange que les étoiles) ; attrs : formats des colonnes d'un seul tampon entrelacé.
     void pipeline(const Gpu& g, VkFormat fmt, const char* vsName, const char* fsName, VkPrimitiveTopology topo,
-                  const std::vector<VkFormat>& attrs, uint32_t stride, VkPipeline& pipe, VkPipelineLayout& layout) {
+                  const std::vector<VkFormat>& attrs, uint32_t stride, VkPipeline& pipe, VkPipelineLayout& layout,
+                  VkDescriptorSetLayout set = VK_NULL_HANDLE) {
         VkShaderModule vs = shader(g, vsName), fs = shader(g, fsName);
         modules_.push_back(vs);
         modules_.push_back(fs);
@@ -322,6 +407,10 @@ private:
         VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         li.pushConstantRangeCount = 1;
         li.pPushConstantRanges = &pcr;
+        if (set != VK_NULL_HANDLE) {
+            li.setLayoutCount = 1;
+            li.pSetLayouts = &set;
+        }
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout), "structures : agencement");
         const VkVertexInputBindingDescription bind{0, stride, VK_VERTEX_INPUT_RATE_VERTEX};
         std::vector<VkVertexInputAttributeDescription> ad;
@@ -380,6 +469,7 @@ private:
     }
 
     void createPipelines(const Gpu& g, VkFormat fmt) {
+        fmt_ = fmt;
         pipeline(g, fmt, "structures_maille.vert.spv", "structures_maille.frag.spv", VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
                  {VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32_SFLOAT}, 24, meshPipe_, meshLayout_);
         pipeline(g, fmt, "structures_flot.vert.spv", "structures_flot.frag.spv", VK_PRIMITIVE_TOPOLOGY_LINE_LIST,

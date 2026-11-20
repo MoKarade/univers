@@ -412,7 +412,7 @@ int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, floa
         if (!cam.project(sim.position(i), w, h, x, y)) continue;
         // audit B1 : une galaxie dont le nom est caché à cette échelle (55 000 de Cosmicflows-4, naines vues de loin) ne se
         // clique pas non plus ; sinon un clic dans le vide faisait voler vers un point invisible.
-        if (b.kind == Kind::Galaxy && i != sim.focus && !labelWanted(sim, ui, cam, i, w, h, x, y, 0.0)) continue;
+        if (b.kind == Kind::Galaxy && b.priority >= 9 && i != sim.focus && !labelWanted(sim, ui, cam, i, w, h, x, y, 0.0)) continue;
         const double d = std::hypot(x - mouse.x, y - mouse.y) - std::min(discRadiusPx(sim, cam, i, h), 2000.0);
         if (d < 16.0 * ui.s && d < bestD) {
             bestD = d;

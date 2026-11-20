@@ -69,6 +69,7 @@ struct Body {
     double shapeRadiusLy = 0;   // rayon de demi-lumière mesuré, si la forme est dessinée d'après lui (galaxies_naines.h)
     std::string shapeNote;      // ce qui est dessiné de sa forme, et d'où viennent les valeurs (galaxies_naines.h)
     bool structure = false;     // repère de structures_noms.tsv (superamas, attracteur, vide) : pas une galaxie
+    bool cluster = false;       // amas de galaxies (galaxies_noms.tsv) : pas une galaxie
     const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
 };
 
@@ -265,6 +266,7 @@ struct Sim {
     bool ageingShown = false;      // vieillissement de la lumière du modèle appliqué à cette date (vieillissement.h)
     bool photoExposure = true;
     double exposureEv = 0, photoGain = 1;
+    double autoPose = 1;      // pose automatique contre la saturation (pose_auto.h) : 1 = aucune baisse
     uint32_t galaxyShapeCount = 0, galaxyShapesShown = 0;      // galaxies de forme mesurée (galaxies_formes.h), montrées en particules
     uint64_t neighbourStarCount = 0;   // étoiles des galaxies voisines (voisines_etoiles.bin), montrées à toute date
     // Grandes structures (Laniakea et son flot, vides cosmiques) et nuage d'Oort (modèle) : structures.h. Repères dessinés,
@@ -272,6 +274,10 @@ struct Sim {
     struct StructuresState {
         bool loaded = false;           // structures.bin lu
         bool showLarge = true, showOort = true;
+        // Formes approchées en sphères (vides SDSS et BOSS, superamas SDSS, superstructures « une bulle par amas » ou « sphère
+        // de la taille publiée ») : cachées par défaut (Marc, 20/11/2026 : « je vois des boules, c'est bizarre ») ; Laniakea,
+        // les vides du voisinage (formes publiées), l'univers observable et le fond diffus restent.
+        bool showSpheres = false;
         double largeShare = 0, oortShare = 0;      // parts montrées à la dernière image
         uint32_t oortComets = 0, flowLines = 0;
         uint32_t triangles[9] = {};    // par genre : 1 Laniakea, 2 vides du voisinage, 3 vides SDSS, 4 vides BOSS, 5 superamas SDSS, 6 superstructures nommées, 7 univers observable, 8 fond diffus
@@ -498,6 +504,13 @@ struct Sim {
             body.natureText = cols[4];
             body.priority = std::atoi(cols[5].c_str());
             body.structure = path == structuresPath || path == superPath;
+            // galaxies_noms.tsv range aussi des amas, des superamas et le Grand Attracteur sous « galaxie » : on les nomme
+            // pour ce qu'ils sont (fiche, distance d'arrivée), sans rien changer à leur place.
+            if (!body.structure && body.natureText == "galaxie") {
+                if (body.name.rfind("Superamas ", 0) == 0) { body.natureText = "superamas de galaxies"; body.structure = true; }
+                else if (body.name == "Grand Attracteur") { body.natureText = "concentration de masse au cœur de Laniakea"; body.structure = true; }
+                else if (body.name.rfind("Amas ", 0) == 0) { body.natureText = "amas de galaxies"; body.cluster = true; }
+            }
             bodies.push_back(body);
         }
         // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
@@ -884,7 +897,8 @@ struct Sim {
         // une recherche « Sirius » depuis la Terre arrivait à 28 000 km du centre de l'étoile, dans l'étoile).
         if (b.kind == Kind::Star) d = std::max(d, 50.0 * kAuInLy);
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
-        if (b.kind == Kind::Galaxy && b.structure) d = std::max(d, 1.5 * arrivee::structureSizeLy(b.natureText));      // audit B3 : la structure entière dans le champ
+        if (b.kind == Kind::Galaxy && b.structure) d = std::max(d, 1.5 * arrivee::structureSizeLy(b.natureText));
+        if (b.kind == Kind::Galaxy && b.cluster) d = std::max(d, 2.0e7);      // un amas (quelques Mpc) : vu entier avec ses galaxies      // audit B3 : la structure entière dans le champ
         if (b.kind == Kind::Galaxy && b.structure && b.name == "Univers observable") d = 1.1e11;      // la sphère entière dans le champ
         if (b.kind == Kind::Galaxy && b.shapeRadiusLy > 0) d = std::clamp(12.0 * b.shapeRadiusLy, 1.0e3, 3.0e5);      // naine dessinée : on la voit entière
         return d;
@@ -989,9 +1003,11 @@ struct Sim {
             // caméra se retrouvait dans le Soleil), et on peut revenir en arrière.
             dist = std::clamp(dist, minDist(focus), kMaxDist);
             if (focus == 0) dist = std::max(dist, 45.0 * kAuInLy);
+            lostFallback = focus;
         }
     }
-    std::string lostName;      // astre suivi qui n'a plus de position à cette date (dit en bas de l'écran jusqu'au prochain choix)
+    std::string lostName;      // astre suivi qui n'a plus de position à cette date (dit en bas de l'écran tant qu'on reste sur le repli)
+    int lostFallback = -1;     // astre de repli choisi à ce moment
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
         if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy && bodies[static_cast<size_t>(i)].blackHole >= 0)
             return 3.0 * bodies[static_cast<size_t>(i)].blackHoleRsLy;      // on peut descendre jusqu'à son trou noir central

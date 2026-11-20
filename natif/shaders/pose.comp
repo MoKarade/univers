@@ -1,0 +1,36 @@
+#version 450
+/* Pose automatique contre la saturation (audit A2, 20/11/2026) : mesure, sur une grille de 128 x 72 points de l'image en
+   grande dynamique, la part des points qui sortiraient blancs à l'écran avec la pose actuelle (pc.p.x). Une seule équipe de
+   256 fils ; chacun lit 36 points, puis les comptes sont additionnés en mémoire partagée. Résultat lu par le processeur à
+   l'image suivante (pose_auto.h), sans attente. */
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0) uniform sampler2D hdr;
+layout(set = 0, binding = 1, std430) buffer Out { float part[4]; } outp;      /* part saturée, part bien visible, nombre de points, 0 */
+layout(push_constant) uniform Pc { vec4 p; } pc;      /* p.x : pose appliquée à l'écran ; p.y : seuil de saturation (après pose) */
+shared float sSat[256];
+shared float sLit[256];
+void main() {
+    uint t = gl_LocalInvocationID.x;
+    float sat = 0.0, lit = 0.0;
+    for (uint k = 0; k < 36; ++k) {
+        uint i = t * 36u + k;      /* 0 à 9215 */
+        vec2 uv = (vec2(float(i % 128u), float(i / 128u)) + 0.5) / vec2(128.0, 72.0);
+        vec3 c = min(texture(hdr, uv).rgb, vec3(6.0e4)) * pc.p.x;
+        float Y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        sat += Y > pc.p.y ? 1.0 : 0.0;
+        lit += Y > 0.5 ? 1.0 : 0.0;      /* points bien visibles (moitié du blanc après compression) */
+    }
+    sSat[t] = sat;
+    sLit[t] = lit;
+    barrier();
+    for (uint s = 128u; s > 0u; s >>= 1) {
+        if (t < s) { sSat[t] += sSat[t + s]; sLit[t] += sLit[t + s]; }
+        barrier();
+    }
+    if (t == 0u) {
+        outp.part[0] = sSat[0] / 9216.0;
+        outp.part[1] = sLit[0] / 9216.0;
+        outp.part[2] = 9216.0;
+        outp.part[3] = 0.0;
+    }
+}

@@ -280,6 +280,9 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
         if (ImGui::MenuItem("Exposition : plus sombre (-1 IL)")) sim.exposureEv -= 1.0;
         if (sim.structures.loaded && ImGui::MenuItem("Laniakea, son flot et les vides cosmiques", nullptr, sim.structures.showLarge))
             sim.structures.showLarge = !sim.structures.showLarge;
+        if (sim.structures.loaded && sim.structures.showLarge &&
+            ImGui::MenuItem("Vides et superamas lointains (formes approchées en sphères)", nullptr, sim.structures.showSpheres))
+            sim.structures.showSpheres = !sim.structures.showSpheres;
         if (ImGui::MenuItem("Nuage d'Oort (modèle)", nullptr, sim.structures.showOort)) sim.structures.showOort = !sim.structures.showOort;
         if (sim.cloneCount && ImGui::MenuItem("Incertitude : routes possibles des galaxies", nullptr, sim.showClones)) sim.showClones = !sim.showClones;
         if (ui.gwCount > 0 && ImGui::MenuItem("Ondes gravitationnelles détectées")) ui.gwOpen = true;
