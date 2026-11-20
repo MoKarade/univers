@@ -187,3 +187,23 @@ Incident : en corrigeant les fins de ligne d'un script pendant que ce tir tourna
 double à 14 h 14 (bash relit un script modifié en cours de route). Le doublon a été arrêté à 15 h 58. Les instantanés du
 premier tir, complet, ont été regroupés (`premier_tir/`) et ce sont eux qui sont mesurés ici. Mesures :
 `barre/mesures_centre_v13_halo_tournant.json`.
+
+### Andromède v16 corrigée (avec bulbe), halo tournant — fini à 23 h 33 (heure du Québec)
+
+Départ exporté : `C:\tmp\arbitres\andromede_1M_halo_tournant_corrige.npz`. 1 M de particules : matière noire 700 000,
+disque 243 568, gaz froid 18 162, bulbe 38 270 (1,18e10 M☉). Adoucissements : 0,1243 kpc pour la matière noire,
+0,0311 kpc pour le reste. Barre guide d'Andromède. **GADGET-4 sans gaz.** Durée : 7 h 37, processeur partagé avec un
+autre calcul GADGET.
+
+| t (Ga) | Ωb GADGET-4 (sans gaz) | Ωb notre moteur (avec gaz) | A2 0,5–4 kpc | Longueur | Épaisseur 4–6 kpc | Rotation 4–6 kpc |
+|---|---|---|---|---|---|---|
+| 0,5 | 44,5 | 39,0 | 0,29 | 3,8 kpc | 0,37 kpc | 210 km/s |
+| 1,0 | 33,6 | 36,1 | 0,29 | 4,2 kpc | 0,39 kpc | 187 km/s |
+| 1,5 | 27,9 | 35,8 | 0,29 | 4,2 kpc | 0,41 kpc | 190 km/s |
+
+[Certain pour les chiffres GADGET-4.] Avec son bulbe, Andromède se tient bien mieux que dans le tir fautif : la barre est
+stable (A2 0,29), courte (4,2 kpc, pour environ 4 mesurés) et le disque ne s'épaissit presque pas (0,37 → 0,41 kpc). Sans
+gaz, la barre ralentit toutefois de 44 à 28 km/s/kpc en 1,5 Ga, alors qu'elle reste près de 36 dans notre moteur avec gaz
+(~40 mesurés). L'écart à 1,5 Ga (8 km/s/kpc) vient probablement du gaz [Probable] ; un tir de notre moteur sans gaz sur
+ce départ le confirmerait [À vérifier]. Mesures : `barre/mesures_m31_halo_tournant_v2.json`. Le témoin corrigé (sans
+rotation du halo) tourne.
