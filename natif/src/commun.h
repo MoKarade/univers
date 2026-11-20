@@ -345,6 +345,18 @@ float halfToFloat(uint16_t h) {
 constexpr float kSunAbsMag = 4.83f, kSunBv = 0.653f;
 constexpr double kKmsToLyPerYear = 1.0 / 299792.458;
 
+// Étoile de Gaia désignée au clic (gaia.h, pickGaiaStar ; simulation.h, selectGaiaStar).
+struct GaiaHit {
+    uint64_t index = 0;
+    double appMag = 99;      // magnitude apparente vue de la caméra
+    double absMagG = 0;      // magnitude absolue G (fichier)
+    double teffK = 0;        // température du pas de couleur BP-RP (table du fichier) ; 0 : couleur non mesurée
+    uint8_t flags = 0;       // drapeaux de gaia.bin (1 vitesse radiale mesurée, 2 orbite fiable, 8 distance à 10-20 %)
+    Vec3 posJ2000;           // place en J2000 (al), ligne droite depuis la mesure : position(t) = posJ2000 + velLy × t
+    Vec3 velLy;              // vitesse (al par an)
+};
+
+
 struct StarRenderer {
     static constexpr int kCols = 8;
     VkPipeline pipeline{};

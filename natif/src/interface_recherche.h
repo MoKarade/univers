@@ -72,7 +72,7 @@ ImU32 kindColor(const Body& b) {
         case Kind::Sun: return theme::kAccent;
         case Kind::Planet: return b.parent > 0 ? IM_COL32(170, 182, 205, 255) : IM_COL32(110, 170, 255, 255);
         case Kind::Star: return IM_COL32(255, 236, 200, 255);
-        case Kind::Galaxy: return IM_COL32(186, 146, 255, 255);
+        case Kind::Galaxy: return b.nebula ? IM_COL32(120, 210, 200, 255) : IM_COL32(186, 146, 255, 255);
         case Kind::Probe: return theme::kMesure;
         default: return IM_COL32(150, 150, 160, 255);
     }

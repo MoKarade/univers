@@ -86,7 +86,7 @@ struct BlackHoles {
                 const auto keys = catalogueKeys(c[1] + " " + c[0]);
                 for (size_t i = 0; i < sim.bodies.size() && h.body < 0 && !keys.empty(); ++i) {
                     const Body& b = sim.bodies[i];
-                    if (b.kind != Kind::Galaxy || b.structure) continue;
+                    if (b.kind != Kind::Galaxy || b.structure || b.merged || b.nebula) continue;      // ni un double fondu (caché), ni une nébuleuse
                     for (const std::string& k : catalogueKeys(b.name))
                         if (keys.count(k)) { h.body = static_cast<int>(i); break; }
                 }

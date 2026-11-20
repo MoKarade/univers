@@ -1,6 +1,8 @@
 // Appli PC « Univers » : l'état du simulateur (temps, astres, objet suivi, caméra), sans rien qui dépende de l'affichage.
 #pragma once
 #include "asteroides_catalogue.h"
+#include <climits>
+#include <functional>
 #include <thread>
 #include "avancement.h"
 #include "arrivee.h"
@@ -49,6 +51,12 @@ struct Body {
     Kind kind = Kind::Star;
     int64_t star = -1;          // étoile : numéro dans le catalogue
     bool emptySlot = false;     // place réservée (étoile désignée au clic) encore vide : ni dessinée ni nommée
+    bool nebula = false;        // nébuleuse planétaire ou nuage moléculaire (nebuleuses_noms.tsv), rangée avec les galaxies
+    bool gaiaStar = false;      // étoile de Gaia désignée au clic (star = -1) : place en ligne droite depuis la mesure
+    Vec3 gaiaPos{0, 0, 0}, gaiaVel{0, 0, 0};      // place en J2000 (al) et vitesse (al par an)
+    double gaiaAbsMag = 0;      // magnitude absolue G mesurée
+    double drawnRadiusLy = 0;   // galaxie de forme mesurée : rayon de sa forme dessinée (D26 du SGA-2020 × distance), pour le clic
+    bool merged = false;        // même galaxie, même nom, déjà dans une autre fiche (galaxies_cf4.tsv et formes) : ni dessinée ni nommée
     bool unplaced = false;      // galaxie de distance inconnue (z trop faible, aucune mesure) : ni placée ni nommée
     int probe = -1;             // sonde : son rang dans le fichier des trajectoires
     int naif = 0;               // planète : code du corps dans les éphémérides de la NASA (clé de sa carte et de son orientation)
@@ -150,6 +158,7 @@ struct ExactOrbits {
         g0.push_back({pg.x / orbite::kKpcLy + s.x, pg.y / orbite::kKpcLy + s.y, pg.z / orbite::kKpcLy + s.z});
         v0.push_back({vg.x + sv.x, vg.y + sv.y, vg.z + sv.z});
         built = false;
+        prevIdx = LONG_MIN;      // les pas gardés ne valent plus (une étoile de plus)
         return static_cast<int>(g0.size()) - 1;
     }
     void read(std::vector<phys::Vec3>& p, std::vector<phys::Vec3>& v) const {
@@ -160,17 +169,31 @@ struct ExactOrbits {
             v[k] = o.vitesse(k);
         }
     }
+    // Les deux derniers pas calculés sont gardés : autour d'une limite de pas (aujourd'hui en est à 27 ans), la vitesse du Soleil
+    // prise par différence sur ±1 000 ans demandait les deux pas tour à tour, et toutes les orbites étaient refaites deux fois
+    // par image (cadence, 20/11/2026 : ~3 ms).
+    mutable long prevIdx = LONG_MIN;
+    mutable std::vector<phys::Vec3> ppa, pva, ppb, pvb;
     void ensure(double years) const {
         const long n = static_cast<long>(std::floor(years / 1.0e6));
         if (built && n == idx) return;
+        if (built && n == prevIdx) {
+            std::swap(pa, ppa); std::swap(va, pva); std::swap(pb, ppb); std::swap(vb, pvb);
+            std::swap(idx, prevIdx);
+            return;
+        }
+        if (built) { ppa = pa; pva = va; ppb = pb; pvb = vb; prevIdx = idx; }
         if (!built || std::labs(n) + 1 < std::labs(n - at)) {      // premier appel, ou plus court en repartant d'aujourd'hui
             o = phys::galaxie::Orbites(g0, v0);
             at = 0;
             built = true;
         }
-        o.avance(static_cast<double>(n) * 1.0e-3, 1);
+        // Étoiles indépendantes (potentiel fixe) : partagées entre les cœurs, mêmes résultats (cadence, 20/11/2026 : 16 ms par image
+        // sur un seul cœur quand le temps défile à 100 Ma/s).
+        const unsigned fils = std::clamp(std::thread::hardware_concurrency() / 2, 1u, 16u);
+        o.avance(static_cast<double>(n) * 1.0e-3, fils);
         read(pa, va);
-        o.avance(static_cast<double>(n + 1) * 1.0e-3, 1);
+        o.avance(static_cast<double>(n + 1) * 1.0e-3, fils);
         read(pb, vb);
         at = n + 1;
         idx = n;
@@ -194,7 +217,7 @@ struct Sim {
         exact.add({0, 0, 0}, {0, 0, 0});      // le Soleil
         exactOf.assign(bodies.size(), -1);
         for (size_t i = 0; i < bodies.size(); ++i)
-            if (bodies[i].kind == Kind::Star && stars)
+            if (bodies[i].kind == Kind::Star && stars && bodies[i].star >= 0)
                 exactOf[i] = exact.add({stars->x()[bodies[i].star], stars->y()[bodies[i].star], stars->z()[bodies[i].star]},
                                        {stars->vel(0)[bodies[i].star], stars->vel(1)[bodies[i].star], stars->vel(2)[bodies[i].star]});
     }
@@ -483,6 +506,13 @@ struct Sim {
             s.emptySlot = true;
             bodies.push_back(s);
             pickedStarBody = static_cast<int>(bodies.size()) - 1;
+            // Même chose pour une étoile de Gaia (192 millions, gaia.bin et gaia_b.bin) : sa place à elle.
+            Body gs = s;
+            gs.name = "Étoile Gaia";
+            gs.star = -1;
+            gs.gaiaStar = true;
+            bodies.push_back(gs);
+            gaiaStarBody = static_cast<int>(bodies.size()) - 1;
         }
         // Étoiles qui ont des planètes connues (pipeline/natif/exoplanetes_app.py, NASA Exoplanet Archive) : cherchables par
         // le nom de l'hôte ; une étoile déjà nommée garde son nom.
@@ -570,26 +600,45 @@ struct Sim {
             }
             bodies.push_back(body);
         }
-        // Galaxies de forme placées d'après z, proches (z < 0,005) : distance remplacée par celle, mesurée, de la galaxie de
-        // Cosmicflows-4 dans la même direction (moins de 0,1°), comme leur forme (galaxies_formes.h, fixNearbyDistances).
-        // Avant : NGC 2976 à 68 000 al, IC 2574 et IC 3658 à 2 Mal, comptées dans le Groupe local (essai_completude).
+        // Galaxies de forme placées d'après z : distance remplacée par une distance MESURÉE (Cosmicflows-4) dans deux cas, comme
+        // leur forme (galaxies_formes.h, fixNearbyDistances) :
+        // - la même galaxie, sous le même nom, est dans galaxies_cf4.tsv (moins de 0,2°), à tout z : M77 (NGC 1068), M106… ;
+        // - proche (z < 0,005), une galaxie de Cosmicflows-4 est dans la même direction (moins de 0,1°) : sous cz ≈ 1 500 km/s,
+        //   la vitesse propre domine z. Avant : NGC 2976 à 68 000 al, IC 2574 et IC 3658 à 2 Mal (essai_completude).
+        // Le double de galaxies_cf4.tsv est alors fondu dans la fiche de la forme : un seul nom, une seule fiche, un seul clic.
         {
-            std::vector<std::pair<Vec3, double>> cf4;
-            for (const Body& b : bodies)
-                if (b.kind == Kind::Galaxy && b.natureText.find("Cosmicflows-4") != std::string::npos) {
+            struct Cf4 { Vec3 u; double d; size_t i; };
+            std::vector<Cf4> cf4;
+            std::unordered_map<std::string, std::vector<size_t>> byName;      // galaxies nommées hors galaxies_cf4.tsv
+            // origine galaxies_cf4.tsv, notée une fois avant toute retouche des fiches
+            std::vector<char> fromCf4(bodies.size(), 0);
+            for (size_t i = 0; i < bodies.size(); ++i) {
+                const Body& b = bodies[i];
+                if (b.kind != Kind::Galaxy) continue;
+                fromCf4[i] = b.priority >= 9 && b.natureText.find("Cosmicflows-4") != std::string::npos && b.natureText.find("SGA-2020") == std::string::npos;
+                if (b.natureText.find("Cosmicflows-4") != std::string::npos) {
                     const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
-                    if (n > 0) cf4.push_back({{b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n}, n});
+                    if (n > 0) cf4.push_back({{b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n}, n, i});
                 }
+                if (!fromCf4[i]) byName[b.name].push_back(i);
+            }
+            auto cosTo = [](const Body& a, const Body& b) {
+                const double na = std::sqrt(dot(a.fixedPos, a.fixedPos)), nb = std::sqrt(dot(b.fixedPos, b.fixedPos));
+                return na > 0 && nb > 0 ? dot(a.fixedPos, b.fixedPos) / (na * nb) : -1.0;
+            };
             for (Body& b : bodies) {
                 const size_t k = b.natureText.find("distance d'après z = ");
                 if (b.kind != Kind::Galaxy || k == std::string::npos) continue;
                 const double z = std::atof(b.natureText.c_str() + k + 21);
                 const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
-                if (!(z < 0.005) || n <= 0) continue;
+                if (n <= 0) continue;
                 double best = 0.99999847691, d = 0;      // cos(0,1°)
-                for (const auto& [u, m] : cf4) {
-                    const double c = (u.x * b.fixedPos.x + u.y * b.fixedPos.y + u.z * b.fixedPos.z) / n;
-                    if (c > best) { best = c; d = m; }
+                size_t src = 0;
+                for (const Cf4& c4 : cf4) {
+                    const double c = (c4.u.x * b.fixedPos.x + c4.u.y * b.fixedPos.y + c4.u.z * b.fixedPos.z) / n;
+                    const bool same = c > 0.99999390766 && bodies[c4.i].name == b.name;      // moins de 0,2°, même nom
+                    if (same) { best = 2.0; d = c4.d; src = c4.i; break; }
+                    if (z < 0.005 && c > best) { best = c; d = c4.d; src = c4.i; }
                 }
                 if (d <= 0) {
                     // ni distance mesurée dans la même direction, ni z exploitable (sous 0,001) : distance inconnue, la galaxie
@@ -598,7 +647,62 @@ struct Sim {
                     continue;
                 }
                 b.fixedPos = {b.fixedPos.x / n * d, b.fixedPos.y / n * d, b.fixedPos.z / n * d};
-                b.natureText.replace(k, std::string("distance d'après z").size(), "distance mesurée (Cosmicflows-4, même direction) ; z");
+                // La fiche reprend la mesure elle-même (valeur, erreur, méthode, source).
+                Body& m = bodies[src];
+                const size_t km = m.natureText.find("distance mesurée");
+                const std::string mesure = km == std::string::npos ? "distance mesurée (Cosmicflows-4, même direction)" : m.natureText.substr(km);
+                const size_t zEnd = b.natureText.find(" ;", k);
+                const std::string zText = b.natureText.substr(k + std::string("distance d'après ").size(), zEnd == std::string::npos ? std::string::npos : zEnd - k - std::string("distance d'après ").size());
+                b.natureText.replace(k, zEnd == std::string::npos ? std::string::npos : zEnd - k, mesure + " ; décalage vers le rouge " + zText + " (non utilisé pour la distance)");
+            }
+            // Doubles : une galaxie de galaxies_cf4.tsv qui porte le nom d'une galaxie déjà nommée ailleurs (Groupe local,
+            // formes), à moins de 0,2°, est la même : elle est fondue (inventaire du 20/11 : 25 noms en double, cliquables deux
+            // fois, deux fois dans la recherche).
+            for (size_t i = 0; i < bodies.size(); ++i) {
+                Body& m = bodies[i];
+                if (!fromCf4[i]) continue;
+                const auto it = byName.find(m.name);
+                if (it == byName.end()) continue;
+                for (size_t j : it->second)
+                    if (cosTo(m, bodies[j]) > 0.99999390766) { m.merged = true; break; }
+            }
+        }
+        // Nébuleuses (nebuleuses_noms.tsv et nebuleuses.bin, pipeline/natif/nebuleuses.py, même ordre) : 223 nébuleuses
+        // planétaires et 94 nuages moléculaires à distance publiée. Dessinées depuis le 20/11 mais sans fiche ni clic
+        // (inventaire du 20/11/2026) : elles deviennent des astres nommés, à leur place d'aujourd'hui, avec leur rayon dessiné.
+        {
+            const std::string dir = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1);
+            std::vector<float> radii;
+            {
+                std::ifstream nb(dir + "nebuleuses.bin", std::ios::binary);
+                char magic[8] = {};
+                uint32_t hd[2] = {};
+                nb.read(magic, 8);
+                nb.read(reinterpret_cast<char*>(hd), sizeof(hd));
+                if (nb && std::memcmp(magic, "UNIVNEB1", 8) == 0 && hd[0] > 0 && hd[0] < 1000000) {
+                    std::vector<float> raw(static_cast<size_t>(hd[0]) * 8);
+                    if (nb.read(reinterpret_cast<char*>(raw.data()), static_cast<std::streamsize>(raw.size() * 4)))
+                        for (uint32_t k = 0; k < hd[0]; ++k) radii.push_back(raw[k * 8 + 3]);
+                }
+            }
+            size_t k = 0;
+            for (std::ifstream nf(dir + "nebuleuses_noms.tsv"); std::getline(nf, line); ++k) {
+                std::vector<std::string> cols;
+                size_t from = 0;
+                for (size_t tab; (tab = line.find('\t', from)) != std::string::npos; from = tab + 1) cols.push_back(line.substr(from, tab - from));
+                cols.push_back(line.substr(from));
+                if (cols.size() < 6) continue;
+                Body body;
+                body.name = cols[0];
+                body.kind = Kind::Galaxy;      // place fixe d'aujourd'hui, comme les galaxies ; `nebula` dit ce qu'elle est
+                body.nebula = true;
+                body.fixedPos = {std::atof(cols[1].c_str()), std::atof(cols[2].c_str()), std::atof(cols[3].c_str())};
+                body.natureText = cols[4];
+                body.priority = std::atoi(cols[5].c_str());
+                if (k < radii.size()) body.drawnRadiusLy = radii[k];
+                body.shapeNote = "Dessin : une tache ronde de la taille mesurée, tournée vers la caméra (" +
+                                 std::string(body.natureText.rfind("nuage", 0) == 0 ? "poussière qui assombrit ce qui est derrière ; opacité supposée)" : "repère lumineux ; son éclat n'est pas dans les données retenues)");
+                bodies.push_back(body);
             }
         }
         // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
@@ -847,6 +951,23 @@ struct Sim {
         return f;
     }
 
+    // Facteur d'échelle de l'univers avec lequel les galaxies sont dessinées (posé par la fenêtre avec la table des distances,
+    // galaxies.h setCosmology) ; 0 : pas de dessin, calculé ici à la date montrée.
+    double galaxyScale = 0;
+    // Galaxie placée par sa mesure d'aujourd'hui puis l'expansion seule (au-delà de 10 Mal, hors calcul de la rencontre).
+    bool expandsOnly(int i) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        const int ref = static_cast<size_t>(i) < replayRef.size() ? replayRef[static_cast<size_t>(i)] : -1;
+        return b.kind == Kind::Galaxy && ref == -1 && CentresReference::indexOf(b.name) < 0 && std::sqrt(dot(b.fixedPos, b.fixedPos)) > 1.0e7;
+    }
+    // Rayon de ce qui est dessiné pour l'astre i (années-lumière) : disque d'une planète ou d'une étoile, forme d'une galaxie
+    // (agrandie comme son dessin par le facteur d'échelle), nuage d'une naine. Sert au clic et à « vu de près ».
+    double drawnRadiusLy(int i) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        double r = b.radiusKm / kLyInKm;
+        if (b.kind == Kind::Galaxy) r = std::max({r, b.drawnRadiusLy * (galaxyScale > 0 && !b.nebula ? galaxyScale : 1.0), b.shapeRadiusLy});
+        return r;
+    }
     void refreshGalaxies() {
         galPos.assign(bodies.size(), {0, 0, 0});
         galValid.assign(bodies.size(), 0);
@@ -857,10 +978,19 @@ struct Sim {
         // place : celle d'aujourd'hui agrandie par l'expansion (même facteur que leur dessin, galaxies.h), au-delà de 10 Mal
         // seulement ; plus près (Groupe local), leur mouvement n'est pas calculé et elles restent cachées comme avant.
         // Avant, toutes devenaient impossibles à cliquer et à nommer.
-        const double scale = deep ? cosmo::scaleFactorAt(cosmology, tGa) : 1.0;
+        // M77 « se balade » (Marc, 20/11/2026, deux fois) : le dessin des galaxies (formes, points des relevés) suit le facteur
+        // d'échelle posé par la fenêtre (galaxyScale, mis à jour tous les 100 000 ans), aussi entre -3 et +3 Ma, alors que le
+        // nom restait à sa place d'aujourd'hui puis sautait à 3 Ma. Le nom et la caméra prennent maintenant le même facteur, à
+        // toute date : une seule place, celle de l'expansion calculée (Hubble), partie de la distance mesurée d'aujourd'hui.
+        const double scale = galaxyScale > 0 ? galaxyScale : deep ? cosmo::scaleFactorAt(cosmology, tGa) : 1.0;
         for (size_t i = 0; i < bodies.size(); ++i) {
             const Body& b = bodies[i];
             if (b.kind != Kind::Galaxy) continue;
+            if (b.nebula) {      // nébuleuse : dessinée à sa place d'aujourd'hui (nebuleuses.h), autour d'aujourd'hui seulement
+                galPos[i] = b.fixedPos;
+                galValid[i] = !deep;
+                continue;
+            }
             // Centres de référence (centres_reference.h) : Andromède, Triangle, Nuages de Magellan, en bloc le long de leur
             // centre, à toute date calculée, aujourd'hui compris (mêmes valeurs que la table unique et que leurs étoiles).
             const int ci = centres && centres->ready ? CentresReference::indexOf(b.name) : -1;
@@ -879,15 +1009,15 @@ struct Sim {
                 continue;
             }
             const int ref = i < replayRef.size() ? replayRef[i] : -1;
-            if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
-                galPos[i] = {b.fixedPos.x + shift.x, b.fixedPos.y + shift.y, b.fixedPos.z + shift.z};
+            if (ref == -1 && std::sqrt(dot(b.fixedPos, b.fixedPos)) > 1.0e7) {
+                // au-delà de 10 Mal, sans mouvement calculé à part : place mesurée × facteur d'échelle, sans le déplacement du
+                // Soleil dans la Galaxie, exactement comme leur dessin (galaxies.vert, galaxies_formes.h), à toute date
+                galPos[i] = {b.fixedPos.x * scale, b.fixedPos.y * scale, b.fixedPos.z * scale};
                 galValid[i] = 1;
                 continue;
             }
-            if (ref == -1 && std::sqrt(dot(b.fixedPos, b.fixedPos)) > 1.0e7) {
-                // sans le déplacement du Soleil dans la Galaxie : comme leur dessin (galaxies.vert, galaxies_formes.h), sinon
-                // le nom glisse à côté de la galaxie (jusqu'à des dizaines de kpc en un milliard d'années)
-                galPos[i] = {b.fixedPos.x * scale, b.fixedPos.y * scale, b.fixedPos.z * scale};
+            if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
+                galPos[i] = {b.fixedPos.x + shift.x, b.fixedPos.y + shift.y, b.fixedPos.z + shift.z};
                 galValid[i] = 1;
                 continue;
             }
@@ -905,11 +1035,13 @@ struct Sim {
     // le Soleil, tant que le système solaire est suivi (10 millions d'années) ; une galaxie, si sa position est connue.
     bool visible(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
-        if (b.emptySlot || b.unplaced) return false;
+        if (b.emptySlot || b.unplaced || b.merged) return false;
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
         // suivi sur son orbite autour de la Galaxie, comme les étoiles ; avec le cycle de vie, montré à toute date (sunAlways)
         if (b.kind == Kind::Sun) return starShare() > 0 || sunAlways;
+        // étoile de Gaia désignée : en ligne droite seulement (pas d'orbite calculée pour elle), à 100 000 ans au plus
+        if (b.gaiaStar) return starShare() > 0 && std::fabs(years - kStartYears) <= kGaiaPickYears;
         return starShare() > 0;      // étoile : suivie sur son orbite calculée, tant que cette orbite a un sens
     }
 
@@ -919,6 +1051,7 @@ struct Sim {
         if (b.kind == Kind::Sun) return {0, 0, 0};
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetPos[static_cast<size_t>(i)];
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galPos.size() && galValid[static_cast<size_t>(i)] ? galPos[static_cast<size_t>(i)] : b.fixedPos;
+        if (b.star < 0) return {b.gaiaPos.x + b.gaiaVel.x * years, b.gaiaPos.y + b.gaiaVel.y * years, b.gaiaPos.z + b.gaiaVel.z * years};
         // Étoile : ligne droite à la vitesse mesurée, raccordée à son orbite calculée autour de la Galaxie.
         const Vec3 p0{stars->x()[b.star], stars->y()[b.star], stars->z()[b.star]};
         // Même calcul que la carte graphique (etoiles_orbite.vert) : orbite exacte relative au Soleil, raccordée à la ligne droite.
@@ -934,6 +1067,7 @@ struct Sim {
     double speedKms(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
         if (b.kind != Kind::Star) return 0;
+        if (b.star < 0) return std::sqrt(dot(b.gaiaVel, b.gaiaVel)) / kKmsToLyPerYear;
         double s = 0;
         for (int a = 0; a < 3; ++a) s += static_cast<double>(stars->vel(a)[b.star]) * stars->vel(a)[b.star];
         return std::sqrt(s);
@@ -954,7 +1088,7 @@ struct Sim {
             const double phase = std::max((std::sin(alpha) + (kPi - alpha) * std::cos(alpha)) / kPi, 1e-6);
             return b.h + 5.0 * std::log10((r / kAuInLy) * (dist / kAuInLy)) - 2.5 * std::log10(phase);
         }
-        const double absMag = b.kind == Kind::Sun ? kSunAbsMag : stars->mag()[b.star];
+        const double absMag = b.kind == Kind::Sun ? kSunAbsMag : b.star < 0 ? b.gaiaAbsMag : stars->mag()[b.star];
         return absMag + 5.0 * std::log10(dist / 3.2615638) - 5.0;
     }
 
@@ -1002,7 +1136,8 @@ struct Sim {
         if (b.kind == Kind::Galaxy && b.structure) d = std::max(d, 1.5 * arrivee::structureSizeLy(b.natureText));
         if (b.kind == Kind::Galaxy && b.cluster) d = std::max(d, 2.0e7);      // un amas (quelques Mpc) : vu entier avec ses galaxies      // audit B3 : la structure entière dans le champ
         if (b.kind == Kind::Galaxy && b.structure && (b.name == "Univers observable" || b.name == "Fond diffus cosmologique")) d = 1.1e11;      // la sphère entière dans le champ
-        if (b.kind == Kind::Galaxy && b.shapeRadiusLy > 0) d = std::clamp(12.0 * b.shapeRadiusLy, 1.0e3, 3.0e5);      // naine dessinée : on la voit entière
+        if (b.kind == Kind::Galaxy && b.shapeRadiusLy > 0) d = std::clamp(12.0 * b.shapeRadiusLy, 1.0e3, 3.0e5);
+        if (b.nebula) d = std::clamp(12.0 * b.drawnRadiusLy, 3.0, 3.0e3);      // nébuleuse : vue entière, dans son voisinage d'étoiles      // naine dessinée : on la voit entière
         return d;
     }
     void remember() {
@@ -1202,6 +1337,39 @@ struct Sim {
         b.natureText = std::string("étoile sans nom propre, ") + from;
         exactOf.clear();      // son orbite exacte est recalculée (ensureExact)
         return pickedStarBody;
+    }
+
+    // ---------------------------------------------------------------- étoile de Gaia désignée au clic
+    static constexpr double kGaiaPickYears = 1.0e5;      // comme les étoiles du catalogue (nearestCatalogStar)
+    int gaiaStarBody = -1;
+    // Recherche dans gaia.bin et gaia_b.bin (posée par la fenêtre) : setB dit si l'étoile vient du jeu B.
+    std::function<bool(const Camera&, double, double, double, double, double, double, GaiaHit&, bool&)> gaiaPick;
+    // L'étoile de Gaia `hit` prend la place de l'étoile Gaia désignée ; rend son rang dans bodies.
+    int selectGaiaStar(const GaiaHit& hit, bool setB) {
+        if (gaiaStarBody < 0) return -1;
+        Body& b = bodies[static_cast<size_t>(gaiaStarBody)];
+        b.emptySlot = false;
+        b.gaiaPos = hit.posJ2000;
+        b.gaiaVel = hit.velLy;
+        b.gaiaAbsMag = hit.absMagG;
+        // indice B-V tel que la formule de la fiche (Ballesteros 2012) redonne la température du pas de couleur BP-RP mesuré
+        b.bv = 0.65;
+        if (hit.teffK > 0) {
+            double lo = -0.4, hi = 3.0;
+            for (int k = 0; k < 60; ++k) {
+                const double mid = 0.5 * (lo + hi), t = 4600.0 * (1.0 / (0.92 * mid + 1.7) + 1.0 / (0.92 * mid + 0.62));
+                (t > hit.teffK ? lo : hi) = mid;
+            }
+            b.bv = 0.5 * (lo + hi);
+        }
+        b.radiusKm = hit.teffK > 0 ? rayon_etoile::rayonKm(hit.absMagG, b.bv) : 0.0;
+        const std::string jeu = setB ? "gaia_b.bin, distance à 10-20 % près" : "gaia.bin, distance à mieux que 10 %";
+        b.name = "Étoile Gaia n° " + std::to_string(hit.index) + (setB ? " (jeu B)" : "");
+        b.natureText = "étoile sans nom propre, Gaia DR3 (" + jeu + ") ; magnitude absolue G " + std::to_string(hit.absMagG).substr(0, 5) +
+                       (hit.flags & 1 ? " ; vitesse radiale mesurée" : " ; sans vitesse radiale (comptée nulle)") +
+                       " ; place en ligne droite depuis la mesure, à 100 000 ans au plus d'aujourd'hui" +
+                       (hit.teffK > 0 ? " ; rayon calculé d'après G et la couleur (approché : G n'est pas V)" : "");
+        return gaiaStarBody;
     }
 
     // Désigne l'astéroïde de rang k du catalogue : il prend la place `asteroidBody` (nom, position) et peut être suivi.
