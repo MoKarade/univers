@@ -23,7 +23,7 @@ void drawFieldChip(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFla
             const std::string lim = sim.gaiaSkyLimit > 50 ? "toutes" : "jusqu'à la magnitude " + frNum(sim.gaiaSkyLimit, 2);
             ImGui::TextDisabled("%s", ("Gaia une à une : " + frInt(sim.gaiaSkyStars) + " sources sans distance mesurée (" + lim + "), direction mesurée").c_str());
             if (sim.gaiaSkyPending > 0) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.43f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(theme::kAccent));
                 ImGui::Text("Chargement depuis le Drive : %u morceaux du ciel…", sim.gaiaSkyPending);
                 ImGui::PopStyleColor();
             }

@@ -74,7 +74,7 @@ void plotSeries(const UiState& ui, const char* id, const std::vector<double>& x,
     const double x0 = x.front(), x1 = x.back();
     auto X = [&](double v) { return a.x + static_cast<float>((v - x0) / (x1 - x0)) * (b.x - a.x); };
     auto Y = [&](float v) { return b.y - (v - lo) / (hi - lo) * (b.y - a.y); };
-    dl->AddRectFilled(a, b, IM_COL32(12, 16, 28, 160), 6.0f * ui.s);
+    dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, 8), 8.0f * ui.s);
     for (int k = 1; k < 4; ++k) dl->AddLine({a.x, a.y + (b.y - a.y) * k / 4}, {b.x, a.y + (b.y - a.y) * k / 4}, kGrid);
     auto line = [&](const std::vector<float>& v, ImU32 col, bool dashed) {
         for (size_t i = 1; i < v.size(); ++i) {
@@ -89,10 +89,16 @@ void plotSeries(const UiState& ui, const char* id, const std::vector<double>& x,
         dl->AddLine({xn, a.y}, {xn, b.y}, IM_COL32(255, 255, 255, 120), 1.0f * ui.s);
     }
     char buf[96];
+    // Valeurs extrêmes de l'axe, sur une pastille sombre : lisibles même quand la courbe passe dessous.
+    auto axisLabel = [&](ImVec2 at, const char* text) {
+        const ImVec2 ts = ImGui::CalcTextSize(text);
+        dl->AddRectFilled({at.x - px(ui, 3), at.y}, {at.x + ts.x + px(ui, 3), at.y + ts.y}, IM_COL32(8, 11, 20, 200), px(ui, 4));
+        dl->AddText(at, theme::kMuted, text);
+    };
     std::snprintf(buf, sizeof buf, "%s %s", frNum(hi, 3).c_str(), yUnit);
-    dl->AddText({a.x + px(ui, 4), a.y + px(ui, 2)}, IM_COL32(200, 206, 220, 200), buf);
+    axisLabel({a.x + px(ui, 6), a.y + px(ui, 2)}, buf);
     std::snprintf(buf, sizeof buf, "%s %s", frNum(lo, 3).c_str(), yUnit);
-    dl->AddText({a.x + px(ui, 4), b.y - ImGui::GetFontSize() - px(ui, 2)}, IM_COL32(200, 206, 220, 200), buf);
+    axisLabel({a.x + px(ui, 6), b.y - ImGui::GetFontSize() - px(ui, 2)}, buf);
     std::snprintf(buf, sizeof buf, "%s", (frNum((x0 - xOrigin) * xScale, 3) + " " + xUnit).c_str());
     dl->AddText({a.x, b.y + px(ui, 2)}, IM_COL32(170, 178, 196, 200), buf);
     std::snprintf(buf, sizeof buf, "%s", (frNum((x1 - xOrigin) * xScale, 3) + " " + xUnit).c_str());
@@ -388,7 +394,7 @@ void tabUniverse(Sim& sim, UiState& ui) {
     // Composition aujourd'hui.
     const cosmo::Params& c = sim.cosmology;
     struct Part { const char* label; double v; ImU32 col; } parts[] = {
-        {"Énergie noire", c.ode, IM_COL32(110, 215, 235, 255)}, {"Matière (dont noire)", c.om, IM_COL32(255, 196, 110, 255)},
+        {"Énergie noire", c.ode, IM_COL32(110, 215, 235, 255)}, {"Matière (dont noire)", c.om, theme::kAccent},
         {"Rayonnement", c.omegaR(), IM_COL32(240, 120, 120, 255)}};
     ImGui::Spacing();
     ImGui::TextUnformatted("De quoi est fait l'univers aujourd'hui");
@@ -525,7 +531,7 @@ void drawObjectOrbit(Sim& sim, UiState& ui, const Camera& cam, float w, float h)
     };
     gBac.track.prepareFrame(sim);
     if (tr.hasWhatIf) draw(tr.gWhatIf, kWhatIf, true);
-    draw(tr.g, IM_COL32(255, 196, 110, 170), false);
+    draw(tr.g, theme::alpha(theme::kAccent, 0.67f), false);
 }
 
 // Colonne des trois onglets, sur le bord droit, quand le panneau est fermé.

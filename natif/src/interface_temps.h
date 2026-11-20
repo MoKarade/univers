@@ -231,6 +231,7 @@ void drawTimeBar(Sim& sim, UiState& ui, float left, float right, float bottom, I
     ImGui::SameLine();
     if (iconButton("notes", ico::kInfo, "i", "Ce qui est mesuré, calculé ou supposé à cette date", ui.openNotes || (notToday && ImGui::IsPopupOpen("notes-date")), small))
         ImGui::OpenPopup("notes-date");
+    const ImVec2 notesAnchor{ImGui::GetItemRectMax().x, ImGui::GetItemRectMin().y - px(ui, 10)};      // bulle au-dessus du bouton « i »
     if (ui.openNotes) {
         ImGui::OpenPopup("notes-date");
         ui.openNotes = false;
@@ -285,6 +286,7 @@ void drawTimeBar(Sim& sim, UiState& ui, float left, float right, float bottom, I
     dateJumpPopup(sim, ui);
     ImGui::SetNextWindowSizeConstraints({px(ui, 420), 0}, {px(ui, 620), FLT_MAX});
     if (ui.keepNotes) ImGui::OpenPopup("notes-date");
+    ImGui::SetNextWindowPos(notesAnchor, ImGuiCond_Appearing, {1, 1});
     if (ImGui::BeginPopup("notes-date")) {
         ImGui::PushTextWrapPos(px(ui, 600));
         ImGui::PushFont(gFontBold ? gFontBold : ImGui::GetFont());
