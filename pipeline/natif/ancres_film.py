@@ -56,7 +56,8 @@ def centre_densite(x, depart, r0, fin=1000, facteur=0.9):
         m = np.einsum('ij,ij->i', x - c, x - c) < r * r
         if m.sum() < fin:
             return c
-        c = x[m].mean(0)
+        x = x[m]      # la sphère suivante est dans celle-ci (à 10 % près) : on ne garde que ses étoiles, bien plus rapide
+        c = x.mean(0)
         r *= facteur
 
 
@@ -70,19 +71,22 @@ def main():
     n, g, et, t, c = lire_index(d)
     debut = np.concatenate([[0], np.cumsum(et)])
     out = np.zeros((n, g, 7))
+    # Réglages par galaxie, pris à t = 0 : rayon du cœur, rayon de départ des sphères, part groupée.
+    regl = {}
     for k in range(1, g):
         x0 = etoiles(d, 0, debut[k], et[k]) + c[0, k]
         cd0 = centre_densite(x0, c[0, k], 2.0 * np.percentile(np.linalg.norm(x0 - c[0, k], axis=1), 90))
         r = np.linalg.norm(x0 - cd0, axis=1)
-        r_coeur, r_depart = 2.0 * np.median(r), 2.0 * np.percentile(r, 90)
-        f0 = np.mean(r < r_coeur)
-        precedent = cd0
-        for i in range(n):
-            rel = etoiles(d, i, debut[k], et[k])
-            if rel is None:      # image en cours d'écriture : on s'arrête là
-                n = i
-                break
-            x = rel + c[i, k]
+        regl[k] = [2.0 * np.median(r), 2.0 * np.percentile(r, 90), np.mean(r < 2.0 * np.median(r)), cd0]
+    # Une seule lecture par image (toutes les voisines d'un coup) : les ouvertures de fichiers dominaient la durée.
+    for i in range(n):
+        tout = etoiles(d, i, debut[1], debut[g] - debut[1])
+        if tout is None:      # image en cours d'écriture : on s'arrête là
+            n = i
+            break
+        for k in range(1, g):
+            r_coeur, r_depart, f0, precedent = regl[k]
+            x = tout[debut[k] - debut[1]:debut[k + 1] - debut[1]] + c[i, k]
             cd = centre_densite(x, precedent, r_depart)
             f = float(np.mean(np.einsum('ij,ij->i', x - cd, x - cd) < r_coeur * r_coeur))
             bary = x.mean(0)
@@ -90,8 +94,11 @@ def main():
             out[i, k, :3] = w * cd + (1 - w) * bary
             out[i, k, 3] = f
             out[i, k, 4:] = bary
-            precedent = cd
-        print(f'galaxie {k} : {et[k]} étoiles, R_coeur {r_coeur:.2f} kpc, part groupée {f0:.3f} -> {out[n - 1, k, 3]:.3f}', flush=True)
+            regl[k][3] = cd
+        if i % 100 == 0:
+            print(f'  image {i}/{n}', flush=True)
+    for k in range(1, g):
+        print(f'galaxie {k} : {et[k]} étoiles, R_coeur {regl[k][0]:.2f} kpc, part groupée {regl[k][2]:.3f} -> {out[n - 1, k, 3]:.3f}', flush=True)
     out = out[:n]
     # Lissage dans le temps de l'ancre (gaussienne de 1,5 image = 15 Ma) là où la galaxie est dispersée : le centre de
     # densité d'un nuage sans cœur reste bruité. Poids du lissage = 1 - w (rien n'est lissé tant qu'il y a un cœur).
