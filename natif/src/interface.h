@@ -6,6 +6,7 @@
 #pragma once
 #include "interface_champ.h"
 #include "interface_frise.h"
+#include "interface_echelle.h"
 
 namespace {
 
@@ -43,22 +44,26 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
         }
     }
     handleKeys(sim, ui);
-    drawTour(sim, ui, w, hUp, fixed);
+    drawTour(sim, ui, std::min(gBac.panelLeft, w), hUp, fixed);
     drawTopLeft(sim, ui, fixed);
-    drawTimeBar(sim, ui, w, fixed);
     lightKeys(sim);
-    drawLightLegend(sim, ui, w, hUp, fixed);
+    // En haut à droite : mode de vue et complétude, puis les calculs en cours ; le panneau de l'astre se cale dessous.
     drawCompleteness(sim, ui, w, fixed);
     drawHow(sim, ui, w, fixed);
-    const float panelTop = std::max({px(ui, 150), ui.timeBottom + px(ui, 12), ui.completenessBottom + px(ui, 12)});
+    const float panelTop = std::max(px(ui, 110), ui.completenessBottom + px(ui, 12));
     drawPanel(sim, ui, cam, w, h, panelTop, hUp);
     drawFrise(sim, ui, h, friseH);
-    drawArmCard(sim, ui, cam, std::min(gBac.panelLeft, w), hUp, fixed);
-    drawStatus(sim, ui, hUp, fixed);
-    drawWelcome(sim, ui, std::min(gBac.panelLeft, w), hUp, fixed);
+    // En bas : le temps au-dessus de la frise, centré dans la place laissée par le panneau ; « tu regardes » à gauche.
+    const float freeRight = std::min(gBac.panelLeft, w);
+    drawTimeBar(sim, ui, 0.0f, freeRight, std::min(hUp + px(ui, 10), gBac.friseTop), fixed);
+    drawStatus(sim, ui, std::min(hUp + px(ui, 10), gBac.friseTop), fixed);
+    drawScaleLadder(sim, ui, h, fixed);
+    drawLightLegend(sim, ui, freeRight, hUp, fixed);
+    drawArmCard(sim, ui, cam, freeRight, hUp, fixed);
+    drawWelcome(sim, ui, freeRight, hUp, fixed);
     drawHelp(ui, w, h);
     drawGravWaves(ui, w, hUp);
-    drawFieldChip(sim, ui, std::min(gBac.panelLeft, w), hUp, fixed);
+    drawFieldChip(sim, ui, freeRight, hUp, fixed);
     return -1;
 }
 

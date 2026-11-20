@@ -73,6 +73,25 @@ int main() {
     expect(vega > 2.1 && vega < 3.1, "Véga : 2,36 à 2,82 R☉ publiés (Aufdenberg et al. 2006, aplatie)");
     expect(arcturus > 20 && arcturus < 30, "Arcturus : 25,4 R☉ publié (Ramírez et Allende Prieto 2011), à 20 % près");
     expect(rayon_etoile::rayonKm(1.0, 9.0) == 0.0, "indice de couleur absurde : pas de rayon");
+    // Statut d'une valeur (pastille de la fiche) : textes réels des fiches de l'appli.
+    expect(statutDe("mesuré") == Statut::Mesure, "statut : mesuré");
+    expect(statutDe("mesuré (JPL Small-Body Database)") == Statut::Mesure, "statut : mesuré avec source");
+    expect(statutDe("éphémérides NASA") == Statut::Mesure, "statut : éphémérides lues telles quelles = mesuré");
+    expect(statutDe("calculé d'après la couleur") == Statut::Calcule, "statut : calculé");
+    expect(statutDe("calculé, approché (éclat et couleur, loi de Stefan-Boltzmann)") == Statut::Calcule, "statut : calculé approché");
+    expect(statutDe("publié, catalogue cité") == Statut::Publie, "statut : publié");
+    expect(statutDe("modèle — MIST v1.2") == Statut::Modele, "statut : modèle");
+    expect(statutDe("calculé (inclinaison supposée)") == Statut::Suppose, "statut : le mot le plus prudent l'emporte");
+    expect(statutDe("non mesuré") == Statut::Inconnu, "statut : non mesuré n'est pas « mesuré »");
+    expect(statutDe("") == Statut::Aucun, "statut : vide");
+    expect(statutReste("mesuré (JPL Small-Body Database)", Statut::Mesure) == "JPL Small-Body Database", "reste : parenthèses retirées");
+    expect(statutReste("calculé d'après la couleur", Statut::Calcule) == "d'après la couleur", "reste : méthode gardée");
+    expect(statutReste("mesuré \xE2\x80\x94 Gaia DR3", Statut::Mesure) == "Gaia DR3", "reste : après le tiret long");
+    expect(statutReste("mesuré", Statut::Mesure).empty(), "reste : rien de plus");
+    expect(statutReste("éphémérides NASA", Statut::Mesure) == "éphémérides NASA", "reste : mot absent du début, texte gardé");
+    const double ech[] = {45.0 / 63241.077, 30.0, 300.0, 5.0e6, 5.0e9};
+    expect(positionEchelle(30.0, ech, 5) == 1.0 && positionEchelle(1.0e12, ech, 5) == 4.0 && positionEchelle(1.0e-9, ech, 5) == 0.0, "échelle : bornes");
+    expect(near(positionEchelle(std::sqrt(30.0 * 300.0), ech, 5), 1.5), "échelle : milieu logarithmique");
     std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
     return failures ? 1 : 0;
 }

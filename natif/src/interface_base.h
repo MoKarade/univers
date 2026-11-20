@@ -12,80 +12,9 @@
 
 #include "interface_outils.h"
 #include "simulation.h"
+#include "interface_theme.h"
 
 namespace {
-
-const ImU32 kInkSoft = IM_COL32(150, 160, 178, 255), kAccent = IM_COL32(255, 196, 110, 255), kOrbit = IM_COL32(110, 140, 200, 110);
-const ImU32 kInk = IM_COL32(200, 214, 240, 255);
-
-// Échelle de l'interface : la police est chargée pour le plus grand écran du PC, puis réduite pour une fenêtre plus petite.
-float gFontMaxScale = 1.0f;
-
-void applyStyle() {
-    ImGuiStyle& st = ImGui::GetStyle();
-    st.WindowRounding = 10;
-    st.FrameRounding = 7;
-    st.GrabRounding = 7;
-    st.PopupRounding = 8;
-    st.WindowBorderSize = 1;
-    st.PopupBorderSize = 1;
-    st.WindowPadding = {14, 12};
-    st.FramePadding = {10, 6};
-    st.ItemSpacing = {8, 7};
-    ImVec4* c = st.Colors;
-    c[ImGuiCol_WindowBg] = {0.035f, 0.045f, 0.075f, 0.88f};
-    c[ImGuiCol_PopupBg] = {0.05f, 0.065f, 0.11f, 0.98f};
-    c[ImGuiCol_Border] = {0.30f, 0.36f, 0.50f, 0.35f};
-    c[ImGuiCol_Text] = {0.91f, 0.93f, 0.96f, 1.0f};
-    c[ImGuiCol_TextDisabled] = {0.62f, 0.66f, 0.73f, 1.0f};
-    c[ImGuiCol_FrameBg] = {0.10f, 0.13f, 0.20f, 0.9f};
-    c[ImGuiCol_FrameBgHovered] = {0.16f, 0.20f, 0.30f, 1.0f};
-    c[ImGuiCol_FrameBgActive] = {0.20f, 0.25f, 0.36f, 1.0f};
-    c[ImGuiCol_Button] = {0.11f, 0.14f, 0.22f, 0.95f};
-    c[ImGuiCol_ButtonHovered] = {0.20f, 0.25f, 0.38f, 1.0f};
-    c[ImGuiCol_ButtonActive] = {0.80f, 0.58f, 0.25f, 1.0f};
-    c[ImGuiCol_Header] = {0.16f, 0.20f, 0.30f, 0.9f};
-    c[ImGuiCol_HeaderHovered] = {0.22f, 0.28f, 0.42f, 1.0f};
-    c[ImGuiCol_HeaderActive] = {0.80f, 0.58f, 0.25f, 1.0f};
-    c[ImGuiCol_Separator] = {0.30f, 0.36f, 0.50f, 0.35f};
-    c[ImGuiCol_TitleBg] = {0.05f, 0.065f, 0.11f, 1.0f};
-    c[ImGuiCol_TitleBgActive] = {0.09f, 0.12f, 0.19f, 1.0f};
-    c[ImGuiCol_PlotHistogram] = {1.0f, 0.77f, 0.43f, 0.9f};
-}
-
-// Police de Windows avec les accents et les signes utilisés ; à défaut, la police intégrée (sans accents).
-// Elle est chargée à la taille voulue pour la hauteur de l'écran principal (1 à 2 fois la taille de base de 1080 lignes).
-void loadFonts(ImFont*& normal, ImFont*& big) {
-    ImGuiIO& io = ImGui::GetIO();
-    static const ImWchar ranges[] = {0x0020, 0x00FF, 0x0100, 0x017F, 0x0391, 0x03C9, 0x2000, 0x206F, 0x2190, 0x2193, 0x2212, 0x2212, 0x2318, 0x2318, 0};
-    gFontMaxScale = std::clamp(static_cast<float>(GetSystemMetrics(SM_CYSCREEN)) / 1080.0f, 1.0f, 2.5f);
-    const char* path = "C:\\Windows\\Fonts\\segoeui.ttf";
-    if (std::ifstream(path).good()) {
-        normal = io.Fonts->AddFontFromFileTTF(path, 18.0f * gFontMaxScale, nullptr, ranges);
-        big = io.Fonts->AddFontFromFileTTF(path, 26.0f * gFontMaxScale, nullptr, ranges);
-    }
-    if (!normal) {
-        gFontMaxScale = 1.0f;
-        normal = big = io.Fonts->AddFontDefault();
-    }
-}
-
-void row(const char* label, const std::string& value, const char* status, float s) {
-    ImGui::TextDisabled("%s", label);
-    const float col = std::max(176.0f, ImGui::CalcTextSize(label).x / s + 16.0f) * s;
-    ImGui::SameLine(col);
-    ImGui::TextUnformatted(value.c_str());
-    if (status[0]) {
-        // Statut trop long pour la place restante (panneau étroit) : à la ligne, sous la valeur.
-        const float need = ImGui::CalcTextSize(status).x + ImGui::CalcTextSize("()").x + ImGui::GetStyle().ItemSpacing.x;
-        ImGui::SameLine();
-        if (ImGui::GetContentRegionAvail().x < need) {
-            ImGui::NewLine();
-            ImGui::SetCursorPosX(col);      /* même repère que SameLine(col) : bord de la fenêtre */
-        }
-        ImGui::TextDisabled("(%s)", status);
-    }
-}
 
 // Projection sans rejet des points hors de l'écran (pour les tracés) ; false si le point est derrière la caméra.
 bool projectLoose(const Camera& cam, Vec3 p, float w, float h, ImVec2& out) {
@@ -200,6 +129,8 @@ struct UiState {
     bool details = false;           // interface minimaliste (Marc, 13/11/2026) : textes détaillés à l'écran seulement sur demande
     bool openDate = false;          // « Aller à une date… » choisi dans le menu « … » de la barre du temps
     double tourClock = 0;
+    float dockTop = 1e9f, dockLeft = 1e9f;      // haut et bord gauche du lecteur de temps (image précédente)
+    bool keepNotes = false;         // contrôle : la bulle « mesuré, calculé ou supposé à cette date » reste ouverte
 };
 
 float px(const UiState& ui, float v) { return v * ui.s; }
@@ -455,6 +386,17 @@ bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, fl
     return true;
 }
 
+// Repère de l'astre suivi : quatre coins, comme un viseur (on voit l'astre au milieu, sans le cacher).
+void focusBrackets(ImDrawList* dl, ImVec2 c, float r, float s) {
+    const float k = std::max(5.0f * s, r * 0.38f), t = 1.8f * s;
+    for (int sx = -1; sx <= 1; sx += 2)
+        for (int sy = -1; sy <= 1; sy += 2) {
+            const ImVec2 corner{c.x + sx * r, c.y + sy * r};
+            dl->AddLine(corner, {corner.x - sx * k, corner.y}, kAccent, t);
+            dl->AddLine(corner, {corner.x, corner.y - sy * k}, kAccent, t);
+        }
+}
+
 // Noms posés sur l'image (jamais l'un sur l'autre) et astre survolé mis en valeur.
 void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, float h, int hovered) {
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
@@ -473,7 +415,12 @@ void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, f
         if (!cam.project(sim.position(i), w, h, x, y)) continue;
         const bool isFocus = i == sim.focus, isHover = i == hovered;
         const ImVec2 p{static_cast<float>(x), static_cast<float>(y)};
-        if (isHover) dl->AddCircle(p, std::max(11.0f * ui.s, static_cast<float>(std::min(discRadiusPx(sim, cam, i, h), 3000.0)) + 6.0f * ui.s), kAccent, 48, 1.5f * ui.s);
+        const float discR = static_cast<float>(std::min(discRadiusPx(sim, cam, i, h), 3000.0));
+        if (isHover && !isFocus) {      // survol : anneau fin et halo doux
+            const float r = std::max(11.0f * ui.s, discR + 6.0f * ui.s);
+            dl->AddCircleFilled(p, r, theme::alpha(theme::kAccent, 0.10f), 48);
+            dl->AddCircle(p, r, theme::alpha(theme::kAccent, 0.85f), 48, 1.4f * ui.s);
+        }
         if (!isHover && !labelWanted(sim, ui, cam, i, w, h, x, y, boostMag)) continue;
         const char* name = b.name.c_str();
         const ImVec2 size = ImGui::CalcTextSize(name);
@@ -485,11 +432,20 @@ void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, f
             if (overlaps) continue;
         }
         placed.push_back(box);
-        if (isFocus) dl->AddCircle(p, 9 * ui.s, kAccent, 32, 1.5f * ui.s);
+        if (isFocus) focusBrackets(dl, p, std::max(10.0f * ui.s, discR + 7.0f * ui.s), ui.s);
         // Lune sans éclat renseigné : un petit repère marque son emplacement mesuré (ce n'est pas sa lumière).
         if ((b.kind == Kind::Planet && !b.hasPhotometry) || b.kind == Kind::Probe || b.kind == Kind::Asteroid) dl->AddCircle(p, 3 * ui.s, IM_COL32(200, 214, 240, 200), 12, 1.2f * ui.s);
+        if (isFocus || isHover) {      // nom de l'astre suivi ou survolé : sur une pastille sombre, en gras
+            ImFont* f = gFontBold ? gFontBold : ImGui::GetFont();
+            const float fs = ImGui::GetFontSize();
+            const ImVec2 ts = f->CalcTextSizeA(fs, FLT_MAX, 0, name);
+            const ImVec2 lp{p.x + std::max(14.0f * ui.s, discR * 0.7f + 10.0f * ui.s), p.y - ts.y * 0.5f};
+            dl->AddRectFilled({lp.x - 7 * ui.s, lp.y - 2 * ui.s}, {lp.x + ts.x + 7 * ui.s, lp.y + ts.y + 2 * ui.s}, IM_COL32(8, 11, 20, 190), ts.y);
+            dl->AddText(f, fs, lp, kAccent, name);
+            continue;
+        }
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), {at.x + 1, at.y + 1}, IM_COL32(0, 0, 0, 200), name);
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), at, isFocus || isHover ? kAccent : (b.kind == Kind::Star ? kInkSoft : kInk), name);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), at, b.kind == Kind::Star ? kInkSoft : kInk, name);
     }
 }
 
@@ -497,11 +453,17 @@ std::string natureOf(const Body& b) { return b.natureLabel(); }
 
 void hoverTooltip(const Sim& sim, const Camera& cam, int i) {
     const Body& b = sim.bodies[static_cast<size_t>(i)];
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {12 * ImGui::GetIO().FontGlobalScale * gFontMaxScale, 10 * ImGui::GetIO().FontGlobalScale * gFontMaxScale});
     ImGui::BeginTooltip();
+    ImGui::PushFont(gFontBold ? gFontBold : ImGui::GetFont());
     ImGui::TextUnformatted(b.name.c_str());
-    ImGui::TextDisabled("%s, à %s d'ici", natureOf(b).c_str(), frDistance(distBetween(sim.position(i), cam.pos)).c_str());
-    ImGui::TextDisabled(i == sim.focus ? "Clic : s'en approcher" : "Clic : y aller");
+    ImGui::PopFont();
+    ImGui::TextDisabled("%s  ·  à %s d'ici", natureOf(b).c_str(), frDistance(distBetween(sim.position(i), cam.pos)).c_str());
+    ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
+    ImGui::TextColored(theme::v4(theme::kAccent), "%s", i == sim.focus ? "Clic : s'en approcher" : "Clic : y aller et ouvrir sa fiche");
+    ImGui::PopFont();
     ImGui::EndTooltip();
+    ImGui::PopStyleVar();
 }
 
 // ---------------------------------------------------------------- clavier
