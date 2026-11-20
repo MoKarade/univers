@@ -18,7 +18,7 @@ Ce qui est mesuré, et ce qui ne l'est pas :
 - la barre n'est PAS posée ici : elle doit naître en laissant vieillir la galaxie seule, puis être comparée aux mesures
   (Voie lactée : 5,0 kpc, 39 km/s/kpc ; Andromède : 4,0 kpc, 40 km/s/kpc).
 
-Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7] [--froid=1.2]
+Usage : python modeles_v2.py <voie_lactee|andromede|triangle|grand_nuage> <particules en tout> <sortie.npz> [--rsig=2] [--halo=0.7] [--froid=1.2] [--froid-centre=0.9] [--agitation=0.75] [--halo-rho0= --halo-rs= --halo-coupure=]
   --rsig : longueur de décroissance de l'agitation des étoiles, en longueurs de disque (2 : disque très calme, sans barre ;
            3 ou 4 : centre plus froid, où une barre peut naître) ; --halo : part des particules donnée à la matière noire.
 """
@@ -51,7 +51,7 @@ GALAXIES = {
         disques=[
             dict(kind=1, sigma0=8.96e8, rd=2.50, hz=0.30, sigma_soleil=35.0, r_soleil=8.21),
             dict(kind=4, sigma0=1.83e8, rd=3.02, hz=0.90, sigma_soleil=50.0, r_soleil=8.21),
-            dict(kind=1, masse=9.23e9, rd=1.0, hz=0.30, q_min=1.2),
+            dict(kind=1, masse=9.23e9, rd=1.0, hz=0.30, q_min=1.2, compact=True),
             dict(kind=3, masse=1.22e10, rd=7.0, hz=0.085, q_min=1.5),
         ]),
     # Variante « barre » d'Andromède : bulbe classique seul (1,18e10 M☉) ; le bulbe en boîte (1,91e10 M☉, Blaña Díaz et al.
@@ -61,7 +61,7 @@ GALAXIES = {
         bulbe=dict(masse=1.18e10, a=0.55),
         disques=[
             dict(kind=1, masse=5.6e10, rd=5.3, hz=0.6, q_min=1.5),
-            dict(kind=1, masse=1.91e10, rd=1.5, hz=0.4, q_min=1.2),
+            dict(kind=1, masse=1.91e10, rd=1.5, hz=0.4, q_min=1.2, compact=True),
             dict(kind=3, masse=5.6e9, rd=6.0, hz=0.15, q_min=1.5),
         ]),
     # Tamm et al. 2012 (A&A 546, A4), tables 2 et 4 (halo NFW) ; disque : Courteau et al. 2011 (5,3 kpc) ; bulbe : Blaña Díaz
@@ -104,15 +104,24 @@ try:
     for _cle in ('voie_lactee', 'andromede'):      # les variantes « barre » gardent le halo de la table
         GALAXIES[_cle + '_barre']['halo'] = dict(GALAXIES[_cle]['halo'])
     TABLE = _C.charger().get('date')
+    # Gaz du Grand Nuage : la table ne lui en donne pas, alors qu'il en a (hydrogène atomique (4,8 ± 0,2) x 10^8 M☉ à
+    # 50 kpc, Staveley-Smith et al. 2003, MNRAS 339, 87 ; x 1,33 pour l'hélium = 6,4 x 10^8 M☉ ; diamètre du disque de gaz
+    # 18,6 kpc). Longueur et hauteur du disque de gaz : [Supposition]. Sans lui, pas de naissance d'étoiles dans le Nuage.
+    if not any(d.get('kind') == 3 for d in GALAXIES['grand_nuage']['disques']):
+        GALAXIES['grand_nuage']['disques'] = list(GALAXIES['grand_nuage']['disques']) + [dict(kind=3, masse=6.4e8, rd=2.5, hz=0.2, q_min=1.5)]
 except Exception as _e:      # table absente : on le dit dans le résumé du tirage
     TABLE = None
 
 
-def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None):
+def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None, froid_centre=None, agitation=1.0, halo=None, disque_masse=1.0, disque_hauteur=1.0):
     import agama
     agama.setUnits(mass=1, length=1, velocity=1)
     g = GALAXIES[nom]
-    h = g['halo']
+    h = dict(g['halo'])
+    # halo : remplace des paramètres du halo de la table (rho0, rs, coupure). Sert à recaler les masses totales sans
+    # toucher à la courbe de rotation interne : la Voie lactée de la table pèse plus qu'Andromède (1,34 contre 1,07e12 M☉)
+    # alors que le rapport mesuré est 0,54 (+0,23 -0,17) (Peñarrubia et al. 2014 ; docs/lois-physiques/03).
+    if halo: h.update(halo)
     if 'hernquist' in h:
         ph = agama.Potential(type='Spheroid', densityNorm=h['hernquist'] / (2 * math.pi * h['a'] ** 3), gamma=1, beta=4, alpha=1, scaleRadius=h['a'],
                              outerCutoffRadius=h['coupure'], cutoffStrength=4)
@@ -127,6 +136,15 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
             pb = agama.Potential(type='Spheroid', densityNorm=b['rho0'], gamma=0, beta=b['puissance'], alpha=1, scaleRadius=b['r0'],
                                  outerCutoffRadius=b['coupure'], cutoffStrength=2, axisRatioZ=b['q'])
         pots.append(pb)
+    # Réglages permis sur les disques d'étoiles MESURÉS (sortes 1 et 4, ceux qui ont une agitation mesurée), dans leurs
+    # marges d'erreur : la barre, en naissant, étale et épaissit le disque (mesuré le 20/11 à 2 Ga : rotation au Soleil
+    # - 6 km/s, disque mince + 25 %). On part donc un peu plus lourd et un peu plus mince pour ARRIVER aux mesures.
+    g = dict(g); g['disques'] = [dict(d) for d in g['disques']]
+    for d in g['disques']:
+        if 'sigma_soleil' in d:
+            if 'sigma0' in d: d['sigma0'] *= disque_masse
+            if 'masse' in d: d['masse'] *= disque_masse
+            d['hz'] *= disque_hauteur
     pds = []
     for d in g['disques']:
         if 'sigma0' not in d:
@@ -167,7 +185,20 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
         nd = max(1, round(n_reste * d['masse'] / m_etoiles))
         sig = d['sigma0'] * np.exp(-R / d['rd'])
         rsig = rsig_facteur * d['rd']      # longueur sur laquelle l'agitation décroît : 2 Rd par défaut ; plus grand = centre plus froid (barre)
-        if froid and d['kind'] != 3:
+        if froid_centre and d.get('compact'):
+            # Centre froid SEUL : le disque compact central (la masse de la barre) part à Q = froid_centre contre tous les
+            # disques, pour que la barre naisse ; le disque mince et le disque épais gardent l'agitation MESURÉE. Un disque
+            # entier à Q < 1 s'agite et s'épaissit de lui-même en 1 Ga (mesuré le 18/11 : mince 0,22 -> 0,54 kpc au Soleil).
+            zone = (R > 0.5 * d['rd']) & (R < 3 * d['rd'])
+            sig_tot = sum(x['sigma0'] * np.exp(-R / x['rd']) for x in g['disques'])
+            cible = froid_centre * 3.36 * G * sig_tot[zone] / kappa[zone]
+            meilleur = None
+            for rs_ in np.linspace(0.8 * d['rd'], 12 * d['rd'], 200):
+                s0_ = float(np.max(cible * np.exp(R[zone] / rs_)))
+                cout = float(np.mean(s0_ * np.exp(-R[zone] / rs_) / cible))
+                if meilleur is None or cout < meilleur[0]: meilleur = (cout, s0_, rs_)
+            _, s0, rsig = meilleur
+        elif froid and d['kind'] != 3:
             # Départ « froid » : l'agitation mesurée aujourd'hui est celle d'un disque que sa barre a déjà chauffé. Pour
             # que la barre naisse et tienne d'elle-même, les étoiles partent avec la plus petite agitation qui donne
             # Q >= froid (contre tous les disques ensemble) ; le disque épais garde son rapport mesuré au disque mince.
@@ -185,7 +216,9 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
             _, s0, rsig = meilleur
             s0 *= d.get('sigma_soleil', 35.0) / 35.0
         elif 'sigma_soleil' in d:      # agitation mesurée au Soleil, profil exponentiel de longueur 2 Rd
-            s0 = d['sigma_soleil'] * math.exp(d['r_soleil'] / rsig)
+            # agitation : facteur de réglage sur l'agitation MESURÉE aujourd'hui. La naissance de la barre agite le disque
+            # (mesuré le 18/11 : 37 -> 47 km/s au Soleil en 0,5 Ga) ; partir un peu plus calme pour ARRIVER à la mesure.
+            s0 = agitation * d['sigma_soleil'] * math.exp(d['r_soleil'] / rsig)
         else:                        # non mesurée : la plus petite agitation qui donne Q >= q_min entre 1 et 4 Rd [modèle]
             zone = (R > d['rd']) & (R < 4 * d['rd'])
             sig_tot = sum(x['sigma0'] * np.exp(-R / x['rd']) for x in g['disques'])
@@ -193,11 +226,24 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
         sr = s0 * np.exp(-R / rsig)
         q = sr * kappa / (3.36 * G * sig)
         zone = (R > 0.5 * d['rd']) & (R < 4 * d['rd'])
-        dfd = agama.DistributionFunction(type='QuasiIsothermal', potential=pot, Sigma0=d['sigma0'], Rdisk=d['rd'], Hdisk=d['hz'], sigmar0=s0, Rsigmar=rsig)
+        # Hauteur : le paramètre « Hdisk » de cette loi ne donne pas un disque de la hauteur voulue (mesuré le 18/11 sur les
+        # départs : disque mince 1,8 fois trop épais au Soleil, disque épais 2,3 fois). On le règle donc par essais : petit
+        # tirage, médiane de |z| mesurée entre 0,5 et 3 longueurs de disque, comparée à celle d'un disque exponentiel de
+        # hauteur hz (hz ln 2), et on recommence (4 fois au plus).
+        h_df, cible_z = d['hz'], d['hz'] * math.log(2.0)
+        for _ in range(4):
+            dfd = agama.DistributionFunction(type='QuasiIsothermal', potential=pot, Sigma0=d['sigma0'], Rdisk=d['rd'], Hdisk=h_df, sigmar0=s0, Rsigmar=rsig)
+            xe, _m = agama.GalaxyModel(pot, dfd).sample(200000)
+            Re = np.hypot(xe[:, 0], xe[:, 1]); ze = np.abs(xe[(Re > 0.5 * d['rd']) & (Re < 3 * d['rd']), 2])
+            mesure = float(np.median(ze))
+            if abs(mesure / cible_z - 1.0) < 0.03: break
+            h_df *= cible_z / mesure
+        dfd = agama.DistributionFunction(type='QuasiIsothermal', potential=pot, Sigma0=d['sigma0'], Rdisk=d['rd'], Hdisk=h_df, sigmar0=s0, Rsigmar=rsig)
         xv, m = agama.GalaxyModel(pot, dfd).sample(nd)
+        Rv = np.hypot(xv[:, 0], xv[:, 1]); zmed = float(np.median(np.abs(xv[(Rv > 0.5 * d['rd']) & (Rv < 3 * d['rd']), 2])))
         out.append((xv, m, eps_e, d['kind']))
         resume['composantes'].append(dict(nom={1: 'disque mince', 3: 'gaz (froid)', 4: 'disque épais'}[d['kind']], masse=d['masse'], particules=nd,
-                                          agitation_centre=round(s0, 1), longueur_agitation_kpc=round(float(rsig), 2), q_seul_min=round(float(q[zone].min()), 2)))
+                                          agitation_centre=round(s0, 1), longueur_agitation_kpc=round(float(rsig), 2), hauteur_reglee_kpc=round(float(h_df), 4), z_median_kpc=round(zmed, 4), z_median_voulu_kpc=round(cible_z, 4), q_seul_min=round(float(q[zone].min()), 2)))
     # Q de l'ensemble des disques (étoiles et gaz ensemble, agitation moyenne pondérée par la masse) : c'est lui qui compte.
     pos = np.concatenate([o[0][:, :3] for o in out]); vel = np.concatenate([o[0][:, 3:] for o in out])
     mass = np.concatenate([o[1] for o in out])
@@ -213,7 +259,10 @@ def main():
     nom, n, sortie = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     opts = dict(a[2:].split('=', 1) for a in sys.argv[4:] if a.startswith('--') and '=' in a)
     p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None,
-                           froid=float(opts['froid']) if 'froid' in opts else None)
+                           froid=float(opts['froid']) if 'froid' in opts else None,
+                           froid_centre=float(opts['froid-centre']) if 'froid-centre' in opts else None,
+                           agitation=float(opts.get('agitation', 1.0)), disque_masse=float(opts.get('disque-masse', 1.0)), disque_hauteur=float(opts.get('disque-hauteur', 1.0)),
+                           halo={k[5:].replace('-', '_'): float(v) for k, v in opts.items() if k.startswith('halo-')} or None)
     resume['options'] = opts
     resume['table_unique'] = TABLE
     np.savez_compressed(sortie, meta=json.dumps(resume, ensure_ascii=False), **p)

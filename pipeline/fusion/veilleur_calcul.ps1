@@ -3,7 +3,15 @@
 # Il attend que la carte graphique soit libre (pas de jeu, pas d'appli Univers ouverte), lance le calcul, et le relance
 # depuis sa derniere sauvegarde chaque fois qu'il s'est retire pour laisser la carte. Il s'arrete quand le film est fini.
 # N'ouvre aucune fenetre. Arret : Ctrl-C dans ce terminal.
-param([string]$sortie = 'C:/tmp/natif/groupe-local', [string]$galaxies = '', [string]$traceurs = '')
+param([string]$sortie = 'C:/tmp/natif/groupe-local', [string]$galaxies = '', [string]$traceurs = '', [string]$contrat = '', [string]$voisines = '', [string]$etat = '', [string]$fin = '', [switch]$gaz, [string]$gazMode = '', [string]$maree = '', [string]$efficacite = '')
+if ($efficacite) { $env:UNIVERS_EFFICACITE = $efficacite }
+if ($gazMode) { $env:UNIVERS_GAZ = $gazMode }
+if ($maree) { $env:UNIVERS_MAREE = $maree }
+if ($voisines) { $env:UNIVERS_CONTRATS_VOISINES = $voisines }
+if ($etat) { $env:UNIVERS_ETAT = $etat }
+if ($fin) { $env:UNIVERS_FIN_GA = $fin }
+if ($gaz) { $env:UNIVERS_GAZ = '1' }
+if ($contrat) { $env:UNIVERS_CONTRAT = $contrat }
 if ($traceurs) { $env:UNIVERS_TRACEURS = $traceurs }
 if ($galaxies) { $env:UNIVERS_GALAXIES = $galaxies }
 $bash = 'C:\Program Files\Git\bin\bash.exe'
@@ -11,10 +19,10 @@ $lanceur = 'C:/tmp/analyse-architecture/univers/pipeline/fusion/lancer_rencontre
 $env:UNIVERS_CEDER = '1'
 
 function Carte-Libre {
-    $l = (& nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
-    if (-not $l) { return $false }
-    $v = $l -split ','
-    return ([int]$v[0] -lt 20) -and ([int]$v[1] -lt 4000)
+    # Libre = aucun programme de Marc sur la carte (jeu, appli Univers) : même règle que le calcul (carte.py). Le taux
+    # d'occupation ne sert plus : le bureau seul le fait varier de 20 à 40 %.
+    & C:/tmp/venv-cupy/Scripts/python.exe (Join-Path $PSScriptRoot "carte.py") *> $null
+    return ($LASTEXITCODE -eq 0)
 }
 
 while ($true) {
