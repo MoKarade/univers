@@ -171,7 +171,7 @@ int runWindow(const WindowOptions& opt) {
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
     // Cycle de vie du Soleil et des étoiles nommées (cycle_appli.h) : facultatif, sans vie_cycle.bin rien ne change.
     static CycleAppli cycleApp;
-    cycleApp.build(dataDir + "/vie_cycle.bin", sim);
+    cycleApp.build(dataDir + "/vie_cycle.bin", sim, dataDir + "/etoiles_cycle.tsv");
     gCycle = &cycleApp;
     loadGravWaves(dataDir + "/ondes_gravitationnelles.tsv");
     sim.chaosRun.load(dataDir + "/chaos_futur_60ma.bin");      // orbite de la Terre de 10 à 60 millions d'années (fil physique)      // ondes gravitationnelles (GWOSC) : fenêtre ouverte depuis « Aller à »

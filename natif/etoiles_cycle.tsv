@@ -1,0 +1,6 @@
+# Cycle de vie (cycle_appli.h) : étoiles massives ajoutées aux étoiles nommées, et températures publiées
+# (spectroscopie) qui remplacent celle tirée de B-V. Colonnes : numéro dans etoiles.bin, nom, Teff (K, 0 : B-V), source.
+# Numéros retrouvés par la position (RA, Dec) dans le catalogue principal, à 0,05 degré près.
+13681	Bételgeuse	3500	Joyce et al. 2020 (ApJ 902, 63)
+19997	Naos (Zêta de la Poupe)	40000	Howarth & van Leeuwen 2019 (arXiv:1901.08020)
+12974	Alnitak, dans la ceinture d’Orion	29500	Bouret et al. 2008, repris par Hummel et al. 2013 (A&A 554, A52)

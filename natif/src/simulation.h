@@ -489,6 +489,28 @@ struct Sim {
                 bodies.push_back(body);
             }
         }
+        // Étoiles massives nommées pour leur cycle de vie (etoiles_cycle.tsv, cycle_appli.h) : une étoile déjà nommée garde son nom.
+        {
+            std::ifstream cf(namesPath.substr(0, namesPath.find_last_of("/\\") + 1) + "etoiles_cycle.tsv");
+            for (std::string cl; std::getline(cf, cl);) {
+                if (cl.empty() || cl[0] == '#') continue;
+                const size_t t1 = cl.find('	'), t2 = cl.find('	', t1 + 1);
+                if (t1 == std::string::npos || t2 == std::string::npos) continue;
+                const int64_t idx = std::strtoll(cl.substr(0, t1).c_str(), nullptr, 10);
+                if (idx < 0 || static_cast<uint64_t>(idx) >= stars->n) continue;
+                bool known = false;
+                for (const Body& b : bodies) known = known || (b.kind == Kind::Star && b.star == idx);
+                if (known) continue;
+                Body body;
+                body.star = idx;
+                body.name = cl.substr(t1 + 1, t2 - t1 - 1);
+                body.nature = "étoile";
+                body.natureText = "étoile massive";
+                body.bv = stars->bv()[idx];
+                body.radiusKm = rayon_etoile::rayonKm(stars->mag()[idx], body.bv);      // calculé (audit E3)
+                bodies.push_back(body);
+            }
+        }
         // Galaxies nommées (galaxies_noms.tsv : nom, x, y, z en années-lumière, genre, priorité).
         // Puis, s'il est à côté, galaxies_cf4.tsv : 55 637 galaxies à distance mesurée (Cosmicflows-4, noms OpenNGC),
         // écrit par pipeline/natif/galaxies_cf4.py ; priorité 9 : nom montré seulement de près ou au survol.

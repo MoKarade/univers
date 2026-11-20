@@ -583,7 +583,9 @@ inline Placement placer(const Grille& g, double logL, double logT) {
 }
 
 // Vie d'une étoile nommée : le Soleil (masse 1, âge mesuré), ou placée par son éclat (M_V) et sa couleur (B-V) mesurés.
-inline Vie vieEtoile(const Grille& g, bool soleil, double absMagV, double bv) {
+// teffPubliee > 0 : température mesurée par spectroscopie (publiée), à la place de celle tirée de B-V (qui ne distingue
+// plus les étoiles très chaudes, et donne mal les supergéantes rouges).
+inline Vie vieEtoile(const Grille& g, bool soleil, double absMagV, double bv, double teffPubliee = 0) {
     if (soleil) {
         Vie v = vieDe(g, 1.0);
         v.ageAujourdhui = kAgeSoleilAns;
@@ -596,10 +598,10 @@ inline Vie vieEtoile(const Grille& g, bool soleil, double absMagV, double bv) {
         v.calculerDebuts();
         return v;
     }
-    const double r = rayon_etoile::rayonKm(absMagV, bv);
-    if (r <= 0) return {};
-    const double t = rayon_etoile::temperatureBv(bv);
-    const double l = std::pow(10.0, -0.4 * (absMagV + rayon_etoile::correctionBolometrique(t) - rayon_etoile::kMbolSoleil));
+    if (rayon_etoile::rayonKm(absMagV, bv) <= 0) return {};
+    const double t = teffPubliee > 0 ? teffPubliee : rayon_etoile::temperatureBv(bv);
+    const double l = std::pow(10.0, -0.4 * (absMagV + bcV(t) - rayon_etoile::kMbolSoleil));
+    const double r = std::sqrt(l) * (rayon_etoile::kTsoleil / t) * (rayon_etoile::kTsoleil / t) * kRsunKm;
     const Placement p = placer(g, std::log10(l), std::log10(t));
     if (!p.ok) return {};
     Vie v = vieDe(g, p.m0);

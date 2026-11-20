@@ -74,7 +74,8 @@ void cycleSection(Sim& sim, UiState& ui, int f) {
         note("Masse et âge placés d'après son éclat et sa couleur mesurés (le modèle le plus probable ; masse de %s à %s M☉). Une étoile peut "
              "avoir le même éclat et la même couleur à deux étapes de sa vie : ce placement est une estimation.",
              frNum(v.mBas, 3).c_str(), frNum(v.mHaut, 3).c_str());
-    else note("Âge du Soleil mesuré (4,568 milliards d'années, météorites) ; sa vie ensuite : calculée.");
+    if (!a->sourceTeff.empty()) note("Température de surface mesurée par spectroscopie : %s (au lieu de celle tirée de sa couleur).", a->sourceTeff.c_str());
+    if (v.source == 1) note("Âge du Soleil mesuré (4,568 milliards d'années, météorites) ; sa vie ensuite : calculée.");
     if (f == 0 && sim.starShare() <= 0)
         note("À cette date, la place du Soleil dans la Galaxie n'est pas calculée (après le passage d'Andromède) : il est montré "
              "à l'endroit d'où l'on regarde. Seule sa vie est montrée.");

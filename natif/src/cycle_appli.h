@@ -23,6 +23,7 @@ public:
         cycle::Bilan bilan;
         cycle::Profil profil;
         bool profilOk = false;
+        std::string sourceTeff;      // température publiée utilisée pour le placement (vide : tirée de B-V)
         float pointMag = 0, pointMag0 = 0;      // éclat du point dessiné (magnitude absolue V) ; celui du catalogue
         uint32_t pointRgba = 0, pointRgba0 = 0;
         float writtenMag = 0;      // ce qui est dans la colonne de la carte graphique
@@ -34,8 +35,21 @@ public:
 
     bool ready() const { return grille.ready && !astres.empty(); }
 
-    void build(const std::string& path, Sim& sim) {
+    void build(const std::string& path, Sim& sim, const std::string& publiees = "") {
         if (!grille.load(path)) return;
+        // Températures publiées (etoiles_cycle.tsv) : numéro du catalogue -> Teff, source.
+        std::vector<std::pair<int64_t, std::pair<double, std::string>>> teffs;
+        if (!publiees.empty()) {
+            std::ifstream f(publiees);
+            for (std::string l; std::getline(f, l);) {
+                if (l.empty() || l[0] == '#') continue;
+                std::vector<std::string> c;
+                size_t from = 0;
+                for (size_t tab; (tab = l.find('	', from)) != std::string::npos; from = tab + 1) c.push_back(l.substr(from, tab - from));
+                c.push_back(l.substr(from));
+                if (c.size() >= 4 && std::atof(c[2].c_str()) > 0) teffs.push_back({std::strtoll(c[0].c_str(), nullptr, 10), {std::atof(c[2].c_str()), c[3]}});
+            }
+        }
         astres.clear();
         deBody.assign(sim.bodies.size(), -1);
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
@@ -45,7 +59,10 @@ public:
             const double mag = b.kind == Kind::Sun ? kSunAbsMag : sim.stars->mag()[b.star];
             Astre a;
             a.body = i;
-            a.vie = cycle::vieEtoile(grille, b.kind == Kind::Sun, mag, b.bv);
+            double teff = 0;
+            for (const auto& [idx, ts] : teffs)
+                if (b.kind == Kind::Star && idx == b.star) { teff = ts.first; a.sourceTeff = ts.second; }
+            a.vie = cycle::vieEtoile(grille, b.kind == Kind::Sun, mag, b.bv, teff);
             if (!a.vie.ok()) continue;
             a.paquets = cycle::paquets(a.vie);
             a.pointMag0 = static_cast<float>(mag);
