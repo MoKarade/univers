@@ -944,8 +944,11 @@ int runWindow(const WindowOptions& opt) {
         chrono.cpu("couches (preparation)");
         spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
         uiImages.uploadPending(g);      // au plus une image du panneau par image affichée
+        chrono.cpu("envois (surfaces, images)");
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
+        chrono.cpu("astres : spheres");
         planets.update(sim, cam, asSphere, spheres.nearestDist());
+        chrono.cpu("astres : planetes");
         dwarfGalaxies.update(sim);
         blackHoles.update(sim, cam);
         exoplanets.update(sim, cam);
