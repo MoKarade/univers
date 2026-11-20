@@ -110,9 +110,8 @@ void tasksTable(const Sim& sim) {
 void drawHow(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     if (sim.calcStates.empty() && sim.tasks.empty()) return;
     if (!ui.details && runningTasks(sim) == 0 && !ui.howOpen && !ui.tasksOpen) return;      // minimaliste : rien à montrer
-    // Sous la complétude ; si elle mordrait sur la barre du temps, sous celle-ci.
-    float y = ui.completenessBottom + px(ui, 8);
-    if (w - px(ui, 16) - ui.howW < ui.timeRight + px(ui, 8)) y = std::max(y, ui.timeBottom + px(ui, 8));
+    // Sous la complétude, en haut à droite.
+    const float y = ui.completenessBottom + px(ui, 8);
     ImGui::SetNextWindowPos({w - px(ui, 16), y}, 0, {1, 0});
     ImGui::Begin("methode-ligne", nullptr, fixed);
     if (!sim.calcStates.empty() && ui.details) {      // minimaliste : « comment c'est obtenu » seulement avec les détails

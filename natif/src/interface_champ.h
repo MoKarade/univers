@@ -9,7 +9,7 @@ namespace {
 void drawFieldChip(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     const bool zoomed = sim.fovDeg < Sim::kFovMax - 0.01;
     if (!zoomed && sim.skyBand < 0) return;
-    ImGui::SetNextWindowPos({w * 0.5f, h - px(ui, 16)}, ImGuiCond_Always, {0.5f, 1.0f});
+    ImGui::SetNextWindowPos({w * 0.5f, std::min(h - px(ui, 16), ui.dockTop - px(ui, 12))}, ImGuiCond_Always, {0.5f, 1.0f});
     ImGui::SetNextWindowBgAlpha(0.6f);
     ImGui::Begin("champ", nullptr, fixed);
     const double f = sim.fovDeg;

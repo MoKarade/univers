@@ -126,4 +126,61 @@ struct NameIndex {
     }
 };
 
+// ---------------------------------------------------------------- statut d'une valeur (refonte de l'interface, 20/11/2026)
+
+// Statut d'une valeur affichée, lu dans le texte libre que chaque ligne de fiche porte déjà (« mesuré », « calculé d'après
+// la couleur », « mesuré (JPL Small-Body Database) », « modèle — MIST v1.2 »…). Il donne la couleur de la pastille ;
+// le reste du texte (la source, la méthode) reste affiché en dessous, rien n'est retiré.
+enum class Statut { Aucun, Mesure, Publie, Calcule, Modele, Suppose, Inconnu };
+
+inline Statut statutDe(const std::string& raw) {
+    const std::string s = fold(raw);
+    if (s.empty()) return Statut::Aucun;
+    // Le mot le plus prudent l'emporte : « calculé, approché (supposé…) » est une supposition, pas un calcul sûr.
+    if (s.find("suppos") != std::string::npos || s.find("hypoth") != std::string::npos || s.find("extrapol") != std::string::npos) return Statut::Suppose;
+    if (s.find("modele") != std::string::npos || s.find("scenario") != std::string::npos) return Statut::Modele;
+    if (s.find("non mesure") != std::string::npos || s.find("inconnu") != std::string::npos) return Statut::Inconnu;
+    if (s.rfind("calcul", 0) == 0) return Statut::Calcule;
+    if (s.rfind("publie", 0) == 0) return Statut::Publie;
+    if (s.rfind("mesure", 0) == 0 || s.find("ephemerides") != std::string::npos) return Statut::Mesure;
+    if (s.find("calcul") != std::string::npos) return Statut::Calcule;
+    return Statut::Aucun;
+}
+
+// Mot court de la pastille.
+inline const char* statutMot(Statut s) {
+    switch (s) {
+        case Statut::Mesure: return "mesuré";
+        case Statut::Publie: return "publié";
+        case Statut::Calcule: return "calculé";
+        case Statut::Modele: return "modèle";
+        case Statut::Suppose: return "supposé";
+        case Statut::Inconnu: return "inconnu";
+        default: return "";
+    }
+}
+
+// Ce qui reste du texte une fois le mot de statut retiré du début : « (JPL Small-Body Database) » → « JPL Small-Body
+// Database » ; « calculé d'après la couleur » → « d'après la couleur ». Texte d'origine si le mot n'est pas au début.
+inline std::string statutReste(const std::string& raw, Statut st) {
+    const std::string mot = statutMot(st);
+    if (mot.empty() || raw.compare(0, mot.size(), mot) != 0) return raw;
+    std::string r = raw.substr(mot.size());
+    while (!r.empty() && (r[0] == ' ' || r[0] == ',' || r[0] == ':' || r[0] == ';')) r.erase(0, 1);
+    if (r.rfind("\xE2\x80\x94", 0) == 0) r.erase(0, 3);      // tiret long « — »
+    while (!r.empty() && r[0] == ' ') r.erase(0, 1);
+    if (r.size() >= 2 && r.front() == '(' && r.back() == ')' && r.find('(', 1) == std::string::npos) r = r.substr(1, r.size() - 2);
+    return r;
+}
+
+// Échelles de la vue (touches 1 à 5) : où se trouve la caméra entre deux échelles, en fraction de l'échelle (log de la
+// distance). 0 = première échelle, n-1 = dernière ; bornée.
+inline double positionEchelle(double distLy, const double* echelles, int n) {
+    if (n <= 0 || distLy <= 0) return 0;
+    if (distLy <= echelles[0]) return 0;
+    for (int k = 0; k + 1 < n; ++k)
+        if (distLy <= echelles[k + 1]) return k + std::log(distLy / echelles[k]) / std::log(echelles[k + 1] / echelles[k]);
+    return n - 1;
+}
+
 }  // namespace ui_outils

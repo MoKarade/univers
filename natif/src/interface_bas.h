@@ -65,7 +65,7 @@ void whatYouSee(const Sim& sim) {
         ImGui::TextDisabled(sim.starShare() > 0 ? "Les points qui apparaissent sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure)."
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
     if (sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv != 0))
-        ImGui::TextDisabled("Exposition photo : pose ×%s (automatique%s), étirement asinh ; l'éclat réel n'est pas changé (Menu : « œil nu »).",
+        ImGui::TextDisabled("Exposition photo : pose ×%s (automatique%s), étirement asinh ; l'éclat réel n'est pas changé (bouton Exposition, en haut à gauche).",
                             frInt(sim.photoGain * std::pow(2.0, sim.exposureEv)).c_str(), sim.exposureEv != 0 ? (", " + frNum(sim.exposureEv, 0) + " IL").c_str() : "");
     else if (!sim.photoExposure && sim.exposureEv != 0)
         ImGui::TextDisabled("Œil nu, pose réglée à %s IL.", frNum(sim.exposureEv, 0).c_str());
@@ -80,7 +80,7 @@ void whatYouSee(const Sim& sim) {
     if (sim.neighbourStarCount && sim.bestLook && sim.dist > 3000.0)
         ImGui::TextDisabled("Andromède, Triangle, Nuages : étoiles du MODÈLE tirées de leurs vraies photos, galaxie déplacée en bloc, rotation mesurée (sans marées).");
     else if (sim.companionShare > 0 && sim.dist > 3000.0)
-        ImGui::TextDisabled("Andromède, Triangle, Grand Nuage : galaxies modèles (paramètres publiés) à leur place mesurée ; leurs routes possibles : Menu, « Incertitude ».");
+        ImGui::TextDisabled("Andromède, Triangle, Grand Nuage : galaxies modèles (paramètres publiés) à leur place mesurée ; leurs routes possibles : bouton Afficher, « Incertitude ».");
     if (sim.milkyWayStarShare > 0 && sim.dist > 3000.0) {
         ImGui::TextDisabled("Voie lactée : étoiles Gaia MESURÉES près du Soleil ; au-delà, %s étoiles du MODÈLE (masses et formes publiées,", frInt(static_cast<double>(sim.milkyWayStarCount)).c_str());
         ImGui::TextDisabled("bras mesurés par les masers, régions HII WISE ; bras EXTRAPOLÉS au-delà des mesures).");
@@ -125,12 +125,27 @@ void whatYouSee(const Sim& sim) {
     }
 }
 
-void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fixed) {
-    ImGui::SetNextWindowPos({px(ui, 16), h - px(ui, 16)}, 0, {0, 1});
+void drawStatus(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
+    // En haut, entre la barre d'outils et le mode de vue : où l'on est. Si la place manque, sous la barre d'outils.
+    const float gapL = ui.searchRight + px(ui, 24), gapR = w - px(ui, 16) - ui.completenessW - px(ui, 24);
+    const bool fits = gapR - gapL >= std::max(ui.statusW, px(ui, 260));
+    if (fits) ImGui::SetNextWindowPos({(gapL + gapR) * 0.5f, px(ui, 16)}, 0, {0.5f, 0});
+    else ImGui::SetNextWindowPos({px(ui, 16), ui.toolbarBottom + px(ui, 10)}, 0, {0, 0});
+    ImGui::SetNextWindowSizeConstraints({0, 0}, {std::max(px(ui, 300), fits ? gapR - gapL : w * 0.5f), FLT_MAX});
     ImGui::Begin("aide", nullptr, fixed);
+    cardShadow();
     const Body& fb = sim.bodies[static_cast<size_t>(sim.focus)];
-    const std::string where = sim.flying ? "En route vers « " + fb.name + " »…" : "Tu regardes « " + fb.name + " » depuis " + frDistance(sim.dist) + ".";
-    ImGui::TextUnformatted(where.c_str());
+    ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
+    ImGui::TextColored(theme::v4(theme::kFaint), "%s", sim.flying ? "EN ROUTE VERS" : "TU REGARDES");
+    ImGui::PopFont();
+    ImGui::PushFont(gFontBold ? gFontBold : ImGui::GetFont());
+    ImGui::TextColored(theme::v4(theme::kAccent), "%s", fb.name.c_str());
+    ImGui::PopFont();
+    if (!sim.flying) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("depuis %s", frDistance(sim.dist).c_str());
+    }
+    ImGui::PushTextWrapPos(0.0f);
     if (!sim.lostName.empty() && !sim.flying && sim.focus == sim.lostFallback)      // audit B4 : on ne change pas d'astre sans le dire
         ImGui::TextDisabled("« %s » n'a pas de position connue à cette date : la vue est revenue sur « %s ».", sim.lostName.c_str(), fb.name.c_str());
     if (sim.autoPose < 0.95)      // audit A2 : la pose baissée est dite, comme toute retouche de l'image
@@ -140,13 +155,16 @@ void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fix
                             sim.dist > 1.0e7 ? "vues de si loin, les galaxies sont très faibles (comme une longue pose photo)." : "la scène est sombre (comme l'œil qui s'habitue au noir).");
     if (const int k = eclipseNow(sim.years); k >= 0) ImGui::TextDisabled("%s, de Soleil : %s.", kEclipses[k].label, kEclipseStatus);
     if (!ui.details) {      // interface minimaliste : seules les hypothèses du « meilleur rendu » restent toujours écrites
-        if (sim.bestLook && !sim.deepTime()) raysNote(sim);
+        ImGui::PopTextWrapPos();
+        ui.statusW = ImGui::GetWindowWidth();
         ImGui::End();
         return;
     }
     whatYouSee(sim);
     armLegend(sim);
     ImGui::TextDisabled("Clic sur un astre : y aller   •   Molette : zoomer   •   Glisser : tourner   •   Tape un nom : chercher   •   F1 : aide");
+    ImGui::PopTextWrapPos();
+    ui.statusW = ImGui::GetWindowWidth();
     ImGui::End();
 }
 
@@ -188,13 +206,13 @@ void drawCosmology(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFla
 
 void drawWelcome(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     if (!ui.welcome) return;
-    ImGui::SetNextWindowPos({w * 0.5f, h - px(ui, 120)}, 0, {0.5f, 1});
+    ImGui::SetNextWindowPos({w * 0.5f, std::min(h - px(ui, 120), ui.dockTop - px(ui, 14))}, 0, {0.5f, 1});
     ImGui::Begin("accueil", nullptr, fixed);
     ImGui::PushFont(ui.big);
     ImGui::TextUnformatted("Bienvenue dans Univers");
     ImGui::PopFont();
     ImGui::TextUnformatted("Aujourd'hui, planètes, étoiles et galaxies sont placées d'après des mesures réelles.");
-    ImGui::TextDisabled("Quand le temps avance ou recule, leur place est calculée : l'écran dit comment (Menu, Détails à l'écran).");
+    ImGui::TextDisabled("Quand le temps avance ou recule, leur place est calculée : le bouton « i » du temps dit comment.");
     ImGui::TextDisabled("Clique sur un astre pour y aller. Molette pour zoomer, glisser pour tourner, tape un nom pour chercher.");
     ImGui::Spacing();
     if (ImGui::Button("  Visite guidée (une minute et demie)  ")) startTour(sim, ui, 0);
@@ -240,7 +258,7 @@ void drawTour(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
         startTour(sim, ui, ui.tour + 1);
         if (ui.tour < 0) return;
     }
-    ImGui::SetNextWindowPos({w * 0.5f, h - px(ui, 120)}, 0, {0.5f, 1});
+    ImGui::SetNextWindowPos({w * 0.5f, std::min(h - px(ui, 120), ui.dockTop - px(ui, 14))}, 0, {0.5f, 1});
     ImGui::Begin("visite", nullptr, fixed);
     ImGui::TextDisabled("Visite guidée   •   étape %d sur %d", ui.tour + 1, kTourCount);
     ImGui::PushFont(ui.big);
@@ -256,9 +274,11 @@ void drawTour(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     ImGui::End();
 }
 
+// Une commande de l'aide : la touche dans une petite pastille claire, puis ce qu'elle fait.
 void helpLine(const UiState& ui, const char* key, const char* what) {
-    ImGui::TextUnformatted(key);
-    ImGui::SameLine(px(ui, 220));
+    const float x0 = ImGui::GetCursorPosX();
+    chip(key, theme::kText);
+    ImGui::SameLine(x0 + px(ui, 200));
     ImGui::TextDisabled("%s", what);
 }
 
@@ -268,12 +288,12 @@ void drawHelp(UiState& ui, float w, float h) {
     ImGui::SetNextWindowPos({w * 0.5f, h * 0.5f}, 0, {0.5f, 0.5f});
     ImGui::Begin("Commandes", &ui.help, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize |
                                              ImGuiWindowFlags_NoSavedSettings);
-    ImGui::TextUnformatted("Souris");
+    sectionLabel("Souris");
     helpLine(ui, "Clic sur un astre", "y aller (son point ou son nom) ; encore un clic : s'en approcher");
     helpLine(ui, "Glisser", "tourner autour de l'astre suivi");
     helpLine(ui, "Molette", "zoomer, dézoomer");
     ImGui::Separator();
-    ImGui::TextUnformatted("Clavier");
+    sectionLabel("Clavier");
     helpLine(ui, "Taper un nom", "chercher un astre ; flèches et Entrée pour choisir");
     helpLine(ui, "1  2  3  4  5", "échelles : système solaire … univers lointain");
     helpLine(ui, "+  −", "zoomer, dézoomer");
@@ -292,26 +312,78 @@ void drawHelp(UiState& ui, float w, float h) {
 
 // ---------------------------------------------------------------- complétude (choix de Marc : toujours visible, détail au clic)
 
-// En haut à droite : ce qui est présent à l'échelle regardée, comparé à ce qui est connu. Un clic ouvre le détail.
-void drawCompleteness(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
-    if (!sim.completeness) return;
-    const completude::Echelle& e = (*sim.completeness)[static_cast<size_t>(completude::echellePour(sim.dist))];
-    // En haut à droite ; si la place manque à côté de la barre du temps, juste en dessous d'elle.
-    const bool roomOnTop = ui.searchRight + ui.timeW + ui.completenessW + px(ui, 48) <= w;
-    ImGui::SetNextWindowPos({w - px(ui, 16), roomOnTop ? px(ui, 16) : ui.timeBottom + px(ui, 12)}, 0, {1, 0});
+// Sélecteur à deux cases « 100 % mesuré | Meilleur rendu » (F4). Le mode qui permet des hypothèses se voit toujours.
+void viewModeSwitch(Sim& sim, const UiState& ui) {
+    const char* labels[2] = {"100 % mesuré", "Meilleur rendu"};
+    const char* tips[2] = {"100 % mesuré : seulement ce qui a été mesuré, et ce qui en est calculé (F4 pour changer).",
+                           "Meilleur rendu : quelques corrections NON mesurées sont permises pour une plus belle image ;\nchacune est dite à l'écran (F4 pour changer)."};
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float hh = ImGui::GetFrameHeight();
+    const ImVec2 p0 = ImGui::GetCursorScreenPos();
+    float wSeg[2];
+    for (int k = 0; k < 2; ++k) wSeg[k] = ImGui::CalcTextSize(labels[k]).x + px(ui, 28);
+    dl->AddRectFilled(p0, {p0.x + wSeg[0] + wSeg[1], p0.y + hh}, IM_COL32(255, 255, 255, 12), hh * 0.5f);
+    for (int k = 0; k < 2; ++k) {
+        const bool on = (k == 1) == sim.bestLook;
+        const ImVec2 a{p0.x + (k ? wSeg[0] : 0), p0.y};
+        ImGui::SetCursorScreenPos(a);
+        ImGui::PushID(k);
+        if (ImGui::InvisibleButton("mode", {wSeg[k], hh})) sim.bestLook = k == 1;
+        const bool hov = ImGui::IsItemHovered();
+        ImGui::PopID();
+        if (hov) ImGui::SetTooltip("%s", tips[k]);
+        const ImU32 col = k == 0 ? theme::kMesure : theme::kAccent;
+        if (on) dl->AddRectFilled({a.x + 2, a.y + 2}, {a.x + wSeg[k] - 2, a.y + hh - 2}, theme::alpha(col, 0.22f), hh * 0.5f);
+        else if (hov) dl->AddRectFilled({a.x + 2, a.y + 2}, {a.x + wSeg[k] - 2, a.y + hh - 2}, theme::kHover, hh * 0.5f);
+        const ImVec2 ts = ImGui::CalcTextSize(labels[k]);
+        dl->AddText({a.x + (wSeg[k] - ts.x) * 0.5f, a.y + (hh - ts.y) * 0.5f}, on ? col : theme::kMuted, labels[k]);
+    }
+    ImGui::SetCursorScreenPos({p0.x, p0.y + hh});
+    ImGui::Dummy({wSeg[0] + wSeg[1], 0});
+}
+
+// En haut à droite (choix de Marc : toujours visible) : le mode de vue, puis ce qui est présent à l'échelle regardée,
+// comparé à ce qui est connu. Un clic sur la ligne ouvre le détail.
+void drawCompleteness(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
+    ImGui::SetNextWindowPos({w - px(ui, 16), px(ui, 16)}, 0, {1, 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 8), px(ui, 8)});
     ImGui::Begin("completude-ligne", nullptr, fixed);
-    const std::string line = ui.details ? completude::ligneCourte(e) : completude::ligneReduite(e);      // réduit : le début de la phrase, le détail au clic
-    if (ImGui::Selectable(line.c_str(), ui.completeness)) ui.completeness = !ui.completeness;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic : ce qui est montré ici, comparé à ce qui est connu");
+    cardShadow();
+    viewModeSwitch(sim, ui);
+    const float switchW = ImGui::GetItemRectSize().x;
+    if (sim.bestLook && !sim.deepTime()) {      // les hypothèses du « meilleur rendu » sont dites juste sous le sélecteur
+        ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + std::max(switchW, px(ui, 260)));
+        raysNote(sim);
+        ImGui::PopTextWrapPos();
+        ImGui::PopFont();
+    }
+    const completude::Echelle* e = sim.completeness ? &(*sim.completeness)[static_cast<size_t>(completude::echellePour(sim.dist))] : nullptr;
+    if (e) {
+        const std::string line = ui.details ? completude::ligneCourte(*e) : completude::ligneReduite(*e);      // réduit : le début de la phrase, le détail au clic
+        ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {px(ui, 6), px(ui, 3)});
+        const float wLine = std::max(switchW, ImGui::CalcTextSize(line.c_str()).x + px(ui, 24));
+        if (ImGui::Selectable(("##compl"), ui.completeness, 0, {wLine, 0})) ui.completeness = !ui.completeness;
+        const ImVec2 r0 = ImGui::GetItemRectMin();
+        ImGui::GetWindowDrawList()->AddCircleFilled({r0.x + px(ui, 6), r0.y + ImGui::GetItemRectSize().y * 0.5f}, px(ui, 3), theme::kMesure);
+        ImGui::GetWindowDrawList()->AddText({r0.x + px(ui, 14), r0.y}, theme::kMuted, line.c_str());
+        ImGui::PopStyleVar();
+        ImGui::PopFont();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic : ce qui est montré ici, comparé à ce qui est connu");
+    }
     ui.completenessBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
     ui.completenessW = ImGui::GetWindowWidth();
     ImGui::End();
+    ImGui::PopStyleVar();
+    if (!e) return;
+    const completude::Echelle& ech = *e;
     if (!ui.completeness) return;
     ImGui::SetNextWindowPos({w * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f}, 0, {0.5f, 0.5f});
     ImGui::SetNextWindowBgAlpha(0.97f);
     ImGui::Begin("Ce qui est montré ici", &ui.completeness,
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings);
-    completude::detail(e);
+    completude::detail(ech);
     ImGui::Spacing();
     if (ImGui::Button("Fermer")) ui.completeness = false;
     ImGui::End();
