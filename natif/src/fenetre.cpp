@@ -369,7 +369,10 @@ int runWindow(const WindowOptions& opt) {
     sim.gaiaRebalancedShift = gaiaOk ? gaia.rebalancedShift : 0;
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
-    sr.create(g, stars, HdrTarget::kFormat, gaiaOk);
+    std::vector<int64_t> starDoublesHidden;
+    for (const auto& [gaiaIdx, mainIdx] : sim.starDoubles) starDoublesHidden.push_back(gaiaIdx);
+    std::printf("etoiles en double (hotes d'exoplanetes) : %zu points Gaia caches\n", starDoublesHidden.size());
+    sr.create(g, stars, HdrTarget::kFormat, gaiaOk, &starDoublesHidden);
     // Ciel dans une autre lumière (radio, infrarouge, X…) : cartes mesurées ciel_NOM.bin, une à la fois (fil longueurs d'onde).
     SkyBandRenderer sky;
     sky.create(g, HdrTarget::kFormat);
@@ -388,6 +391,7 @@ int runWindow(const WindowOptions& opt) {
     // Planètes des autres étoiles (exoplanetes.h) : liste dans la fiche de leur étoile, dessin quand on s'en approche.
     Exoplanets exoplanets;
     if (exoplanets.load(dataDir + "/exoplanetes_app.tsv")) {
+        exoplanets.mergeDoubles(sim.starDoubles);      // planètes d'un double rangées sous l'étoile du catalogue principal
         exoplanets.create(g);
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
             if (const auto* ps = exoplanets.of(sim, i)) {
