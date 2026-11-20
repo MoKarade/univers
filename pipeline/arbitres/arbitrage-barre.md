@@ -227,3 +227,37 @@ rotation [Probable, fort : une seule réalisation par code]. Notre moteur de gra
 Andromède. La barre plus rapide du film (36 contre 28 à 30) vient du gaz [Probable]. La résolution ne change rien
 (1 M contre 4 M). Les chiffres du tir fautif (17 et 15) sont à oublier.
 
+### Andromède v16 corrigée, témoin sans rotation du halo — fini à 5 h 06 le 20/11 (heure du Québec)
+
+Départ exporté : `C:\tmp\arbitres\andromede_1M_temoin_corrige.npz` (avec bulbe, adoucissements d'Andromède, sans gaz).
+
+| t (Ga) | Ωb témoin | Ωb halo tournant (GADGET-4) | Ωb notre moteur (halo tournant, avec gaz) | A2 témoin | Longueur témoin | Épaisseur 4–6 kpc témoin |
+|---|---|---|---|---|---|---|
+| 0,5 | 43,4 | 44,5 | 39,0 | 0,28 | 3,8 kpc | 0,37 kpc |
+| 1,0 | 34,6 | 33,6 | 36,1 | 0,29 | 5,2 kpc | 0,40 kpc |
+| 1,5 | 27,6 | 27,9 | 35,8 | 0,31 | 4,8 kpc | 0,41 kpc |
+
+[Certain pour les chiffres GADGET-4.] Pour Andromède, sans gaz, la rotation du halo ne change rien de mesurable : à 1,5 Ga,
+la barre tourne à 27,6 km/s/kpc dans le témoin, contre 27,9 avec le halo tournant. Comme pour la Voie lactée, la barre
+ralentit vers 28–30 km/s/kpc en 1,5 Ga quand il n'y a pas de gaz.
+
+## Bilan de la file (19–20/11)
+
+| Départ (GADGET-4, sans gaz, 1 M) | Ωb à 1,5 Ga | Longueur | Épaisseur 4–6 kpc à 1,5 Ga | Notre moteur au même départ |
+|---|---|---|---|---|
+| Voie lactée v16, halo tournant | 30,2 | 4,8 kpc | 0,33 kpc | 29,9 (sans gaz) |
+| Voie lactée v16, témoin | 29,4 | 5,8 kpc | 0,32 kpc | — |
+| Voie lactée v13/centre, halo tournant | 27,4 | 4,2 kpc | 0,32 kpc | 34,8 (v13 avec guide) |
+| Andromède v16 corrigée, halo tournant | 27,9 | 4,2 kpc | 0,41 kpc | 30,4 (sans gaz) ; 35,8 (avec gaz) |
+| Andromède v16 corrigée, témoin | 27,6 | 4,8 kpc | 0,41 kpc | — |
+
+Lecture [Probable] :
+- Sans gaz, les deux codes s'accordent quand on compare la même chose (Voie lactée v16 : 30,2 contre 29,9 ; Andromède :
+  27,9 contre 30,4). Le moteur n'est donc pas en cause.
+- Les nouveaux départs règlent l'épaisseur et la longueur des barres, mais sans gaz les barres ralentissent toutes vers
+  28–30 km/s/kpc en 1,5 Ga, loin des 39–40 mesurés.
+- La rotation du halo, telle qu'elle est posée (paramètre 0,035), n'aide presque pas : 0 à 1 km/s/kpc.
+- Ce qui garde la barre rapide dans le film, c'est le gaz : dans notre moteur, Andromède tourne à 35,8 avec gaz contre
+  30,4 sans, et GADGET-4 sans gaz donne 27,9 (section « Même départ, sans gaz dans les deux codes »).
+- L'essai v13/centre reste le seul écart entre les codes (27,4 contre 34,8). Il compare un tir sans gaz à un tir de
+  notre moteur dont les conditions ne sont pas les mêmes [À vérifier].
