@@ -30,7 +30,8 @@
 namespace cycle {
 
 // ---------------------------------------------------------------- constantes
-constexpr double kAgeSoleilAns = 4.5682e9;    // Bouvier & Wadhwa 2010 (Nature Geoscience 3, 637) [Probable]
+constexpr double kAgeSoleilAns = 4.5682e9;
+constexpr double kAgeUnivers = 13.8e9;            // Planck 2018 : 13,79 milliards d'années [Probable]    // Bouvier & Wadhwa 2010 (Nature Geoscience 3, 637) [Probable]
 constexpr double kAccretionAns = 0.5e6;       // phase enfouie (classes 0 et I), Evans et al. 2009 [Probable]
 constexpr double kCondensationAns = 1.0e6;    // le cœur se resserre de 0,3 à 0,1 pc avant de s'effondrer [Supposition]
 constexpr double kEfficacite = 1.0 / 3.0;     // part du cœur qui finit dans l'étoile, Alves et al. 2007 [Probable]
@@ -520,7 +521,7 @@ struct Placement {
 };
 inline Placement placer(const Grille& g, double logL, double logT) {
     Placement p;
-    struct Pt { double w, m, reste; };
+    struct Pt { double w, m, reste, age; size_t trace; };
     std::vector<Pt> pts;
     double best = -1;
     for (size_t k = 0; k < g.traces.size(); ++k) {
@@ -530,17 +531,13 @@ inline Placement placer(const Grille& g, double logL, double logT) {
         const double mort = t.age[t.n - 1];
         for (uint32_t i = 1; i + 1 < t.n; ++i) {
             if (t.phase[i] == -1 || t.phase[i] == 6) continue;      // ni contraction de jeunesse, ni cœur nu : étoiles nommées visibles à l'œil
+            if (t.age[i] > kAgeUnivers) break;                      // pas plus vieille que l'Univers
             const double dl = (t.logL[i] - logL) / 0.1, dT = (t.logT[i] - logT) / 0.03;
             const double chi2 = dl * dl + dT * dT;
             if (chi2 > 50) continue;
             const double dt = 0.5 * (t.age[i + 1] - t.age[i - 1]);
             const double w = std::exp(-0.5 * chi2) * dt * std::pow(t.m0, -2.35) * std::max(dm, 1e-3);
-            pts.push_back({w, t.m0, mort - t.age[i]});
-            if (w > best) {
-                best = w;
-                p.m0 = t.m0;
-                p.age = t.age[i];
-            }
+            pts.push_back({w, t.m0, mort - t.age[i], t.age[i], k});
         }
     }
     if (pts.empty()) return p;
@@ -560,6 +557,14 @@ inline Placement placer(const Grille& g, double logL, double logT) {
     p.mHaut = quant([](const Pt& x) { return x.m; }, 0.84);
     p.finBas = quant([](const Pt& x) { return x.reste; }, 0.16);
     p.finHaut = quant([](const Pt& x) { return x.reste; }, 0.84);
+    // Masse retenue : la médiane ; âge : le point le plus probable sur la trace de la grille la plus proche de cette masse.
+    const double mMed = quant([](const Pt& x) { return x.m; }, 0.5);
+    double ecart = 1e300;
+    size_t tr = 0;
+    for (const Pt& x : pts)
+        if (std::fabs(std::log(x.m / mMed)) < ecart) { ecart = std::fabs(std::log(x.m / mMed)); tr = x.trace; }
+    for (const Pt& x : pts)
+        if (x.trace == tr && x.w > best) { best = x.w; p.m0 = x.m; p.age = x.age; }
     p.ok = true;
     return p;
 }

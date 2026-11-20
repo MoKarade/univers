@@ -75,6 +75,7 @@ struct Body {
     bool lifeOn = false;
     double lifeRadiusKm = 0;    // 0 : rien à dessiner en sphère (pas née, éteinte)
     double lifeTeff = 0, lifeBv = 0.65;
+    double lifeAbsMag = 99;     // magnitude absolue V à la date montrée (99 : rien de visible)
     bool lifeBlack = false;     // trou noir : disque noir de son ombre
     bool lifeMapped = true;     // c'est encore l'étoile elle-même (le Soleil garde sa carte de surface, teintée)
     const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }

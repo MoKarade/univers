@@ -80,6 +80,7 @@ public:
             b.lifeRadiusKm = a.vu.rayonKm;
             b.lifeTeff = a.vu.teff;
             b.lifeBv = a.vu.bv;
+            b.lifeAbsMag = a.vu.magV;
             b.lifeBlack = s.trouNoir;
             b.lifeMapped = a.vu.etoile;      // surface de l'étoile elle-même (le Soleil garde sa carte) ; reste : teinte unie
             // Point du catalogue : aujourd'hui exactement l'éclat mesuré ; sinon l'éclat calculé (absente : très faible).
