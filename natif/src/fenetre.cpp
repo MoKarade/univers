@@ -1256,6 +1256,8 @@ int runWindow(const WindowOptions& opt) {
                         e[12345 * 8], e[12345 * 8 + 1], e[12345 * 8 + 2]);
         }
         if (filmGpuOk) std::printf("film sur la carte : %ld images envoyees\n", filmGpu.uploads);
+        std::printf("etoiles dessinees a la derniere image : Gaia %llu, Gaia B %llu, modele %llu, voisines %llu\n", static_cast<unsigned long long>(gaia.drawn),
+                    static_cast<unsigned long long>(gaiaB.drawn), static_cast<unsigned long long>(milkyWayStars.drawn), static_cast<unsigned long long>(neighbourStars.drawn));
         if (!opt.capture.empty()) writeCapture(g, final, sc.extent, opt.capture);
         if (!opt.capture.empty() && sim.asteroidCat) {      // mesure : durée d'une recherche de l'astéroïde sous un clic
             const auto t0 = std::chrono::steady_clock::now();
