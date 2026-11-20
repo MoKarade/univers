@@ -35,6 +35,7 @@
 #include "rendu_fenetre.h"
 #include "pose_auto.h"
 #include "chargement.h"
+#include "nebuleuses.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -430,6 +431,9 @@ int runWindow(const WindowOptions& opt) {
     StructureRenderer structuresR;
     const bool structuresOk = structuresR.create(g, dataDir, HdrTarget::kFormat);
     sim.structures.loaded = structuresOk;
+    NebulaRenderer nebulae;      // nébuleuses planétaires et nuages moléculaires à distance publiée (nebuleuses.h)
+    if (nebulae.create(g, dataDir + "/nebuleuses.bin", HdrTarget::kFormat))
+        std::printf("nebuleuses : %u planetaires, %u nuages moleculaires\n", nebulae.planetary, nebulae.clouds);
     sim.structures.oortComets = structuresR.oortCount;
     sim.structures.flowLines = structuresR.flowLines;
     for (int k = 0; k < 9; ++k) sim.structures.triangles[k] = structuresR.meshTriangles[k];
@@ -1102,6 +1106,13 @@ int runWindow(const WindowOptions& opt) {
             clones.draw(cmd);
             armTracers.draw(cmd);
         }
+        if (!skyOnly && sim.showNebulae) {      // après les étoiles et les galaxies (la poussière les assombrit), avant les planètes
+            const double camSun = std::sqrt(dot(cam.pos, cam.pos));
+            const double part = std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0) *
+                                std::clamp((6.0e4 - camSun) / 3.0e4, 0.0, 1.0);
+            nebulae.draw(cmd, cam, sc.extent.width, sc.extent.height, part);
+            sr.bind(cmd, pc, sc.extent.width, sc.extent.height);      // le dessin des étoiles reprend ensuite
+        }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
                        sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? pc.par[0] * static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // pose des étoiles × fondu en temps (audit A6, C4) ; seulement en lumière visible
         // (l'ordre compte : après les astéroïdes, le dessin des étoiles n'est plus lié ; les planètes le relient)
@@ -1249,6 +1260,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     autoPose.release(g);
+    nebulae.release(g);
     planets.release(g);
     dwarfGalaxies.release(g);
     blackHoles.release(g);

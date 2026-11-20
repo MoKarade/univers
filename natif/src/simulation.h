@@ -273,6 +273,7 @@ struct Sim {
     // Gaz ionisé de la Voie lactée (régions HII de voie_lactee.bin) montré par-dessus les étoiles (Marc, 20/11/2026 soir :
     // « l'espace paraît trop vide, il manque du gaz, des nébuleuses, de la poussière ») ; case du menu.
     bool showGas = true;
+    bool showNebulae = true;      // nébuleuses planétaires et nuages moléculaires (nebuleuses.h) ; case du menu
     double gasShare = 0;      // part montrée à cette image (0 à 1)
     uint32_t galaxyShapeCount = 0, galaxyShapesShown = 0;      // galaxies de forme mesurée (galaxies_formes.h), montrées en particules
     uint64_t neighbourStarCount = 0;   // étoiles des galaxies voisines (voisines_etoiles.bin), montrées à toute date
