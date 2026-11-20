@@ -64,3 +64,10 @@ Suivi simple (groupe le plus proche de la position prédite, masse compatible) [
 
 Pour le raccord : sur le dernier milliard d'années, les halos ne grossissent que de 2 à 10 % [Certain dans ce calcul] ;
 un groupe de 3,8e13 M☉ se forme à ~10 Mpc (modèle, à comparer au groupe de Centaurus A, ~1e13 M☉ à 3,7 Mpc).
+
+## Paire retenue : essai 17, zoom fin (20/11/2026) — `docs/histoire_paire_fin_v17.json`
+Réglage arrêté à v17 (pics δ_L 2,2, selle 1,2, écart de Lagrange 2,0 Mpc/h, environnement 0,3 ; Δχ² 4,97) : la vitesse
+d'approche plafonne vers −50 à −60 km/s quel que soit le réglage (v16 à v19, mesuré).
+Zoom fin (5 298 s, 12 fils) : **paire 2,10 et 1,74e12 M☉, 1 028 kpc, −61 km/s, 27 km/s transverse, isolée (passe HESTIA) ;
+Vierge 1,19e15 M☉ à 5,3 Mpc de sa place.** [Certain, mesuré] Mesuré dans le ciel : 785 kpc, −110 km/s, < 60 km/s.
+Écart restant (modèle à dire à l'écran) : paire 30 % trop lourde et 240 kpc trop écartée ; approche deux fois trop lente.
