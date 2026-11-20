@@ -1019,6 +1019,7 @@ int runWindow(const WindowOptions& opt) {
         uiImages.uploadPending(g);      // au plus une image du panneau par image affichée
         chrono.cpu("envois (surfaces, images)");
         cycleApp.update(sim, cam);      // rayon, teinte, éclat et matière des étoiles à cette date (avant les sphères)
+        chrono.cpu("astres : cycle de vie");
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
         chrono.cpu("astres : spheres");
         planets.update(sim, cam, asSphere, spheres.nearestDist());

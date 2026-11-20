@@ -6,6 +6,7 @@
 // Aujourd'hui, rien ne change : l'étoile garde son rayon et son éclat mesurés (le modèle ne donne que le changement).
 #pragma once
 #include "cycle_matiere.h"
+#include "parallele.h"
 #include "simulation.h"
 
 namespace {
@@ -89,7 +90,18 @@ public:
     void update(Sim& sim, const Camera& cam) {
         if (!ready()) return;
         const double dt = sim.years - kStartYears;
-        for (Astre& a : astres) {
+        // Cadence (20/11/2026 : 10 à 14 ms par image sur un seul cœur) : place de chaque étoile lue d'abord (Sim::position garde
+        // un état commun), puis chaque étoile calculée à part sur tous les cœurs. Mêmes calculs, mêmes résultats.
+        near_.assign(astres.size(), 0);
+        for (size_t k = 0; k < astres.size(); ++k) {
+            const int body = astres[k].body;
+            if (!sim.visible(body)) continue;
+            const Vec3 p = sim.position(body) - cam.pos;
+            near_[k] = std::sqrt(dot(p, p)) > kProfilMaxAl ? 0 : 1;
+        }
+        parallele::pour(astres.size(), [&](uint64_t ka, uint64_t kb, unsigned) {
+        for (uint64_t k = ka; k < kb; ++k) {
+            Astre& a = astres[k];
             Body& b = sim.bodies[static_cast<size_t>(a.body)];
             a.vu = cycle::vuA(a.vie, dt);
             const cycle::Etat& s = a.vu.modele;
@@ -105,9 +117,7 @@ public:
             a.pointMag = today ? a.pointMag0 : a.vu.magV < 90 ? static_cast<float>(a.vu.magV) : kCache;
             a.pointRgba = today ? a.pointRgba0 : rgba(a.vu.bv);
             a.profilOk = false;
-            const bool shown = sim.visible(a.body);
-            const Vec3 p = sim.position(a.body) - cam.pos;
-            if (!shown || std::sqrt(dot(p, p)) > kProfilMaxAl) continue;
+            if (!near_[k]) continue;      // non montrée, ou trop loin pour que sa matière fasse un pixel
             const auto cs = cycle::couches(a.vie, a.paquets, a.vie.ageAujourdhui + dt, &a.bilan);
             if (cs.empty()) continue;
             const auto c = colorOfTemperature(s.teff > 0 ? s.teff : 5772.0);
@@ -115,7 +125,9 @@ public:
             a.profil = cycle::profil(cs, s, col);
             a.profilOk = a.profil.n > 0;
         }
+        }, 2);
     }
+    std::vector<char> near_;      // étoile montrée et assez proche pour sa matière (update)
 
     // Réécrit l'éclat et la couleur des points de ces étoiles dans les colonnes du catalogue (avant la passe de dessin).
     // Seuls les mots qui changent partent à la carte graphique.
