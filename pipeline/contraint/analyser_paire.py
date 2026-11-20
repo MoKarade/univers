@@ -36,7 +36,7 @@ def vierge_depuis_particules(instantane: str) -> dict:
     tab = f['Header'].attrs['MassTable']
     cote = 16.0 * H
     pos, mas = [], []
-    for t in (1, 2, 3):
+    for t in (1, 2, 3, 4, 5):
         g = f.get(f'PartType{t}')
         if g is None:
             continue
