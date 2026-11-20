@@ -207,3 +207,23 @@ gaz, la barre ralentit toutefois de 44 à 28 km/s/kpc en 1,5 Ga, alors qu'elle r
 (~40 mesurés). L'écart à 1,5 Ga (8 km/s/kpc) vient probablement du gaz [Probable] ; un tir de notre moteur sans gaz sur
 ce départ le confirmerait [À vérifier]. Mesures : `barre/mesures_m31_halo_tournant_v2.json`. Le témoin corrigé (sans
 rotation du halo) tourne.
+
+#### Même départ, sans gaz dans les deux codes (20/11)
+
+Le fil du calcul a fait tourner son moteur sur ce même fichier (`andromede_1M_halo_tournant_corrige.npz`), sans gaz,
+avec la même barre guide, sur 1,5 Ga (relevés : `C:\tmp\analyse-architecture\galaxies\v22\m31_1M_tir.json`).
+
+| t (Ga) | Ωb GADGET-4 (sans gaz) | Ωb notre moteur (sans gaz, 1 M) | Ωb notre moteur (sans gaz, 4 M) | Ωb notre moteur (avec gaz) |
+|---|---|---|---|---|
+| 0,5 | 44,5 | 43,3 | 42,5 | 39,0 |
+| 1,0 | 33,6 | 32,8 | 36,9 | 36,1 |
+| 1,5 | 27,9 | 30,4 | 29,0 | 35,8 |
+
+À 1,5 Ga, notre moteur sans gaz donne une épaisseur médiane de 0,40 kpc et une rotation de 190 km/s. GADGET-4 donne
+0,41 kpc et 190 km/s.
+
+Lecture : à départ identique et sans gaz, les deux codes s'accordent à 1 à 2,5 km/s/kpc près, sur l'épaisseur et sur la
+rotation [Probable, fort : une seule réalisation par code]. Notre moteur de gravité n'est donc pas en cause pour
+Andromède. La barre plus rapide du film (36 contre 28 à 30) vient du gaz [Probable]. La résolution ne change rien
+(1 M contre 4 M). Les chiffres du tir fautif (17 et 15) sont à oublier.
+
