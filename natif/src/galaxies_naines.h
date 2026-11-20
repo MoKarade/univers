@@ -47,7 +47,7 @@ struct DwarfGalaxies {
             Dwarf d{-1, std::atof(c[1].c_str()), std::atof(c[2].c_str()), std::atof(c[3].c_str()), std::atof(c[4].c_str()),
                     c.size() >= 8 ? c[5] + " ; " + c[6] + " ; " + c[7] : ""};
             for (size_t i = 0; i < sim.bodies.size(); ++i)
-                if (sim.bodies[i].kind == Kind::Galaxy && !sim.bodies[i].merged && sim.bodies[i].name == c[0]) d.body = static_cast<int>(i);
+                if (sim.bodies[i].kind == Kind::Galaxy && !sim.bodies[i].merged && !sim.bodies[i].nebula && sim.bodies[i].name == c[0]) d.body = static_cast<int>(i);
             if (d.body >= 0 && d.rhLy > 0) {
                 sim.bodies[static_cast<size_t>(d.body)].dwarfModel = static_cast<int>(dwarfs.size());
                 sim.bodies[static_cast<size_t>(d.body)].shapeRadiusLy = d.rhLy;

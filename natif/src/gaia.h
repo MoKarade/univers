@@ -85,6 +85,59 @@ bool openGaia(const std::string& path, GaiaFile& out) {
     return static_cast<uint64_t>(size.QuadPart) >= (out.bins ? need : 4096 + leafBytes + starBytes + out.n * 8);
 }
 
+// Étoile de Gaia désignée au clic (Marc, 20/11/2026 : « tout doit être sélectionnable »). Au clic seulement : rien n'est
+// fait à chaque image, le dessin n'est pas touché. Seules les feuilles traversées par la ligne de visée du clic sont lues ;
+// dans une feuille, les étoiles sont rangées de la plus brillante à la plus faible (magnitude absolue) : on s'arrête dès
+// qu'aucune ne peut plus passer sous la magnitude limite mLim vue de la caméra.
+inline bool pickGaiaStar(const GaiaFile& f, const Camera& cam, double px, double py, double w, double h, double maxPx, double mLim,
+                         double years, GaiaHit& hit) {
+    if (!f.base || f.n == 0) return false;
+    const double since = years - (static_cast<double>(f.epoch) - 2000.0), kv = 0.05 * kKmsToLyPerYear;
+    const double sx = (px / w * 2.0 - 1.0) * cam.tanHalf * cam.aspect, sy = -(py / h * 2.0 - 1.0) * cam.tanHalf;
+    Vec3 ray{cam.fwd.x + cam.right.x * sx + cam.up.x * sy, cam.fwd.y + cam.right.y * sx + cam.up.y * sy, cam.fwd.z + cam.right.z * sx + cam.up.z * sy};
+    const double nr = std::sqrt(dot(ray, ray));
+    ray = {ray.x / nr, ray.y / nr, ray.z / nr};
+    const double tol = maxPx / h * 2.0 * cam.tanHalf * 1.5;      // demi-angle du cône du clic (rad), avec de la marge
+    const double drift = 1000.0 * std::fabs(since) * kKmsToLyPerYear;      // au plus 1 000 km/s (borne des vitesses du fichier)
+    bool found = false;
+    for (uint32_t l = 0; l < f.leafCount; ++l) {
+        const GaiaLeaf& lf = f.leaves[l];
+        if (lf.n == 0) continue;
+        const Vec3 c{0.5 * (lf.mn[0] + lf.mx[0]), 0.5 * (lf.mn[1] + lf.mx[1]), 0.5 * (lf.mn[2] + lf.mx[2])};
+        const double half = 0.5 * std::sqrt(double(lf.mx[0] - lf.mn[0]) * (lf.mx[0] - lf.mn[0]) + double(lf.mx[1] - lf.mn[1]) * (lf.mx[1] - lf.mn[1]) +
+                                            double(lf.mx[2] - lf.mn[2]) * (lf.mx[2] - lf.mn[2])) + drift;
+        const Vec3 rel = c - cam.pos;
+        const double t = dot(rel, ray), dc = std::sqrt(dot(rel, rel));
+        if (t < -half) continue;      // derrière la caméra
+        const Vec3 perp{rel.x - ray.x * t, rel.y - ray.y * t, rel.z - ray.z * t};
+        if (std::sqrt(dot(perp, perp)) > half + tol * std::max(t + half, 0.0)) continue;      // hors du cône du clic
+        const double dmin = std::max(dc - half, 1e-3);
+        for (uint64_t k = lf.first; k < lf.first + lf.n; ++k) {
+            uint16_t hm;
+            std::memcpy(&hm, f.stars + k * 16 + 12, 2);
+            const double m = halfToFloat(hm);
+            if (m + 5.0 * std::log10(dmin / 3.2615638) - 5.0 > std::min(mLim, hit.appMag)) break;      // les suivantes sont plus faibles
+            float xyz[3];
+            int16_t v[3];
+            std::memcpy(xyz, f.stars + k * 16, 12);
+            std::memcpy(v, f.velocities + k * 8, 6);
+            const Vec3 vel{v[0] * kv, v[1] * kv, v[2] * kv};
+            const Vec3 p{xyz[0] + vel.x * since, xyz[1] + vel.y * since, xyz[2] + vel.z * since};
+            double x = 0, y = 0;
+            if (!cam.project(p, w, h, x, y) || (x - px) * (x - px) + (y - py) * (y - py) > maxPx * maxPx) continue;
+            const Vec3 d = p - cam.pos;
+            const double app = m + 5.0 * std::log10(std::max(std::sqrt(dot(d, d)), 1e-12) / 3.2615638) - 5.0;
+            if (app >= std::min(mLim, hit.appMag)) continue;
+            const double ep = static_cast<double>(f.epoch) - 2000.0;
+            const uint8_t step = f.stars[k * 16 + 14];
+            hit = {k, app, m, std::isfinite(f.temperature[step]) ? static_cast<double>(f.temperature[step]) : 0.0, f.stars[k * 16 + 15],
+                   {xyz[0] - vel.x * ep, xyz[1] - vel.y * ep, xyz[2] - vel.z * ep}, vel};
+            found = true;
+        }
+    }
+    return found;
+}
+
 // Copie vers un tampon de stockage de la carte, par morceaux (pas de tampon intermédiaire de plusieurs gigaoctets).
 Buffer uploadStorage(const Gpu& g, const void* data, VkDeviceSize size) {
     constexpr VkDeviceSize kChunk = 256ull << 20;
@@ -147,6 +200,7 @@ public:
         if (i >= file_.n) return std::numeric_limits<float>::quiet_NaN();
         uint16_t h; std::memcpy(&h, file_.stars + i * 16 + 12, 2); return halfToFloat(h);
     }
+    const GaiaFile& file() const { return file_; }      // lecture seule (clic : pickGaiaStar)
     bool starReliable(uint64_t i) const { return i < file_.n && (file_.stars[i * 16 + 15] & GaiaFiable::kOrbiteFiable); }
     // Part de la lumière de la feuille i portée par des étoiles à orbite fiable (0 à 1).
     float leafReliableShare(uint32_t i) const { return i < leafShare_.size() ? leafShare_[i] : 0.0f; }

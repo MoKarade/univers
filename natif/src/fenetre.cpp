@@ -377,6 +377,14 @@ int runWindow(const WindowOptions& opt) {
     sim.gaiaCellDispersionKms = gaiaOk ? gaia.cellDispersionKms : 0;
     sim.hasGaiaAggregate = gaiaOk && gaia.cellCount > 0;      // gaia_agrege.bin chargé : lumière additionnée des autres sources
     sim.gaiaCount = gaiaOk ? gaia.count + (gaiaBOk ? gaiaB.count : 0) : 0;
+    // Clic sur une étoile de Gaia : recherche dans les deux fichiers projetés en mémoire, au clic seulement (rien par image).
+    if (gaiaOk)
+        sim.gaiaPick = [&gaia, &gaiaB, gaiaBOk, &sim](const Camera& c, double px, double py, double w, double h, double maxPx, double mLim, GaiaHit& hit, bool& setB) {
+            bool found = pickGaiaStar(gaia.file(), c, px, py, w, h, maxPx, mLim, sim.years, hit);
+            setB = false;
+            if (gaiaBOk && pickGaiaStar(gaiaB.file(), c, px, py, w, h, maxPx, mLim, sim.years, hit)) { found = true; setB = true; }
+            return found;
+        };
     sim.gaiaReliableCount = gaiaOk ? gaia.reliableCount : 0;
     sim.gaiaReliableLight = gaiaOk ? gaia.reliableLight : 0;
     sim.gaiaRebalancedCount = gaiaOk ? gaia.rebalancedCount : 0;
