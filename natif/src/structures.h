@@ -238,13 +238,16 @@ public:
             // dates : l'anomalie moyenne avance de n × années ; gardée en double ici, envoyée réduite pour la simple précision
             pc.par[0] = static_cast<float>(oort);
             pc.par[1] = static_cast<float>(height);
-            pc.par[2] = static_cast<float>(std::fmod(years, 1.0e9));      // > 1 Ga : période la plus longue ~31,6 Ma, avance réduite
+            const double hi = std::floor(years / 1.0e6);      // date en deux morceaux (oort.vert, audit C7) : millions, puis le reste
+            pc.par[2] = static_cast<float>(hi);
+            pc.cam[3] = static_cast<float>(years - hi * 1.0e6);
             pc.par[3] = static_cast<float>(structures::kAuInLyApprox);      // UA -> al
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, oortPipe_);
             vkCmdPushConstants(cmd, oortLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
             const VkDeviceSize off = 0;
             vkCmdBindVertexBuffers(cmd, 0, 1, &oortBuf_.buf, &off);
             vkCmdDraw(cmd, oortCount, 1, 0, 0);
+            pc.cam[3] = static_cast<float>(std::max(viewDistLy, 1.0));      // rendu à l'échelle regardée pour les surfaces
         }
         if (!ready || large <= 0.002) return;
         pc.par[0] = static_cast<float>(large);
