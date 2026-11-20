@@ -63,10 +63,21 @@ public:
             // fraction) est calculée une fois (byZ_) : mêmes opérations que distanceLy, mêmes distances, 10 ms -> ~1 ms.
             const bool first = version_ == ~0ull;
             version_ = cat.tableVersion;
+            // Distance mesurée : agrandie elle aussi par l'expansion au-delà de 10 Mal, comme le nom et le point de la galaxie
+            // (simulation.h, refreshGalaxies). Avant, la forme restait à sa place d'aujourd'hui pendant que son nom et son
+            // point s'éloignaient avec l'univers : M77 « se baladait » (Marc, 20/11/2026).
+            const double k = cat.scale;
+            for (uint32_t i = 0; i < count; ++i) {
+                const Rec& r = recs_[i];
+                if (r.d <= 0) continue;
+                const double d = r.d > 1.0e7 ? r.d * k : r.d;
+                world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
+            }
             if (first) {
                 for (uint32_t i = 0; i < count; ++i) {
                     const Rec& r = recs_[i];
-                    const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
+                    if (r.d > 0) continue;
+                    const double d = cat.distanceLy(r.z);
                     world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
                 }
             } else {

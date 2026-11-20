@@ -855,9 +855,9 @@ int runWindow(const WindowOptions& opt) {
         // mesure de l'image précédente, lue sans attente (la barrière vient d'être passée) ; relevée seulement aux échelles des
         // galaxies (au-delà de 10 millions d'al regardés), jamais pour les étoiles ; balayage du zoom du 20/11 : un plafond fixe
         // dès 10 Mal donnait ×2,1 d'éclat d'un cran de molette au suivant
-        // plafond qui monte comme l'échelle regardée (1 à 10 Mal, 10 à 100 Mal, 1 000 à 10 Gal) : au plus ×1,26 d'un cran de
+        // plafond : ×4 pour les étoiles, puis comme l'échelle regardée (10 à 100 Mal, 1 000 à 10 Gal) : au plus ×1,26 d'un cran de
         // molette au suivant (en carré, le balayage mesurait ×1,6 par cran)
-        autoPose.update(dt, test, true, std::clamp(sim.dist / 1.0e7, 1.0, pose_auto::kPoseMaxGalaxies));
+        autoPose.update(dt, test, true, std::clamp(sim.dist / 1.0e7, 4.0, pose_auto::kPoseMaxGalaxies));      // ×4 au plus pour les étoiles
         sim.autoPose = autoPose.pose;
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
         // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
@@ -1009,6 +1009,13 @@ int runWindow(const WindowOptions& opt) {
             // avec leurs étoiles visibles (autour d'aujourd'hui), la photo n'a que la part qu'elles laissent
             if (sim.milkyWayModelShare > 0)
                 milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayModelShare), sim.years);
+            // Avec les étoiles du modèle : leur gaz ionisé (régions HII) seulement, autour d'aujourd'hui (les bras de la grille
+            // sont ceux d'aujourd'hui ; fondu de 1 à 3 Ma comme les traceurs des bras)
+            sim.gasShare = sim.showGas && milkyWayStarsOk && sim.milkyWayModelShare <= 0
+                               ? sim.starShare() * std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0)
+                               : 0.0;
+            if (sim.gasShare > 0)
+                milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.gasShare), sim.years, true);
             gaia.improved = sim.bestLook;
             gaiaSky.update(cam, sim.fovDeg, !sim.deepTime());
             gaia.hideSkyOnly = gaiaSky.active && gaiaSky.shownStars > 0;
@@ -1177,6 +1184,13 @@ int runWindow(const WindowOptions& opt) {
             const int k = sim.nearestAsteroid(sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height), sc.extent.width * 0.5, sc.extent.height * 0.5, sc.extent.width, sc.extent.height, 12.0);
             const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             std::printf("clic sur un asteroide : %.1f ms pour %llu orbites (trouve : %d)\n", ms, static_cast<unsigned long long>(sim.asteroidCat->n), k);
+        }
+        if (!opt.capture.empty() && sim.stars) {      // mesure : durée d'une recherche de l'étoile sous un clic au centre de l'image
+            const auto t0 = std::chrono::steady_clock::now();
+            const int64_t k = sim.nearestCatalogStar(sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height), sc.extent.width * 0.5,
+                                                     sc.extent.height * 0.5, sc.extent.width, sc.extent.height, 12.0, 99.0);
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            std::printf("clic sur une etoile : %.1f ms pour %llu etoiles (trouvee : %lld)\n", ms, static_cast<unsigned long long>(sim.stars->n), static_cast<long long>(k));
         }
         std::printf("premier passage d'Andromede : %.3f milliards d'annees ; etoiles mesurees montrees jusqu'a %.3f (fondu depuis %.3f) ; part des etoiles mesurees a cette date : %.2f\n",
                     sim.firstPassageGa, sim.starEraEndYears / 1.0e9, sim.starEraFadeYears / 1.0e9, sim.starShare());

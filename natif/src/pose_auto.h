@@ -26,13 +26,21 @@ constexpr double kPoseMaxGalaxies = 1000.0;
 
 // Nouvelle pose d'après la part saturée mesurée (dt : secondes depuis l'image précédente ; instant : contrôle sans fenêtre,
 // où chaque image compte comme six).
-// poseMax : 1 (la pose ne fait que baisser) ou kPoseMaxGalaxies aux échelles des galaxies ; partVisible : part bien visible.
-inline double suivante(double pose, double partSaturee, double partVisible, double dt, bool instant, double poseMax) {
+// Éclat moyen visé à l'écran (Y/(1+Y), lumière linéaire) : Marc, 20/11/2026 soir : « parfois je vois rien, trop de lumière,
+// parfois pas assez ». Mesuré au balayage du zoom : de 1 à 115 sur 255 selon l'échelle. Au-dessus de kMoyHaute (≈ 75/255 à
+// l'écran), la pose baisse doucement ; en dessous de kMoyBasse (≈ 25/255) sans rien de bien visible, elle remonte (jusqu'à
+// poseMax). Entre les deux, rien ne bouge : la pose ne « pompe » pas.
+constexpr double kMoyHaute = 0.075, kMoyBasse = 0.010;
+
+// poseMax : plafond de la pose relevée ; partVisible : part bien visible ; moy : éclat moyen à l'écran.
+inline double suivante(double pose, double partSaturee, double partVisible, double moy, double dt, bool instant, double poseMax) {
     const double frames = instant ? 6.0 : std::clamp(dt * 60.0, 0.0, 6.0);      // vitesse réglée pour 60 images par seconde
     if (partSaturee > kPartMax) pose *= std::pow(0.8, frames);                      // ~0,2 s pour un facteur 1/10
-    else if (pose < 1.0 && partSaturee < kPartBasse) pose = std::min(1.0, pose * std::pow(1.04, frames));      // ~1 s pour revenir d'un facteur 1/10
-    else if (pose >= 1.0 && pose < poseMax && partVisible < kPartVisible && partSaturee < kPartBasse) pose = std::min(poseMax, pose * std::pow(1.04, frames));
-    else if (pose > poseMax) pose *= std::pow(0.96, frames);                        // on quitte les échelles des galaxies : retour doux
+    else if (moy > kMoyHaute) pose *= std::pow(0.97, frames);                       // image trop claire : ~1,3 s pour un facteur 1/10
+    else if (pose < poseMax && moy < kMoyBasse && partVisible < kPartVisible && partSaturee < kPartBasse)
+        pose = std::min(poseMax, pose * std::pow(1.04, frames));                   // trop sombre : ~1 s pour un facteur 10
+    else if (pose < 1.0 && partSaturee < kPartBasse && moy < 0.6 * kMoyHaute) pose = std::min(1.0, pose * std::pow(1.02, frames));      // retour doux vers la pose de base
+    else if (pose > poseMax) pose *= std::pow(0.96, frames);                        // le plafond a baissé : retour doux
     return std::clamp(pose, kPoseMin, std::max(poseMax, std::min(pose, kPoseMaxGalaxies)));
 }
 }  // namespace pose_auto
@@ -42,7 +50,7 @@ namespace {
 class PoseAuto {
 public:
     double pose = 1.0;        // facteur appliqué à l'écran (ecran.frag)
-    double partSaturee = 0, partVisible = 0;   // dernière mesure
+    double partSaturee = 0, partVisible = 0, moyenne = 0;   // dernière mesure
     bool ready = false;
 
     void create(const Gpu& g) {
@@ -118,7 +126,8 @@ public:
         if (!(m[2] > 0)) return;      // pas encore de mesure
         partSaturee = m[0];
         partVisible = m[1];
-        pose = pose_auto::suivante(pose, partSaturee, partVisible, dt, instant, poseMax);
+        moyenne = m[3];
+        pose = pose_auto::suivante(pose, partSaturee, partVisible, moyenne, dt, instant, poseMax);
     }
     // Dans le tampon de commandes, quand l'image en grande dynamique est en lecture (après sa passe).
     void measure(VkCommandBuffer cmd) const {
