@@ -60,3 +60,13 @@ Masse de chaque groupe = `logMK` de ce catalogue (masse tirée de la luminosité
 ## Reste fusionné (demande du 20/11) : `v2/reste_fusionne.csv`
 M200 du halo issu de la fusion, de +5,2 à +10 Ga : 4,6e12 → 3,9e12 M☉ (masse liée 5,1 → 6,2e12). **Modèle et à
 prendre avec prudence** : le troisième halo fantôme de ~5e12 M☉ tombe probablement dans ce reste [Probable].
+
+## Dispersion entre graines indépendantes (20/11/2026) : `maree_dispersion_graines.csv`
+Réglage de paire v17 appliqué tel quel aux graines 2 à 13 (Vierge imposée) : **une seule forme une paire (graine 9 :
+1,7 et 1,6e12 M☉, 726 kpc, −56 km/s)** ; le réglage d'une graine ne se transporte pas aux autres [Certain, mesuré].
+Avec les 2 à 3 réalisations indépendantes qui ont une paire (graine 9, graine 13 à −1,27 Ga, essai v17 de la graine 1),
+la marée simulée varie d'environ 100 % (T_xx : 1,05e-3 ± 1,20e-3 aujourd'hui) [Probable : trop peu de cas pour un chiffre
+précis]. Conclusion : la marée d'un calcul contraint n'est pas assez sûre pour servir d'entrée ; la marée « ciel réel »
+(groupes observés) est le bon choix.
+Note : la graine 9 donne une paire plus proche du vrai écart (726 kpc contre 785 mesurés) que la paire retenue (1 028 kpc) :
+candidate pour un prochain zoom fin.
