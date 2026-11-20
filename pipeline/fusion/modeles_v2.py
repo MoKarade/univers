@@ -113,7 +113,7 @@ except Exception as _e:      # table absente : on le dit dans le résumé du tir
     TABLE = None
 
 
-def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None, froid_centre=None, agitation=1.0, halo=None):
+def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=None, froid=None, froid_centre=None, agitation=1.0, halo=None, disque_masse=1.0, disque_hauteur=1.0):
     import agama
     agama.setUnits(mass=1, length=1, velocity=1)
     g = GALAXIES[nom]
@@ -136,6 +136,15 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
             pb = agama.Potential(type='Spheroid', densityNorm=b['rho0'], gamma=0, beta=b['puissance'], alpha=1, scaleRadius=b['r0'],
                                  outerCutoffRadius=b['coupure'], cutoffStrength=2, axisRatioZ=b['q'])
         pots.append(pb)
+    # Réglages permis sur les disques d'étoiles MESURÉS (sortes 1 et 4, ceux qui ont une agitation mesurée), dans leurs
+    # marges d'erreur : la barre, en naissant, étale et épaissit le disque (mesuré le 20/11 à 2 Ga : rotation au Soleil
+    # - 6 km/s, disque mince + 25 %). On part donc un peu plus lourd et un peu plus mince pour ARRIVER aux mesures.
+    g = dict(g); g['disques'] = [dict(d) for d in g['disques']]
+    for d in g['disques']:
+        if 'sigma_soleil' in d:
+            if 'sigma0' in d: d['sigma0'] *= disque_masse
+            if 'masse' in d: d['masse'] *= disque_masse
+            d['hz'] *= disque_hauteur
     pds = []
     for d in g['disques']:
         if 'sigma0' not in d:
@@ -252,7 +261,7 @@ def main():
     p, resume = construire(nom, n, rsig_facteur=float(opts.get('rsig', 2.0)), part_halo=float(opts['halo']) if 'halo' in opts else None,
                            froid=float(opts['froid']) if 'froid' in opts else None,
                            froid_centre=float(opts['froid-centre']) if 'froid-centre' in opts else None,
-                           agitation=float(opts.get('agitation', 1.0)),
+                           agitation=float(opts.get('agitation', 1.0)), disque_masse=float(opts.get('disque-masse', 1.0)), disque_hauteur=float(opts.get('disque-hauteur', 1.0)),
                            halo={k[5:].replace('-', '_'): float(v) for k, v in opts.items() if k.startswith('halo-')} or None)
     resume['options'] = opts
     resume['table_unique'] = TABLE
