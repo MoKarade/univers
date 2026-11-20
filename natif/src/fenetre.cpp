@@ -1093,6 +1093,12 @@ int runWindow(const WindowOptions& opt) {
             const double part = std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0) *
                                 std::clamp((6.0e4 - camSun) / 3.0e4, 0.0, 1.0);
             nebulae.draw(cmd, cam, sc.extent.width, sc.extent.height, part);
+            // Poussière MESURÉE en 3D (Edenhofer et al. 2024, grille locale de voie_lactee.bin) : vue de loin (plus de 4 000 al
+            // du Soleil, fondu jusqu'à 6 500), ses nuages assombrissent les étoiles derrière eux. Pas de près : les magnitudes
+            // mesurées contiennent déjà la poussière vue du Soleil, elle serait comptée deux fois.
+            const double dustPart = std::clamp((camSun - 4000.0) / 2500.0, 0.0, 1.0) * std::clamp((2.0e5 - camSun) / 1.0e5, 0.0, 1.0) *
+                                    std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0);
+            if (dustPart > 0.002) milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(dustPart), sim.years, false, true);
             sr.bind(cmd, pc, sc.extent.width, sc.extent.height);      // le dessin des étoiles reprend ensuite
         }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
