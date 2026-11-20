@@ -395,8 +395,28 @@ def main():
         angles = {a.split(':')[0]: float(a.split(':')[1]) for a in opts['angles'].split(',')} if 'angles' in opts else None
         p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)), angles=angles)
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
-        S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'), t_ga=t_depart)
-        journal = avancer(S, t_depart, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)), replacement=replacement)
+        # Reprise après un retrait (carte rendue à Marc) : le passe repart de sa dernière sauvegarde au lieu de tout refaire
+        # (20/11/2026 : 36 minutes de calcul perdues sur un retrait). Réservé au passe : le lanceur efface la sauvegarde
+        # entre ses deux passages ; un dossier de tir peut garder celle d'un autre réglage.
+        t_reprise, journal0 = t_depart, None
+        f_rep, f_jou = os.path.join(sortie, 'reprise.npz'), os.path.join(sortie, 'journal.json')
+        if mode == 'passe' and os.path.exists(f_rep) and os.path.exists(f_jou):
+            j0 = json.load(open(f_jou, encoding='utf-8'))
+            with np.load(f_rep) as z:
+                if len(z['m']) == len(p['m']) and j0['t'] and abs(j0['t'][0] - t_depart) < 1e-6:
+                    p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
+                    t_reprise = float(z['t'])
+            if t_reprise > t_depart:
+                k = len(j0['t'])
+                while k and j0['t'][k - 1] > t_reprise + 1e-9: k -= 1
+                for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas'):
+                    if cle in j0: j0[cle] = j0[cle][:k]
+                journal0 = j0
+                if replacement and t_reprise >= replacement['t'] - 1e-9: replacement['fait'] = True
+                print(f"reprise à {t_reprise:+.3f} Ga", flush=True)
+        S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'), t_ga=t_reprise)
+        journal = avancer(S, t_reprise, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)), replacement=replacement, journal=journal0,
+                          instantane_ga=0.05 if mode == 'passe' else 0.5)
         ecart = ecart_a_la_cible(journal, cible)
         # Correction du départ : l'écart final de vitesse est retiré de la vitesse de départ ; l'écart final de position est
         # retiré de la position de départ, compte tenu de ce que le changement de vitesse déplace sur la durée du trajet
