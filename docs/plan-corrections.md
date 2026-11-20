@@ -271,3 +271,17 @@ Nouveaux retours de Marc, avec ce qui a été trouvé :
 | « Des boules » au-delà de Laniakea | sphères « forme généralisée » des vides SDSS/BOSS et des superstructures | cachées par défaut (PR 122) |
 | « Je veux voir le CMB » | la sphère du fond diffus était unie | carte SMICA de Planck posée dessus (PR 122) |
 | « Le superamas c'est une seule galaxie » | `galaxies_noms.tsv` range 11 amas et superamas sous « galaxie » | nommés et décrits comme amas ou superamas, sources citées (PR 122) |
+
+## 8. Avancement (20 novembre, soir)
+
+| Point | Statut |
+|---|---|
+| A1 étoile sous son cercle | fait (fil correcteur, PR 118) et vérifié : Sirius à +10⁵, +10⁶, +10⁷ ans et Bételgeuse au centre exact |
+| A2, A4, A5 éclat | PR 122 (pose automatique) et PR 123 (rampe) |
+| A3 Voie lactée lointaine pâle | mesurée de nouveau à 3 Mal : pas plus pâle qu'Andromède (lumière au centre 3 480 contre 284) : retiré |
+| A6, B1 à B5, C4, D1 | PR 121 |
+| C1, C7, E3 | PR 124 |
+| C2, C5, C6, D2, E1, sauts du zoom | PR 123 |
+| E4 Nuages de Magellan | Grand Nuage : traits allongés [Probable] = cases de lumière Gaia additionnée (morceau de ciel × tranche de parallaxe) étirées le long de la ligne de visée ; Petit Nuage : ovale lisse = forme du modèle du grand calcul (pas de forme mesurée). À traiter avec le fil du grand calcul |
+| E2 points cachés par les sphères | à faire |
+| E5 simple précision des galaxies | sans effet visible tant qu'on ne peut s'approcher à moins de 1 000 al : laissé |
