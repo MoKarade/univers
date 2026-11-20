@@ -161,11 +161,13 @@ public:
         return table_cpu_[static_cast<size_t>(p.k)] + (table_cpu_[static_cast<size_t>(p.k) + 1] - table_cpu_[static_cast<size_t>(p.k)]) * p.f;
     }
     uint64_t tableVersion = 0;
+    double scale = 1.0;      // facteur d'échelle de la date montrée (setCosmology), repris par galaxies_formes.h
 
     // Recalcule la table des distances pour une cosmologie : toutes les galaxies sont replacées à l'image suivante.
     // scale : facteur d'échelle de l'univers à la date montrée (1 aujourd'hui) : les distances grandissent avec lui.
     void setCosmology(const cosmo::Params& p, double scale = 1.0) {
         if (!ready) return;
+        this->scale = scale;
         const auto t = cosmo::distanceTable(p, kGalaxyZMax, 256);
         for (int k = 0; k < 260; ++k) {
             table_cpu_[static_cast<size_t>(k)] = static_cast<float>(t[static_cast<size_t>(std::min(k, 256))] * cosmo::kMpcInLy * scale);

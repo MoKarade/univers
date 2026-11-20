@@ -10,6 +10,7 @@
 #pragma once
 #include "gaia.h"
 #include "galaxies.h"
+#include <unordered_map>
 
 namespace {
 
@@ -63,10 +64,21 @@ public:
             // fraction) est calculée une fois (byZ_) : mêmes opérations que distanceLy, mêmes distances, 10 ms -> ~1 ms.
             const bool first = version_ == ~0ull;
             version_ = cat.tableVersion;
+            // Distance mesurée : agrandie elle aussi par l'expansion au-delà de 10 Mal, comme le nom et le point de la galaxie
+            // (simulation.h, refreshGalaxies). Avant, la forme restait à sa place d'aujourd'hui pendant que son nom et son
+            // point s'éloignaient avec l'univers : M77 « se baladait » (Marc, 20/11/2026).
+            const double k = cat.scale;
+            for (uint32_t i = 0; i < count; ++i) {
+                const Rec& r = recs_[i];
+                if (r.d <= 0) continue;
+                const double d = r.d > 1.0e7 ? r.d * k : r.d;
+                world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
+            }
             if (first) {
                 for (uint32_t i = 0; i < count; ++i) {
                     const Rec& r = recs_[i];
-                    const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
+                    if (r.d > 0) continue;
+                    const double d = cat.distanceLy(r.z);
                     world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
                 }
             } else {
@@ -114,6 +126,47 @@ public:
             particles += n;
             ind[shown++] = {n, 1, 0, i};      // une instance : la galaxie i (gl_InstanceIndex)
         }
+    }
+
+    // Le nom d'une galaxie de forme (galaxies_formes_noms.tsv) est posé exactement au centre de sa forme : sa place
+    // d'aujourd'hui devient celle de la forme (même direction, même distance que le dessin). Avant, le nom et la caméra
+    // visaient un point décalé d'environ un tiers du rayon (M77 : ~20 000 al à 55 Mal ; Marc, 20/11/2026). Rend le nombre
+    // de noms posés.
+    int snapNames(std::vector<Body>& bodies, const GalaxyRenderer& cat) const {
+        if (!ready) return 0;
+        constexpr double kBin = 0.5 * 3.14159265358979 / 180.0;      // cases de 0,5° en latitude et longitude
+        auto key = [&](double ux, double uy, double uz, int dl, int db) {
+            const long b = static_cast<long>(std::floor(std::asin(std::clamp(uz, -1.0, 1.0)) / kBin)) + db;
+            const long l = static_cast<long>(std::floor((std::atan2(uy, ux) + 3.14159265358979) / kBin)) + dl;
+            return static_cast<uint64_t>((b + 1000) * 4000 + ((l % 720) + 720) % 720);
+        };
+        std::unordered_map<uint64_t, std::vector<uint32_t>> grid;
+        for (uint32_t i = 0; i < count; ++i) grid[key(recs_[i].ux, recs_[i].uy, recs_[i].uz, 0, 0)].push_back(i);
+        int snapped = 0;
+        for (Body& b : bodies) {
+            if (b.kind != Kind::Galaxy || b.natureText.find("SGA-2020") == std::string::npos) continue;
+            const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
+            if (n <= 0) continue;
+            const double ux = b.fixedPos.x / n, uy = b.fixedPos.y / n, uz = b.fixedPos.z / n;
+            double best = std::cos(0.1 * 3.14159265358979 / 180.0);      // à moins de 0,1°
+            int bi = -1;
+            for (int db = -1; db <= 1; ++db)
+                for (int dl = -1; dl <= 1; ++dl) {
+                    const auto it = grid.find(key(ux, uy, uz, dl, db));
+                    if (it == grid.end()) continue;
+                    for (uint32_t i : it->second) {
+                        const double c = ux * recs_[i].ux + uy * recs_[i].uy + uz * recs_[i].uz;
+                        if (c > best) { best = c; bi = static_cast<int>(i); }
+                    }
+                }
+            if (bi < 0) continue;
+            const Rec& r = recs_[static_cast<size_t>(bi)];
+            const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
+            if (!(d > 0)) continue;
+            b.fixedPos = {r.ux * d, r.uy * d, r.uz * d};
+            ++snapped;
+        }
+        return snapped;
     }
 
     void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure) {
