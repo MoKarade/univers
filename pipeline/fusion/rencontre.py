@@ -342,6 +342,9 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
     mode = args[0]
+    if 'efficacite' in opts:      # efficacité des naissances d'étoiles : le seul réglage permis sur le taux de naissance mesuré (1,65 ± 0,19 M☉/an)
+        import gaz_galaxie
+        gaz_galaxie.EFFICACITE = float(opts['efficacite'])
     cible = json.load(open(os.path.join(ICI, 'resultats', 'cible_aujourdhui.json'), encoding='utf-8'))
     t_depart = float(cible['debut_reference_ga'])
     ref = None
