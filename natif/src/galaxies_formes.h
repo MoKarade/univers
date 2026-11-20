@@ -9,6 +9,7 @@
 // fondu jusqu'à 8 pixels, la lumière totale conservée. Nombre de particules selon la taille à l'écran, plafonné.
 #pragma once
 #include "gaia.h"
+#include "parallele.h"
 #include "galaxies.h"
 
 namespace {
@@ -64,17 +65,22 @@ public:
             const bool first = version_ == ~0ull;
             version_ = cat.tableVersion;
             if (first) {
-                for (uint32_t i = 0; i < count; ++i) {
-                    const Rec& r = recs_[i];
-                    const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
-                    world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
-                }
+                parallele::pour(count, [&](uint64_t a, uint64_t b, unsigned) {
+                    for (uint64_t i = a; i < b; ++i) {
+                        const Rec& r = recs_[i];
+                        const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
+                        world_[i] = {r.ux * d, r.uy * d, r.uz * d, d};
+                    }
+                });
             } else {
-                for (const ByZ& b : byZ_) {
-                    const Rec& r = recs_[b.i];
-                    const double d = cat.distanceAt(b.p);
-                    world_[b.i] = {r.ux * d, r.uy * d, r.uz * d, d};
-                }
+                parallele::pour(byZ_.size(), [&](uint64_t a, uint64_t b, unsigned) {
+                    for (uint64_t k = a; k < b; ++k) {
+                        const ByZ& z = byZ_[k];
+                        const Rec& r = recs_[z.i];
+                        const double d = cat.distanceAt(z.p);
+                        world_[z.i] = {r.ux * d, r.uy * d, r.uz * d, d};
+                    }
+                });
             }
         }
         const double pxPerRad = height / (2.0 * cam.tanHalf);
@@ -86,34 +92,48 @@ public:
         shown = 0;
         particles = 0;
         maxSurface = 0;
-        for (uint32_t i = 0; i < count; ++i) {
-            const W& w = world_[i];
-            const double rx = w.x - cam.pos.x, ry = w.y - cam.pos.y, rz = w.z - cam.pos.z;
-            pos[i * 4] = static_cast<float>(rx);
-            pos[i * 4 + 1] = static_cast<float>(ry);
-            pos[i * 4 + 2] = static_cast<float>(rz);
-            pos[i * 4 + 3] = static_cast<float>(w.d);
-            np[i] = 0;
-            const double dc = std::sqrt(rx * rx + ry * ry + rz * rz);
-            const double size = recs_[i].diam * 2.9088821e-4 * w.d;      // diamètre (al)
-            const double px = size / std::max(dc, 1.0) * pxPerRad;
-            if (px < 2.0 || shown >= kMaxShown) continue;
-            if (px > 40.0) {      // galaxie bien résolue (plus de 40 pixels) : flux vu de la caméra / surface de son disque à l'écran
-                const double fl = std::pow(10.0, -0.4 * recs_[i].r) * (w.d / std::max(dc, 1.0)) * (w.d / std::max(dc, 1.0));
-                maxSurface = std::max(maxSurface, fl / (0.785398 * px * px * std::max(static_cast<double>(recs_[i].ba), 0.2)));
+        // Partagé entre les cœurs (parallele.h ; cadence, 20/11/2026) : chaque galaxie à part, ses candidates (plus de 2 pixels)
+        // rangées par tranche ; puis les plafonds (kMaxShown, kMaxParticles) appliqués dans l'ordre des galaxies, comme avant.
+        const unsigned nt = parallele::morceaux(count);
+        candidates_.resize(nt);
+        parallele::pour(count, [&](uint64_t a, uint64_t b, unsigned k) {
+            std::vector<Candidate>& out = candidates_[k];
+            out.clear();
+            for (uint32_t i = static_cast<uint32_t>(a); i < b; ++i) {
+                const W& w = world_[i];
+                const double rx = w.x - cam.pos.x, ry = w.y - cam.pos.y, rz = w.z - cam.pos.z;
+                pos[i * 4] = static_cast<float>(rx);
+                pos[i * 4 + 1] = static_cast<float>(ry);
+                pos[i * 4 + 2] = static_cast<float>(rz);
+                pos[i * 4 + 3] = static_cast<float>(w.d);
+                np[i] = 0;
+                const double dc = std::sqrt(rx * rx + ry * ry + rz * rz);
+                const double size = recs_[i].diam * 2.9088821e-4 * w.d;      // diamètre (al)
+                const double px = size / std::max(dc, 1.0) * pxPerRad;
+                if (px < 2.0) continue;
+                Candidate c{i, 0, -1.0};
+                if (px > 40.0) {      // galaxie bien résolue (plus de 40 pixels) : flux vu de la caméra / surface de son disque à l'écran
+                    const double fl = std::pow(10.0, -0.4 * recs_[i].r) * (w.d / std::max(dc, 1.0)) * (w.d / std::max(dc, 1.0));
+                    c.surface = fl / (0.785398 * px * px * std::max(static_cast<double>(recs_[i].ba), 0.2));
+                }
+                // dans le champ (avec la marge de la taille de la galaxie) ; n = 0 : hors du champ
+                const double f = rx * cam.fwd.x + ry * cam.fwd.y + rz * cam.fwd.z;
+                const double x = rx * cam.right.x + ry * cam.right.y + rz * cam.right.z, y = rx * cam.up.x + ry * cam.up.y + rz * cam.up.z;
+                const double fz = std::max(f, 1.0);
+                if (!(f < -size) && !(std::fabs(x) > fz * tx + size || std::fabs(y) > fz * ty + size))
+                    c.n = static_cast<uint32_t>(std::clamp(px * px * 0.3, 64.0, 30000.0));
+                out.push_back(c);
             }
-            // dans le champ (avec la marge de la taille de la galaxie)
-            const double f = rx * cam.fwd.x + ry * cam.fwd.y + rz * cam.fwd.z;
-            if (f < -size) continue;
-            const double x = rx * cam.right.x + ry * cam.right.y + rz * cam.right.z, y = rx * cam.up.x + ry * cam.up.y + rz * cam.up.z;
-            const double fz = std::max(f, 1.0);
-            if (std::fabs(x) > fz * tx + size || std::fabs(y) > fz * ty + size) continue;
-            const uint32_t n = static_cast<uint32_t>(std::clamp(px * px * 0.3, 64.0, 30000.0));
-            if (particles + n > kMaxParticles) continue;
-            np[i] = n;
-            particles += n;
-            ind[shown++] = {n, 1, 0, i};      // une instance : la galaxie i (gl_InstanceIndex)
-        }
+        });
+        for (const auto& part : candidates_)
+            for (const Candidate& c : part) {
+                if (shown >= kMaxShown) break;
+                if (c.surface >= 0) maxSurface = std::max(maxSurface, c.surface);
+                if (c.n == 0 || particles + c.n > kMaxParticles) continue;
+                np[c.i] = c.n;
+                particles += c.n;
+                ind[shown++] = {c.n, 1, 0, c.i};      // une instance : la galaxie i (gl_InstanceIndex)
+            }
     }
 
     void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure) {
@@ -259,6 +279,11 @@ private:
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_), "dessin des galaxies de forme");
     }
 
+    struct Candidate {      // galaxie de plus de 2 pixels (prepare) : particules voulues (0 : hors du champ), brillance (-1 : non résolue)
+        uint32_t i, n;
+        double surface;
+    };
+    std::vector<std::vector<Candidate>> candidates_;
     std::vector<Rec> recs_;
     std::vector<W> world_;
     struct ByZ { uint32_t i; GalaxyRenderer::ZPlace p; };
