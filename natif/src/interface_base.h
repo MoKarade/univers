@@ -436,11 +436,21 @@ bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, fl
         const Vec3 d{p.x - cam.pos.x, p.y - cam.pos.y, p.z - cam.pos.z};
         return std::sqrt(dot(d, d)) < 3.0e6;
     }
+    // balayage du zoom (20/11/2026) : à 1,5 Mal, une trentaine de noms de naines apparaissaient d'un coup ; les naines
+    // (rang 5) sont nommées au survol, comme les petites lunes, sauf en mode détaillé
+    if (b.kind == Kind::Galaxy && (b.priority >= 5 || b.natureText == "galaxie naine") && b.priority < 9 && i != sim.focus && !ui.details) return false;
     if (b.kind == Kind::Galaxy && (sim.dist < 2.0e4 || sim.dist > 3.0e9 || (b.priority > 1 && sim.dist < 1.5e6))) return false;
     if (b.kind == Kind::Planet) {      // un nom par planète seulement quand elle se détache de son astre parent
         double qx = 0, qy = 0;
-        const bool parentOn = cam.project(sim.position(std::max(b.parent, 0)), w, h, qx, qy);
+        const int par = std::max(b.parent, 0);
+        const bool parentOn = cam.project(sim.position(par), w, h, qx, qy);
         if (parentOn && std::hypot(px0 - qx, py0 - qy) < 22) return false;
+        // audit D2 : une lune derrière le disque de sa planète ne montre pas son nom (« Rhéa » écrit sur Saturne)
+        if (parentOn && par > 0) {
+            const Vec3 pm = sim.position(i), pp = sim.position(par);
+            const Vec3 dm{pm.x - cam.pos.x, pm.y - cam.pos.y, pm.z - cam.pos.z}, dp{pp.x - cam.pos.x, pp.y - cam.pos.y, pp.z - cam.pos.z};
+            if (dot(dm, dm) > dot(dp, dp) && std::hypot(px0 - qx, py0 - qy) < discRadiusPx(sim, cam, par, h)) return false;
+        }
     }
     return true;
 }

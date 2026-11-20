@@ -245,8 +245,12 @@ public:
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &aggSet_, 0, nullptr);
             vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
             if (cellCount && GaiaFiable::effacement(since) > 1e-4) vkCmdDraw(cmd, cellCount, kCellSpread, 0, 0);      // kCellSpread points par case (gaia_agrege.vert) ; effacées loin d'aujourd'hui (gaia_fiable.glsl)
-            if (skyCount && !hideSkyOnly && std::fabs(since) < kAggregateYears && std::sqrt(dot(cam.pos, cam.pos)) < kSkyOnlyRadiusLy) {
-                pa.base.camLo[3] = 1.0f;
+            // audit C2 : fondus au lieu de coupures (avant : 37 % → 0 d'une image à l'autre à 3 Ma, et −7 % d'un coup à 100 al)
+            const double camSun = std::sqrt(dot(cam.pos, cam.pos));
+            const double skyFade = std::clamp((2.0 * kSkyOnlyRadiusLy - camSun) / kSkyOnlyRadiusLy, 0.0, 1.0) *
+                                   std::clamp((kAggregateYears - std::fabs(since)) / (kAggregateYears - 1.0e6), 0.0, 1.0);
+            if (skyCount && !hideSkyOnly && skyFade > 1e-3) {
+                pa.base.camLo[3] = static_cast<float>(skyFade);
                 vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pa), &pa);
                 vkCmdDraw(cmd, skyCount, 1, cellCount, 0);
             }

@@ -319,7 +319,10 @@ public:
             }
             // Rectangle de l'écran qui contient le disque.
             const double cx = (dot(c, cam.right) / (z * cam.tanHalf * cam.aspect) * 0.5 + 0.5) * width, cy = (-dot(c, cam.up) / (z * cam.tanHalf) * 0.5 + 0.5) * height;
-            const double rpx = rho / pixel * 1.6 * (ringed ? kRingOuterKm / b.radiusKm : 1.0) + 3;      // marge : la perspective agrandit le disque loin du centre de l'image
+            // marge : la perspective agrandit le disque de 1/cos²θ loin du centre de l'image (θ : angle hors de l'axe) ; avant, une
+            // marge fixe de 1,6 coupait le disque d'un bord droit dans les coins (jusqu'à 2,06 à 16:9, audit E1)
+            const double tx = (cx / width * 2.0 - 1.0) * cam.tanHalf * cam.aspect, ty = (cy / height * 2.0 - 1.0) * cam.tanHalf;
+            const double rpx = rho / pixel * 1.15 * (1.0 + tx * tx + ty * ty) * (ringed ? kRingOuterKm / b.radiusKm : 1.0) + 3;
             const double x0 = std::clamp(cx - rpx, 0.0, static_cast<double>(width)), x1 = std::clamp(cx + rpx, 0.0, static_cast<double>(width));
             const double y0 = std::clamp(cy - rpx, 0.0, static_cast<double>(height)), y1 = std::clamp(cy + rpx, 0.0, static_cast<double>(height));
             if (x1 - x0 < 1 || y1 - y0 < 1) continue;

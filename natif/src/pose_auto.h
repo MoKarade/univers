@@ -16,7 +16,7 @@
 namespace pose_auto {
 constexpr float kSeuil = 3.0f;          // luminance après pose au-delà de laquelle un point sort presque blanc (Reinhard : 0,75)
 constexpr double kPartMax = 0.005;      // part saturée tolérée (les étoiles brillantes saturent toujours un peu)
-constexpr double kPartBasse = 0.002;    // en dessous : on rend de la pose
+constexpr double kPartBasse = 0.001;    // en dessous : on rend de la pose (écart large avec kPartMax : pas de pompage)
 constexpr double kPoseMin = 1.0e-3;     // au plus ×1/1000
 // Relever la pose, seulement aux échelles des galaxies (Marc, 20/11/2026 : « Laniakea quasi aucune galaxie, c'est vide ») :
 // vues de centaines de millions d'années-lumière, les galaxies des relevés sont des points très faibles (éclat réel en 1/d²).
@@ -31,7 +31,7 @@ inline double suivante(double pose, double partSaturee, double partVisible, doub
     const double frames = instant ? 6.0 : std::clamp(dt * 60.0, 0.0, 6.0);      // vitesse réglée pour 60 images par seconde
     if (partSaturee > kPartMax) pose *= std::pow(0.8, frames);                      // ~0,2 s pour un facteur 1/10
     else if (pose < 1.0 && partSaturee < kPartBasse) pose = std::min(1.0, pose * std::pow(1.04, frames));      // ~1 s pour revenir d'un facteur 1/10
-    else if (pose >= 1.0 && poseMax > 1.0 && partVisible < kPartVisible && partSaturee < kPartBasse) pose *= std::pow(1.04, frames);
+    else if (pose >= 1.0 && pose < poseMax && partVisible < kPartVisible && partSaturee < kPartBasse) pose = std::min(poseMax, pose * std::pow(1.04, frames));
     else if (pose > poseMax) pose *= std::pow(0.96, frames);                        // on quitte les échelles des galaxies : retour doux
     return std::clamp(pose, kPoseMin, std::max(poseMax, std::min(pose, kPoseMaxGalaxies)));
 }

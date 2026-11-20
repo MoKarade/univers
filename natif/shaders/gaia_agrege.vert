@@ -6,7 +6,8 @@
 /* Lumière additionnée des sources Gaia à distance mal mesurée (gaia.h, gaia_agrege.bin). Deux usages, choisis par
    pc.camLo.w :
    0 : cases 3D (morceau de ciel × tranche de parallaxe), placées à leur distance, étalées sur leur taille à l'écran ;
-   1 : ciel seul (distance inconnue), dessiné comme vu du Soleil : direction seulement, flux mesuré tel quel.
+   > 0 : ciel seul (distance inconnue), dessiné comme vu du Soleil : direction seulement, flux mesuré multiplié par
+       camLo.w, son fondu (1 près du Soleil et d'aujourd'hui, 0 au-delà de 200 al ou de 3 Ma ; audit C2, 20/11/2026).
    Les cases bougent comme les étoiles (gaia.vert) : centre emporté à la vitesse moyenne mesurée de ses sources, ligne
    droite puis orbite (exacte si calculée, sinon épicycles). Les points d'une case restent groupés autour du centre. */
 struct Cell { vec4 pm; vec4 rest; vec4 vel; };      /* x, y, z (al), magnitude ; rayon, erreur, couleur (bits), nombre (bits) ; vitesse moyenne (km/s), dispersion */
@@ -68,7 +69,7 @@ void main() {
         ext = r / d * pxPerRad;
     } else {
         p = c.pm.xyz;                          /* direction seule */
-        flux = pc.par.x * pow(10.0, -0.4 * c.pm.w);
+        flux = pc.par.x * pow(10.0, -0.4 * c.pm.w) * pc.camLo.w;      /* camLo.w (0 à 1) : fondu en distance et en temps (gaia.h) */
         ext = 2.0 * OVERLAP * c.rest.x * pxPerRad;      /* vu du Soleil, pixels du ciel jointifs : recouvrement plus large */
     }
     /* sources sans orbite fiable (aucune vitesse radiale propre, distance à 20 % près) : montrées autour d'aujourd'hui seulement */
