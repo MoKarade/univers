@@ -865,6 +865,21 @@ int runWindow(const WindowOptions& opt) {
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain() * sim.photoGain * std::pow(2.0, sim.exposureEv)), sc.extent.height, sim.years);
 
         chrono.cpu("camera");
+        // Choix des étoiles Gaia et des étoiles visibles du modèle (processeur, tous les cœurs) AVANT l'attente de la carte : il
+        // remplit des listes que l'image en vol ne lit pas (anneau de gaia.h), pendant que la carte finit l'image d'avant. Mêmes
+        // valeurs que leur dessin plus bas, qui reprend ce choix (sinon il le refait : rien ne change à l'écran).
+        {
+            const bool skyOnlyNow = sim.skyBand >= 0 && sky.loaded && sim.skyBand == skyLoaded;
+            gaia.improved = sim.bestLook;
+            gaiaB.improved = sim.bestLook;
+            const double gaiaLeftNow = sim.starShare() * (1.0 - sim.gaiaFilmOff);
+            if (!skyOnlyNow && sim.starShare() > 0 && gaiaLeftNow > 0) {
+                gaia.select(cam, pc.par[0] * static_cast<float>(gaiaLeftNow), sc.extent.height, sim.years);
+                if (gaiaBOk) gaiaB.select(cam, pc.par[0] * static_cast<float>(gaiaLeftNow), sc.extent.height, sim.years);
+            }
+            if (milkyWayStarsOk && !skyOnlyNow && sim.bestLook) milkyWayStars.select(cam, pc.par[0], sc.extent.height, sim.years);
+        }
+        chrono.cpu("choix des etoiles (avant l'attente)");
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
         chrono.cpu("attente de la carte");
         chrono.gpuCollect(g);

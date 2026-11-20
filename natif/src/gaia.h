@@ -232,10 +232,9 @@ public:
     // tel quel) : seules les étoiles qui seront dessinées sont calculées.
     void precompute(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, double years, bool want) {
         cacheReady_ = false;
-        selected_ = false;
         if (!ready || !cacheOn_ || !want) return;
         (void)width;
-        select(cam, exposure, height, years);
+        if (!selectedFor(cam, exposure, height, years)) select(cam, exposure, height, years);
         // plages d'étoiles dessinées (début, nombre, rang du premier fil), précédées de leur nombre et du total
         auto* pl = static_cast<uint32_t*>(plagesMap_) + static_cast<size_t>(ring_) * (file_.leafCount + 1) * 4;
         const auto* cmds = static_cast<const VkDrawIndirectCommand*>(mapped_[ring_]);
@@ -270,12 +269,22 @@ public:
         cacheReady_ = true;
         cacheExact_ = gp.exact;
     }
-    // Choix des feuilles et des étoiles dessinées à cette image (listes de l'anneau ring_).
+    // Choix des feuilles et des étoiles dessinées à cette image (listes de l'anneau ring_, que la carte ne lit pas encore :
+    // l'anneau a plus de cases que d'images en vol). Peut être fait avant l'attente de la carte (fenetre.cpp) ; draw le reprend
+    // s'il a été fait avec la même caméra, la même exposition, la même hauteur et la même date.
     void select(const Camera& cam, float exposure, uint32_t height, double years) {
+        if (!ready) return;
         const double since = years - (static_cast<double>(file_.epoch) - 2000.0);
         selN_ = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
                              file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
         selected_ = true;
+        selKey_ = {cam.pos.x, cam.pos.y, cam.pos.z, cam.fwd.x, cam.fwd.y, cam.fwd.z, cam.up.x, cam.up.y, cam.up.z, cam.tanHalf, cam.aspect,
+                   static_cast<double>(exposure), static_cast<double>(height), years, improved ? 1.0 : 0.0};
+    }
+    bool selectedFor(const Camera& cam, float exposure, uint32_t height, double years) const {
+        const std::array<double, 15> k{cam.pos.x, cam.pos.y, cam.pos.z, cam.fwd.x, cam.fwd.y, cam.fwd.z, cam.up.x, cam.up.y, cam.up.z, cam.tanHalf, cam.aspect,
+                                       static_cast<double>(exposure), static_cast<double>(height), years, improved ? 1.0 : 0.0};
+        return selected_ && k == selKey_;
     }
     // Cache des étoiles du modèle : n'a de sens que pour un fichier aux sous-nuages (étoiles du MODÈLE). 32 octets par étoile.
     void enableCache(const Gpu& g) {
@@ -297,7 +306,9 @@ public:
         GaiaPush gp = makePush(cam, exposure, height, years);
         // Cache des étoiles du modèle à jour (precompute) et calculé avec la même orbite (exacte ou épicycles) : lu par gaia.vert.
         if (cacheReady_ && gp.exact == cacheExact_) gp.cellBase |= kCacheBit;
-        if (!selected_) select(cam, exposure, height, years);      // sinon : choix déjà fait par precompute, même caméra, même date
+        // Choix déjà fait plus tôt dans l'image (select avant l'attente de la carte, ou precompute) avec la même caméra, la même
+        // exposition et la même date : repris tel quel ; sinon refait ici.
+        if (!selectedFor(cam, exposure, height, years)) select(cam, exposure, height, years);
         selected_ = false;
         const uint32_t n = selN_;
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
@@ -552,7 +563,8 @@ private:
     Buffer cache_{};
     bool cacheOn_ = false, cacheReady_ = false;
     float cacheExact_ = 0.0f;
-    bool selected_ = false;      // choix des feuilles déjà fait à cette image (precompute)
+    bool selected_ = false;      // choix des feuilles déjà fait à cette image (select, precompute)
+    std::array<double, 15> selKey_{};      // caméra, exposition, hauteur, date et mode de ce choix
     uint32_t selN_ = 0;
     Buffer plages_{};            // plages d'étoiles dessinées (precompute), une part par case de l'anneau ; liaison 7
     void* plagesMap_ = nullptr;
