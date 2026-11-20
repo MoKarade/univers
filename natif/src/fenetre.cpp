@@ -1014,7 +1014,7 @@ int runWindow(const WindowOptions& opt) {
         // max(pose de l'écran, gain de la distance de vue) ; près de la Voie lactée, rien ne change.
         const float galFactor = static_cast<float>(galaxies_pose::facteur(sim.dist, sim.autoPose));
         sim.galaxyPose = galaxies_pose::gain(sim.dist);
-        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * galFactor);      // exposition des étoiles, relevée aux grandes échelles
+        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], galFactor, sim.dist);      // exposition des étoiles, relevée aux grandes échelles
         if (!skyOnly && galaxyShapes.ready) {
             galaxyShapes.prepare(cam, galaxies, sc.extent.height);
             float aL[16], aT[16];
