@@ -973,6 +973,17 @@ int runWindow(const WindowOptions& opt) {
             const double gaiaLeft = sim.starShare() * (1.0 - sim.gaiaFilmOff);      // revue F1 : Gaia cède au film
             // Gaia entièrement éteint (le film mène, loin d'aujourd'hui) : rien à dessiner, et ses 192 M d'étoiles ne coûtent
             // plus le tri des feuilles à chaque image.
+            {      // étoile suivie de près : ses copies Gaia cachées autour de sa place exacte (gaia.h, setHide ; audit A1)
+                Vec3 rel{0, 0, 0};
+                double r = 0;
+                if (sim.focus >= 0 && sim.bodies[static_cast<size_t>(sim.focus)].kind == Kind::Star && sim.visible(sim.focus) && sim.dist < 0.5) {
+                    const Vec3 fp = sim.position(sim.focus);
+                    rel = {fp.x - cam.pos.x, fp.y - cam.pos.y, fp.z - cam.pos.z};
+                    r = 0.01;      // 630 UA : plus que l'arrondi des orbites de la carte (~200 UA à 8 kpc du centre)
+                }
+                gaia.setHide(rel, r);
+                gaiaB.setHide(rel, r);
+            }
             if (gaiaLeft > 0) gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeft), sim.years);
             if (sim.gaiaFilmOff < 1.0) gaiaSky.draw(cmd, cam, sc.extent.height, pc.par[0] * static_cast<float>(1.0 - sim.gaiaFilmOff));
             if (gaiaBOk && gaiaLeft > 0) {
