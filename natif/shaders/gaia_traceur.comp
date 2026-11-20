@@ -1,0 +1,23 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+/* Précalcul par image des étoiles du MODÈLE (drapeau 16) : la partie propre à chaque étoile (gvTraceur, gaia_corps.glsl),
+   une fois, au lieu d'une fois par étoile de son sous-nuage dans gaia.vert (cadence, 20/11/2026 : orbite, 16 lectures de
+   poussière et vieillissement refaits 16 fois). Mêmes constantes, mêmes tampons, même calcul que le dessin. */
+#define GV_CACHE_ACCES writeonly
+#include "gaia_corps.glsl"
+layout(local_size_x = 256) in;
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= (pc.cellBase & 0x1FFFFFFFu)) return;      /* bits bas de cellBase : nombre d'étoiles du fichier (gaia.h) */
+    uvec4 r = star[idx];
+    uint flags = r.w >> 24;
+    if ((flags & 16u) == 0u) return;
+    vec3 p, teinte, poussiere;
+    float garde, gainFilm, mDec, fAge;
+    if (!gvTraceur(idx, r, flags, p, garde, gainFilm, mDec, fAge, teinte, poussiere)) {
+        cache[2u * idx + 1u] = vec4(0.0, 0.0, 0.0, -1.0);
+        return;
+    }
+    cache[2u * idx] = vec4(p, mDec);
+    cache[2u * idx + 1u] = vec4(teinte * poussiere, garde * gainFilm * fAge);
+}

@@ -38,10 +38,10 @@ find_program(GLSLANG glslang REQUIRED)
 set(SPV_DIR ${CMAKE_BINARY_DIR}/spv)
 file(MAKE_DIRECTORY ${SPV_DIR})
 set(SPV_FILES)
-foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp film_etat.comp ciel_bandes.frag fusion_nuage.vert ciel_sources.vert ciel_sources.frag gaia_ciel.vert galaxie_formes.vert oort.vert oort.frag structures_maille.vert structures_maille.frag structures_flot.vert structures_flot.frag pose.comp structures_cmb.frag)
+foreach(S essai.vert essai.frag etoiles.vert etoiles.frag ecran.vert ecran.frag sphere.frag galaxies.vert asteroides.vert gaia.vert gaia_traceur.comp gaia_reste.vert gaia_agrege.vert voie_lactee.frag etoiles_orbite.vert orbites_pas.comp film_etat.comp ciel_bandes.frag fusion_nuage.vert ciel_sources.vert ciel_sources.frag gaia_ciel.vert galaxie_formes.vert oort.vert oort.frag structures_maille.vert structures_maille.frag structures_flot.vert structures_flot.frag pose.comp structures_cmb.frag)
   add_custom_command(OUTPUT ${SPV_DIR}/${S}.spv
     COMMAND ${GLSLANG} -V --quiet -I${CMAKE_SOURCE_DIR}/shaders ${CMAKE_SOURCE_DIR}/shaders/${S} -o ${SPV_DIR}/${S}.spv
-    DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_acc.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_fiable.glsl VERBATIM)
+    DEPENDS ${CMAKE_SOURCE_DIR}/shaders/${S} ${CMAKE_SOURCE_DIR}/shaders/orbite_galactique.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_acc.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_fiable.glsl ${CMAKE_SOURCE_DIR}/shaders/gaia_corps.glsl VERBATIM)
   list(APPEND SPV_FILES ${SPV_DIR}/${S}.spv)
 endforeach()
 add_custom_target(shaders DEPENDS ${SPV_FILES})
