@@ -15,6 +15,9 @@ Labels : [Certain] calculé ici et contrôlé ; [Probable] publié ; [Suppositio
 - **Panneau, onglet Astre, « Vie de l'étoile »** : étape, âge, masse, rayon, température, éclat, où est passée la
   matière (bilan conservé), sa fin et quand ; un bouton par étape (« Géante », « Nébuleuse », « Supernova »…) qui met
   la date au début de l'étape, une vitesse qui la fait durer une trentaine de secondes, et la caméra à bonne distance.
+- **Pose « photo »** : comme pour les galaxies, la pose suit la nébuleuse la plus brillante à l'écran (brillance moyenne
+  0,3 dans le rayon qui contient la moitié de sa lumière) ; les étoiles saturent, comme sur une photo. Vue de près
+  (l'étoile est une sphère), le gaz suit l'échelle des surfaces (même réglage que la surface du Soleil).
 - **Le Soleil reste montré à toute date** (avant : il disparaissait après le premier passage d'Andromède, +4,6 Ga).
   Au-delà, sa place dans la Galaxie n'est pas calculée : il est montré à l'origine du repère, et le panneau le dit.
 
@@ -26,9 +29,16 @@ Labels : [Certain] calculé ici et contrôlé ; [Probable] publié ; [Suppositio
 | Géante rouge la plus grande | 205 R☉ (0,95 UA) dans 6,89 Ga |
 | Naine blanche | dans 6,90 Ga, 0,540 M☉, 0,013 R☉ ; à +9 Ga : 6 000 K |
 
-Étoiles nommées (placées par éclat et couleur, voir plus bas) : Bételgeuse 14 M☉ (13 à 15), supernova dans 0,35 à
-1,35 Ma ; Antarès 20 M☉, dans 0,04 à 0,4 Ma ; Rigel et Deneb 13 M☉ ; Sirius 2,16 M☉ (mesuré : 2,06), naine blanche
-dans 0,7 à 1,1 Ga ; Procyon 1,44 M☉ (mesuré : 1,50). Aucune étoile nommée ne finit en trou noir d'après ce modèle.
+Étoiles nommées (placées par éclat et couleur, voir plus bas) : Bételgeuse 18 M☉ (16 à 20 ; Joyce et al. 2020 :
+16,5 à 19), supernova dans 0,09 à 0,55 Ma ; Antarès 20 M☉, dans 0,04 à 0,4 Ma ; Rigel et Deneb 13 M☉ ; Sirius 2,16 M☉
+(mesuré : 2,06), naine blanche dans 0,7 à 1,1 Ga ; Procyon 1,44 M☉ (mesuré : 1,50).
+
+Étoiles massives ajoutées pour voir la fin des plus grosses (`natif/etoiles_cycle.tsv`, températures publiées par
+spectroscopie à la place de B-V, qui ne distingue plus les étoiles très chaudes) : **Naos** (Zêta de la Poupe, O4,
+40 000 K, Howarth & van Leeuwen 2019) : 45 M☉, s'effondre en **trou noir de 26 M☉ sans explosion** dans environ 2 Ma ;
+**Alnitak** (29 500 K, Bouret et al. 2008) : 22 M☉, supernova puis étoile à neutrons. Bételgeuse : 3 500 K (Joyce et al. 2020).
+Naos est une étoile peut-être issue d'une fusion (Howarth & van Leeuwen 2019) : la masse placée par le modèle d'une
+étoile seule est plus grande que la leur [À vérifier].
 
 Contrôles qui passent : masse conservée à toute date (écart < 1e-6, Soleil et 20 M☉), rayon continu (aucun saut entre
 deux dates proches, raccord MIST -> Montréal à 0,0000007 dex en éclat), 20 M☉ -> étoile à neutrons de 1,5 M☉, 30 M☉ ->
@@ -48,6 +58,14 @@ trou noir, 60 M☉ -> effondrement direct sans explosion, supernova au plateau M
 | Lumière du gaz | photons ionisants d'un corps noir, recombinaisons cas B (Osterbrock & Ferland 2006), 30 % de l'énergie absorbée en lumière visible ; poussière : 209 cm²/g (Bohlin et al. 1978), albédo 0,6 | [Probable] ; 30 % et teintes [Supposition] |
 | Mélange avec le milieu | une coquille freinée sous ~10 km/s se confond avec le milieu (Cioffi et al. 1988) ; passage de 10 à 5 km/s | [Probable] ; largeur [Supposition] |
 | Placement des étoiles nommées | point le plus probable de la grille d'après M_V et B-V mesurés (σ log L = 0,1 ; σ log T = 0,03), Salpeter, âge < 13,8 Ga ; fourchettes 16-84 % à l'écran | estimation [Supposition sur les σ] |
+
+## Vu à l'écran (captures du 20/11, fenêtre cachée 1600 × 900)
+
+Soleil géante rouge (+6,77 Ga) et sur la branche asymptotique (+6,89 Ga) : grosse sphère orange teintée ; naine blanche
+(+7,5 Ga) : petite sphère bleutée ; Bételgeuse en supernova : photosphère blanche de 50 UA ; Rigel il y a 16,8 Ma :
+nuage sombre qui cache les étoiles derrière lui, puis jeune étoile bleue qui ionise son nuage (lueur bleue, anneau
+sombre de poussière). Pas encore vu : la nébuleuse planétaire du Soleil avec la pose « photo » (corrigée après les
+captures) ; le reste de la supernova de Bételgeuse (trop faible avant cette correction).
 
 ## Limites connues
 
