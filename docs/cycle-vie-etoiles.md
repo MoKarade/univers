@@ -15,9 +15,8 @@ Labels : [Certain] calculé ici et contrôlé ; [Probable] publié ; [Suppositio
 - **Panneau, onglet Astre, « Vie de l'étoile »** : étape, âge, masse, rayon, température, éclat, où est passée la
   matière (bilan conservé), sa fin et quand ; un bouton par étape (« Géante », « Nébuleuse », « Supernova »…) qui met
   la date au début de l'étape, une vitesse qui la fait durer une trentaine de secondes, et la caméra à bonne distance.
-- **Pose « photo »** : comme pour les galaxies, la pose suit la nébuleuse la plus brillante à l'écran (brillance moyenne
-  0,3 dans le rayon qui contient la moitié de sa lumière) ; les étoiles saturent, comme sur une photo. Vue de près
-  (l'étoile est une sphère), le gaz suit l'échelle des surfaces (même réglage que la surface du Soleil).
+- **Éclat du gaz** : vue de loin, la même échelle que les points des étoiles ; vue de près (l'étoile est une sphère),
+  l'échelle des surfaces (même réglage que la surface du Soleil).
 - **Le Soleil reste montré à toute date** (avant : il disparaissait après le premier passage d'Andromède, +4,6 Ga).
   Au-delà, sa place dans la Galaxie n'est pas calculée : il est montré à l'origine du repère, et le panneau le dit.
 
@@ -64,8 +63,9 @@ trou noir, 60 M☉ -> effondrement direct sans explosion, supernova au plateau M
 Soleil géante rouge (+6,77 Ga) et sur la branche asymptotique (+6,89 Ga) : grosse sphère orange teintée ; naine blanche
 (+7,5 Ga) : petite sphère bleutée ; Bételgeuse en supernova : photosphère blanche de 50 UA ; Rigel il y a 16,8 Ma :
 nuage sombre qui cache les étoiles derrière lui, puis jeune étoile bleue qui ionise son nuage (lueur bleue, anneau
-sombre de poussière). Pas encore vu : la nébuleuse planétaire du Soleil avec la pose « photo » (corrigée après les
-captures) ; le reste de la supernova de Bételgeuse (trop faible avant cette correction).
+sombre de poussière). **Pas vus** : la nébuleuse planétaire du Soleil et le reste de la supernova de Bételgeuse sont
+trop faibles pour se voir à la pose normale. Essai d'une pose « photo » réglée sur eux : refusé, toute l'image
+saturait (le gain plafonne à 10⁶). La nébuleuse du modèle est aussi plus faible que les vraies (voir limites).
 
 ## Limites connues
 
