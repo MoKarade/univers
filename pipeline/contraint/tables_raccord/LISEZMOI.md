@@ -31,3 +31,14 @@ Même formule, au centre de masse de la paire, dans les 10 calculs où une paire
 **Attention : 9 de ces 10 calculs partagent la même graine (réglages de paire différents) ; la vraie dispersion entre
 réalisations indépendantes est probablement plus grande** [Probable]. Un balayage dédié (paire réglée sur plusieurs
 graines) la mesurerait : environ 1 h de processeur par graine.
+
+## Version 2 (20/11/2026) : dossier `v2/`, tous les 0,1 Ga de −2,3 à +5,1 Ga
+Calcul relancé depuis l'instantané de −2,48 Ga avec une sortie tous les 0,1 Ga jusqu'à +10 Ga (2 101 s, 12 fils).
+Suivi au niveau des **sous-halos** (les groupes FOF des deux galaxies se soudent dès ~+1,8 Ga, bien avant la fusion) :
+- `masse_t.csv` : colonnes M200, r200, concentration VIDES (nan) quand les deux galaxies partagent un groupe (M200 n'a plus
+  de sens) ; nouvelle colonne `masse_liee_msun` (masse liée du sous-halo, toujours remplie).
+- **Fin des tables à +5,1 Ga** : la galaxie « andromede » de ce calcul est dissoute dans l'autre vers +5,2 Ga (sa masse
+  liée tombe sous 25 % de son maximum). Premier passage serré : ~216 kpc à +5,1 Ga, −227 km/s. Après, il n'y a plus de
+  paire à décrire ; la masse du reste fusionné peut être ajoutée sur demande.
+- Avertissement (modèle) : ce calcul a un troisième halo de ~5e12 M☉ à ~3 Mpc de la paire, absent du ciel réel ; il pèse
+  sur la marée et sur l'orbite. La dispersion de la marée entre graines indépendantes est en calcul (balayage « rcp »).

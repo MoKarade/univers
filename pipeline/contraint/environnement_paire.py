@@ -71,7 +71,7 @@ def main():
     t0 = age_ga(1.0)
     cats = sorted(glob.glob(f'{dossier}/fof_subhalo_tab_*.hdf5'))
     lignes_m, lignes_o, lignes_t, lignes_s = [], [], [], []
-    centre_prec = None
+    suivi, etat, a_prec_age = None, None, None
     for cat in cats:
         g = h5py.File(cat, 'r')
         a = float(g['Header'].attrs['Time'])
@@ -81,34 +81,63 @@ def main():
         m200 = g['Group/Group_M_Crit200'][:] * 1e10 / H
         r200 = g['Group/Group_R_Crit200'][:] * a / H * 1000.0          # kpc physiques
         gpos = g['Group/GroupPos'][:].astype(np.float64)
-        gvel = g['Group/GroupVel'][:].astype(np.float64)
         premier = g['Group/GroupFirstSub'][:]
-        ref = centre_prec if centre_prec is not None else np.median(gpos[m200 > 1e12], axis=0)
-        d = np.linalg.norm(gpos - ref, axis=1)
-        cand = np.where((d < 2.0) & (m200 > 5e11) & (m200 < 1e13))[0]
-        if len(cand) < 2:
-            continue
-        i, j = cand[np.argsort(-m200[cand])[:2]]
-        # Andromède = celui placé du côté de sa direction réelle
-        if np.dot(gpos[j] - gpos[i], M31_DIR_SG) < 0:
-            i, j = j, i
-        noms = {'voie_lactee': i, 'andromede': j}
-        dx = (gpos[j] - gpos[i]) * a / H * 1000.0
+        smas = g['Subhalo/SubhaloMass'][:] * 1e10 / H
+        spos = g['Subhalo/SubhaloPos'][:].astype(np.float64)
+        svel = g['Subhalo/SubhaloVel'][:].astype(np.float64)
+        sgrp = g['Subhalo/SubhaloGroupNr'][:]
+        if suivi is None:
+            # premier instantané : la paire = les deux groupes de 5e11 à 1e13 M☉ les plus lourds près des halos > 1e12
+            ref = np.median(gpos[m200 > 1e12], axis=0)
+            cand = np.where((np.linalg.norm(gpos - ref, axis=1) < 2.0) & (m200 > 5e11) & (m200 < 1e13))[0]
+            if len(cand) < 2:
+                continue
+            gi, gj = cand[np.argsort(-m200[cand])[:2]]
+            if np.dot(gpos[gj] - gpos[gi], M31_DIR_SG) < 0:
+                gi, gj = gj, gi
+            suivi = {'voie_lactee': int(premier[gi]), 'andromede': int(premier[gj])}
+            etat = {k: (spos[s], svel[s], smas[s]) for k, s in suivi.items()}
+            pic = {k: smas[s] for k, s in suivi.items()}
+        else:
+            # suivi au niveau des sous-halos (les groupes fusionnent avant les galaxies) : position prédite, masse compatible
+            dt_s = (age_ga(a) - a_prec_age) * 3.156e16
+            nouveau = {}
+            for k, (p0, v0, m0) in etat.items():
+                pred = p0 + v0 * dt_s / a / 3.0857e19 * H
+                d = np.linalg.norm(spos - pred, axis=1)
+                ok = (d < 0.8) & (smas > 0.4 * m0) & (smas < 2.5 * m0)
+                if not ok.any():
+                    break
+                nouveau[k] = int(np.argmin(np.where(ok, d, np.inf)))
+            if len(nouveau) < 2 or nouveau['voie_lactee'] == nouveau['andromede']:
+                print(t, 'paire fusionnée ou perdue : fin des tables', flush=True)
+                break
+            suivi = nouveau
+            etat = {k: (spos[s], svel[s], smas[s]) for k, s in suivi.items()}
+            # fusion : la masse liée d'une galaxie tombe sous 25 % de son maximum (elle est dissoute dans l'autre)
+            if any(smas[s] < 0.25 * pic[k] for k, s in suivi.items()):
+                print(t, 'fusion (masse liée < 25 % du maximum) : fin des tables', flush=True)
+                break
+        a_prec_age = age_ga(a)
+        pic = {k: max(pic[k], smas[s]) for k, s in suivi.items()}
+        i, j = suivi['voie_lactee'], suivi['andromede']
+        dx = (spos[j] - spos[i]) * a / H * 1000.0
         r = np.linalg.norm(dx)
-        dv = gvel[j] - gvel[i] + hubble(a) * dx / 1000.0
+        dv = svel[j] - svel[i] + hubble(a) * dx / 1000.0
         vr = dv @ dx / r
         lignes_o.append(f'{t},{r:.1f},{vr:.2f},{np.linalg.norm(dv - vr * dx / r):.2f}')
-        cm = (m200[i] * gpos[i] + m200[j] * gpos[j]) / (m200[i] + m200[j])
-        centre_prec = cm
-        for nom, k in noms.items():
-            v200 = np.sqrt(G * m200[k] / r200[k])
-            s = premier[k]
+        cm = (smas[i] * spos[i] + smas[j] * spos[j]) / (smas[i] + smas[j])
+        meme_groupe = sgrp[i] == sgrp[j]
+        for nom, s in suivi.items():
+            k = sgrp[s]
+            central = (premier[k] == s) and not meme_groupe
+            mm, rr2 = (m200[k], r200[k]) if central else (np.nan, np.nan)
             rmax = float(g['Subhalo/SubhaloVmaxRad'][s]) * a / H * 1000.0             # kpc physiques
-            c = 2.163 * r200[k] / rmax if rmax > 0 else concentration(float(g['Subhalo/SubhaloVmax'][s]), v200)
+            c = 2.163 * rr2 / rmax if (central and rmax > 0) else np.nan
             j_spec = g['Subhalo/SubhaloSpin'][s].astype(np.float64) * a / H * 1000.0     # kpc km/s [À vérifier]
-            lam = np.linalg.norm(j_spec) / (np.sqrt(2.0) * v200 * r200[k])
+            lam = (np.linalg.norm(j_spec) / (np.sqrt(2.0) * np.sqrt(G * mm / rr2) * rr2)) if central else np.nan
             u = ROT_SG_GAL @ (j_spec / np.linalg.norm(j_spec))
-            lignes_m.append(f'{t},{nom},{m200[k]:.4e},{r200[k]:.1f},{c:.2f}')
+            lignes_m.append(f'{t},{nom},{mm:.4e},{rr2:.1f},{c:.2f},{smas[s]:.4e}')
             lignes_s.append(f'{t},{nom},{lam:.4f},{u[0]:.4f},{u[1]:.4f},{u[2]:.4f}')
         snap = cat.replace('fof_subhalo_tab', 'snap')
         if os.path.exists(snap):
@@ -120,8 +149,8 @@ def main():
             tt = G * np.einsum('n,ni,nj->ij', m / q ** 5, 3.0 * x, x) - G * np.eye(3) * np.sum(m / q ** 3)
             tg = ROT_SG_GAL @ tt @ ROT_SG_GAL.T
             lignes_t.append(f'{t},' + ','.join(f'{v:.4e}' for v in tg.ravel()))
-        print(t, f'{m200[i]:.2e} {m200[j]:.2e} sép {r:.0f} kpc vr {vr:.0f}', flush=True)
-    ent = {'masse_t.csv': 't_ga,galaxie,m200_msun,r200_kpc,concentration',
+        print(t, f'{smas[i]:.2e} {smas[j]:.2e} sép {r:.0f} kpc vr {vr:.0f}', flush=True)
+    ent = {'masse_t.csv': 't_ga,galaxie,m200_msun,r200_kpc,concentration,masse_liee_msun  # M200 vide quand les deux halos partagent un groupe',
            'orbite_paire.csv': 't_ga,separation_kpc,v_radiale_kms,v_tangentielle_kms',
            'maree.csv': 't_ga,Txx,Txy,Txz,Tyx,Tyy,Tyz,Tzx,Tzy,Tzz  # (km/s/kpc)^2, repère galactique de l appli',
            'spin.csv': 't_ga,galaxie,lambda_bullock,jx,jy,jz  # direction unité, repère galactique de l appli'}
