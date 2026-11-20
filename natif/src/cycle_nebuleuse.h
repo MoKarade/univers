@@ -10,6 +10,9 @@ namespace {
 class NebuleuseRenderer {
 public:
     static constexpr int kMax = 16;
+    static constexpr double kSurfaceGain = 9.0;                 // même réglage que la surface du Soleil (spheres.h, kSunGain)
+    static constexpr double kRsunAl = 695700.0 / 9.4607e12;     // rayon du Soleil en années-lumière
+    static constexpr double kPi = 3.14159265358979;
     static constexpr int kFloats = 2 * cycle::kCouchesMax + 1 + 3 * cycle::kCouchesMax + 3;      // r (n + 1), teintes (3 n), extinction (n), arrondi
     int shown = 0;      // nébuleuses dessinées à la dernière image
 
@@ -74,6 +77,14 @@ public:
             const double dist = std::sqrt(dot(c, c));
             if (dist <= 0) continue;
             const double rho = rMax / dist, z = dot(c, cam.fwd);
+            // Éclat : vue de loin (l'étoile est un point), l'échelle des points des étoiles ; vue de près (l'étoile est une
+            // sphère), l'échelle des surfaces (spheres.h : kSunGain × éclat de surface / celui du Soleil), pour que le gaz garde
+            // son rapport réel à la surface de l'étoile. Passage de l'une à l'autre quand le disque de l'étoile passe de 1,5 à
+            // 15 pixels de rayon : c'est un réglage d'exposition, pas un phénomène [Supposition : réglage d'affichage].
+            const double rStarPx = sim.bodies[static_cast<size_t>(a.body)].lifeRadiusKm / kLyInKm / dist / pixel;
+            const double scaleSurface = std::min(scale, kSurfaceGain * kPi * kRsunAl * kRsunAl);
+            const double w = std::clamp(std::log10(std::max(rStarPx, 1e-9) / 1.5), 0.0, 1.0);
+            const double scaleHere = std::exp((1.0 - w) * std::log(scale) + w * std::log(scaleSurface));
             const bool inside = rho >= 0.95;
             if (!inside && (z <= 0 || rho / pixel < 1.0)) continue;
             VkRect2D sc{{0, 0}, {width, height}};
@@ -99,7 +110,7 @@ public:
                          {static_cast<float>(cam.right.x), static_cast<float>(cam.right.y), static_cast<float>(cam.right.z), static_cast<float>(cam.tanHalf * cam.aspect)},
                          {static_cast<float>(cam.up.x), static_cast<float>(cam.up.y), static_cast<float>(cam.up.z), static_cast<float>(cam.tanHalf)},
                          {static_cast<float>(cam.fwd.x), static_cast<float>(cam.fwd.y), static_cast<float>(cam.fwd.z), 0},
-                         {static_cast<float>(slot * kFloats), static_cast<float>(p.n), static_cast<float>(scale), 0}};
+                         {static_cast<float>(slot * kFloats), static_cast<float>(p.n), static_cast<float>(scaleHere), 0}};
             it.sc = sc;
             items.push_back(it);
         }
