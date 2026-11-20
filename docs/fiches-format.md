@@ -51,3 +51,18 @@ L'appli rend exactement les mêmes lignes qu'au format long.
 
 Identité · Position · Mouvement · Physique · Orbite · Rotation · Atmosphère et surface · Lumière et couleur ·
 Âge et évolution · Planètes · Découverte · Autres noms · Modèles et hypothèses.
+
+## Produire et installer les fiches
+
+Scripts (cache brut réutilisé à chaque relance, dans `C:\tmp\fiches\cache\`) :
+
+| script | sortie | astres | taille |
+|---|---|---|---|
+| `fiches_systeme_solaire.py` | `systeme_solaire.tsv` | Soleil, planètes, Pluton, Lune, 437 lunes | 1,4 Mo |
+| `fiches_etoiles.py` | `etoiles.tsv` | 33 étoiles nommées + 2 208 hôtes de planètes | 33 Mo |
+| `fiches_galaxies.py` | `galaxies.tsv`, `galaxies_1_leda.tsv`, `galaxies_2_cf4.tsv`, `galaxies_3_sga.tsv` | ~60 000 galaxies, amas, trous noirs, structures | 39 Mo |
+| `fiches_petits_corps.py` | `petits_corps.tsv` (tableau) | 1 582 067 astéroïdes et comètes | 889 Mo |
+| `fiches_sondes.py` | `sondes.tsv` | 5 sondes | 37 ko |
+
+Les sorties vont dans `C:\tmp\fiches\` ; les copier dans le dossier `fiches\` de l'installation. L'appli indexe
+1,74 million d'astres en 0,6 s au démarrage (fil à part) et lit une fiche en moins de 1 ms (mesuré le 20/11/2026).

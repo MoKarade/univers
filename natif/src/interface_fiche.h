@@ -8,7 +8,7 @@
 // restylé par le fil de l'interface : le premier mot du statut devient une pastille).
 #pragma once
 #include "fiches.h"
-#include "interface_base.h"
+// row(), frDistance… : déjà inclus par interface_panneau.h, qui inclut ce fichier.
 
 namespace {
 
@@ -89,7 +89,7 @@ void groupeCalcule(const Sim& sim, const UiState& ui, int f) {
     row("Latitude galactique", degresFr(bb), st, ui.s);
     row(depuisTerre ? "Distance à la Terre" : "Distance au Soleil", frDistance(r), "calculé — position de l'appli", ui.s);
     row("Temps mis par sa lumière", dureeFr(r * kYearSeconds), "calculé — distance / vitesse de la lumière", ui.s);
-    noteFiche("Les grandes distances (galaxies) sont celles du catalogue ; ici, elles ne tiennent pas compte de l'expansion de l'univers pendant le trajet de la lumière.");
+    if (b.kind == Kind::Galaxy) noteFiche("Les grandes distances (galaxies) sont celles du catalogue ; ici, elles ne tiennent pas compte de l'expansion de l'univers pendant le trajet de la lumière.");
 }
 
 // ---------------------------------------------------------------- la fiche
@@ -102,12 +102,19 @@ struct FicheCache {
 FicheCache gFicheCache;
 
 // Les groupes de la fiche, chacun repliable, dans l'ordre des fichiers.
+// Contrôle sans fenêtre : UNIVERS_FICHE=tout ouvre tous les groupes et fait défiler le panneau jusqu'à la fiche (captures).
+bool ficheTout() {
+    static const bool tout = std::getenv("UNIVERS_FICHE") != nullptr;
+    return tout;
+}
+
 void drawFicheRows(const std::vector<fiches::Ligne>& lignes, const UiState& ui) {
     std::vector<std::string> groupes;
     for (const auto& l : lignes)
         if (std::find(groupes.begin(), groupes.end(), l.groupe) == groupes.end()) groupes.push_back(l.groupe);
     for (size_t g = 0; g < groupes.size(); ++g) {
         const std::string titre = (groupes[g].empty() ? std::string("Autres données") : groupes[g]) + "##fiche-" + std::to_string(g);
+        if (ficheTout()) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
         if (!ImGui::CollapsingHeader(titre.c_str(), g == 0 ? ImGuiTreeNodeFlags_DefaultOpen : 0)) continue;
         ImGui::PushID(static_cast<int>(g));
         for (const auto& l : lignes)
@@ -123,6 +130,10 @@ void drawFiche(const Sim& sim, const UiState& ui, int f) {
         gFicheCache.cle = b.name;
         gFicheCache.pret = gFiches.pret();
         gFicheCache.lignes = gFiches.lire(b.name);
+    }
+    if (ficheTout()) {
+        ImGui::SetScrollHereY(0.0f);
+        ImGui::SetNextItemOpen(true, ImGuiCond_Always);
     }
     groupeCalcule(sim, ui, f);
     if (!gFiches.pret()) {

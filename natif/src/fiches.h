@@ -55,7 +55,7 @@ inline void nettoyer(std::string& l, bool premiere) {
 // (référence « 2005MNRAS.356 », nom) est gardé tel quel.
 inline std::string texteFr(const std::string& s) {
     for (char c : s)
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return s;
+        if (((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) && c != 'x') return s;      // « 14.9x8.2 » : x = « fois »
     std::string out = s;
     for (size_t k = 1; k + 1 < out.size(); ++k)
         if (out[k] == '.' && out[k - 1] >= '0' && out[k - 1] <= '9' && out[k + 1] >= '0' && out[k + 1] <= '9') out[k] = ',';
@@ -121,6 +121,9 @@ inline std::string incertitudeFr(const std::string& s) {
 
 // Valeur complète d'une ligne : limite, nombre, incertitude, unité.
 inline std::string valeurFr(const Ligne& l) {
+    // Un identifiant (numéro de catalogue, code) n'est pas une quantité : écrit tel quel, sans espaces ni virgule.
+    for (const char* mot : {"Identifiant", "identifiant", "Code", "code NAIF", "Numéro", "numéro", "PGC"})
+        if (l.libelle.find(mot) != std::string::npos) return l.valeur + (l.unite.empty() ? "" : " " + l.unite);
     std::string v = l.valeur, prefixe;
     if (!v.empty() && (v[0] == '<' || v[0] == '>')) {      // limite publiée
         prefixe = v[0] == '<' ? "moins de " : "plus de ";

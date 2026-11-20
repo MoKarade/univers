@@ -34,6 +34,8 @@ int main() {
     expect(incertitudeFr("+0.1/-0.1") == " \xC2\xB1 0,1", "dissymétrique égale");
     Ligne l{"Physique", "Rayon", "<3.2", "", "km", "mesuré", "JPL"};
     expect(valeurFr(l) == "moins de 3,2 km", "limite supérieure");
+    expect(nombreFr("14.9x8.2") == "14,9x8,2", "dimensions avec x");
+    expect(valeurFr(Ligne{"Identité", "Identifiant SPK (JPL)", "20000001", "", "", "publié", "JPL"}) == "20000001", "identifiant tel quel");
     expect(statutFr(l) == "mesuré \xE2\x80\x94 JPL", "statut et source");
 
     // Fichiers : un au format long, un au format tableau ; « Terre » est dans les deux.
