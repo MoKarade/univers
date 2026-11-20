@@ -156,8 +156,13 @@ public:
         p.hasGain = hasGain_ ? 1u : 0u;
         // Le calcul est enregistré dans les commandes de l'image (record), avant le dessin qui lit ces états : aucune attente
         // de la carte ici. L'état écrit est celui de la date de CETTE image.
+        // Même date, même Soleil, même film qu'à l'image d'avant, rien d'envoyé : les états écrits sont déjà ceux-là, le calcul
+        // n'est pas refait (cadence, 20/11/2026 : 2 à 4 ms par image quand le temps est arrêté). Rien d'autre n'écrit ces états
+        // tant que le film mène sans interruption (lastValid_ retombe dès qu'une image passe sans lui).
+        const bool same = lastValid_ && copies_.empty() && std::memcmp(&p, &push_, sizeof(Push)) == 0;
         push_ = p;
-        hasDispatch_ = true;
+        hasDispatch_ = !same;
+        ledThisFrame_ = true;
         orb.markExternalExact(step);
         return true;
     }
@@ -179,6 +184,8 @@ public:
         }
         stagingUsed_ = 0;
         stagingSet_ = 1 - stagingSet_;      // l'image suivante écrit dans l'autre jeu (celui-ci peut encore être lu par la carte)
+        lastValid_ = ledThisFrame_;      // le film a-t-il écrit (ou gardé) les états à cette image ?
+        ledThisFrame_ = false;
         if (!hasDispatch_) return;
         hasDispatch_ = false;
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_);
@@ -236,6 +243,7 @@ private:
     VkBuffer stateBuf_ = VK_NULL_HANDLE;      // états lus par gaia.vert (écrits par le calcul du film)
     Push push_{};
     bool hasDispatch_ = false;
+    bool lastValid_ = false, ledThisFrame_ = false;      // états écrits par le film et intacts depuis (update à chaque image)
     std::vector<VkBufferCopy> copies_;        // envois en attente pour les commandes de la prochaine image
     int stagingSet_ = 0, stagingUsed_ = 0;
     void* stagingMap_ = nullptr;
