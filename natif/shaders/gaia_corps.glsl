@@ -93,8 +93,13 @@ bool gvTraceur(uint idx, uvec4 r, uint flags, out vec3 p, out float garde, out f
                raccord sans seuil avec la ligne droite mesurée, comme etoiles_orbite.vert */
             float u = pc.par.w * 1.0e9 / OG_RACCORD_ANS, w = 1.0 - exp(-u * u);
             float tEtat = pc.par.w - pc.frac * 1.0e-3, h = pc.frac * 1.0e-3 * OP_K;
-            Etat a = orb[idx], s = orb[pc.sun];
+            Etat a = orb[idx];
             if ((flags & 16u) != 0u && a.v.w > 0.0) gainFilm = a.v.w;      /* film : lumière que Gaia, éteint, ne porte plus (film_etoiles.h) */
+            /* raccord nul (à moins de ~70 ans des mesures, w vaut exactement 0 en simple précision) : mix(ligne droite, orbite, 0)
+               rend la ligne droite telle quelle ; l'orbite, multipliée par zéro, n'est pas calculée (cadence, 20/11/2026). */
+            if (w == 0.0) move = v * pc.par.z;
+            else {
+            Etat s = orb[pc.sun];
             /* h = 0 (film sur la carte : état écrit à la date exacte) : la position est l'état lui-même ; l'accélération,
                multipliée par zéro, n'est pas calculée (cadence, 20/11/2026). */
             vec3 xa = a.p.xyz, xs;
@@ -105,6 +110,7 @@ bool gvTraceur(uint idx, uvec4 r, uint flags, out vec3 p, out float garde, out f
                 if (h != 0.0) xs += h * s.v.xyz + 0.5 * h * h * accGal(s.p.xyz, tEtat);
             }
             move = mix(v * pc.par.z, OG_M * (xa - xs) * OG_KPC_LY - pos, w);
+            }
         } else move = ogDeplacement(pos, v, pc.par.z, pc.par.w);      /* épicycles, le temps que le calcul exact rattrape */
     }
     p = voisine ? ((voisineBase - pc.camHi.xyz) + pos) - pc.camLo.xyz : ((pos - pc.camHi.xyz) + move) - pc.camLo.xyz;
