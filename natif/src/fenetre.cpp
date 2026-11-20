@@ -1165,6 +1165,7 @@ int runWindow(const WindowOptions& opt) {
         submit.signalSemaphoreCount = 1;
         submit.pSignalSemaphores = &rendered;
         check(vkQueueSubmit(g.queue, 1, &submit, fence), "envoi");
+        chrono.cpu("envoi");
         VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
         present.waitSemaphoreCount = 1;
         present.pWaitSemaphores = &rendered;
@@ -1175,7 +1176,7 @@ int runWindow(const WindowOptions& opt) {
         if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) input.resized = true;
         else if (pr != VK_SUCCESS) fail("affichage", pr);
         chrono.gpuSubmitted();
-        chrono.cpu("envoi et affichage");
+        chrono.cpu("affichage");
         chrono.endFrame(frameWallMs, sim.dist, sim.years);
 
         ++frame;
