@@ -4,6 +4,7 @@
 #include <thread>
 #include "avancement.h"
 #include "arrivee.h"
+#include "rayon_etoile.h"
 #include "centres_reference.h"
 #include "film_v2.h"
 #include "film_ancres.h"
@@ -450,6 +451,7 @@ struct Sim {
             body.nature = "étoile";
             if (body.star >= 0 && static_cast<uint64_t>(body.star) < stars->n) {
                 body.bv = stars->bv()[body.star];
+                body.radiusKm = rayon_etoile::rayonKm(stars->mag()[body.star], body.bv);      // calculé (audit E3)
                 bodies.push_back(body);
             }
         }
@@ -475,6 +477,7 @@ struct Sim {
                 body.natureText = "étoile avec " + c[3] + (c[3] == "1" ? " planète connue" : " planètes connues") + " (NASA Exoplanet Archive)";
                 body.priority = 9;
                 body.bv = stars->bv()[idx];
+                body.radiusKm = rayon_etoile::rayonKm(stars->mag()[idx], body.bv);      // calculé (audit E3)
                 bodies.push_back(body);
             }
         }

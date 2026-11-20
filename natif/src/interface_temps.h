@@ -329,6 +329,9 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         // Aujourd'hui la distance est une mesure ; à une autre date, c'est la mesure prolongée en ligne droite.
         row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : départ mesuré, orbite calculée autour de la Galaxie", s);
         row("Éclat vu de la Terre", "magnitude " + frNum(sim.apparentMag(f, {0, 0, 0})), "calculé", s);
+        if (fb.radiusKm > 0)      // audit E3 : rayon tiré de l'éclat et de la couleur (rayon_etoile.h), pas mesuré
+            row("Rayon", frNum(fb.radiusKm / rayon_etoile::kRsoleilKm, fb.radiusKm > 1.0e7 ? 0 : 2) + " fois le Soleil",
+                "calculé, approché (éclat et couleur, loi de Stefan-Boltzmann)", s);
         row(today ? "Vitesse" : "Vitesse aujourd'hui", frNum(sim.speedKms(f)) + " km/s par rapport au Soleil", "mesuré", s);
         if (!fb.planetLines.empty()) {
             ImGui::TextUnformatted("Planètes connues (NASA Exoplanet Archive, valeurs mesurées) :");
