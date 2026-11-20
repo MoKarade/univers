@@ -26,12 +26,13 @@ for ($g = $Premiere; $g -le $Derniere; $g++) {
     }
     Remove-Item 'resultats\pause.txt' -ErrorAction SilentlyContinue
     # au plus 3 départs d'avance sur le côté WSL (place sur le disque)
-    while ((Get-ChildItem 'resultats\rcj_*_genetic_128.npy' -ErrorAction SilentlyContinue).Count -ge 3) { Start-Sleep -Seconds 30 }
-    $sortie = "resultats\rcj_${g}_genetic_128.npy"
+    while ((Get-ChildItem "resultats\${Prefixe}_*_genetic_128.npy" -ErrorAction SilentlyContinue).Count -ge 3) { Start-Sleep -Seconds 30 }
+    $sortie = "resultats\${Prefixe}_${g}_genetic_128.npy"
     if (Test-Path $sortie) { continue }
     & $python realisations_jointes.py $g | Out-File -Append -Encoding utf8 'resultats\balayage_windows.log'
     & $python exporter_genetic.py $g 128 | Out-File -Append -Encoding utf8 'resultats\balayage_windows.log'
-    Remove-Item "resultats\rcj_${g}.npz" -ErrorAction SilentlyContinue      # refaisable à l'identique depuis la graine
+    if ($Prefixe -ne 'rcj') { Move-Item -Force "resultats\rcj_${g}_genetic_128.npy" $sortie }
+    Remove-Item "resultats\rcj_${g}.npz" -ErrorAction SilentlyContinue     # refaisable à l'identique depuis la graine
     "$(Get-Date -Format s) graine $g prête" | Out-File -Append -Encoding utf8 'resultats\balayage_windows.log'
 }
 "$(Get-Date -Format s) fini $Premiere..$Derniere" | Out-File -Append -Encoding utf8 'resultats\balayage_windows.log'
