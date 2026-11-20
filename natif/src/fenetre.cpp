@@ -21,6 +21,7 @@
 #include "galaxies.h"
 #include "interface.h"
 #include "points_planetes.h"
+#include "galaxies_naines.h"
 #include "spheres.h"
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
@@ -292,6 +293,10 @@ int runWindow(const WindowOptions& opt) {
     std::vector<float> filmStates;
     const bool filmStarsOk = milkyWayStarsOk && milkyWayStars.externalStatesFit() && filmStars.load(dataDir, milkyWayStars.starCount());
     if (filmStarsOk) sim.film = &filmStars.film;
+    // Ancres des voisines (pipeline/natif/ancres_film.py) : le point que suivent l'étiquette et la caméra quand une galaxie se déchire.
+    static FilmAnchors filmAnchors;
+    if (filmStarsOk && filmAnchors.load(dataDir + "/film_ancres.bin", filmStars.film)) sim.anchors = &filmAnchors;
+    std::printf("ancres des galaxies voisines dans le film : %s\n", sim.anchors ? "lues" : "absentes (centre ecrit par le calcul)");
     // Lumière entière des étoiles (vl_etoiles.lum) : sans elle, Gaia reste montré quand le film mène (revue F1).
     const bool filmLumOk = filmStarsOk && filmStars.loadLum(dataDir, "vl_etoiles.lum", [&](size_t i) { return milkyWayStars.starMagnitude(i); });
     std::printf("lumiere entiere des etoiles visibles : %s\n", filmLumOk ? "lue, Gaia cede au film loin d'aujourd'hui" : "absente, Gaia reste montre");
@@ -375,6 +380,10 @@ int runWindow(const WindowOptions& opt) {
     orbits.create(g, stars, sr, HdrTarget::kFormat);
     PlanetPoints planets;
     planets.create(g);
+    // Galaxies naines nommées sans forme ni photo : nuage tiré de leurs paramètres mesurés (galaxies_naines.h).
+    DwarfGalaxies dwarfGalaxies;
+    const bool dwarfsOk = dwarfGalaxies.load(g, dataDir + "/naines.tsv", sim);
+    std::printf("galaxies naines dessinees d'apres leurs mesures : %zu\n", dwarfsOk ? dwarfGalaxies.dwarfs.size() : size_t{0});
     GalaxyFile galaxyFile;
     GalaxyRenderer galaxies;
     if (openGalaxies(dataDir + "/galaxies.bin", galaxyFile)) galaxies.create(g, galaxyFile, HdrTarget::kFormat);
@@ -837,6 +846,7 @@ int runWindow(const WindowOptions& opt) {
         uiImages.uploadPending(g);      // au plus une image du panneau par image affichée
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
         planets.update(sim, cam, asSphere);
+        dwarfGalaxies.update(sim);
 
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -899,7 +909,10 @@ int runWindow(const WindowOptions& opt) {
             float table[4 * 16] = {};
             for (int k = 0; k < 4; ++k) {
                 const Voisine& v = voisines[k];
-                const Vec3 ct = v.body >= 0 && sim.visible(v.body) ? sim.position(v.body) : v.c0;
+                Vec3 ct = v.body >= 0 && sim.visible(v.body) ? sim.position(v.body) : v.c0;
+                // Film : base = centre écrit par la courbe des étoiles (Sim::filmStarBase), pas l'ancre que suit la caméra ;
+                // sinon une galaxie déchirée, au centre écrit bruité, faisait trembler toutes ses étoiles (Marc, 20/11/2026).
+                if (neighbourStars.externalStates()) sim.filmStarBase(v.nom, ct);
                 const Vec3 a = orbite::versEcliptique({v.axe[0], v.axe[1], v.axe[2]});      // axe galactique -> écliptique
                 const float row[16] = {static_cast<float>(v.c0.x), static_cast<float>(v.c0.y), static_cast<float>(v.c0.z), 0,
                                        static_cast<float>(ct.x), static_cast<float>(ct.y), static_cast<float>(ct.z), 0,
@@ -982,6 +995,7 @@ int runWindow(const WindowOptions& opt) {
         // (l'ordre compte : après les astéroïdes, le dessin des étoiles n'est plus lié ; les planètes le relient)
         sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
         planets.draw(cmd);
+        if (!skyOnly) dwarfGalaxies.draw(cmd);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
         vkCmdEndRendering(cmd);
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1107,6 +1121,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     planets.release(g);
+    dwarfGalaxies.release(g);
     gaiaSky.destroy(g);
     if (gaiaBOk) gaiaB.release(g);
     filmGpu.release(g);

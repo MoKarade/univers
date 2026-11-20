@@ -204,18 +204,10 @@ private:
         }
     }
 
-    // Même règle que Sim::refreshGalaxies : film de la rencontre là où il existe (écart de départ effacé sur 100 Ma),
+    // Même règle que Sim::refreshGalaxies (Sim::filmCentre) : film de la rencontre là où il existe (écart de départ effacé sur 100 Ma),
     // centres de référence ailleurs.
     static bool galaxyAt(const Sim& sim, int ci, double tGa, phys::Vec3& out) {
-        if (sim.filmCovers(tGa) && ci < sim.film->galaxies() && sim.film->centre(ci, tGa, out)) {
-            const double t0 = std::clamp(0.0, sim.film->debutGa(), sim.film->date(sim.film->images() - 2));
-            phys::Vec3 f0, r0;
-            if (sim.centres && sim.film->centre(ci, t0, f0) && sim.centres->centre(ci, t0, r0)) {
-                const double w = std::clamp(1.0 - std::fabs(tGa - t0) / 0.1, 0.0, 1.0);
-                out = {out.x - w * (f0.x - r0.x), out.y - w * (f0.y - r0.y), out.z - w * (f0.z - r0.z)};
-            }
-            return true;
-        }
+        if (sim.filmCovers(tGa) && ci < sim.film->galaxies() && sim.filmCentre(ci, tGa, out, true)) return true;      // ancre si elle existe
         return sim.centres && sim.centres->ready && sim.centres->centre(ci, tGa, out);
     }
 

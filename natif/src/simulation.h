@@ -5,6 +5,7 @@
 #include "avancement.h"
 #include "centres_reference.h"
 #include "film_v2.h"
+#include "film_ancres.h"
 #include "ciel_bandes.h"
 #include "commun.h"
 #include "completude.h"
@@ -58,6 +59,9 @@ struct Body {
     std::string natureText;     // galaxie : genre lu dans le fichier
     Vec3 fixedPos{0, 0, 0};     // galaxie : position mesurée (années-lumière), immobile pour l'instant
     int priority = 1;           // galaxie : 1 = nom montré dès qu'on sort de la Voie lactée
+    int dwarfModel = -1;        // galaxie naine dessinée d'après ses paramètres mesurés (galaxies_naines.h) ; -1 : non
+    double shapeRadiusLy = 0;   // rayon de demi-lumière mesuré, si la forme est dessinée d'après lui (galaxies_naines.h)
+    std::string shapeNote;      // ce qui est dessiné de sa forme, et d'où viennent les valeurs (galaxies_naines.h)
     bool structure = false;     // repère de structures_noms.tsv (superamas, attracteur, vide) : pas une galaxie
     const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
 };
@@ -242,6 +246,7 @@ struct Sim {
     // Film du Groupe local (film_etoiles.h) : quand il couvre la date montrée, c'est lui qui donne le centre des galaxies
     // voisines et la place des étoiles visibles de la Voie lactée ; sinon les centres et les orbites de référence.
     const phys::film::FilmV2* film = nullptr;
+    const FilmAnchors* anchors = nullptr;      // ancres des voisines dans le film (film_ancres.h) ; nul sans fichier
     bool filmLeads = false;      // à cette image, les étoiles visibles suivent le film
     double filmEdgeYears = 0;    // non nul : la date voulue dépasse le film calculé ; elle est arrêtée à ce bord (fenetre.cpp)
     double gaiaFilmOff = 0;      // part de Gaia éteinte parce que le film mène (0 à 1, revue F1 ; fenetre.cpp)
@@ -667,6 +672,46 @@ struct Sim {
         refreshGalaxies();
     }
 
+    // Centre d'une voisine dans le film, en kpc relatifs à la Voie lactée. follow = true : le point que suivent l'étiquette
+    // et la caméra (ancre, film_ancres.h, si le fichier la couvre) ; false : le centre écrit, par la courbe de ses étoiles
+    // (base où gaia.vert pose leurs positions relatives). Revue F4 : le centre du film à t = 0 n'est pas exactement le
+    // centre mesuré ; l'écart à la date de départ commune est retiré, puis s'efface sur 100 Ma (même décalage pour l'ancre
+    // et pour la base des étoiles : la galaxie ne se décolle pas de son étiquette).
+    bool filmCentre(int ci, double tGa, phys::Vec3& g, bool follow) const {
+        if (!film || !centres || !centres->ready) return false;
+        auto raw = [&](double t, phys::Vec3& o) {
+            if (follow && anchors && anchors->at(*film, ci, t, o)) return true;
+            return follow ? film->centre(ci, t, o) : film->centreEtoiles(ci, t, o);
+        };
+        if (!raw(tGa, g)) return false;
+        const double t0 = std::clamp(0.0, film->debutGa(), film->date(film->images() - 2));
+        phys::Vec3 f0, r0;
+        if (raw(t0, f0) && centres->centre(ci, t0, r0)) {
+            const double w = std::clamp(1.0 - std::fabs(tGa - t0) / 0.1, 0.0, 1.0);
+            g = {g.x - w * (f0.x - r0.x), g.y - w * (f0.y - r0.y), g.z - w * (f0.z - r0.z)};
+        }
+        return true;
+    }
+    // Base des étoiles d'une voisine quand le film les mène (repère du simulateur, années-lumière) : centre écrit par la
+    // courbe des étoiles, pour que centre + position relative redonne exactement la position calculée de chaque étoile.
+    bool filmStarBase(const std::string& name, Vec3& out) const {
+        const int ci = CentresReference::indexOf(name);
+        phys::Vec3 g;
+        const double tGa = replayGa();
+        if (ci < 0 || !filmCovers(tGa) || ci >= film->galaxies() || !filmCentre(ci, tGa, g, false)) return false;
+        const Vec3 w = fromGalactocentric(g), shift = sunShift();
+        out = {w.x + shift.x, w.y + shift.y, w.z + shift.z};
+        return true;
+    }
+    // Part des étoiles d'une voisine encore groupées autour de son cœur à la date montrée (film_ancres.h) ; -1 : inconnue.
+    double groupedShare(const std::string& name) const {
+        const int ci = CentresReference::indexOf(name);
+        phys::Vec3 o;
+        double f = -1;
+        if (ci < 0 || !anchors || !film || !filmCovers(replayGa()) || !anchors->at(*film, ci, replayGa(), o, &f)) return -1;
+        return f;
+    }
+
     void refreshGalaxies() {
         galPos.assign(bodies.size(), {0, 0, 0});
         galValid.assign(bodies.size(), 0);
@@ -682,16 +727,7 @@ struct Sim {
             if (ci >= 0) {
                 phys::Vec3 g;
                 bool ok = false;
-                if (filmCovers(tGa) && ci < film->galaxies() && film->centre(ci, tGa, g)) {
-                    // Revue F4 : le centre du film à t = 0 n'est pas exactement le centre mesuré (decalage_a_t0 n'est pas dans
-                    // l'index du film v2). L'écart à la date de départ commune est retiré, puis s'efface sur 100 Ma : plus de
-                    // saut au passage référence -> film, et le film reprend seul la main loin d'aujourd'hui.
-                    const double t0 = std::clamp(0.0, film->debutGa(), film->date(film->images() - 2));
-                    phys::Vec3 f0, r0;
-                    if (film->centre(ci, t0, f0) && centres->centre(ci, t0, r0)) {
-                        const double w = std::clamp(1.0 - std::fabs(tGa - t0) / 0.1, 0.0, 1.0);
-                        g = {g.x - w * (f0.x - r0.x), g.y - w * (f0.y - r0.y), g.z - w * (f0.z - r0.z)};
-                    }
+                if (filmCovers(tGa) && ci < film->galaxies() && filmCentre(ci, tGa, g, true)) {
                     ok = true;
                 } else
                     ok = centres->centre(ci, tGa, g);
@@ -811,6 +847,7 @@ struct Sim {
         if (b.kind == Kind::Probe) arrive = 3.0e6 / kLyInKm;                  // sonde (un point) : on voit son voisinage, à 3 millions de km
         double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
+        if (b.kind == Kind::Galaxy && b.shapeRadiusLy > 0) d = std::clamp(12.0 * b.shapeRadiusLy, 1.0e3, 3.0e5);      // naine dessinée : on la voit entière
         return d;
     }
     void remember() {
@@ -907,7 +944,7 @@ struct Sim {
         }
     }
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
-        if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return 1.0e3;
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return bodies[static_cast<size_t>(i)].shapeRadiusLy > 0 ? std::min(1.0e3, bodies[static_cast<size_t>(i)].shapeRadiusLy) : 1.0e3;
         if (bodies[static_cast<size_t>(i)].kind == Kind::Probe || bodies[static_cast<size_t>(i)].kind == Kind::Asteroid) return 1.0e-10;      // environ 1 000 km
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }

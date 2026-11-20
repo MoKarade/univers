@@ -282,6 +282,12 @@ void bodyOrbit(Sim& sim, UiState& ui, const Body& b, int f) {
         plotSeries(ui, "##orb", tr.t, tr.r, tr.hasWhatIf ? &tr.rWhatIf : nullptr, sim.years, "Ga", 1e-9, "kpc", px(ui, 140), kStartYears);
         note("Axe : milliards d'années depuis aujourd'hui ; trait blanc : date montrée.");
         groupFacts(ui, tr);
+        // Galaxie déchirée par les marées (film de la rencontre, film_ancres.h) : ses étoiles sont toutes gardées et se mêlent
+        // peu à peu à la Voie lactée ; on dit quelle part reste groupée autour de son cœur.
+        if (const double f = sim.groupedShare(b.name); f >= 0) {
+            row("Étoiles encore groupées autour de son cœur", frInt(100.0 * f) + " %", "calculé (film de la rencontre)", ui.s);
+            if (f < 0.3) note("Déchirée par les marées : toutes ses étoiles sont gardées (aucune n'est retirée) et se mêlent peu à peu à la Voie lactée. Le repère suit le centre de ses étoiles.");
+        }
         // Premier rapprochement après aujourd'hui (premier minimum de la distance).
         for (size_t i = 1; i + 1 < tr.r.size(); ++i)
             if (tr.t[i] > sim.years && tr.r[i] < tr.r[i - 1] && tr.r[i] <= tr.r[i + 1]) {
