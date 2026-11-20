@@ -582,6 +582,7 @@ int runWindow(const WindowOptions& opt) {
         double d0 = 0, d1 = 0;
         int n = 0, k = -1;
         std::string dir;
+        std::vector<double> dates;      // balayage dans le temps (UNIVERS_BALAYAGE_DATES) : une vue par date, distance fixe
         bool next(const Gpu& gg, const Target& img, VkExtent2D ext, Sim& s) {
             if (n <= 0) return false;
             if (k >= 0) {
@@ -589,13 +590,30 @@ int runWindow(const WindowOptions& opt) {
                 char name[32];
                 std::snprintf(name, sizeof(name), "/b_%03d.ppm", k);
                 writeCapture(gg, img, ext, dir + name);
-                std::printf("balayage %d : distance %.4g al, pose automatique %.4g\n", k, s.dist, s.autoPose);
+                std::printf("balayage %d : distance %.4g al, date %.6g, pose automatique %.4g\n", k, s.dist, s.years, s.autoPose);
             }
             if (++k >= n) return false;
-            s.dist = n > 1 ? d0 * std::pow(d1 / d0, static_cast<double>(k) / (n - 1)) : d0;
+            if (!dates.empty()) s.years = dates[static_cast<size_t>(k)];
+            else s.dist = n > 1 ? d0 * std::pow(d1 / d0, static_cast<double>(k) / (n - 1)) : d0;
             return true;
         }
     } sweep;
+    // UNIVERS_BALAYAGE_DATES=<dossier>|<date>,<date>,... : une vue par date (années depuis J2000), à la distance de départ
+    if (const char* b = std::getenv("UNIVERS_BALAYAGE_DATES"); b && test) {
+        const std::string s = b;
+        const size_t bar = s.find('|');
+        if (bar != std::string::npos) {
+            sweep.dir = s.substr(0, bar);
+            for (size_t from = bar + 1; from < s.size();) {
+                const size_t c = s.find(',', from);
+                sweep.dates.push_back(std::atof(s.substr(from, c == std::string::npos ? std::string::npos : c - from).c_str()));
+                if (c == std::string::npos) break;
+                from = c + 1;
+            }
+            sweep.n = static_cast<int>(sweep.dates.size());
+            sweep.next(g, final, sc.extent, sim);
+        }
+    }
     if (const char* b = std::getenv("UNIVERS_BALAYAGE"); b && test) {
         char dir[512] = {};
         if (std::sscanf(b, "%lf:%lf:%d:%511s", &sweep.d0, &sweep.d1, &sweep.n, dir) == 4 && sweep.d0 > 0 && sweep.d1 > 0) {
