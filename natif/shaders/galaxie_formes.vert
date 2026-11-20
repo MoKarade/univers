@@ -59,6 +59,9 @@ void main() {
     vec3 p = P.xyz, col = couleurT(Tc * (vieille ? pc.par2.w : pc.par2.z));
     F *= vieille ? pc.par2.y : pc.par2.x;
     float part = 1.0 - s;
+    /* audit C6 : galaxie non admise en particules (budget plein, hors champ) : le point garde toute sa lumière, sinon
+       personne ne la dessinait dès 8 px */
+    if (!particules && npart[g] == 0u) part = 1.0;
     if (particules) {
         uint n = max(npart[g], 1u);
         if (k >= n) { cacher(); return; }

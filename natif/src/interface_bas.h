@@ -9,7 +9,7 @@ namespace {
 
 // Un à un ou en somme (demande de Marc, 12/11 : « quand on augmente les distances on généralise au fur et à mesure ») :
 // de près chaque point est un objet mesuré ; en s'éloignant, chaque pixel additionne la lumière de plus en plus d'étoiles
-// mesurées (éclat par pixel constant au-delà de 300 al, simulation.h). La vue lointaine est leur somme, jamais un modèle.
+// mesurées (éclat par pixel constant au-delà de 3 000 al, simulation.h). La vue lointaine est leur somme, jamais un modèle.
 const char* grainLine(const Sim& sim) {
     if (sim.starShare() <= 0) return nullptr;      // seul le calcul de la fusion est montré : voir la ligne suivante
     if (sim.dist < 0.05) {

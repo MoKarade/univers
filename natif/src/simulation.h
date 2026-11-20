@@ -954,14 +954,16 @@ struct Sim {
 
     // Les étoiles pâlissent en 1/d² : loin de tout, on multiplie leur éclat pour qu'elles restent visibles, et on le dit.
     double brightnessBoost() const {
-        // Jusqu'à 300 années-lumière l'éclat est multiplié pour compenser la distance (au plus 100 fois), puis il reste à
+        // Jusqu'à 3 000 années-lumière l'éclat est multiplié pour compenser la distance (au plus 100 fois), puis il reste à
         // 100. À partir de là, chaque pixel additionne de plus en plus d'étoiles : l'image passe d'elle-même des étoiles une
         // à une à leur lumière regroupée, à éclat par pixel constant, et l'ensemble rapetisse en s'éloignant, comme une vraie
         // galaxie. Demande de Marc (12 novembre 2026) : « quand on augmente les distances on généralise au fur et à mesure ».
         // Ce qu'on voit de loin est donc la somme des étoiles MESURÉES (rien d'ajouté) : un nuage autour du Soleil, parce que
         // Gaia ne mesure bien les distances que dans notre région de la Galaxie.
-        const double k = std::clamp(dist / 30.0, 1.0, 10.0);
-        return k * k;
+        // Audit du zoom (20/11/2026, « les vues changent quand je zoome, l'éclairage aussi ») : le renfort montait en (d/30)²,
+        // ×100 sur une seule décade (30 à 300 al), soit ×13 d'éclat moyen mesuré entre deux crans de molette. Il monte
+        // maintenant en d/30, sur deux décades (×100 atteint à 3 000 al) : la même lumière au bout, deux fois moins vite.
+        return std::clamp(dist / 30.0, 1.0, 100.0);
     }
     // Astéroïdes : un point chacun de près ; au-delà de 2,5 fois la distance Terre-Soleil, l'éclat de chaque point baisse
     // comme l'inverse du carré de la distance, si bien que la ceinture garde le même éclat par pixel pendant que ses

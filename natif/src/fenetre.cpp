@@ -572,6 +572,34 @@ int runWindow(const WindowOptions& opt) {
     auto last = std::chrono::steady_clock::now();
     const auto start = last;
     int frame = 0, shown = 0;
+    // Contrôle : balayage du zoom dans un seul lancement (UNIVERS_BALAYAGE=<d0>:<d1>:<n>:<dossier>) : n vues de d0 à d1
+    // années-lumière (pas égaux en logarithme), chacune après opt.testFrames images, écrites en dossier/b_NNN.ppm, avec une
+    // ligne par vue (distance, pose automatique). Sert à trouver les sauts de vue et d'éclat au zoom (audit, 20/11/2026).
+    struct Sweep {
+        double d0 = 0, d1 = 0;
+        int n = 0, k = -1;
+        std::string dir;
+        bool next(const Gpu& gg, const Target& img, VkExtent2D ext, Sim& s) {
+            if (n <= 0) return false;
+            if (k >= 0) {
+                vkDeviceWaitIdle(gg.dev);
+                char name[32];
+                std::snprintf(name, sizeof(name), "/b_%03d.ppm", k);
+                writeCapture(gg, img, ext, dir + name);
+                std::printf("balayage %d : distance %.4g al, pose automatique %.4g\n", k, s.dist, s.autoPose);
+            }
+            if (++k >= n) return false;
+            s.dist = n > 1 ? d0 * std::pow(d1 / d0, static_cast<double>(k) / (n - 1)) : d0;
+            return true;
+        }
+    } sweep;
+    if (const char* b = std::getenv("UNIVERS_BALAYAGE"); b && test) {
+        char dir[512] = {};
+        if (std::sscanf(b, "%lf:%lf:%d:%511s", &sweep.d0, &sweep.d1, &sweep.n, dir) == 4 && sweep.d0 > 0 && sweep.d1 > 0) {
+            sweep.dir = dir;
+            sweep.next(g, final, sc.extent, sim);      // première distance, avant la première image
+        } else sweep.n = 0;
+    }
     bool gaiaLiveNow = true;            // le calcul en direct de Gaia sert-il à cette image ? (non quand le film mène et que Gaia y est éteint)
     double pathYears0 = 0, pathWall = 0;      // contrôle --horloge-reelle : date et durée du trajet
     long pathFrames = 0;
@@ -825,8 +853,11 @@ int runWindow(const WindowOptions& opt) {
 
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
         // mesure de l'image précédente, lue sans attente (la barrière vient d'être passée) ; relevée seulement aux échelles des
-        // galaxies (au-delà de 10 millions d'al regardés), jamais pour les étoiles
-        autoPose.update(dt, test, true, sim.dist > 1.0e7 ? pose_auto::kPoseMaxGalaxies : 1.0);
+        // galaxies (au-delà de 10 millions d'al regardés), jamais pour les étoiles ; balayage du zoom du 20/11 : un plafond fixe
+        // dès 10 Mal donnait ×2,1 d'éclat d'un cran de molette au suivant
+        // plafond qui monte comme l'échelle regardée (1 à 10 Mal, 10 à 100 Mal, 1 000 à 10 Gal) : au plus ×1,26 d'un cran de
+        // molette au suivant (en carré, le balayage mesurait ×1,6 par cran)
+        autoPose.update(dt, test, true, std::clamp(sim.dist / 1.0e7, 1.0, pose_auto::kPoseMaxGalaxies));
         sim.autoPose = autoPose.pose;
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
         // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
@@ -867,8 +898,11 @@ int runWindow(const WindowOptions& opt) {
         // les fait tourner d'un bloc, alors que les étoiles visibles de la Voie lactée tournent chacune à sa vitesse (film ou
         // orbites) : les deux se contredisaient à l'écran (contrôle du premier film, docs/premier-film.md, défaut 6). Quand les
         // étoiles visibles sont dessinées, le calque n'est donc montré qu'à moins de 3 millions d'années d'aujourd'hui.
-        const bool armLayerAgrees = !(milkyWayStarsOk && sim.bestLook) || std::fabs(sim.years - kStartYears) <= kLinearLimitYears;
-        if (milkyWayCentre >= 0 && armLayerAgrees) armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0]);
+        // audit C5 : fondu de 1 à 3 Ma au lieu d'une coupure nette à 3 Ma (meilleur rendu)
+        const double armAgree = !(milkyWayStarsOk && sim.bestLook) ? 1.0
+                                : std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0);
+        if (milkyWayCentre >= 0 && armAgree > 0)
+            armTracers.update(cam, sim.position(milkyWayCentre), sim.years - kStartYears, sim.dist, pc.par[0] * static_cast<float>(armAgree));
         else armTracers.count = 0;
         sim.armTracersShown = armTracers.count > 0;
         tasksTimer += dt;
@@ -1111,7 +1145,8 @@ int runWindow(const WindowOptions& opt) {
             titleTimer = 0;
             shown = 0;
         }
-        if (test && frame >= opt.testFrames) break;
+        if (test && frame >= opt.testFrames && sweep.next(g, final, sc.extent, sim)) frame = 0;      // balayage : vue suivante
+        else if (test && frame >= opt.testFrames) break;
     }
     vkDeviceWaitIdle(g.dev);
     if (outerThread.joinable()) outerThread.join();
