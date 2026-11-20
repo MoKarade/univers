@@ -100,6 +100,11 @@ add_executable(essai_interface src/essai_interface.cpp)
 target_compile_options(essai_interface PRIVATE -Wall -Wextra)
 target_link_options(essai_interface PRIVATE -static)
 
+# Contrôle du cycle de vie des étoiles (cycle_etoile.h, cycle_matiere.h) sur vie_cycle.bin.
+add_executable(essai_cycle src/essai_cycle.cpp)
+target_compile_options(essai_cycle PRIVATE -Wall -Wextra)
+target_link_options(essai_cycle PRIVATE -static)
+
 # Contrôle de la complétude par échelle (completude.h) sur le vrai fichier d'étoiles.
 add_executable(essai_completude src/essai_completude.cpp)
 target_link_libraries(essai_completude PRIVATE volk imgui univers_physique)
