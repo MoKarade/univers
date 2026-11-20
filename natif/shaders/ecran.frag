@@ -4,12 +4,13 @@
 layout(set = 0, binding = 0) uniform sampler2D hdr;
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 o;
-layout(push_constant) uniform Pc { vec4 p; } pc;      /* p.x : 1 = photo (asinh), 0 = œil nu */
+layout(push_constant) uniform Pc { vec4 p; } pc;      /* p.x : 1 = photo (asinh), 0 = œil nu ; p.y : pose automatique contre la saturation (pose_auto.h, 1 = aucune) */
 vec3 srgb(vec3 c) {
     return mix(12.92 * c, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
 void main() {
-    vec3 c = texture(hdr, uv).rgb;
+    /* borne avant tout calcul : une somme de points qui déborde les 16 bits (inf) donnait des pixels noirs (NaN) (audit A2) */
+    vec3 c = min(texture(hdr, uv).rgb, vec3(6.0e4)) * (pc.p.y > 0.0 ? pc.p.y : 1.0);
     if (pc.p.x > 0.5) {
         /* photo : étirement asinh de la luminance, comme les images astronomiques (Lupton et al. 2004) : la teinte est gardée,
            les zones faibles ressortent, les fortes saturent doucement */

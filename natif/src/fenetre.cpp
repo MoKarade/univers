@@ -33,6 +33,7 @@
 #include "film_etoiles.h"
 #include "film_carte.h"
 #include "rendu_fenetre.h"
+#include "pose_auto.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -480,6 +481,9 @@ int runWindow(const WindowOptions& opt) {
     ScreenPass screen;
     screen.create(g);
     screen.bindSource(g, hdr.view);
+    PoseAuto autoPose;      // pose qui baisse quand l'image sature (audit A2, pose_auto.h)
+    autoPose.create(g);
+    autoPose.bindSource(g, hdr.view);
 
     // Interface.
     IMGUI_CHECKVERSION();
@@ -546,6 +550,7 @@ int runWindow(const WindowOptions& opt) {
         if (!createSwapchain(g, surface, test, sc)) return false;
         createTargets();
         screen.bindSource(g, hdr.view);
+        autoPose.bindSource(g, hdr.view);
         return true;
     };
 
@@ -819,6 +824,10 @@ int runWindow(const WindowOptions& opt) {
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain() * sim.photoGain * std::pow(2.0, sim.exposureEv)), sc.extent.height, sim.years);
 
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
+        // mesure de l'image précédente, lue sans attente (la barrière vient d'être passée) ; relevée seulement aux échelles des
+        // galaxies (au-delà de 10 millions d'al regardés), jamais pour les étoiles
+        autoPose.update(dt, test, true, sim.dist > 1.0e7 ? pose_auto::kPoseMaxGalaxies : 1.0);
+        sim.autoPose = autoPose.pose;
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
         // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
         if (sim.cosmologyDirty || std::fabs(sim.years - galaxyScaleAt) > 1.0e6) {
@@ -925,7 +934,10 @@ int runWindow(const WindowOptions& opt) {
             sim.structures.oortShare = sim.structures.showOort ? structures::oortShare(camSun) : 0.0;
             sim.structures.largeShare = sim.structures.showLarge && structuresOk ? structures::largeShare(sim.dist) : 0.0;
             if (!skyOnly && (sim.structures.oortShare > 0 || sim.structures.largeShare > 0))
-                structuresR.draw(cmd, cam, sc.extent.width, sc.extent.height, sim.structures.oortShare, sim.structures.largeShare, sim.years, structuresClock, sim.dist);
+                // repères (pas de la lumière) : divisés par la pose automatique, pour garder le même aspect quand elle change
+                structuresR.draw(cmd, cam, sc.extent.width, sc.extent.height, sim.structures.oortShare / sim.autoPose, sim.structures.largeShare / sim.autoPose,
+                                 sim.years, structuresClock, sim.dist,
+                                sim.structures.showSpheres);
         }
         float ageLum[16], ageTeff[16];
         vieillissement.factors(sim.replayGa(), ageLum, ageTeff);
@@ -1029,7 +1041,7 @@ int runWindow(const WindowOptions& opt) {
             armTracers.draw(cmd);
         }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
-                       sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? pc.par[0] * static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // pose des étoiles × fondu en temps (audit A6, C4)      // cachés dans une autre lumière : on ne les voit qu'en lumière visible
+                       sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? pc.par[0] * static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // pose des étoiles × fondu en temps (audit A6, C4) ; seulement en lumière visible
         // (l'ordre compte : après les astéroïdes, le dessin des étoiles n'est plus lié ; les planètes le relient)
         sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
         planets.draw(cmd);
@@ -1044,9 +1056,11 @@ int runWindow(const WindowOptions& opt) {
         transition(cmd, final.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, final.view, sc.extent);
-        screen.draw(cmd, sc.extent, sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv > 0) ? 1.0f : 0.0f);      // étirement « photo » seulement quand une galaxie résolue règle la pose
+        screen.draw(cmd, sc.extent, sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv > 0) ? 1.0f : 0.0f,
+                    static_cast<float>(autoPose.pose));      // étirement « photo » seulement quand une galaxie résolue règle la pose
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
         vkCmdEndRendering(cmd);
+        autoPose.measure(cmd);      // part saturée de cette image, lue à la suivante
         // 3. Copie dans la fenêtre.
         transition(cmd, final.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -1160,6 +1174,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, acquired, nullptr);
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
+    autoPose.release(g);
     planets.release(g);
     dwarfGalaxies.release(g);
     blackHoles.release(g);
