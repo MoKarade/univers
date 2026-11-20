@@ -172,9 +172,9 @@ bool dockButton(const UiState& ui, const char* id, const char* icon, const char*
 // avec son écart à aujourd'hui, puis la vitesse (curseur libre, du temps réel à 200 millions d'années par seconde).
 // `left`, `right` : place libre (le panneau de droite est exclu) ; `bottom` : haut de la frise.
 void drawTimeBar(Sim& sim, UiState& ui, float left, float right, float bottom, ImGuiWindowFlags fixed) {
-    const float dockW = std::min(px(ui, 640), right - left - px(ui, 32));
+    const float dockW = std::min(px(ui, 700), right - left - px(ui, 32));
     ImGui::SetNextWindowPos({(left + right) * 0.5f, bottom - px(ui, 10)}, 0, {0.5f, 1});
-    ImGui::SetNextWindowSize({dockW, 0});
+    ImGui::SetNextWindowSizeConstraints({dockW, 0}, {std::max(dockW, right - left - px(ui, 32)), FLT_MAX});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 14), px(ui, 10)});
     ImGui::Begin("temps", nullptr, (fixed & ~ImGuiWindowFlags_AlwaysAutoResize) | ImGuiWindowFlags_AlwaysAutoResize);
     cardShadow();
@@ -216,10 +216,11 @@ void drawTimeBar(Sim& sim, UiState& ui, float left, float right, float bottom, I
     ImGui::TextColored(theme::v4(sim.paused ? theme::kMuted : theme::kAccent), "%s", rel.c_str());
     ImGui::PopFont();
     ImGui::EndGroup();
-    // À droite : maintenant, date, ce qui est mesuré à cette date.
+    // À droite : maintenant, date, ce qui est mesuré à cette date (jamais sur la date : au besoin, la carte s'élargit).
     const bool notToday = std::fabs(sim.years - kStartYears) >= 1.0;
     const float rightW = small * 3 + ImGui::GetStyle().ItemSpacing.x * 2;
-    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - rightW));
+    const float afterDate = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + px(ui, 16);
+    ImGui::SameLine(std::max(afterDate, ImGui::GetWindowContentRegionMax().x - rightW));
     ImGui::SetCursorPosY(y0 + (big - small) * 0.5f);
     if (iconButton("maintenant", ico::kClock, "Maintenant", "Revenir à aujourd'hui", false, small)) {
         sim.years = kStartYears;

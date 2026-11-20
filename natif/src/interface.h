@@ -56,7 +56,7 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     // En bas : le temps au-dessus de la frise, centré dans la place laissée par le panneau ; « tu regardes » à gauche.
     const float freeRight = std::min(gBac.panelLeft, w);
     drawTimeBar(sim, ui, 0.0f, freeRight, std::min(hUp + px(ui, 10), gBac.friseTop), fixed);
-    drawStatus(sim, ui, std::min(hUp + px(ui, 10), gBac.friseTop), fixed);
+    drawStatus(sim, ui, w, fixed);
     drawScaleLadder(sim, ui, h, fixed);
     drawLightLegend(sim, ui, freeRight, hUp, fixed);
     drawArmCard(sim, ui, cam, freeRight, hUp, fixed);

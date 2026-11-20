@@ -83,7 +83,7 @@ bool richRow(const UiState& ui, const char* id, const std::string& name, const s
     ImGui::PushID(id);
     const float wRow = std::max(ImGui::GetContentRegionAvail().x, px(ui, 380));
     const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float hRow = ImGui::GetTextLineHeight() + px(ui, 14);
+    const float hRow = ImGui::GetTextLineHeight() + px(ui, 10);
     const bool hit = ImGui::Selectable("##r", selected, ImGuiSelectableFlags_None, {wRow, hRow});
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float cy = p.y + hRow * 0.5f;
@@ -364,7 +364,7 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     }
     ImGui::EndDisabled();
     toolbarDivider(ui);
-    if (iconButton("aller", ico::kPin, "Aller à", "Aller à : échelles, système solaire, étoiles, galaxies, sondes, éclipses", ImGui::IsPopupOpen("aller")))
+    if (iconButton("aller", ico::kLocation, "Aller à", "Aller à : échelles, système solaire, étoiles, galaxies, sondes, éclipses", ImGui::IsPopupOpen("aller")))
         popupUnder(ui, "aller");
     if (ui.keepGoTo) ui.goToAnchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + px(ui, 8)};
     ImGui::SameLine();
@@ -394,6 +394,7 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     // Résultats sous la barre ; raccourcis quand le champ est vide et choisi.
     if (ui.search[0]) drawSearchResults(sim, ui, active, entered);
     else if (active) drawSuggestions(sim, ui);
+    ui.toolbarBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
     ImGui::End();
     ImGui::PopStyleVar(2);
 }

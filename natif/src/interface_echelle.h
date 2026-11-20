@@ -18,13 +18,13 @@ void drawScaleLadder(Sim& sim, UiState& ui, float h, ImGuiWindowFlags fixed) {
     const float step = px(ui, 44), dot = px(ui, 5);
     const float trackH = step * (kScaleCount - 1);
 
-    ImGui::SetNextWindowPos({px(ui, 16), h * 0.5f}, 0, {0, 0.5f});
+    ImGui::SetNextWindowPos({px(ui, 16), h * 0.56f}, 0, {0, 0.5f});
     ImGui::SetNextWindowBgAlpha(0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 6), px(ui, 10)});
     ImGui::Begin("echelle", nullptr, fixed);
     const bool hov = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByPopup);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();      // sous les autres fenêtres (résultats de recherche, menus), sur le ciel
     const ImVec2 o = ImGui::GetCursorScreenPos();
     const float cx = o.x + px(ui, 10);
     // Cran du haut = le plus loin (on « monte » en s'éloignant).
@@ -46,7 +46,7 @@ void drawScaleLadder(Sim& sim, UiState& ui, float h, ImGuiWindowFlags fixed) {
         }
         if (hovK) ImGui::SetTooltip("%s  (touche %d)", kScales[k].label, k + 1);
         dl->AddCircleFilled({cx, y}, dot, hovK ? theme::kText : IM_COL32(150, 160, 185, 200), 20);
-        if (hov || k == nearest) {
+        if (hov || (k == nearest && !ui.search[0])) {
             const ImU32 col = k == nearest ? theme::kText : theme::kMuted;
             const ImVec2 ts = ImGui::CalcTextSize(kScaleShort[k]);
             const ImVec2 tp{cx + px(ui, 14), y - ts.y * 0.5f};

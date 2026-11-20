@@ -65,7 +65,7 @@ void whatYouSee(const Sim& sim) {
         ImGui::TextDisabled(sim.starShare() > 0 ? "Les points qui apparaissent sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure)."
                                                 : "Les points sont les étoiles-tests du calcul complet de la rencontre avec Andromède (un scénario, pas une mesure).");
     if (sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv != 0))
-        ImGui::TextDisabled("Exposition photo : pose ×%s (automatique%s), étirement asinh ; l'éclat réel n'est pas changé (Menu : « œil nu »).",
+        ImGui::TextDisabled("Exposition photo : pose ×%s (automatique%s), étirement asinh ; l'éclat réel n'est pas changé (bouton Exposition, en haut à gauche).",
                             frInt(sim.photoGain * std::pow(2.0, sim.exposureEv)).c_str(), sim.exposureEv != 0 ? (", " + frNum(sim.exposureEv, 0) + " IL").c_str() : "");
     else if (!sim.photoExposure && sim.exposureEv != 0)
         ImGui::TextDisabled("Œil nu, pose réglée à %s IL.", frNum(sim.exposureEv, 0).c_str());
@@ -80,7 +80,7 @@ void whatYouSee(const Sim& sim) {
     if (sim.neighbourStarCount && sim.bestLook && sim.dist > 3000.0)
         ImGui::TextDisabled("Andromède, Triangle, Nuages : étoiles du MODÈLE tirées de leurs vraies photos, galaxie déplacée en bloc, rotation mesurée (sans marées).");
     else if (sim.companionShare > 0 && sim.dist > 3000.0)
-        ImGui::TextDisabled("Andromède, Triangle, Grand Nuage : galaxies modèles (paramètres publiés) à leur place mesurée ; leurs routes possibles : Menu, « Incertitude ».");
+        ImGui::TextDisabled("Andromède, Triangle, Grand Nuage : galaxies modèles (paramètres publiés) à leur place mesurée ; leurs routes possibles : bouton Afficher, « Incertitude ».");
     if (sim.milkyWayStarShare > 0 && sim.dist > 3000.0) {
         ImGui::TextDisabled("Voie lactée : étoiles Gaia MESURÉES près du Soleil ; au-delà, %s étoiles du MODÈLE (masses et formes publiées,", frInt(static_cast<double>(sim.milkyWayStarCount)).c_str());
         ImGui::TextDisabled("bras mesurés par les masers, régions HII WISE ; bras EXTRAPOLÉS au-delà des mesures).");
@@ -125,10 +125,13 @@ void whatYouSee(const Sim& sim) {
     }
 }
 
-void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fixed) {
-    // En bas à gauche, au-dessus de la frise : où l'on est. Le nom de l'astre suivi en avant, la distance en dessous.
-    ImGui::SetNextWindowPos({px(ui, 16), h - px(ui, 10)}, 0, {0, 1});
-    ImGui::SetNextWindowSizeConstraints({0, 0}, {std::max(px(ui, 300), ui.dockLeft - px(ui, 32)), FLT_MAX});
+void drawStatus(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
+    // En haut, entre la barre d'outils et le mode de vue : où l'on est. Si la place manque, sous la barre d'outils.
+    const float gapL = ui.searchRight + px(ui, 24), gapR = w - px(ui, 16) - ui.completenessW - px(ui, 24);
+    const bool fits = gapR - gapL >= std::max(ui.statusW, px(ui, 260));
+    if (fits) ImGui::SetNextWindowPos({(gapL + gapR) * 0.5f, px(ui, 16)}, 0, {0.5f, 0});
+    else ImGui::SetNextWindowPos({px(ui, 16), ui.toolbarBottom + px(ui, 10)}, 0, {0, 0});
+    ImGui::SetNextWindowSizeConstraints({0, 0}, {std::max(px(ui, 300), fits ? gapR - gapL : w * 0.5f), FLT_MAX});
     ImGui::Begin("aide", nullptr, fixed);
     cardShadow();
     const Body& fb = sim.bodies[static_cast<size_t>(sim.focus)];
@@ -151,8 +154,8 @@ void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fix
         ImGui::TextDisabled("Pose relevée ×%s : vues de si loin, les galaxies sont très faibles (comme une longue pose photo).", frNum(sim.autoPose, 0).c_str());
     if (const int k = eclipseNow(sim.years); k >= 0) ImGui::TextDisabled("%s, de Soleil : %s.", kEclipses[k].label, kEclipseStatus);
     if (!ui.details) {      // interface minimaliste : seules les hypothèses du « meilleur rendu » restent toujours écrites
-        if (sim.bestLook && !sim.deepTime()) raysNote(sim);
         ImGui::PopTextWrapPos();
+        ui.statusW = ImGui::GetWindowWidth();
         ImGui::End();
         return;
     }
@@ -160,6 +163,7 @@ void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fix
     armLegend(sim);
     ImGui::TextDisabled("Clic sur un astre : y aller   •   Molette : zoomer   •   Glisser : tourner   •   Tape un nom : chercher   •   F1 : aide");
     ImGui::PopTextWrapPos();
+    ui.statusW = ImGui::GetWindowWidth();
     ImGui::End();
 }
 
@@ -207,7 +211,7 @@ void drawWelcome(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed
     ImGui::TextUnformatted("Bienvenue dans Univers");
     ImGui::PopFont();
     ImGui::TextUnformatted("Aujourd'hui, planètes, étoiles et galaxies sont placées d'après des mesures réelles.");
-    ImGui::TextDisabled("Quand le temps avance ou recule, leur place est calculée : l'écran dit comment (Menu, Détails à l'écran).");
+    ImGui::TextDisabled("Quand le temps avance ou recule, leur place est calculée : le bouton « i » du temps dit comment.");
     ImGui::TextDisabled("Clique sur un astre pour y aller. Molette pour zoomer, glisser pour tourner, tape un nom pour chercher.");
     ImGui::Spacing();
     if (ImGui::Button("  Visite guidée (une minute et demie)  ")) startTour(sim, ui, 0);
@@ -345,12 +349,20 @@ void drawCompleteness(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     ImGui::Begin("completude-ligne", nullptr, fixed);
     cardShadow();
     viewModeSwitch(sim, ui);
+    const float switchW = ImGui::GetItemRectSize().x;
+    if (sim.bestLook && !sim.deepTime()) {      // les hypothèses du « meilleur rendu » sont dites juste sous le sélecteur
+        ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + std::max(switchW, px(ui, 260)));
+        raysNote(sim);
+        ImGui::PopTextWrapPos();
+        ImGui::PopFont();
+    }
     const completude::Echelle* e = sim.completeness ? &(*sim.completeness)[static_cast<size_t>(completude::echellePour(sim.dist))] : nullptr;
     if (e) {
         const std::string line = ui.details ? completude::ligneCourte(*e) : completude::ligneReduite(*e);      // réduit : le début de la phrase, le détail au clic
         ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {px(ui, 6), px(ui, 3)});
-        const float wLine = std::max(ImGui::GetItemRectSize().x, ImGui::CalcTextSize(line.c_str()).x + px(ui, 24));
+        const float wLine = std::max(switchW, ImGui::CalcTextSize(line.c_str()).x + px(ui, 24));
         if (ImGui::Selectable(("##compl"), ui.completeness, 0, {wLine, 0})) ui.completeness = !ui.completeness;
         const ImVec2 r0 = ImGui::GetItemRectMin();
         ImGui::GetWindowDrawList()->AddCircleFilled({r0.x + px(ui, 6), r0.y + ImGui::GetItemRectSize().y * 0.5f}, px(ui, 3), theme::kMesure);

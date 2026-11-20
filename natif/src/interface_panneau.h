@@ -170,7 +170,7 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
     auto next = [&]() { if (line) ImGui::SameLine(); line = true; };
     if (sim.dist > 1.5 * sim.arriveDist(f, 1e300) && !sim.flying) {
         next();
-        if (ImGui::Button(gIcons ? "î¢£  S'en approcher" : "S'en approcher")) goToBody(sim, ui, f);
+        if (ImGui::Button(gIcons ? (std::string(ico::kZoomIn) + "  S'en approcher").c_str() : "S'en approcher")) goToBody(sim, ui, f);
     }
     // Planètes connues de cette étoile (exoplanetes.h) : vol jusqu'à 4 fois la plus grande orbite.
     if (b.planetsReachLy > 0 && sim.dist > 20.0 * b.planetsReachLy && !sim.flying) {
@@ -184,7 +184,7 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
     }
     if (!sim.history.empty()) {
         next();
-        if (ImGui::Button(gIcons ? "î«  Retour" : "← Retour")) {
+        if (ImGui::Button(gIcons ? (std::string(ico::kBack) + "  Retour").c_str() : "← Retour")) {
             ui.tour = -1;
             sim.back();
         }
@@ -200,7 +200,7 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
     }
     if (f != 0 && sim.visible(0)) {
         next();
-        if (ImGui::Button(gIcons ? "î  Revenir au Soleil" : "Revenir au Soleil")) goToBody(sim, ui, 0, 45.0 * kAuInLy);
+        if (ImGui::Button(gIcons ? (std::string(ico::kSun) + "  Revenir au Soleil").c_str() : "Revenir au Soleil")) goToBody(sim, ui, 0, 45.0 * kAuInLy);
     }
 }
 
@@ -217,7 +217,7 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
     if (b.kind != Kind::Sun && sim.visible(f)) {
         ImGui::SameLine();
         ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
-        ImGui::TextColored(theme::v4(theme::kMuted), "à %s du Soleil", frDistance(std::sqrt(dot(sim.position(f), sim.position(f)))).c_str());
+        ImGui::TextColored(theme::v4(theme::kMuted), "distance au Soleil : %s", frDistance(std::sqrt(dot(sim.position(f), sim.position(f)))).c_str());
         ImGui::PopFont();
     }
     ImGui::Spacing();

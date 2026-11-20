@@ -129,7 +129,8 @@ struct UiState {
     bool details = false;           // interface minimaliste (Marc, 13/11/2026) : textes détaillés à l'écran seulement sur demande
     bool openDate = false;          // « Aller à une date… » choisi dans le menu « … » de la barre du temps
     double tourClock = 0;
-    float dockTop = 1e9f, dockLeft = 1e9f;      // haut et bord gauche du lecteur de temps (image précédente)
+    float dockTop = 1e9f, dockLeft = 1e9f;
+    float statusW = 0, toolbarBottom = 0;      // largeur de « tu regardes », bas de la barre d'outils (image précédente)      // haut et bord gauche du lecteur de temps (image précédente)
     bool keepNotes = false;         // contrôle : la bulle « mesuré, calculé ou supposé à cette date » reste ouverte
 };
 
