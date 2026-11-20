@@ -25,6 +25,7 @@
 #include "trous_noirs.h"
 #include "exoplanetes.h"
 #include "spheres.h"
+#include "cycle_nebuleuse.h"
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
 #include "galaxies_formes.h"
@@ -176,6 +177,10 @@ int runWindow(const WindowOptions& opt) {
     gFiches.demarrer(dataDir);      // fiches complètes des astres (fiches/*.tsv), lues en tâche de fond
     ecran.etape(L"Planètes, lunes, étoiles et galaxies nommées", 0.08f);
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
+    // Cycle de vie du Soleil et des étoiles nommées (cycle_appli.h) : facultatif, sans vie_cycle.bin rien ne change.
+    static CycleAppli cycleApp;
+    cycleApp.build(dataDir + "/vie_cycle.bin", sim, dataDir + "/etoiles_cycle.tsv");
+    gCycle = &cycleApp;
     loadGravWaves(dataDir + "/ondes_gravitationnelles.tsv");
     sim.chaosRun.load(dataDir + "/chaos_futur_60ma.bin");      // orbite de la Terre de 10 à 60 millions d'années (fil physique)      // ondes gravitationnelles (GWOSC) : fenêtre ouverte depuis « Aller à »
     if (!opt.target.empty()) {
@@ -484,6 +489,8 @@ int runWindow(const WindowOptions& opt) {
     double galaxyScaleAt = 1e300;      // date (années) du dernier calcul du facteur d'échelle de l'univers
     SphereRenderer spheres;
     spheres.create(g, HdrTarget::kFormat, dataDir + "/textures");
+    NebuleuseRenderer starMatter;      // matière autour des étoiles (cycle_nebuleuse.h)
+    starMatter.create(g, HdrTarget::kFormat);
     std::vector<bool> asSphere;
     if (test)      // contrôle : on attend les cartes de surface, pour une image reproductible
         for (int tries = 0; tries < 3000 && !spheres.allLoaded(); ++tries) {
@@ -960,6 +967,7 @@ int runWindow(const WindowOptions& opt) {
         }
         spheres.uploadPending(g);      // au plus une carte de surface par image, dès qu'elle est décodée
         uiImages.uploadPending(g);      // au plus une image du panneau par image affichée
+        cycleApp.update(sim, cam);      // rayon, teinte, éclat et matière des étoiles à cette date (avant les sphères)
         spheres.prepare(sim, cam, sc.extent.width, sc.extent.height, asSphere);
         planets.update(sim, cam, asSphere, spheres.nearestDist());
         dwarfGalaxies.update(sim);
@@ -992,6 +1000,7 @@ int runWindow(const WindowOptions& opt) {
         vkBeginCommandBuffer(cmd, &begin);
         // Film du Groupe local : envois et calcul des états à la date de cette image, avant le dessin (film_carte.h).
         if (filmGpuOk) filmGpu.record(cmd);
+        cycleApp.recordPoints(cmd, sim, sr);      // éclat et couleur des points du Soleil et des étoiles nommées à cette date
         if (filmGpuNeighboursOk) filmGpuNeighbours.record(cmd);
         // 1. Les étoiles, en grande dynamique.
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1151,6 +1160,7 @@ int runWindow(const WindowOptions& opt) {
         if (!skyOnly) blackHoles.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
         if (!skyOnly) exoplanets.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
+        if (!skyOnly) starMatter.draw(cmd, cycleApp, sim, cam, sc.extent.width, sc.extent.height, pc.par[0]);      // nuage, vents, nébuleuse, reste de supernova
         if (planets.count > planets.backCount) {      // lunes et planètes devant la sphère la plus proche (audit E2)
             sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
             planets.draw(cmd, true);
@@ -1312,6 +1322,7 @@ int runWindow(const WindowOptions& opt) {
     galaxyShapes.release(g);
     structuresR.release(g);
     spheres.release(g);
+    starMatter.release(g);
     if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
         const uint32_t n = std::min<uint32_t>(20000, orbits.count);
         const std::vector<float> got = orbits.readBack(g, n);

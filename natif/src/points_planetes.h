@@ -53,6 +53,17 @@ struct PlanetPoints {
             cols[5][count] = cols[6][count] = cols[7][count] = 0;
             ++count;
         }
+        // Le Soleil au-delà de l'ère des étoiles mesurées (cycle_appli.h, sunAlways) : le catalogue ne le dessine plus ; son
+        // point, à l'éclat et à la couleur de la date montrée, quand il n'est pas déjà une sphère.
+        const Body& sun = sim.bodies[0];
+        if (count < kMax && sim.sunAlways && sim.starShare() <= 0 && sun.lifeOn && sun.lifeAbsMag < 90 && !asSphere[0]) {
+            cols[0][count] = cols[1][count] = cols[2][count] = 0;
+            cols[3][count] = static_cast<float>(sun.lifeAbsMag);
+            const auto c = colorOfBv(sun.lifeBv);
+            std::memcpy(&cols[4][count], c.data(), 4);
+            cols[5][count] = cols[6][count] = cols[7][count] = 0;
+            ++count;
+        }
     }
 
     // À appeler juste après StarRenderer::draw (même pipeline, mêmes constantes). front : les points devant les sphères.

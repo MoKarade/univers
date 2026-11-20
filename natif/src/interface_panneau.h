@@ -10,6 +10,7 @@
 #include <cstdarg>
 
 #include "interface_cosmo_courbes.h"
+#include "interface_cycle.h"
 #include "interface_fiche.h"
 #include "interface_images.h"
 #include "interface_savoir.h"
@@ -250,6 +251,7 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
     drawSummaryText(bt ? bt->text : b.cluster ? clusterText() : b.structure ? structureText() : kindText(static_cast<int>(b.kind)), f);
     ImGui::Spacing();
 
+    if (b.kind == Kind::Sun || b.kind == Kind::Star) cycleSection(sim, ui, f);      // cycle de vie (interface_cycle.h)
     // Le détail ensuite, replié : la courbe de l'orbite, puis toutes les valeurs avec leur source.
     if (ImGui::CollapsingHeader("Orbite : courbe et analyse")) bodyOrbit(sim, ui, b, f);
     if (ImGui::CollapsingHeader("Valeurs", ImGuiTreeNodeFlags_DefaultOpen)) cardRows(sim, ui, cam, f);

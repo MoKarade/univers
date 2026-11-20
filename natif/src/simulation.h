@@ -74,6 +74,13 @@ struct Body {
     std::string shapeNote;      // ce qui est dessiné de sa forme, et d'où viennent les valeurs (galaxies_naines.h)
     bool structure = false;     // repère de structures_noms.tsv (superamas, attracteur, vide) : pas une galaxie
     bool cluster = false;       // amas de galaxies (galaxies_noms.tsv) : pas une galaxie
+    // Cycle de vie à la date montrée (cycle_appli.h) ; lifeOn faux : l'astre garde radiusKm et bv.
+    bool lifeOn = false;
+    double lifeRadiusKm = 0;    // 0 : rien à dessiner en sphère (pas née, éteinte)
+    double lifeTeff = 0, lifeBv = 0.65;
+    double lifeAbsMag = 99;     // magnitude absolue V à la date montrée (99 : rien de visible)
+    bool lifeBlack = false;     // trou noir : disque noir de son ombre
+    bool lifeMapped = true;     // c'est encore l'étoile elle-même (le Soleil garde sa carte de surface, teintée)
     const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
 };
 
@@ -307,6 +314,7 @@ struct Sim {
     // limite reste alors à 1 milliard d'années).
     double starEraEndYears = kOrbitLimitYears, starEraFadeYears = kOrbitFadeYears, firstPassageGa = 0;
     bool timeHeld = false;
+    bool sunAlways = false;      // le Soleil reste montré au-delà de l'ère des étoiles mesurées (cycle_appli.h)
     double yearsGoal = 0;
     double lastAdvance = 0;              // années ajoutées par le dernier advance() (le temps qui défile)
     long orbitLagSteps = 0;              // pas d'orbite (1 million d'années) que la carte graphique doit encore calculer
@@ -499,6 +507,28 @@ struct Sim {
                 body.nature = "étoile";
                 body.natureText = "étoile avec " + c[3] + (c[3] == "1" ? " planète connue" : " planètes connues") + " (NASA Exoplanet Archive)";
                 body.priority = 9;
+                body.bv = stars->bv()[idx];
+                body.radiusKm = rayon_etoile::rayonKm(stars->mag()[idx], body.bv);      // calculé (audit E3)
+                bodies.push_back(body);
+            }
+        }
+        // Étoiles massives nommées pour leur cycle de vie (etoiles_cycle.tsv, cycle_appli.h) : une étoile déjà nommée garde son nom.
+        {
+            std::ifstream cf(namesPath.substr(0, namesPath.find_last_of("/\\") + 1) + "etoiles_cycle.tsv");
+            for (std::string cl; std::getline(cf, cl);) {
+                if (cl.empty() || cl[0] == '#') continue;
+                const size_t t1 = cl.find('	'), t2 = cl.find('	', t1 + 1);
+                if (t1 == std::string::npos || t2 == std::string::npos) continue;
+                const int64_t idx = std::strtoll(cl.substr(0, t1).c_str(), nullptr, 10);
+                if (idx < 0 || static_cast<uint64_t>(idx) >= stars->n) continue;
+                bool known = false;
+                for (const Body& b : bodies) known = known || (b.kind == Kind::Star && b.star == idx);
+                if (known) continue;
+                Body body;
+                body.star = idx;
+                body.name = cl.substr(t1 + 1, t2 - t1 - 1);
+                body.nature = "étoile";
+                body.natureText = "étoile massive";
                 body.bv = stars->bv()[idx];
                 body.radiusKm = rayon_etoile::rayonKm(stars->mag()[idx], body.bv);      // calculé (audit E3)
                 bodies.push_back(body);
@@ -877,7 +907,8 @@ struct Sim {
         if (b.emptySlot || b.unplaced) return false;
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
-        if (b.kind == Kind::Sun) return starShare() > 0;      // suivi sur son orbite autour de la Galaxie, comme les étoiles
+        // suivi sur son orbite autour de la Galaxie, comme les étoiles ; avec le cycle de vie, montré à toute date (sunAlways)
+        if (b.kind == Kind::Sun) return starShare() > 0 || sunAlways;
         return starShare() > 0;      // étoile : suivie sur son orbite calculée, tant que cette orbite a un sens
     }
 

@@ -265,7 +265,9 @@ public:
         const double days = sim.years * 365.25 + kTdbMinusUtc / 86400.0;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
             const Body& b = sim.bodies[static_cast<size_t>(i)];
-            if ((b.kind == Kind::Star && b.radiusKm <= 0) || !sim.visible(i)) continue;
+            // rayon à la date montrée : celui du cycle de vie (cycle_appli.h) pour le Soleil et les étoiles nommées
+            const double radiusKm = b.lifeOn ? b.lifeRadiusKm : b.radiusKm;
+            if (((b.kind == Kind::Star || b.kind == Kind::Sun) && radiusKm <= 0) || !sim.visible(i)) continue;
             // étoile (audit E3) : disque de son rayon calculé et de sa couleur, sans carte de surface (aucune n'est mesurée) ;
             // la carte du Soleil sert seulement à remplir l'emplacement de la ressource, elle n'est pas lue
             const bool star = b.kind == Kind::Star;
@@ -276,7 +278,7 @@ public:
             if (map < 0) continue;
             const Vec3 p = sim.position(i), c = p - cam.pos;
             const double dist = std::sqrt(dot(c, c)), z = dot(c, cam.fwd);
-            const double rho = (b.radiusKm / kLyInKm) / dist;
+            const double rho = (radiusKm / kLyInKm) / dist;
             if (z <= 0 || rho >= 0.95 || rho / pixel < 1.5) continue;
             ori::Mat3 m;
             if (!ori::eclipticToBody(naif, days, m)) continue;
@@ -296,17 +298,33 @@ public:
                               {static_cast<float>(m.m[2][0]), static_cast<float>(m.m[2][1]), static_cast<float>(m.m[2][2]), 0},
                               {0, 0, 0, 0},
                               {0, 0, 0, 0}};
-            if (star) {      // couleur de l'étoile (lumière linéaire, plus grande composante 1) ; éclat de surface en (T / T☉)⁴
-                const auto c = colorOfBv(b.bv);
+            const bool uniform = star || (b.kind == Kind::Sun && b.lifeOn && !b.lifeMapped);
+            if (b.lifeOn && b.lifeBlack) {      // trou noir : disque noir de son ombre (2,6 rayons de Schwarzschild)
+                d.pc.ombre[0] = d.pc.ombre[1] = d.pc.ombre[2] = 0.0f;
+                d.pc.ombre[3] = -1.0f;
+                d.pc.soleil[3] = -1e-6f;
+            } else if (uniform) {      // couleur de l'étoile (lumière linéaire, plus grande composante 1) ; éclat de surface en (T / T☉)⁴
+                const double bvNow = b.lifeOn ? b.lifeBv : b.bv;
+                const auto c = colorOfBv(bvNow);
                 const double r = std::pow(c[0] / 255.0, 2.2), gr = std::pow(c[1] / 255.0, 2.2), bl = std::pow(c[2] / 255.0, 2.2);
                 const double mx = std::max({r, gr, bl, 1e-6});
-                const double t = rayon_etoile::temperatureBv(b.bv) / rayon_etoile::kTsoleil;
+                const double t = (b.lifeOn && b.lifeTeff > 0 ? b.lifeTeff : rayon_etoile::temperatureBv(bvNow)) / rayon_etoile::kTsoleil;
                 d.pc.ombre[0] = static_cast<float>(r / mx);
                 d.pc.ombre[1] = static_cast<float>(gr / mx);
                 d.pc.ombre[2] = static_cast<float>(bl / mx);
                 d.pc.ombre[3] = -1.0f;      // drapeau : pas de carte, cette couleur
                 d.pc.soleil[3] = static_cast<float>(-kSunGain * std::clamp(t * t * t * t, 0.05, 20.0));
-            } else if (b.kind != Kind::Sun) {
+            } else if (b.kind == Kind::Sun) {
+                if (b.lifeOn) {      // le Soleil à la date montrée : sa carte teintée par sa température, éclat de surface en (T / T☉)⁴
+                    const auto c = colorOfBv(b.lifeBv), c0 = colorOfBv(kSunBv);
+                    for (int k = 0; k < 3; ++k) d.pc.ombre[k] = static_cast<float>(std::pow(c[k] / 255.0, 2.2) / std::max(std::pow(c0[k] / 255.0, 2.2), 1e-4));
+                    const float mx = std::max({d.pc.ombre[0], d.pc.ombre[1], d.pc.ombre[2], 1e-6f});
+                    for (int k = 0; k < 3; ++k) d.pc.ombre[k] /= mx;
+                    d.pc.ombre[3] = -2.0f;      // drapeau : la carte, teintée
+                    const double t = b.lifeTeff / rayon_etoile::kTsoleil;
+                    d.pc.soleil[3] = static_cast<float>(-kSunGain * std::clamp(t * t * t * t, 0.05, 20.0));
+                }
+            } else {
                 const Vec3 toSun = unit(Vec3{-p.x, -p.y, -p.z});
                 d.pc.soleil[0] = static_cast<float>(toSun.x);
                 d.pc.soleil[1] = static_cast<float>(toSun.y);
@@ -317,7 +335,7 @@ public:
                 }
                 // Éclipses : parmi la planète de cet astre et ses lunes, celui qui est le mieux aligné devant le Soleil.
                 const double radius = b.radiusKm / kLyInKm, sunDist = std::sqrt(dot(p, p));
-                d.pc.ombre2[0] = static_cast<float>(std::asin(std::min(1.0, 695700.0 / kLyInKm / sunDist)));
+                d.pc.ombre2[0] = static_cast<float>(std::asin(std::min(1.0, (sim.bodies[0].lifeOn ? sim.bodies[0].lifeRadiusKm : 695700.0) / kLyInKm / sunDist)));
                 double best = 1e300;
                 for (int j = 0; j < static_cast<int>(sim.bodies.size()); ++j) {
                     const Body& o = sim.bodies[static_cast<size_t>(j)];
