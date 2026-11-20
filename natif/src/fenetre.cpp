@@ -853,6 +853,12 @@ int runWindow(const WindowOptions& opt) {
             double want = 1.0;
             if (sim.bestLook && sim.photoExposure && galaxyShapes.maxSurface > 0)
                 want = std::clamp(0.3 / (galaxyShapes.maxSurface * base), 1.0, 1.0e6);
+            // nébuleuse autour d'une étoile (cycle_appli.h) : même règle, la plus brillante des deux règle la pose
+            const double nebSurface = sim.bestLook && sim.photoExposure ? cycleApp.maxSurface(sim, cam, 2.0 * cam.tanHalf / sc.extent.height) : 0.0;
+            if (nebSurface > 0) {
+                const double wantNeb = std::clamp(0.3 / (nebSurface * base), 1.0, 1.0e6);
+                want = galaxyShapes.maxSurface > 0 && sim.bestLook && sim.photoExposure ? std::min(want, wantNeb) : wantNeb;
+            }
             sim.photoGain = test ? want : sim.photoGain + (want - sim.photoGain) * std::min(1.0, 4.0 * dt);      // sans à-coup
             if (!(sim.bestLook && sim.photoExposure)) sim.photoGain = 1.0;
         }
