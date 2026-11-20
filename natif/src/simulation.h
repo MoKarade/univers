@@ -50,6 +50,8 @@ struct Body {
     Kind kind = Kind::Star;
     int64_t star = -1;          // étoile : numéro dans le catalogue
     bool emptySlot = false;     // place réservée (étoile désignée au clic) encore vide : ni dessinée ni nommée
+    double drawnRadiusLy = 0;   // galaxie de forme mesurée : rayon de sa forme dessinée (D26 du SGA-2020 × distance), pour le clic
+    bool merged = false;        // même galaxie, même nom, déjà dans une autre fiche (galaxies_cf4.tsv et formes) : ni dessinée ni nommée
     bool unplaced = false;      // galaxie de distance inconnue (z trop faible, aucune mesure) : ni placée ni nommée
     int probe = -1;             // sonde : son rang dans le fichier des trajectoires
     int naif = 0;               // planète : code du corps dans les éphémérides de la NASA (clé de sa carte et de son orientation)
@@ -585,26 +587,45 @@ struct Sim {
             }
             bodies.push_back(body);
         }
-        // Galaxies de forme placées d'après z, proches (z < 0,005) : distance remplacée par celle, mesurée, de la galaxie de
-        // Cosmicflows-4 dans la même direction (moins de 0,1°), comme leur forme (galaxies_formes.h, fixNearbyDistances).
-        // Avant : NGC 2976 à 68 000 al, IC 2574 et IC 3658 à 2 Mal, comptées dans le Groupe local (essai_completude).
+        // Galaxies de forme placées d'après z : distance remplacée par une distance MESURÉE (Cosmicflows-4) dans deux cas, comme
+        // leur forme (galaxies_formes.h, fixNearbyDistances) :
+        // - la même galaxie, sous le même nom, est dans galaxies_cf4.tsv (moins de 0,2°), à tout z : M77 (NGC 1068), M106… ;
+        // - proche (z < 0,005), une galaxie de Cosmicflows-4 est dans la même direction (moins de 0,1°) : sous cz ≈ 1 500 km/s,
+        //   la vitesse propre domine z. Avant : NGC 2976 à 68 000 al, IC 2574 et IC 3658 à 2 Mal (essai_completude).
+        // Le double de galaxies_cf4.tsv est alors fondu dans la fiche de la forme : un seul nom, une seule fiche, un seul clic.
         {
-            std::vector<std::pair<Vec3, double>> cf4;
-            for (const Body& b : bodies)
-                if (b.kind == Kind::Galaxy && b.natureText.find("Cosmicflows-4") != std::string::npos) {
+            struct Cf4 { Vec3 u; double d; size_t i; };
+            std::vector<Cf4> cf4;
+            std::unordered_map<std::string, std::vector<size_t>> byName;      // galaxies nommées hors galaxies_cf4.tsv
+            // origine galaxies_cf4.tsv, notée une fois avant toute retouche des fiches
+            std::vector<char> fromCf4(bodies.size(), 0);
+            for (size_t i = 0; i < bodies.size(); ++i) {
+                const Body& b = bodies[i];
+                if (b.kind != Kind::Galaxy) continue;
+                fromCf4[i] = b.priority >= 9 && b.natureText.find("Cosmicflows-4") != std::string::npos && b.natureText.find("SGA-2020") == std::string::npos;
+                if (b.natureText.find("Cosmicflows-4") != std::string::npos) {
                     const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
-                    if (n > 0) cf4.push_back({{b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n}, n});
+                    if (n > 0) cf4.push_back({{b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n}, n, i});
                 }
+                if (!fromCf4[i]) byName[b.name].push_back(i);
+            }
+            auto cosTo = [](const Body& a, const Body& b) {
+                const double na = std::sqrt(dot(a.fixedPos, a.fixedPos)), nb = std::sqrt(dot(b.fixedPos, b.fixedPos));
+                return na > 0 && nb > 0 ? dot(a.fixedPos, b.fixedPos) / (na * nb) : -1.0;
+            };
             for (Body& b : bodies) {
                 const size_t k = b.natureText.find("distance d'après z = ");
                 if (b.kind != Kind::Galaxy || k == std::string::npos) continue;
                 const double z = std::atof(b.natureText.c_str() + k + 21);
                 const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
-                if (!(z < 0.005) || n <= 0) continue;
+                if (n <= 0) continue;
                 double best = 0.99999847691, d = 0;      // cos(0,1°)
-                for (const auto& [u, m] : cf4) {
-                    const double c = (u.x * b.fixedPos.x + u.y * b.fixedPos.y + u.z * b.fixedPos.z) / n;
-                    if (c > best) { best = c; d = m; }
+                size_t src = 0;
+                for (const Cf4& c4 : cf4) {
+                    const double c = (c4.u.x * b.fixedPos.x + c4.u.y * b.fixedPos.y + c4.u.z * b.fixedPos.z) / n;
+                    const bool same = c > 0.99999390766 && bodies[c4.i].name == b.name;      // moins de 0,2°, même nom
+                    if (same) { best = 2.0; d = c4.d; src = c4.i; break; }
+                    if (z < 0.005 && c > best) { best = c; d = c4.d; src = c4.i; }
                 }
                 if (d <= 0) {
                     // ni distance mesurée dans la même direction, ni z exploitable (sous 0,001) : distance inconnue, la galaxie
@@ -613,7 +634,24 @@ struct Sim {
                     continue;
                 }
                 b.fixedPos = {b.fixedPos.x / n * d, b.fixedPos.y / n * d, b.fixedPos.z / n * d};
-                b.natureText.replace(k, std::string("distance d'après z").size(), "distance mesurée (Cosmicflows-4, même direction) ; z");
+                // La fiche reprend la mesure elle-même (valeur, erreur, méthode, source).
+                Body& m = bodies[src];
+                const size_t km = m.natureText.find("distance mesurée");
+                const std::string mesure = km == std::string::npos ? "distance mesurée (Cosmicflows-4, même direction)" : m.natureText.substr(km);
+                const size_t zEnd = b.natureText.find(" ;", k);
+                const std::string zText = b.natureText.substr(k + std::string("distance d'après ").size(), zEnd == std::string::npos ? std::string::npos : zEnd - k - std::string("distance d'après ").size());
+                b.natureText.replace(k, zEnd == std::string::npos ? std::string::npos : zEnd - k, mesure + " ; décalage vers le rouge " + zText + " (non utilisé pour la distance)");
+            }
+            // Doubles : une galaxie de galaxies_cf4.tsv qui porte le nom d'une galaxie déjà nommée ailleurs (Groupe local,
+            // formes), à moins de 0,2°, est la même : elle est fondue (inventaire du 20/11 : 25 noms en double, cliquables deux
+            // fois, deux fois dans la recherche).
+            for (size_t i = 0; i < bodies.size(); ++i) {
+                Body& m = bodies[i];
+                if (!fromCf4[i]) continue;
+                const auto it = byName.find(m.name);
+                if (it == byName.end()) continue;
+                for (size_t j : it->second)
+                    if (cosTo(m, bodies[j]) > 0.99999390766) { m.merged = true; break; }
             }
         }
         // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
@@ -862,6 +900,23 @@ struct Sim {
         return f;
     }
 
+    // Facteur d'échelle de l'univers avec lequel les galaxies sont dessinées (posé par la fenêtre avec la table des distances,
+    // galaxies.h setCosmology) ; 0 : pas de dessin, calculé ici à la date montrée.
+    double galaxyScale = 0;
+    // Galaxie placée par sa mesure d'aujourd'hui puis l'expansion seule (au-delà de 10 Mal, hors calcul de la rencontre).
+    bool expandsOnly(int i) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        const int ref = static_cast<size_t>(i) < replayRef.size() ? replayRef[static_cast<size_t>(i)] : -1;
+        return b.kind == Kind::Galaxy && ref == -1 && CentresReference::indexOf(b.name) < 0 && std::sqrt(dot(b.fixedPos, b.fixedPos)) > 1.0e7;
+    }
+    // Rayon de ce qui est dessiné pour l'astre i (années-lumière) : disque d'une planète ou d'une étoile, forme d'une galaxie
+    // (agrandie comme son dessin par le facteur d'échelle), nuage d'une naine. Sert au clic et à « vu de près ».
+    double drawnRadiusLy(int i) const {
+        const Body& b = bodies[static_cast<size_t>(i)];
+        double r = b.radiusKm / kLyInKm;
+        if (b.kind == Kind::Galaxy) r = std::max({r, b.drawnRadiusLy * (galaxyScale > 0 ? galaxyScale : 1.0), b.shapeRadiusLy});
+        return r;
+    }
     void refreshGalaxies() {
         galPos.assign(bodies.size(), {0, 0, 0});
         galValid.assign(bodies.size(), 0);
@@ -872,7 +927,11 @@ struct Sim {
         // place : celle d'aujourd'hui agrandie par l'expansion (même facteur que leur dessin, galaxies.h), au-delà de 10 Mal
         // seulement ; plus près (Groupe local), leur mouvement n'est pas calculé et elles restent cachées comme avant.
         // Avant, toutes devenaient impossibles à cliquer et à nommer.
-        const double scale = deep ? cosmo::scaleFactorAt(cosmology, tGa) : 1.0;
+        // M77 « se balade » (Marc, 20/11/2026, deux fois) : le dessin des galaxies (formes, points des relevés) suit le facteur
+        // d'échelle posé par la fenêtre (galaxyScale, mis à jour tous les 100 000 ans), aussi entre -3 et +3 Ma, alors que le
+        // nom restait à sa place d'aujourd'hui puis sautait à 3 Ma. Le nom et la caméra prennent maintenant le même facteur, à
+        // toute date : une seule place, celle de l'expansion calculée (Hubble), partie de la distance mesurée d'aujourd'hui.
+        const double scale = galaxyScale > 0 ? galaxyScale : deep ? cosmo::scaleFactorAt(cosmology, tGa) : 1.0;
         for (size_t i = 0; i < bodies.size(); ++i) {
             const Body& b = bodies[i];
             if (b.kind != Kind::Galaxy) continue;
@@ -894,15 +953,15 @@ struct Sim {
                 continue;
             }
             const int ref = i < replayRef.size() ? replayRef[i] : -1;
-            if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
-                galPos[i] = {b.fixedPos.x + shift.x, b.fixedPos.y + shift.y, b.fixedPos.z + shift.z};
+            if (ref == -1 && std::sqrt(dot(b.fixedPos, b.fixedPos)) > 1.0e7) {
+                // au-delà de 10 Mal, sans mouvement calculé à part : place mesurée × facteur d'échelle, sans le déplacement du
+                // Soleil dans la Galaxie, exactement comme leur dessin (galaxies.vert, galaxies_formes.h), à toute date
+                galPos[i] = {b.fixedPos.x * scale, b.fixedPos.y * scale, b.fixedPos.z * scale};
                 galValid[i] = 1;
                 continue;
             }
-            if (ref == -1 && std::sqrt(dot(b.fixedPos, b.fixedPos)) > 1.0e7) {
-                // sans le déplacement du Soleil dans la Galaxie : comme leur dessin (galaxies.vert, galaxies_formes.h), sinon
-                // le nom glisse à côté de la galaxie (jusqu'à des dizaines de kpc en un milliard d'années)
-                galPos[i] = {b.fixedPos.x * scale, b.fixedPos.y * scale, b.fixedPos.z * scale};
+            if (ref == -2 || !deep) {      // aujourd'hui (à 3 millions d'années près) : la position mesurée
+                galPos[i] = {b.fixedPos.x + shift.x, b.fixedPos.y + shift.y, b.fixedPos.z + shift.z};
                 galValid[i] = 1;
                 continue;
             }
@@ -920,7 +979,7 @@ struct Sim {
     // le Soleil, tant que le système solaire est suivi (10 millions d'années) ; une galaxie, si sa position est connue.
     bool visible(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
-        if (b.emptySlot || b.unplaced) return false;
+        if (b.emptySlot || b.unplaced || b.merged) return false;
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
         // suivi sur son orbite autour de la Galaxie, comme les étoiles ; avec le cycle de vie, montré à toute date (sunAlways)
