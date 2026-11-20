@@ -41,6 +41,9 @@ vec3 gvCorpsNoir(float T) {      /* couleur relative d'un corps noir (approximat
     return vec3(r, g, b);
 }
 
+#ifndef GV_EXACT
+#define GV_EXACT pc.exact      /* orbite exacte (1) ou épicycles (0) ; gaia_points.comp la donne étoile par étoile */
+#endif
 /* Partie propre à l'étoile (la même pour les 16 étoiles d'un sous-nuage) : place relative à la caméra p (après flou, rotation
    d'une voisine, orbite), effacement, gain du film, décalage d'éclat, vieillissement, teinte, poussière. Rend false si
    l'étoile n'est pas montrée (effacée). Code d'avant, seulement rangé à part : gaia.vert et gaia_traceur.comp l'appellent. */
@@ -88,7 +91,7 @@ bool gvTraceur(uint idx, uvec4 r, uint flags, out vec3 p, out float garde, out f
            sans vitesse radiale mesurée (drapeau), elle compte pour nulle : l'étoile ne s'éloigne ni ne s'approche du Soleil
            au départ [supposé, dit à l'écran] */
         if (pc.par.w == 0.0) move = v * pc.par.z;
-        else if (pc.exact > 0.5) {
+        else if (GV_EXACT > 0.5) {
             /* orbite exacte : état calculé au dernier pas d'un million d'années, prolongé au second ordre jusqu'à la date ;
                raccord sans seuil avec la ligne droite mesurée, comme etoiles_orbite.vert */
             float u = pc.par.w * 1.0e9 / OG_RACCORD_ANS, w = 1.0 - exp(-u * u);
