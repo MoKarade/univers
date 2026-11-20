@@ -1,0 +1,9 @@
+centre 322.74 310.29 326.27
+select_sphere 1.35
+modify overdensity absolute 0.02419
+centre 325.86 308.91 327.03
+select_sphere 1.35
+modify overdensity absolute 0.02419
+centre 324.30 309.60 326.65
+select_sphere 0.9
+modify overdensity absolute 0.01018

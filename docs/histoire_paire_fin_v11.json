@@ -1,0 +1,464 @@
+{
+ "histoire": [
+  {
+   "a": 0.09999999999999998,
+   "t_ga": -13.2456,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 5231431168.0,
+    "groupe": 5
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 2007409280.0,
+    "groupe": 28
+   },
+   "separation_kpc": 276.1143764870215,
+   "v_radiale_kms": 327.25274658203125,
+   "v_transverse_kms": 8.529873847961426
+  },
+  {
+   "a": 0.11139738599948022,
+   "t_ga": -13.1497,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 8455451648.0,
+    "groupe": 4
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 4136480000.0,
+    "groupe": 18
+   },
+   "separation_kpc": 305.43651853550693,
+   "v_radiale_kms": 307.7635498046875,
+   "v_transverse_kms": 9.355303764343262
+  },
+  {
+   "a": 0.12409377607517193,
+   "t_ga": -13.037,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 12652763136.0,
+    "groupe": 5
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 6934686720.0,
+    "groupe": 17
+   },
+   "separation_kpc": 337.78399713568666,
+   "v_radiale_kms": 288.4193115234375,
+   "v_transverse_kms": 10.792257308959961
+  },
+  {
+   "a": 0.13823722273578992,
+   "t_ga": -12.9047,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 20378247168.0,
+    "groupe": 4
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 14477680640.0,
+    "groupe": 5
+   },
+   "separation_kpc": 372.2431636441575,
+   "v_radiale_kms": 271.1888122558594,
+   "v_transverse_kms": 12.83967113494873
+  },
+  {
+   "a": 0.15399265260594916,
+   "t_ga": -12.7492,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 36255031296.0,
+    "groupe": 4
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 33213503488.0,
+    "groupe": 5
+   },
+   "separation_kpc": 405.2191294405963,
+   "v_radiale_kms": 248.62326049804688,
+   "v_transverse_kms": 13.912798881530762
+  },
+  {
+   "a": 0.17154378963428785,
+   "t_ga": -12.5666,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 53835075584.0,
+    "groupe": 3
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 44953808896.0,
+    "groupe": 5
+   },
+   "separation_kpc": 448.3375752285815,
+   "v_radiale_kms": 233.53160095214844,
+   "v_transverse_kms": 17.42417335510254
+  },
+  {
+   "a": 0.19456400615886352,
+   "t_ga": -12.3132,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 68616908800.0,
+    "groupe": 3
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 60039786496.0,
+    "groupe": 5
+   },
+   "separation_kpc": 494.4516697685429,
+   "v_radiale_kms": 213.3314208984375,
+   "v_transverse_kms": 20.513437271118164
+  },
+  {
+   "a": 0.21673921695684167,
+   "t_ga": -12.0552,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 61803876352.0,
+    "groupe": 5
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 78288969728.0,
+    "groupe": 4
+   },
+   "separation_kpc": 540.5470883039338,
+   "v_radiale_kms": 201.30679321289062,
+   "v_transverse_kms": 23.378835678100586
+  },
+  {
+   "a": 0.24144182212566384,
+   "t_ga": -11.7529,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 78228144128.0,
+    "groupe": 6
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 101222105088.0,
+    "groupe": 4
+   },
+   "separation_kpc": 600.0952645938071,
+   "v_radiale_kms": 187.59844970703125,
+   "v_transverse_kms": 22.721885681152344
+  },
+  {
+   "a": 0.26895987855750425,
+   "t_ga": -11.3992,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 100613791744.0,
+    "groupe": 4
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 133218983936.0,
+    "groupe": 3
+   },
+   "separation_kpc": 668.5786757495958,
+   "v_radiale_kms": 175.04383850097656,
+   "v_transverse_kms": 20.06935691833496
+  },
+  {
+   "a": 0.2996142741004363,
+   "t_ga": -10.9862,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 199524335616.0,
+    "groupe": 3
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 165398364160.0,
+    "groupe": 4
+   },
+   "separation_kpc": 765.08983648144,
+   "v_radiale_kms": 171.30169677734375,
+   "v_transverse_kms": 24.760330200195312
+  },
+  {
+   "a": 0.33376246942920373,
+   "t_ga": -10.505,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 261693194240.0,
+    "groupe": 2
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 152137302016.0,
+    "groupe": 5
+   },
+   "separation_kpc": 820.2950488594274,
+   "v_radiale_kms": 158.07969665527344,
+   "v_transverse_kms": 32.81553649902344
+  },
+  {
+   "a": 0.3718026663914473,
+   "t_ga": -9.9463,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 261754044416.0,
+    "groupe": 4
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 184012537856.0,
+    "groupe": 0
+   },
+   "separation_kpc": 895.9387696920469,
+   "v_radiale_kms": 133.9169158935547,
+   "v_transverse_kms": 33.1893196105957
+  },
+  {
+   "a": 0.4141784514364404,
+   "t_ga": -9.3003,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 297704914944.0,
+    "groupe": 3
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 396615450624.0,
+    "groupe": 0
+   },
+   "separation_kpc": 964.0280466759095,
+   "v_radiale_kms": 122.32301330566406,
+   "v_transverse_kms": 24.62571144104004
+  },
+  {
+   "a": 0.46138396827332123,
+   "t_ga": -8.5574,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 537438257152.0,
+    "groupe": 2
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 597295562752.0,
+    "groupe": 0
+   },
+   "separation_kpc": 948.3021460726809,
+   "v_radiale_kms": 96.1760025024414,
+   "v_transverse_kms": 31.735837936401367
+  },
+  {
+   "a": 0.5139696800771512,
+   "t_ga": -7.709,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 723884048384.0,
+    "groupe": 2
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1194895343616.0,
+    "groupe": 0
+   },
+   "separation_kpc": 1130.087503201504,
+   "v_radiale_kms": 93.26103210449219,
+   "v_transverse_kms": 25.570158004760742
+  },
+  {
+   "a": 0.5725487884358375,
+   "t_ga": -6.7485,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 850472468480.0,
+    "groupe": 2
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1515837456384.0,
+    "groupe": 0
+   },
+   "separation_kpc": 1187.5786761577897,
+   "v_radiale_kms": 81.53028106689453,
+   "v_transverse_kms": 36.64534378051758
+  },
+  {
+   "a": 0.6378043838892176,
+   "t_ga": -5.6717,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 784045441024.0,
+    "groupe": 2
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1448680620032.0,
+    "groupe": 0
+   },
+   "separation_kpc": 1274.3109223266838,
+   "v_radiale_kms": 69.31863403320312,
+   "v_transverse_kms": 47.762664794921875
+  },
+  {
+   "a": 0.7233941627366748,
+   "t_ga": -4.2687,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 815373221888.0,
+    "groupe": 1
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1410357264384.0,
+    "groupe": 0
+   },
+   "separation_kpc": 1318.708894663649,
+   "v_radiale_kms": 50.091949462890625,
+   "v_transverse_kms": 34.41947937011719
+  },
+  {
+   "a": 0.8058421877614815,
+   "t_ga": -2.945,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1413216337920.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1573869846528.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1330.7031181272305,
+   "v_radiale_kms": 24.03564453125,
+   "v_transverse_kms": 42.788822174072266
+  },
+  {
+   "a": 0.8204696109024987,
+   "t_ga": -2.7141,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1474715975680.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1592240635904.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1323.8072677226662,
+   "v_radiale_kms": 22.181550979614258,
+   "v_transverse_kms": 45.82755661010742
+  },
+  {
+   "a": 0.8353625469578257,
+   "t_ga": -2.4804,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1521494654976.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1598871306240.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1313.871104725007,
+   "v_radiale_kms": 17.457740783691406,
+   "v_transverse_kms": 47.54407501220703
+  },
+  {
+   "a": 0.8659643233600648,
+   "t_ga": -2.0047,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1569733345280.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1549355057152.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1292.4420632732504,
+   "v_radiale_kms": 15.760879516601562,
+   "v_transverse_kms": 27.32520294189453
+  },
+  {
+   "a": 0.8816830667755702,
+   "t_ga": -1.7628,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1574417334272.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1531410120704.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1292.2678126268333,
+   "v_radiale_kms": 10.971363067626953,
+   "v_transverse_kms": 26.915908813476562
+  },
+  {
+   "a": 0.8976871324473141,
+   "t_ga": -1.5183,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1554951438336.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1546982653952.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1285.6662854829765,
+   "v_radiale_kms": 5.912987232208252,
+   "v_transverse_kms": 29.489900588989258
+  },
+  {
+   "a": 0.9139816994654905,
+   "t_ga": -1.2713,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1550145814528.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1550206763008.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1286.3827569224657,
+   "v_radiale_kms": 2.010512590408325,
+   "v_transverse_kms": 30.22535514831543
+  },
+  {
+   "a": 0.9474635256553752,
+   "t_ga": -0.7698,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1560182915072.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1562920353792.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1286.7823529447849,
+   "v_radiale_kms": -8.076581001281738,
+   "v_transverse_kms": 31.161439895629883
+  },
+  {
+   "a": 0.9646616199111989,
+   "t_ga": -0.5155,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1588225900544.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1600209551360.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1285.8754214964215,
+   "v_radiale_kms": -12.948040008544922,
+   "v_transverse_kms": 35.681514739990234
+  },
+  {
+   "a": 0.9821718891880374,
+   "t_ga": -0.2589,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1578736287744.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1638167740416.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1276.3663399617699,
+   "v_radiale_kms": -19.11442756652832,
+   "v_transverse_kms": 40.851097106933594
+  },
+  {
+   "a": 0.9999999999999996,
+   "t_ga": 0.0,
+   "voie_lactee_ou_andromede_1": {
+    "m200": 1584575938560.0,
+    "groupe": 0
+   },
+   "voie_lactee_ou_andromede_2": {
+    "m200": 1716091748352.0,
+    "groupe": 1
+   },
+   "separation_kpc": 1261.5599683005537,
+   "v_radiale_kms": -23.124988555908203,
+   "v_transverse_kms": 43.186641693115234
+  }
+ ],
+ "satellites": {
+  "voie_lactee_ou_andromede_1": [],
+  "voie_lactee_ou_andromede_2": [
+   {
+    "m200": 1946578944.0,
+    "distance_kpc": 299.9477844238281
+   }
+  ]
+ },
+ "statut": "modèle : un passé possible (calcul contraint), pas une mesure"
+}
