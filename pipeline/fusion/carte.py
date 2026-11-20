@@ -8,7 +8,10 @@ prise par les autres programmes au-delà de MEMOIRE_AUTRES_MO.
 """
 import subprocess
 
-JEUX = (r'steamapps\common', 'cod.exe', 'univers.exe', 'universpc.exe', 'epic games', 'riot games', 'battle.net')
+# L'appli de Marc est UniversPC.exe (raccourci du Bureau, sans console). univers.exe (avec console) sert aux essais en fenêtre
+# cachée des autres fils : il ne compte PAS comme « Marc utilise la carte », sinon ces essais affament le calcul (constaté le
+# 20/11 : six tirs d'orbites refusés d'affilée).
+JEUX = (r'steamapps\common', 'cod.exe', 'universpc.exe', 'epic games', 'riot games', 'battle.net')
 MEMOIRE_AUTRES_MO = 7000
 
 
