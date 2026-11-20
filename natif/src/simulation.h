@@ -47,6 +47,7 @@ struct Body {
     std::string name;
     Kind kind = Kind::Star;
     int64_t star = -1;          // étoile : numéro dans le catalogue
+    bool emptySlot = false;     // place réservée (étoile désignée au clic) encore vide : ni dessinée ni nommée
     int probe = -1;             // sonde : son rang dans le fichier des trajectoires
     int naif = 0;               // planète : code du corps dans les éphémérides de la NASA (clé de sa carte et de son orientation)
     int posNaif = 0;            // code utilisé pour sa position : le centre de la planète quand un fichier de lunes le donne
@@ -268,6 +269,10 @@ struct Sim {
     bool photoExposure = true;
     double exposureEv = 0, photoGain = 1;
     double autoPose = 1;      // pose automatique contre la saturation (pose_auto.h) : 1 = aucune baisse
+    // Gaz ionisé de la Voie lactée (régions HII de voie_lactee.bin) montré par-dessus les étoiles (Marc, 20/11/2026 soir :
+    // « l'espace paraît trop vide, il manque du gaz, des nébuleuses, de la poussière ») ; case du menu.
+    bool showGas = true;
+    double gasShare = 0;      // part montrée à cette image (0 à 1)
     uint32_t galaxyShapeCount = 0, galaxyShapesShown = 0;      // galaxies de forme mesurée (galaxies_formes.h), montrées en particules
     uint64_t neighbourStarCount = 0;   // étoiles des galaxies voisines (voisines_etoiles.bin), montrées à toute date
     // Grandes structures (Laniakea et son flot, vides cosmiques) et nuage d'Oort (modèle) : structures.h. Repères dessinés,
@@ -455,6 +460,18 @@ struct Sim {
                 bodies.push_back(body);
             }
         }
+        // Place de l'étoile désignée au clic (Marc, 20/11/2026 : « des astres que je ne peux pas sélectionner ») : n'importe
+        // quelle étoile dessinée du catalogue (6,15 millions) peut être choisie ; elle prend cette place (nom, fiche, suivi).
+        {
+            Body s;
+            s.name = "Étoile";
+            s.nature = "étoile";
+            s.star = 0;
+            s.priority = 9;
+            s.emptySlot = true;
+            bodies.push_back(s);
+            pickedStarBody = static_cast<int>(bodies.size()) - 1;
+        }
         // Étoiles qui ont des planètes connues (pipeline/natif/exoplanetes_app.py, NASA Exoplanet Archive) : cherchables par
         // le nom de l'hôte ; une étoile déjà nommée garde son nom.
         {
@@ -468,7 +485,7 @@ struct Sim {
                 const int64_t idx = std::strtoll(c[0].c_str(), nullptr, 10);
                 if (idx < 0 || static_cast<uint64_t>(idx) >= stars->n) continue;
                 bool known = false;
-                for (const Body& b : bodies) known = known || (b.kind == Kind::Star && b.star == idx);
+                for (const Body& b : bodies) known = known || (b.kind == Kind::Star && !b.emptySlot && b.star == idx);
                 if (known) continue;
                 Body body;
                 body.star = idx;
@@ -800,7 +817,9 @@ struct Sim {
                 continue;
             }
             if (ref == -1 && std::sqrt(dot(b.fixedPos, b.fixedPos)) > 1.0e7) {
-                galPos[i] = {b.fixedPos.x * scale + shift.x, b.fixedPos.y * scale + shift.y, b.fixedPos.z * scale + shift.z};
+                // sans le déplacement du Soleil dans la Galaxie : comme leur dessin (galaxies.vert, galaxies_formes.h), sinon
+                // le nom glisse à côté de la galaxie (jusqu'à des dizaines de kpc en un milliard d'années)
+                galPos[i] = {b.fixedPos.x * scale, b.fixedPos.y * scale, b.fixedPos.z * scale};
                 galValid[i] = 1;
                 continue;
             }
@@ -818,6 +837,7 @@ struct Sim {
     // le Soleil, tant que le système solaire est suivi (10 millions d'années) ; une galaxie, si sa position est connue.
     bool visible(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
+        if (b.emptySlot) return false;
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return starShare() > 0;      // suivi sur son orbite autour de la Galaxie, comme les étoiles
@@ -1055,6 +1075,63 @@ struct Sim {
         pitch = std::clamp(pitch + dy * 0.005, -1.55, 1.55);
     }
     // Suivre l'astre i tout de suite, sans vol (départ du programme, contrôles).
+    // ---------------------------------------------------------------- étoile désignée au clic
+    int pickedStarBody = -1;
+    // L'étoile du catalogue la plus brillante dessinée à moins de maxPx pixels d'un point de l'écran ; -1 si aucune.
+    // mLim : magnitude apparente au-delà de laquelle l'étoile n'est pas visible à l'écran (elle n'est pas proposée).
+    // Seulement à moins de 100 000 ans d'aujourd'hui (ligne droite, même place que le dessin) ; partagé entre les cœurs.
+    int64_t nearestCatalogStar(const Camera& cam, double px, double py, double w, double h, double maxPx, double mLim) const {
+        if (!stars || std::fabs(years - kStartYears) > 1.0e5) return -1;
+        const double kt = years * kKmsToLyPerYear;
+        const unsigned nt = std::max(1u, std::min(32u, std::thread::hardware_concurrency()));
+        std::vector<int64_t> bests(nt, -1);
+        std::vector<double> bestM(nt, mLim);
+        std::vector<std::thread> workers;
+        const uint64_t n = stars->n;
+        for (unsigned t = 0; t < nt; ++t)
+            workers.emplace_back([&, t] {
+                for (uint64_t k = n * t / nt; k < n * (t + 1) / nt; ++k) {
+                    const Vec3 p{stars->x()[k] + stars->vel(0)[k] * kt, stars->y()[k] + stars->vel(1)[k] * kt, stars->z()[k] + stars->vel(2)[k] * kt};
+                    double x = 0, y = 0;
+                    if (!cam.project(p, w, h, x, y) || (x - px) * (x - px) + (y - py) * (y - py) > maxPx * maxPx) continue;
+                    const Vec3 d = p - cam.pos;
+                    const double m = stars->mag()[k] + 5.0 * std::log10(std::max(std::sqrt(dot(d, d)), 1e-12) / 3.2615638) - 5.0;
+                    if (m < bestM[t]) {
+                        bestM[t] = m;
+                        bests[t] = static_cast<int64_t>(k);
+                    }
+                }
+            });
+        for (auto& th : workers) th.join();
+        int64_t best = -1;
+        double m = mLim;
+        for (unsigned t = 0; t < nt; ++t)
+            if (bests[t] >= 0 && bestM[t] < m) {
+                m = bestM[t];
+                best = bests[t];
+            }
+        return best;
+    }
+    // L'étoile k du catalogue prend la place de l'étoile désignée ; rend son rang dans bodies (ou l'astre nommé qui est déjà
+    // cette étoile).
+    int selectCatalogStar(int64_t k) {
+        if (pickedStarBody < 0 || !stars || k < 0 || static_cast<uint64_t>(k) >= stars->n) return -1;
+        for (int i = 0; i < static_cast<int>(bodies.size()); ++i)
+            if (i != pickedStarBody && bodies[static_cast<size_t>(i)].kind == Kind::Star && bodies[static_cast<size_t>(i)].star == k) return i;
+        Body& b = bodies[static_cast<size_t>(pickedStarBody)];
+        b.star = k;
+        b.emptySlot = false;
+        b.bv = stars->bv()[k];
+        b.radiusKm = rayon_etoile::rayonKm(stars->mag()[k], b.bv);
+        // trois parties du fichier d'étoiles (etoiles.json) : catalogue principal, 200 000 étoiles Gaia, puis les autres
+        const char* from = k < 58967 ? "catalogue principal (Hipparcos et Gaia)" : k < 258967 ? "Gaia DR3, 200 000 étoiles les plus brillantes"
+                                                                                  : "Gaia DR3";
+        b.name = "Étoile sans nom n° " + std::to_string(k);
+        b.natureText = std::string("étoile sans nom propre, ") + from;
+        exactOf.clear();      // son orbite exacte est recalculée (ensureExact)
+        return pickedStarBody;
+    }
+
     // Désigne l'astéroïde de rang k du catalogue : il prend la place `asteroidBody` (nom, position) et peut être suivi.
     // Rend le rang de cette place dans bodies, ou -1 s'il n'y a pas de catalogue.
     int selectAsteroid(int k) {
@@ -1067,7 +1144,8 @@ struct Sim {
     }
 
     // L'astéroïde le plus proche d'un point de l'écran (clic), à moins de maxPx pixels ; -1 si aucun.
-    int nearestAsteroid(const Camera& cam, double px, double py, double w, double h, double maxPx) const {
+    // mLim : magnitude apparente au-delà de laquelle il n'est pas visible à l'écran (depuis leur vrai éclat, audit A6) ; 99 : tous
+    int nearestAsteroid(const Camera& cam, double px, double py, double w, double h, double maxPx, double mLim = 99.0) const {
         if (!asteroidCat) return -1;
         const double jd = 2451545.0 + years * 365.25 + kTdbMinusUtc / 86400.0;
         if (std::fabs(jd - asteroidCat->epochJd) >= 300.0 * 365.25) return -1;
@@ -1083,6 +1161,11 @@ struct Sim {
                     double au[3], x = 0, y = 0;
                     asteroidCat->position(k, jd, au);
                     if (!cam.project({au[0] * kAuInLy, au[1] * kAuInLy, au[2] * kAuInLy}, w, h, x, y)) continue;
+                    if (mLim < 90.0) {      // vraie lumière : m = H + 5 log10(r Δ), comme asteroides.vert
+                        const double r = std::sqrt(au[0] * au[0] + au[1] * au[1] + au[2] * au[2]);
+                        const double dx = au[0] - cam.pos.x / kAuInLy, dy = au[1] - cam.pos.y / kAuInLy, dz = au[2] - cam.pos.z / kAuInLy;
+                        if (asteroidCat->cols[9][k] + 5.0 * std::log10(std::max(r * std::sqrt(dx * dx + dy * dy + dz * dz), 1e-12)) > mLim) continue;
+                    }
                     const double d = (x - px) * (x - px) + (y - py) * (y - py);
                     if (d < bestDs[t]) {
                         bestDs[t] = d;

@@ -92,8 +92,10 @@ public:
     double barAngle(double years) const { return phys::galaxie::barAngleAt(years * 1e-9); }
 
     // Dans la passe en grande dynamique, avant les étoiles. exposure : la même que pour les étoiles.
-    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, double years) {
-        if (!ready) return;
+    // gasOnly : seulement le gaz ionisé des régions HII (quatrième canal de la grille), éteint par la poussière rencontrée ;
+    // ni lueur des étoiles, ni bulbe, ni barre : elles sont déjà dessinées une à une (étoiles du modèle et de Gaia).
+    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float exposure, double years, bool gasOnly = false) {
+        if (!ready || (gasOnly && channels_ != 4)) return;
         auto toGal = [&](Vec3 v) {      // écliptique -> galactique : transposée de gal2ecl
             const float* m = par.gal2ecl;
             return Vec3{m[0] * v.x + m[3] * v.y + m[6] * v.z, m[1] * v.x + m[4] * v.y + m[7] * v.z, m[2] * v.x + m[5] * v.y + m[8] * v.z};
@@ -122,6 +124,8 @@ public:
         for (int i = 0; i < 3; ++i) u.color[i] = color_[i];
         u.color[3] = static_cast<float>(k);
         for (int i = 0; i < 3; ++i) { u.colorBulge[i] = colorBulge_[i]; u.colorYoung[i] = colorYoung_[i]; u.colorHii[i] = colorHii_[i]; }
+        if (gasOnly)
+            for (int i = 0; i < 3; ++i) u.color[i] = u.colorBulge[i] = u.colorYoung[i] = 0.0f;
         u.colorBulge[3] = static_cast<float>(channels_);
         u.grid[0] = par.halfXY;
         u.grid[1] = par.halfZ;

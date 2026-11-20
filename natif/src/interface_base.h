@@ -334,6 +334,13 @@ void firstFrame(Sim& sim, UiState& ui) {
             sim.stepFlight(Sim::kFlySeconds);
         }
     }
+    if (e.rfind("etoile:", 0) == 0) {      // etoile:<rang dans le catalogue> : comme un clic sur cette étoile
+        const int i = sim.selectCatalogStar(std::atoll(e.substr(7).c_str()));
+        if (i >= 0) {
+            sim.flyTo(i);
+            sim.stepFlight(Sim::kFlySeconds);
+        }
+    }
     if (e == "voyager") {
         showVoyagerJupiter(sim, ui);
         sim.stepFlight(Sim::kFlySeconds);

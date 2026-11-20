@@ -284,6 +284,7 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
             ImGui::MenuItem("Vides et superamas lointains (formes approchées en sphères)", nullptr, sim.structures.showSpheres))
             sim.structures.showSpheres = !sim.structures.showSpheres;
         if (ImGui::MenuItem("Nuage d'Oort (modèle)", nullptr, sim.structures.showOort)) sim.structures.showOort = !sim.structures.showOort;
+        if (ImGui::MenuItem("Gaz ionisé de la Voie lactée (régions HII)", nullptr, sim.showGas)) sim.showGas = !sim.showGas;
         if (sim.cloneCount && ImGui::MenuItem("Incertitude : routes possibles des galaxies", nullptr, sim.showClones)) sim.showClones = !sim.showClones;
         if (ui.gwCount > 0 && ImGui::MenuItem("Ondes gravitationnelles détectées")) ui.gwOpen = true;
         ImGui::Separator();
