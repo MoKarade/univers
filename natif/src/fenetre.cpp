@@ -949,7 +949,15 @@ int runWindow(const WindowOptions& opt) {
         if (!skyOnly && sim.starShare() > 0) {      // étoiles mesurées, chacune sur son orbite calculée autour de la Galaxie (orbite_galactique.glsl)
             PushConstants orbiting = pc;
             orbiting.par[0] *= static_cast<float>(sim.starShare());
-            orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years));      // années depuis J2000, date des positions
+            // Étoile suivie : posée à sa place calculée en double précision (orbites_gpu.h, Push::focus), là où la caméra la vise.
+            int focusStar = -1;
+            Vec3 focusRel{0, 0, 0};
+            if (sim.focus >= 0 && sim.bodies[static_cast<size_t>(sim.focus)].kind == Kind::Star && sim.visible(sim.focus)) {
+                const Vec3 fp = sim.position(sim.focus);
+                focusStar = static_cast<int>(sim.bodies[static_cast<size_t>(sim.focus)].star);
+                focusRel = {fp.x - cam.pos.x, fp.y - cam.pos.y, fp.z - cam.pos.z};
+            }
+            orbits.draw(cmd, sr, orbiting, sc.extent.width, sc.extent.height, sim.years, orbite::poidsOrbite(sim.years), focusStar, focusRel);      // années depuis J2000, date des positions
         }
         if (!skyOnly && loneGalaxy.count && milkyWayCentre >= 0 && sim.milkyWayStarShare <= 0)
             loneGalaxy.draw(cmd, cam, sim.position(milkyWayCentre), pc.par[0], 0.35f, loneShare, sc.extent.width, sc.extent.height);

@@ -17,7 +17,7 @@ layout(location = 7) in float inVz;
 struct Etat { vec4 p; vec4 v; };
 layout(std430, set = 0, binding = 0) readonly buffer Avant { Etat e[]; } avant;
 layout(std430, set = 0, binding = 1) readonly buffer Apres { Etat e[]; } apres;
-layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; } pc;
+layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; vec4 focus; } pc;   /* focus : étoile suivie (orbites_gpu.h) */
 layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
 const float KPC_LY = 3261.5637769;
@@ -42,6 +42,7 @@ void main() {
         dep = mix(dep, M * rel * KPC_LY - pos, pc.camHi.w);
     }
     vec3 p = ((pos - pc.camHi.xyz) + dep) - pc.camLo.xyz;
+    if (gl_VertexIndex == floatBitsToInt(pc.focus.w)) p = pc.focus.xyz;      /* étoile suivie : place calculée en double par le processeur */
     float d = max(length(p), 1e-12);
     float m = inMag + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0;
     float flux = pc.par.x * pow(10.0, -0.4 * m);

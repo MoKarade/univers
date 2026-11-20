@@ -180,8 +180,21 @@ struct OrbitGpu {
 
     // Dans la passe en grande dynamique. pc : constantes des étoiles (pushConstants) ; weight : poids de l'orbite dans le
     // raccord avec la ligne droite mesurée (orbite::poidsOrbite).
-    void draw(VkCommandBuffer cmd, const StarRenderer& sr, PushConstants pc, uint32_t width, uint32_t height, double years, double weight) const {
+    // focus : étoile suivie par la caméra (rang dans le catalogue, -1 : aucune) et sa place relative à la caméra, calculée
+    // en double précision par le processeur (Sim::position). Les orbites de la carte sont en simple précision et en kpc
+    // galactocentriques : à 8 kpc du centre, un arrondi vaut environ 100 UA. Vue de quelques UA, l'étoile suivie sautait
+    // à chaque image ou sortait de l'écran (Marc, 20/11/2026 : « elle gigote sur place ») ; elle est donc posée là où
+    // la caméra la vise, exactement (etoiles_orbite.vert).
+    struct Push {
+        PushConstants pc;
+        float focus[4];      // xyz : place relative à la caméra (années-lumière) ; w : rang (bits d'un entier)
+    };
+    void draw(VkCommandBuffer cmd, const StarRenderer& sr, PushConstants pc0, uint32_t width, uint32_t height, double years, double weight,
+              int focusStar = -1, Vec3 focusRel = {0, 0, 0}) const {
         if (!ready) return;
+        Push push{pc0, {static_cast<float>(focusRel.x), static_cast<float>(focusRel.y), static_cast<float>(focusRel.z), 0.0f}};
+        std::memcpy(&push.focus[3], &focusStar, 4);
+        PushConstants& pc = push.pc;
         pc.par[3] = fraction(years);
         pc.camHi[3] = static_cast<float>(weight);
         pc.camLo[3] = static_cast<float>(count - 1);      // rang du Soleil
@@ -198,7 +211,7 @@ struct OrbitGpu {
             offs[i] = 0;
         }
         vkCmdBindVertexBuffers(cmd, 0, StarRenderer::kCols, bufs, offs);
-        vkCmdPushConstants(cmd, drawLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+        vkCmdPushConstants(cmd, drawLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
         vkCmdDraw(cmd, count, 1, 0, 0);
     }
 
@@ -273,7 +286,7 @@ private:
         stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         stages[1].module = fs;
         stages[1].pName = "main";
-        const VkPushConstantRange pcr{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants)};
+        const VkPushConstantRange pcr{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Push)};
         VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         li.setLayoutCount = 1;
         li.pSetLayouts = &setLayout;
