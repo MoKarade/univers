@@ -129,6 +129,47 @@ public:
     }
     std::vector<char> near_;      // étoile montrée et assez proche pour sa matière (update)
 
+    // Pose « photo » (fenetre.cpp, photoMetering) : brillance moyenne, par unité d'exposition, des nébuleuses à l'écran
+    // (dans le rayon qui contient la moitié de leur lumière), à la même échelle que les points des étoiles
+    // (cycle_nebuleuse.h). Poids (0 à 1) : monte en continu quand la nébuleuse passe de 3 à 30 pixels de rayon, et baisse
+    // quand l'étoile devient une sphère (1,5 à 15 pixels de rayon : le gaz passe alors à l'échelle des surfaces). weight,
+    // surface : poids le plus fort et brillance pondérée (en logarithme) ; 0 : aucune.
+    void photoMetering(const Sim& sim, const Camera& cam, double pixel, double& weight, double& surface) const {
+        double wMax = 0, wSum = 0, logSum = 0;
+        for (const Astre& a : astres) {
+            // seulement le gaz qui brille de lui-même ou éclairé de près : nuage de naissance, nébuleuse planétaire (et ce
+            // qui en reste autour de la naine blanche), reste de supernova. Pas les vents des étoiles vivantes : leur
+            // faible lumière diffusée relevait toute la pose (×10⁶ autour du Soleil d'aujourd'hui, mesuré au rejeu du zoom).
+            // Au moins 0,01 L☉ de lumière visible [Supposition : seuil d'affichage].
+            const cycle::Etape e = a.vu.modele.etape;
+            const bool gaz = e == cycle::Etape::Nuage || e == cycle::Etape::Enfouie || e == cycle::Etape::PostAGB || e == cycle::Etape::Nebuleuse ||
+                             e == cycle::Etape::NaineBlanche || e == cycle::Etape::Supernova || e == cycle::Etape::EtoileNeutrons || e == cycle::Etape::TrouNoir;
+            if (!gaz || !a.profilOk || a.profil.lumiere < 0.01) continue;
+            const cycle::Profil& p = a.profil;
+            double cum = 0, rDemi = p.r[p.n];
+            for (int k = 0; k < p.n; ++k) {
+                const double vk = 4.0 / 3.0 * cycle::kPi * (static_cast<double>(p.r[k + 1]) * p.r[k + 1] * p.r[k + 1] - static_cast<double>(p.r[k]) * p.r[k] * p.r[k]);
+                cum += (p.rgb[k][0] + p.rgb[k][1] + p.rgb[k][2]) / 3.0 * vk;
+                if (cum >= 0.5 * p.lumiere) { rDemi = p.r[k + 1]; break; }
+            }
+            const Vec3 c = sim.position(a.body) - cam.pos;
+            const double dist = std::sqrt(dot(c, c));
+            if (dist <= 0 || rDemi <= 0) continue;
+            const double z = dot(c, cam.fwd);
+            if (z <= 0 && dist > rDemi) continue;      // derrière la caméra
+            const double rPx = rDemi / dist / pixel, starPx = sim.bodies[static_cast<size_t>(a.body)].lifeRadiusKm / kLyInKm / dist / pixel;
+            const double wt = std::clamp(std::log10(rPx / 3.0), 0.0, 1.0) * std::clamp(std::log10(15.0 / std::max(starPx, 1e-9)), 0.0, 1.0);
+            if (wt <= 0) continue;
+            const double surf = std::pow(10.0, -0.4 * 4.83) * 32.6156 * 32.6156 * pixel * pixel * 0.5 * p.lumiere / (cycle::kPi * rDemi * rDemi);
+            if (surf <= 0) continue;
+            wMax = std::max(wMax, wt);
+            wSum += wt;
+            logSum += wt * std::log(surf);
+        }
+        weight = wMax;
+        surface = wSum > 0 ? std::exp(logSum / wSum) : 0.0;
+    }
+
     // Réécrit l'éclat et la couleur des points de ces étoiles dans les colonnes du catalogue (avant la passe de dessin).
     // Seuls les mots qui changent partent à la carte graphique.
     void recordPoints(VkCommandBuffer cmd, const Sim& sim, StarRenderer& sr) {

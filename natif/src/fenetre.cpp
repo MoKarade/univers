@@ -628,6 +628,7 @@ int runWindow(const WindowOptions& opt) {
         int n = 0, k = -1;
         std::string dir;
         std::vector<double> dates;      // balayage dans le temps (UNIVERS_BALAYAGE_DATES) : une vue par date, distance fixe
+        bool yawSweep = false;          // balayage en lacet (UNIVERS_BALAYAGE_LACET) : d0 et d1 en degrés, distance fixe
         bool next(const Gpu& gg, const Target& img, VkExtent2D ext, Sim& s) {
             if (n <= 0) return false;
             if (k >= 0) {
@@ -635,10 +636,15 @@ int runWindow(const WindowOptions& opt) {
                 char name[32];
                 std::snprintf(name, sizeof(name), "/b_%03d.ppm", k);
                 if (dir != "-") writeCapture(gg, img, ext, dir + name);      /* « - » : zoom continu sans images (mesure des saccades) */
-                std::printf("balayage %d : distance %.4g al, date %.6g, pose automatique %.4g\n", k, s.dist, s.years, s.autoPose);
+                std::printf("balayage %d : distance %.4g al, date %.6g, lacet %.4g, pose automatique %.4g, part saturee %.5f, part visible %.5f, eclat moyen %.5f\n",
+                            k, s.dist, s.years, s.yaw * 180.0 / kPi, s.autoPose, s.metreSat, s.metreVis, s.metreMoy);
             }
             if (++k >= n) return false;
             if (!dates.empty()) s.years = dates[static_cast<size_t>(k)];
+            else if (yawSweep) {
+                s.touched = true;      // pas de tour d'horizon automatique pendant le balayage
+                s.yaw = (n > 1 ? d0 + (d1 - d0) * k / (n - 1) : d0) * kPi / 180.0;
+            }
             else s.dist = n > 1 ? d0 * std::pow(d1 / d0, static_cast<double>(k) / (n - 1)) : d0;
             return true;
         }
@@ -659,13 +665,42 @@ int runWindow(const WindowOptions& opt) {
             sweep.next(g, final, sc.extent, sim);
         }
     }
-    if (const char* b = std::getenv("UNIVERS_BALAYAGE"); b && test) {
+    // UNIVERS_BALAYAGE_LACET=<degrés début>:<degrés fin>:<n>:<dossier> : n vues en tournant la tête (défilement), distance
+    // fixe. Sert à vérifier que l'éclat ne saute pas quand on fait défiler la vue (Marc, 20/11/2026).
+    if (const char* b = std::getenv("UNIVERS_BALAYAGE_LACET"); b && test) {
+        char dir[512] = {};
+        if (std::sscanf(b, "%lf:%lf:%d:%511s", &sweep.d0, &sweep.d1, &sweep.n, dir) == 4) {
+            sweep.dir = dir;
+            sweep.yawSweep = true;
+            sweep.next(g, final, sc.extent, sim);
+        } else sweep.n = 0;
+    }
+    if (const char* b = std::getenv("UNIVERS_BALAYAGE"); b && test && !sweep.yawSweep) {
         char dir[512] = {};
         if (std::sscanf(b, "%lf:%lf:%d:%511s", &sweep.d0, &sweep.d1, &sweep.n, dir) == 4 && sweep.d0 > 0 && sweep.d1 > 0) {
             sweep.dir = dir;
             sweep.next(g, final, sc.extent, sim);      // première distance, avant la première image
         } else sweep.n = 0;
     }
+    // Contrôle du mouvement (Marc, 20/11/2026 : « trop clair ou trop sombre quand je zoome ou défile ») :
+    // UNIVERS_GESTE=<zoom|lacet>:<début>:<fin>:<secondes>:<journal> rejoue un geste à 60 images par seconde (pas fixe), avec
+    // la pose automatique à sa vraie vitesse (pas le régime instantané des contrôles), et écrit une ligne par image :
+    // temps, distance, lacet, pose photo, pose automatique, éclat moyen mesuré, part saturée.
+    struct Geste {
+        bool on = false, zoom = false;
+        double a = 0, b = 0, secondes = 0, t = 0;
+        FILE* log = nullptr;
+    } geste;
+    if (const char* gs = std::getenv("UNIVERS_GESTE"); gs && test) {
+        char mode[16] = {}, file[512] = {};
+        if (std::sscanf(gs, "%15[^:]:%lf:%lf:%lf:%511s", mode, &geste.a, &geste.b, &geste.secondes, file) == 5 && geste.secondes > 0) {
+            geste.zoom = std::string(mode) == "zoom";
+            geste.log = std::fopen(file, "w");
+            geste.on = geste.log != nullptr;
+            sim.touched = true;
+        }
+    }
+    const bool instant = test && !geste.on;      // contrôles : pose réglée tout de suite ; geste rejoué : vraie vitesse
     bool gaiaLiveNow = true;            // le calcul en direct de Gaia sert-il à cette image ? (non quand le film mène et que Gaia y est éteint)
     double pathYears0 = 0, pathWall = 0;      // contrôle --horloge-reelle : date et durée du trajet
     long pathFrames = 0;
@@ -713,10 +748,15 @@ int runWindow(const WindowOptions& opt) {
         // (le plafond de 0,1 s par image la ralentissait dès que l'appli passait sous 10 images/s). Plafond de 0,5 s
         // gardé pour un arrêt de la fenêtre (déplacement, mise en veille). Contrôle d'un trajet : pas fixe.
         const double frameWallMs = std::chrono::duration<double, std::milli>(now - last).count();
-        const double dt = test && opt.hasPath && !opt.realClock ? 1.0 / 60.0 : std::min(0.5, std::chrono::duration<double>(now - last).count());
+        const double dt = (test && opt.hasPath && !opt.realClock) || geste.on ? 1.0 / 60.0 : std::min(0.5, std::chrono::duration<double>(now - last).count());
         chrono.cpu("messages");
         last = now;
 
+        if (geste.on) {      // geste rejoué : la caméra suit le geste, image par image
+            const double u = std::clamp(geste.t / geste.secondes, 0.0, 1.0);
+            if (geste.zoom) sim.dist = geste.a * std::pow(geste.b / geste.a, u);
+            else sim.yaw = (geste.a + (geste.b - geste.a) * u) * kPi / 180.0;
+        }
         // Gestes -> simulateur.
         if (input.touched) sim.touched = true;
         sim.orbit(input.dragX, input.dragY);
@@ -770,7 +810,7 @@ int runWindow(const WindowOptions& opt) {
             if (need) {
                 VkCommandBuffer once = beginOnce(g);
                 if (gaiaLive) {
-                    gaia.advance(g, once, wanted, test && !opt.hasPath ? 1000000 : 64);      // le fil Gaia borne lui-même le travail par image
+                    gaia.advance(g, once, wanted, test && !opt.hasPath && !geste.on ? 1000000 : 64);      // le fil Gaia borne lui-même le travail par image
                     const double lo = static_cast<double>(gaia.orbitStep()) * OrbitGpu::kStepYears + off;
                     shownYears = std::clamp(wanted, lo, lo + OrbitGpu::kStepYears - 1.0);
                     gaia.advance(g, once, shownYears, 0);      // retard recompté pour la date réellement montrée
@@ -833,7 +873,7 @@ int runWindow(const WindowOptions& opt) {
                         filmStars.lastStep = LONG_MIN;
                     }
                     VkCommandBuffer once = beginOnce(g);
-                    milkyWayStars.advance(g, once, shownYears, test && !opt.hasPath ? 1000000 : 64);
+                    milkyWayStars.advance(g, once, shownYears, test && !opt.hasPath && !geste.on ? 1000000 : 64);
                     endOnce(g, once);
                 }
                 sim.filmLeads = byFilm && milkyWayStars.externalStates();
@@ -942,12 +982,30 @@ int runWindow(const WindowOptions& opt) {
         // moyenne de 0,3 (avant l'étirement asinh) ; la même pose pour tout ce qui est à l'écran (les étoiles saturent, comme
         // sur une photo). Aucune lumière n'est ajoutée ni retirée : seule la pose change. Réglable par crans (exposureEv).
         {
+            // Galaxies résolues et nébuleuses autour des étoiles (Marc, 20/11/2026 : la nébuleuse planétaire du Soleil ne se
+            // voyait pas) : chacune pèse de 0 à 1 selon sa taille à l'écran et sa part dans l'image ; la pose visée est
+            // la pose « photo » élevée à ce poids (en logarithme), si bien qu'elle glisse quand un objet entre, grandit ou
+            // sort, au lieu de basculer. Même règle qu'avant une fois l'objet bien installé (poids 1).
             const double base = kExposure * sim.brightnessBoost() * sim.fieldGain();
-            double want = 1.0;
-            if (sim.bestLook && sim.photoExposure && galaxyShapes.maxSurface > 0)
-                want = std::clamp(0.3 / (galaxyShapes.maxSurface * base), 1.0, 1.0e6);
-            sim.photoGain = test ? want : sim.photoGain + (want - sim.photoGain) * std::min(1.0, 4.0 * dt);      // sans à-coup
-            if (!(sim.bestLook && sim.photoExposure)) sim.photoGain = 1.0;
+            double wg = galaxyShapes.photoWeight, sg = galaxyShapes.photoSurface, wn = 0, sn = 0;
+            cycleApp.photoMetering(sim, cam, 2.0 * cam.tanHalf / sc.extent.height, wn, sn);
+            const double weight = std::max(wg, wn);
+            double want = 1.0, wantWeight = 0.0;
+            if (sim.bestLook && sim.photoExposure && weight > 0) {
+                const double logS = ((wg > 0 ? wg * std::log(sg) : 0.0) + (wn > 0 ? wn * std::log(sn) : 0.0)) / (wg + wn);
+                // plafond ×10⁶ (galaxies, comme avant) ; ×10⁴ quand seule une nébuleuse règle la pose (10 magnitudes : de
+                // quoi montrer une nébuleuse planétaire comme celle de l'Hélice, 23 mag par seconde d'arc carrée)
+                const double cap = wg > 0 ? 1.0e6 : 1.0e4;
+                want = std::exp(weight * std::log(std::clamp(0.3 / (std::exp(logS) * base), 1.0, cap)));
+                wantWeight = weight;
+            }
+            // Adaptation : en logarithme (en crans d'IL, comme l'œil et les appareils photo), demi-temps 0,35 s. Avant, la
+            // pose courait en linéaire vers sa cible : de ×1 à ×1 000, elle montait de ×250 dès la première image.
+            const double k = instant ? 1.0 : 1.0 - std::exp(-dt / 0.5);
+            sim.photoGain = std::exp(std::log(sim.photoGain) + (std::log(want) - std::log(sim.photoGain)) * k);
+            sim.photoWeight += (wantWeight - sim.photoWeight) * k;
+            sim.photoNebula += ((wantWeight > 0 && wn > wg ? wantWeight : 0.0) - sim.photoNebula) * k;
+            if (!(sim.bestLook && sim.photoExposure)) sim.photoGain = 1.0, sim.photoWeight = 0.0, sim.photoNebula = 0.0;
         }
         const PushConstants pc = pushConstants(cam, kExposure * static_cast<float>(sim.brightnessBoost() * sim.fieldGain() * sim.photoGain * std::pow(2.0, sim.exposureEv)), sc.extent.height, sim.years);
 
@@ -977,8 +1035,17 @@ int runWindow(const WindowOptions& opt) {
         // dès 10 Mal donnait ×2,1 d'éclat d'un cran de molette au suivant
         // plafond : ×4 pour les étoiles, puis comme l'échelle regardée (10 à 100 Mal, 1 000 à 10 Gal) : au plus ×1,26 d'un cran de
         // molette au suivant (en carré, le balayage mesurait ×1,6 par cran)
-        autoPose.update(dt, test, true, std::clamp(sim.dist / 1.0e7, 4.0, pose_auto::kPoseMaxGalaxies));      // ×4 au plus pour les étoiles
+        autoPose.update(dt, instant, true, std::clamp(sim.dist / 1.0e7, 4.0, pose_auto::kPoseMaxGalaxies),
+                       sim.bestLook && sim.photoExposure ? (sim.exposureEv > 0 ? 1.0 : std::clamp(sim.photoWeight, 0.0, 1.0)) : 0.0, sim.photoNebula);      // ×4 au plus pour les étoiles
         sim.autoPose = autoPose.pose;
+        sim.metreSat = autoPose.partSaturee;
+        sim.metreVis = autoPose.partVisible;
+        sim.metreMoy = autoPose.moyenne;
+        if (geste.on) {
+            std::fprintf(geste.log, "%.4f %.6g %.4f %.6g %.6g %.6g %.6g\n", geste.t, sim.dist, sim.yaw * 180.0 / kPi, sim.photoGain,
+                         autoPose.pose, autoPose.moyenne, autoPose.partSaturee);
+            geste.t += dt;
+        }
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
         // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
         // Tous les 100 000 ans (avant : un million) : M77, à 44 millions d'al, avance alors d'environ 300 al par pas au lieu
@@ -1295,13 +1362,13 @@ int runWindow(const WindowOptions& opt) {
         transition(cmd, final.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         beginPass(cmd, final.view, sc.extent);
-        screen.draw(cmd, sc.extent, sim.bestLook && sim.photoExposure && (sim.photoGain > 1.01 || sim.exposureEv > 0) ? 1.0f : 0.0f,
-                    static_cast<float>(autoPose.pose));      // étirement « photo » seulement quand une galaxie résolue règle la pose
+        screen.draw(cmd, sc.extent, sim.bestLook && sim.photoExposure ? static_cast<float>(sim.exposureEv > 0 ? 1.0 : std::clamp(sim.photoWeight, 0.0, 1.0)) : 0.0f,
+                    static_cast<float>(autoPose.pose));      // étirement « photo » fondu avec le poids des objets qui règlent la pose
         chrono.gpu(cmd, "conversion pour l'ecran");
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
         vkCmdEndRendering(cmd);
         chrono.gpu(cmd, "interface (dessin)");
-        autoPose.measure(cmd);      // part saturée de cette image, lue à la suivante
+        autoPose.measure(cmd, sc.extent);      // histogramme de cette image, lu à la suivante
         chrono.gpu(cmd, "pose automatique");
         // 3. Copie dans la fenêtre.
         transition(cmd, final.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1354,11 +1421,16 @@ int runWindow(const WindowOptions& opt) {
             titleTimer = 0;
             shown = 0;
         }
+        if (geste.on) {      // geste rejoué : on s'arrête à sa fin
+            if (geste.t > geste.secondes + 1.0) break;
+            frame = 0;
+        }
         if (test && frame >= opt.testFrames && sweep.next(g, final, sc.extent, sim)) frame = 0;      // balayage : vue suivante
         else if (test && frame >= opt.testFrames) break;
     }
     presentPending();
     vkDeviceWaitIdle(g.dev);
+    if (geste.log) std::fclose(geste.log);
     if (outerThread.joinable()) outerThread.join();
     if (test) {
         const double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();

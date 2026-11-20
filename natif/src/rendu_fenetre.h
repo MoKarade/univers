@@ -195,7 +195,8 @@ struct ScreenPass {
     }
 
     // À appeler dans la passe de l'image finale.
-    // photo : 0 = œil nu (compression de Reinhard, couleur par couleur) ; 1 = photo (étirement asinh sur la luminance).
+    // photo : 0 = œil nu (compression de Reinhard, couleur par couleur) ; 1 = photo (étirement asinh sur la luminance) ;
+    // entre les deux : mélange des deux images (passage sans à-coup).
     // pose : facteur de la pose automatique contre la saturation (pose_auto.h), 1 = aucun.
     void draw(VkCommandBuffer cmd, VkExtent2D extent, float photo = 0.0f, float pose = 1.0f) const {
         const VkViewport vp{0, 0, static_cast<float>(extent.width), static_cast<float>(extent.height), 0, 1};
