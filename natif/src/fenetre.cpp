@@ -18,6 +18,7 @@
 #include "fusion_points.h"
 #include "gaia.h"
 #include "gaia_ciel.h"
+#include "gaia_points.h"
 #include "galaxies.h"
 #include "interface.h"
 #include "points_planetes.h"
@@ -355,6 +356,12 @@ int runWindow(const WindowOptions& opt) {
     if (milkyWayStarsOk) milkyWayStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     if (gaiaOk) gaia.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     if (gaiaBOk) gaiaB.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
+    // Étoiles Gaia calculées dans une somme par pixel plutôt que tracées en points (gaia_points.h ; cadence, 20/11/2026) :
+    // seulement avec UNIVERS_POINTS=calcul. Mesuré : à peine plus rapide carte libre (10 à 30 %), mais quand un autre
+    // programme calcule sur la carte (le grand calcul), ce calcul-ci passe après lui et l'image tombe à 0,3 image/s contre 4
+    // pour le tracé de points. Le tracé de points reste donc la règle.
+    GaiaPointsSum gaiaSum;
+    if (std::getenv("UNIVERS_POINTS") && std::string(std::getenv("UNIVERS_POINTS")) == "calcul") gaiaSum.create(g, HdrTarget::kFormat);
     if (neighbourStarsOk) neighbourStars.attachDust(g, milkyWay.gridView(), milkyWay.gridSampler());
     // Galaxies voisines faites de leurs étoiles (Marc, 13/11/2026 : « plus aucune galaxie en image ») : table par galaxie pour
     // gaia.vert (centre à t = 0 et à la date montrée, axe et vitesse de rotation) ; rang = ordre de etoiles_visibles_photos.py.
@@ -1065,10 +1072,15 @@ int runWindow(const WindowOptions& opt) {
         vkResetFences(g.dev, 1, &fence);
         chrono.cpu("image d'ecran");
 
+        if (gaiaSum.resize(g, sc.extent.width, sc.extent.height)) {      // taille de l'image changée : somme refaite, reliée aux étoiles
+            gaia.attachPointsSum(g, gaiaSum.sum.buf);
+            if (gaiaBOk) gaiaB.attachPointsSum(g, gaiaSum.sum.buf);
+        }
         vkResetCommandBuffer(cmd, 0);
         VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         vkBeginCommandBuffer(cmd, &begin);
         chrono.gpuBegin(cmd);
+        gaiaSum.clear(cmd);      // somme par pixel des étoiles Gaia remise à zéro
         // Film du Groupe local : envois et calcul des états à la date de cette image, avant le dessin (film_carte.h).
         if (filmGpuOk) filmGpu.record(cmd);
         cycleApp.recordPoints(cmd, sim, sr);      // éclat et couleur des points du Soleil et des étoiles nommées à cette date
@@ -1103,6 +1115,28 @@ int runWindow(const WindowOptions& opt) {
         if (milkyWayStarsOk) milkyWayStars.precompute(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years, !skyOnly && sim.bestLook);
         if (neighbourStarsOk) neighbourStars.precompute(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], sim.years, !skyOnly && sim.bestLook);
         chrono.gpu(cmd, "precalcul des etoiles du modele");
+        {      // étoile suivie de près : ses copies Gaia cachées autour de sa place exacte (gaia.h, setHide ; audit A1)
+            Vec3 rel{0, 0, 0};
+            double r = 0;
+            if (sim.focus >= 0 && sim.bodies[static_cast<size_t>(sim.focus)].kind == Kind::Star && sim.visible(sim.focus) && sim.dist < 0.5) {
+                const Vec3 fp = sim.position(sim.focus);
+                rel = {fp.x - cam.pos.x, fp.y - cam.pos.y, fp.z - cam.pos.z};
+                r = 0.01;      // 630 UA : plus que l'arrondi des orbites de la carte (~200 UA à 8 kpc du centre)
+            }
+            gaia.setHide(rel, r);
+            gaiaB.setHide(rel, r);
+        }
+        // Étoiles Gaia et Gaia B calculées dans la somme par pixel (gaia_points.h), mêmes conditions et mêmes valeurs que leur dessin.
+        {
+            const double gaiaLeftNow = sim.starShare() * (1.0 - sim.gaiaFilmOff);
+            if (!skyOnly && sim.starShare() > 0 && gaiaLeftNow > 0) {
+                bool any = gaia.splat(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeftNow), sim.years);
+                if (gaiaBOk) any = gaiaB.splat(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeftNow), sim.years) || any;
+                if (any) gaiaSum.markUsed();
+            }
+            gaiaSum.ready(cmd);
+        }
+        chrono.gpu(cmd, "Gaia (calcul des points)");
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
         // Pose propre aux galaxies aux grandes échelles (galaxies_pose.h) : la pose totale des galaxies vaut
@@ -1173,18 +1207,8 @@ int runWindow(const WindowOptions& opt) {
             const double gaiaLeft = sim.starShare() * (1.0 - sim.gaiaFilmOff);      // revue F1 : Gaia cède au film
             // Gaia entièrement éteint (le film mène, loin d'aujourd'hui) : rien à dessiner, et ses 192 M d'étoiles ne coûtent
             // plus le tri des feuilles à chaque image.
-            {      // étoile suivie de près : ses copies Gaia cachées autour de sa place exacte (gaia.h, setHide ; audit A1)
-                Vec3 rel{0, 0, 0};
-                double r = 0;
-                if (sim.focus >= 0 && sim.bodies[static_cast<size_t>(sim.focus)].kind == Kind::Star && sim.visible(sim.focus) && sim.dist < 0.5) {
-                    const Vec3 fp = sim.position(sim.focus);
-                    rel = {fp.x - cam.pos.x, fp.y - cam.pos.y, fp.z - cam.pos.z};
-                    r = 0.01;      // 630 UA : plus que l'arrondi des orbites de la carte (~200 UA à 8 kpc du centre)
-                }
-                gaia.setHide(rel, r);
-                gaiaB.setHide(rel, r);
-            }
             if (gaiaLeft > 0) gaia.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(gaiaLeft), sim.years);
+            gaiaSum.resolve(cmd);      // étoiles Gaia (et Gaia B) calculées avant la passe : leur somme par pixel
             chrono.gpu(cmd, "Gaia");
             if (sim.gaiaFilmOff < 1.0) gaiaSky.draw(cmd, cam, sc.extent.height, pc.par[0] * static_cast<float>(1.0 - sim.gaiaFilmOff));
             chrono.gpu(cmd, "Gaia (ciel)");
@@ -1406,6 +1430,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, acquired, nullptr);
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
+    gaiaSum.release(g);
     autoPose.release(g);
     nebulae.release(g);
     planets.release(g);

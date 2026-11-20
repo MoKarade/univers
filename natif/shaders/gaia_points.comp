@@ -1,0 +1,88 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_shader_atomic_int64 : require
+#extension GL_ARB_gpu_shader_int64 : require
+/* Étoiles Gaia dessinées par un calcul plutôt que par le tracé de points de la carte (cadence, 20/11/2026 : vers 10 000 al,
+   140 millions de points ; le tracé de points plafonnait à ~12 milliards de points par seconde, autant à 800 × 450 qu'à
+   1600 × 900). Chaque étoile : exactement le calcul de gaia.vert (place, éclat, taille, couleur), puis la tache de
+   etoiles.frag sur les pixels dont le centre tombe dans le carré du point (règle des points de Vulkan), ajoutée dans une
+   somme par pixel en nombres entiers (1/2^24 près, sans perte ; l'image en demi-flottants perdait les étoiles très faibles
+   posées sur un pixel déjà clair). La somme est versée dans l'image par gaia_somme.frag. */
+#define GV_CACHE_ACCES readonly
+#define GV_PUSH_SUITE uint plageBase; uint largeur; uint hauteur; uint libre;
+float gvExact = 1.0;
+#define GV_EXACT gvExact
+#include "gaia_corps.glsl"
+/* Plages d'étoiles dessinées (gaia.h, splat) : [0] = (nombre de plages, total) ; puis (début, nombre, rang du premier fil,
+   orbite exacte 1 / épicycles 0). */
+layout(std430, set = 0, binding = 7) readonly buffer Plages { uvec4 plage[]; };
+layout(std430, set = 0, binding = 8) buffer Somme { uint64_t somme[]; };      /* r, g, b par pixel */
+layout(local_size_x = 256) in;
+const float GP_ECHELLE = 16777216.0;      /* 2^24 : pas de la somme */
+
+void ajoute(uint px, vec3 c) {
+    for (int k = 0; k < 3; ++k) {
+        float v = c[k] * GP_ECHELLE + 0.5;
+        if (v >= 1.0) atomicAdd(somme[3u * px + uint(k)], uint64_t(v));
+    }
+}
+
+void main() {
+    uint fil = gl_GlobalInvocationID.x;
+    uvec4 tete = plage[pc.plageBase];
+    if (fil >= tete.y) return;
+    uint lo = 0u, hi = tete.x - 1u;      /* dernière plage dont le premier fil est <= fil */
+    while (lo < hi) {
+        uint m = (lo + hi + 1u) / 2u;
+        if (plage[pc.plageBase + 1u + m].z <= fil) lo = m; else hi = m - 1u;
+    }
+    uvec4 pl = plage[pc.plageBase + 1u + lo];
+    gvExact = pl.w != 0u ? 1.0 : 0.0;
+    uint idx = pl.x + (fil - pl.z);
+
+    /* --- gaia.vert, instance 0 (un seul point par étoile : fichier sans sous-nuages) --- */
+    uvec4 r = star[idx];
+    uint flags = r.w >> 24;
+    bool voisine = (flags & 32u) != 0u;
+    vec3 p, teinte, poussiere = vec3(1.0);
+    float garde = 1.0, gainFilm = 1.0, mDec = 0.0, fAge = 1.0;
+    if (!gvTraceur(idx, r, flags, p, garde, gainFilm, mDec, fAge, teinte, poussiere)) return;
+    if (pc.hide.w > 0.0 && !voisine && (flags & 16u) == 0u && length(p - pc.hide.xyz) < pc.hide.w) return;
+    float part = 1.0;
+    if ((flags & 16u) != 0u) {
+        uint k = 0u, graine = idx * GV_SOUS_NUAGE + k;
+        part = GV_PART[(k + idx) % GV_SOUS_NUAGE];
+        float ouvert = smoothstep(GV_LOIN, GV_PRES, length(p));
+        if (ouvert > 0.0) {
+            float u1 = gvUnif(graine * 3u), u2 = gvUnif(graine * 3u + 1u), u3 = gvUnif(graine * 3u + 2u);
+            float cz = 2.0 * u1 - 1.0, phi = 6.2831853 * u2, rr = GV_RAYON * pow(u3, 1.0 / 3.0);
+            vec3 dir = vec3(sqrt(1.0 - cz * cz) * cos(phi), sqrt(1.0 - cz * cz) * sin(phi), 0.5 * cz);
+            p += ouvert * rr * dir;
+        }
+    }
+    float d = max(length(p), 1e-12);
+    float m = unpackHalf2x16(r.w).x + 5.0 * log(d / LY_PER_PC) / log(10.0) - 5.0;
+    if ((flags & 4u) != 0u && (pc.cellBase & GF_MODE_RENDU) != 0u) m += mDec;
+    float flux = pc.par.x * pow(10.0, -0.4 * m) * garde * part * gainFilm;
+    if ((flags & 16u) != 0u) flux *= fAge;
+    float size = clamp(1.5 + 1.2 * log2(1.0 + flux), 1.5, 14.0) * pc.par.y / 1080.0;
+    if ((flags & 16u) != 0u) size = min(size, 2.5 * pc.par.y / 1080.0);
+    vec3 vCol = teinte * min(flux, 3.0e4) / (size * size);
+    vCol *= poussiere;
+    vec4 cp = pc.viewProj * vec4(p, 1.0);
+
+    /* --- point de Vulkan : rejeté si son sommet sort du volume vu ; carré de côté size centré sur sa place à l'écran --- */
+    if (!(cp.w > 0.0) || abs(cp.x) > cp.w || abs(cp.y) > cp.w) return;
+    float W = float(pc.largeur), H = float(pc.hauteur);
+    float xf = (cp.x / cp.w * 0.5 + 0.5) * W, yf = (cp.y / cp.w * 0.5 + 0.5) * H, h = 0.5 * size;
+    int x0 = max(int(ceil(xf - h - 0.5)), 0), x1 = min(int(floor(xf + h - 0.5)), int(pc.largeur) - 1);
+    int y0 = max(int(ceil(yf - h - 0.5)), 0), y1 = min(int(floor(yf + h - 0.5)), int(pc.hauteur) - 1);
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+            /* etoiles.frag : q = 2 gl_PointCoord - 1 ; tache ronde, bords doux, somme sur le disque = 1 */
+            vec2 q = (vec2(float(x), float(y)) + 0.5 - vec2(xf, yf)) / h;
+            float r2 = dot(q, q);
+            if (r2 > 1.0) continue;
+            ajoute(uint(y) * pc.largeur + uint(x), vCol * exp(-4.0 * r2) * 5.19);
+        }
+}

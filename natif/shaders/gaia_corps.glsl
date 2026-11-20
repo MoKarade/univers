@@ -41,6 +41,9 @@ vec3 gvCorpsNoir(float T) {      /* couleur relative d'un corps noir (approximat
     return vec3(r, g, b);
 }
 
+#ifndef GV_EXACT
+#define GV_EXACT pc.exact      /* orbite exacte (1) ou épicycles (0) ; gaia_points.comp la donne étoile par étoile */
+#endif
 /* Partie propre à l'étoile (la même pour les 16 étoiles d'un sous-nuage) : place relative à la caméra p (après flou, rotation
    d'une voisine, orbite), effacement, gain du film, décalage d'éclat, vieillissement, teinte, poussière. Rend false si
    l'étoile n'est pas montrée (effacée). Code d'avant, seulement rangé à part : gaia.vert et gaia_traceur.comp l'appellent. */
@@ -88,17 +91,23 @@ bool gvTraceur(uint idx, uvec4 r, uint flags, out vec3 p, out float garde, out f
            sans vitesse radiale mesurée (drapeau), elle compte pour nulle : l'étoile ne s'éloigne ni ne s'approche du Soleil
            au départ [supposé, dit à l'écran] */
         if (pc.par.w == 0.0) move = v * pc.par.z;
-        else if (pc.exact > 0.5) {
+        else if (GV_EXACT > 0.5) {
             /* orbite exacte : état calculé au dernier pas d'un million d'années, prolongé au second ordre jusqu'à la date ;
                raccord sans seuil avec la ligne droite mesurée, comme etoiles_orbite.vert */
             float u = pc.par.w * 1.0e9 / OG_RACCORD_ANS, w = 1.0 - exp(-u * u);
             float tEtat = pc.par.w - pc.frac * 1.0e-3, h = pc.frac * 1.0e-3 * OP_K;
+            /* raccord nul (à moins de ~70 ans des mesures, w vaut exactement 0 en simple précision) : mix(ligne droite, orbite, 0)
+               rend la ligne droite telle quelle ; l'orbite, multipliée par zéro, n'est ni lue ni calculée (cadence, 20/11/2026 :
+               32 octets par étoile, 4,5 Go par image pour 140 millions d'étoiles). L'état n'est lu que pour le gain du film. */
+            if (w == 0.0) {
+                move = v * pc.par.z;
+                if ((flags & 16u) != 0u) {
+                    Etat a = orb[idx];
+                    if (a.v.w > 0.0) gainFilm = a.v.w;      /* film : lumière que Gaia, éteint, ne porte plus (film_etoiles.h) */
+                }
+            } else {
             Etat a = orb[idx];
             if ((flags & 16u) != 0u && a.v.w > 0.0) gainFilm = a.v.w;      /* film : lumière que Gaia, éteint, ne porte plus (film_etoiles.h) */
-            /* raccord nul (à moins de ~70 ans des mesures, w vaut exactement 0 en simple précision) : mix(ligne droite, orbite, 0)
-               rend la ligne droite telle quelle ; l'orbite, multipliée par zéro, n'est pas calculée (cadence, 20/11/2026). */
-            if (w == 0.0) move = v * pc.par.z;
-            else {
             Etat s = orb[pc.sun];
             /* h = 0 (film sur la carte : état écrit à la date exacte) : la position est l'état lui-même ; l'accélération,
                multipliée par zéro, n'est pas calculée (cadence, 20/11/2026). */

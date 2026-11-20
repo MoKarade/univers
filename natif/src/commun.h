@@ -144,6 +144,7 @@ struct Gpu {
     uint32_t family = 0;
     VkQueue queue{};
     VkCommandPool pool{};
+    bool int64Atomics = false;      // additions atomiques sur 64 bits dans les tampons (gaia_points.comp) : allumées si la carte sait
 };
 
 uint32_t memoryType(const Gpu& g, uint32_t bits, VkMemoryPropertyFlags want) {
@@ -196,13 +197,22 @@ Gpu createGpu(bool window = false) {
     qci.queueFamilyIndex = g.family;
     qci.queueCount = 1;
     qci.pQueuePriorities = &prio;
-    VkPhysicalDeviceVulkan13Features on13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+    // Additions atomiques sur 64 bits (somme par pixel des étoiles Gaia, gaia_points.comp ; cadence, 20/11/2026) : demandées
+    // seulement si la carte les offre ; sinon les étoiles Gaia restent dessinées en points.
+    VkPhysicalDeviceVulkan12Features has12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+    VkPhysicalDeviceFeatures2 has{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &has12};
+    vkGetPhysicalDeviceFeatures2(g.pd, &has);
+    g.int64Atomics = has12.shaderBufferInt64Atomics && has.features.shaderInt64;
+    VkPhysicalDeviceVulkan12Features on12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+    on12.shaderBufferInt64Atomics = g.int64Atomics ? VK_TRUE : VK_FALSE;
+    VkPhysicalDeviceVulkan13Features on13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &on12};
     on13.dynamicRendering = VK_TRUE;
     VkPhysicalDeviceFeatures feats{};
     feats.largePoints = VK_TRUE;
     feats.multiDrawIndirect = VK_TRUE;      // étoiles Gaia : un dessin par feuille de l'arbre, en un seul appel (gaia.h)
     feats.drawIndirectFirstInstance = VK_TRUE;      // sous-nuages repliés : marqués par la première instance (gaia.h, selectLeaves)
     feats.samplerAnisotropy = VK_TRUE;      // cartes de surface nettes en vue rasante
+    feats.shaderInt64 = g.int64Atomics ? VK_TRUE : VK_FALSE;
     VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &on13};
     dci.queueCreateInfoCount = 1;
     dci.pQueueCreateInfos = &qci;
