@@ -153,6 +153,9 @@ void drawStatus(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     else if (sim.autoPose > 1.05)
         ImGui::TextDisabled("Pose relevée ×%s : %s", frNum(sim.autoPose, sim.autoPose < 10 ? 1 : 0).c_str(),
                             sim.dist > 1.0e7 ? "vues de si loin, les galaxies sont très faibles (comme une longue pose photo)." : "la scène est sombre (comme l'œil qui s'habitue au noir).");
+    if (sim.galaxyPose > 1.05 && sim.galaxyPose > sim.autoPose)      // la pose des galaxies est dite, comme celle de l'écran
+        ImGui::TextDisabled("Galaxies en longue pose ×%s : chaque galaxie est à sa place mesurée ; éclats relatifs réels, mais tous relevés pour être vus de si loin.",
+                            frNum(sim.galaxyPose, 0).c_str());
     if (const int k = eclipseNow(sim.years); k >= 0) ImGui::TextDisabled("%s, de Soleil : %s.", kEclipses[k].label, kEclipseStatus);
     if (!ui.details) {      // interface minimaliste : seules les hypothèses du « meilleur rendu » restent toujours écrites
         ImGui::PopTextWrapPos();

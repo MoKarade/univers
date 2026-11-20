@@ -98,6 +98,7 @@ std::vector<Tuile> keyFacts(const Sim& sim, int f) {
         }
         case Kind::Galaxy: {
             if (b.structure && b.name == "Univers observable") out.push_back({"Rayon", "46,2 milliards d'al", Statut::Calcule, "Planck 2018"});
+            else if (b.structure && b.name == "Fond diffus cosmologique") out.push_back({"Rayon", "45,3 milliards d'al (z = 1 090)", Statut::Calcule, "Planck 2018 ; carte : Planck SMICA 2018, mesurée"});
             else out.push_back({"Distance", frDistance(dSun), sim.deepTime() ? Statut::Calcule : b.structure ? Statut::Publie : Statut::Mesure, sim.deepTime() ? "calcul de la rencontre avec Andromède" : "catalogue cité dans la fiche"});
             out.push_back({"Nature", natureOf(b), Statut::Aucun, ""});
             if (!b.blackHoleText.empty()) out.push_back({"Trou noir central", "masse mesurée", Statut::Mesure, b.blackHoleText});

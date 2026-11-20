@@ -146,6 +146,9 @@ def main(tsv, sortie):
                  f'bord de l’univers observable (horizon des particules) : {horizon / 1e9:.1f} milliards d’années-lumière aujourd’hui, '
                  f'distance comobile calculée avec la cosmologie Planck 2018 (Planck Collaboration 2020, A&A 641, A6) ; la lumière du fond '
                  f'diffus cosmologique est partie de {lss / 1e9:.1f} milliards d’années-lumière (z = 1 089,9) ; calculé', 1))
+    # nom à part pour le fond diffus (Marc, 20/11/2026 : « je veux voir le CMB ») : se cherche et se visite
+    noms.append(('Fond diffus cosmologique', np.array([0.0, 0.0, 0.0]),
+                 'surface où la lumière du fond diffus cosmologique est partie : ' + f'{lss / 1e9:.1f}' + ' milliards d’années-lumière (distance comobile aujourd’hui, z = 1 089,9, cosmologie Planck 2018) ; carte des écarts de température mesurée par Planck (SMICA, PR3 2018, Planck Collaboration IV 2020) en fausses couleurs, bleu froid, rouge chaud, ±300 µK ; ce rayonnement (micro-ondes) ne se voit pas à l’œil ; mesuré', 1))
     ecrire(os.path.join(sortie, 'superstructures.bin'), [(5, *sec5), (6, *sec6), (7, *sec7), (8, *sec8)])
     with open(os.path.join(sortie, 'superstructures_noms.tsv'), 'w', encoding='utf-8', newline='\n') as f:
         for nom, x, txt, prio in noms:

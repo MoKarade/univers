@@ -29,6 +29,7 @@
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
 #include "galaxies_formes.h"
+#include "galaxies_pose.h"
 #include "structures.h"
 #include "chrono.h"
 #include "vieillissement.h"
@@ -1104,7 +1105,11 @@ int runWindow(const WindowOptions& opt) {
         chrono.gpu(cmd, "precalcul des etoiles du modele");
         beginPass(cmd, hdr.view, sc.extent);
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
-        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);      // même exposition que les étoiles
+        // Pose propre aux galaxies aux grandes échelles (galaxies_pose.h) : la pose totale des galaxies vaut
+        // max(pose de l'écran, gain de la distance de vue) ; près de la Voie lactée, rien ne change.
+        const float galFactor = static_cast<float>(galaxies_pose::facteur(sim.dist, sim.autoPose));
+        sim.galaxyPose = galaxies_pose::gain(sim.dist);
+        if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0], galFactor, sim.dist);      // exposition des étoiles, relevée aux grandes échelles
         chrono.gpu(cmd, "ciel et galaxies lointaines");
         if (!skyOnly && galaxyShapes.ready) {
             galaxyShapes.deepTime = sim.deepTime();
@@ -1112,7 +1117,7 @@ int runWindow(const WindowOptions& opt) {
             float aL[16], aT[16];
             vieillissement.factors(sim.replayGa(), aL, aT);
             galaxyShapes.ageing[0] = aL[1]; galaxyShapes.ageing[1] = aL[2]; galaxyShapes.ageing[2] = aT[1]; galaxyShapes.ageing[3] = aT[2];
-            galaxyShapes.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);
+            galaxyShapes.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * galFactor);
             sim.galaxyShapesShown = galaxyShapes.shown;
         }
         chrono.gpu(cmd, "formes des galaxies");

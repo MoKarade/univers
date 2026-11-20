@@ -301,6 +301,7 @@ struct Sim {
     bool photoExposure = true;
     double exposureEv = 0, photoGain = 1;
     double autoPose = 1;      // pose automatique contre la saturation (pose_auto.h) : 1 = aucune baisse
+    double galaxyPose = 1;    // pose propre aux galaxies aux grandes échelles (galaxies_pose.h) : 1 = la même que les étoiles
     // Gaz ionisé de la Voie lactée (régions HII de voie_lactee.bin) montré par-dessus les étoiles (Marc, 20/11/2026 soir :
     // « l'espace paraît trop vide, il manque du gaz, des nébuleuses, de la poussière ») ; case du menu.
     bool showGas = true;
@@ -1134,7 +1135,7 @@ struct Sim {
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
         if (b.kind == Kind::Galaxy && b.structure) d = std::max(d, 1.5 * arrivee::structureSizeLy(b.natureText));
         if (b.kind == Kind::Galaxy && b.cluster) d = std::max(d, 2.0e7);      // un amas (quelques Mpc) : vu entier avec ses galaxies      // audit B3 : la structure entière dans le champ
-        if (b.kind == Kind::Galaxy && b.structure && b.name == "Univers observable") d = 1.1e11;      // la sphère entière dans le champ
+        if (b.kind == Kind::Galaxy && b.structure && (b.name == "Univers observable" || b.name == "Fond diffus cosmologique")) d = 1.1e11;      // la sphère entière dans le champ
         if (b.kind == Kind::Galaxy && b.shapeRadiusLy > 0) d = std::clamp(12.0 * b.shapeRadiusLy, 1.0e3, 3.0e5);
         if (b.nebula) d = std::clamp(12.0 * b.drawnRadiusLy, 3.0, 3.0e3);      // nébuleuse : vue entière, dans son voisinage d'étoiles      // naine dessinée : on la voit entière
         return d;
