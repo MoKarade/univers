@@ -2,7 +2,7 @@
 # Le côté WSL (balayage_wsl.sh) les prend au fur et à mesure et lance GADGET-4.
 # Pause : tant que le jeu de Marc (cod.exe) tourne, on n'en fabrique pas de nouveau et on pose resultats\pause.txt.
 # Usage : & .\pipeline\contraint\calcul\balayage_windows.ps1 PREMIERE DERNIERE
-param([int]$Premiere = 2, [int]$Derniere = 21)
+param([int]$Premiere = 2, [int]$Derniere = 21, [string]$Prefixe = 'rcj')
 $ErrorActionPreference = 'Stop'
 $dossier = Split-Path -Parent $PSScriptRoot
 Set-Location $dossier
@@ -14,7 +14,7 @@ if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'univers-venv')) -and (Test-Pat
 }
 $python = Join-Path $env:LOCALAPPDATA 'univers-venv\Scripts\python.exe'
 $env:PYTHONIOENCODING = 'utf-8'
-$env:MONOPOLE = '1'; $env:PAS_D = '4'; $env:R_D = '40'; $env:SIGMA_D = '0.25'; $env:PREFIXE = 'rcj'
+$env:MONOPOLE = '1'; $env:PAS_D = '4'; $env:R_D = '40'; $env:SIGMA_D = '0.25'; $env:PREFIXE = 'rcj'          # nom des fichiers de realisations_jointes (toujours rcj_<g>.npz)
 # Vierge imposée (δ_L = 1,8 dans 13 Mpc/h) : mesuré le 19/11, sans elle aucun amas ne se forme ; avec, rcv1 donne
 # 1,3e15 M☉ à 5,3 Mpc de sa place (mesure : ~1,2e15).
 $env:VIERGE_DL = '1.8'
