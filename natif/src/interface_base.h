@@ -305,7 +305,7 @@ void drawOrbits(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
             const double nu = 2.0 * kPi * k / 180.0, r = (1.0 - e * e) / (1.0 + e * std::cos(nu)) * kAuInLy;
             ImVec2 at;
             const bool ok = projectLoose(cam, {r * std::cos(nu + peri), r * std::sin(nu + peri), 0.0}, w, h, at);
-            if (ok && hasPrev) dl->AddLine(prev, at, IM_COL32(255, 196, 110, 150), 1.2f * ui.s);
+            if (ok && hasPrev) dl->AddLine(prev, at, theme::alpha(theme::kAccent, 0.6f), 1.2f * ui.s);
             prev = at;
             hasPrev = ok;
         }
@@ -330,7 +330,7 @@ void drawOrbits(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
         for (const Vec3& rel : pts) {
             ImVec2 at;
             const bool ok = projectLoose(cam, {parent.x + rel.x, parent.y + rel.y, parent.z + rel.z}, w, h, at);
-            if (ok && hasPrev) dl->AddLine(prev, at, i == sim.focus ? IM_COL32(255, 196, 110, 150) : kOrbit, 1.2f * ui.s);
+            if (ok && hasPrev) dl->AddLine(prev, at, i == sim.focus ? theme::alpha(theme::kAccent, 0.6f) : kOrbit, 1.2f * ui.s);
             prev = at;
             hasPrev = ok;
         }
