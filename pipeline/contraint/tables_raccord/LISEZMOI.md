@@ -42,3 +42,21 @@ Suivi au niveau des **sous-halos** (les groupes FOF des deux galaxies se soudent
   paire à décrire ; la masse du reste fusionné peut être ajoutée sur demande.
 - Avertissement (modèle) : ce calcul a un troisième halo de ~5e12 M☉ à ~3 Mpc de la paire, absent du ciel réel ; il pèse
   sur la marée et sur l'orbite. La dispersion de la marée entre graines indépendantes est en calcul (balayage « rcp »).
+
+## Marée « ciel réel » (demande (a), 20/11/2026) : dossier `ciel_reel/`, `pipeline/contraint/maree_ciel_reel.py`
+Même formule et même convention de signe, mais sur les **groupes observés** : Kourkchi & Tully 2017, ApJ 843, 16
+(VizieR J/ApJ/843/16, table2), 8 658 groupes entre 1,5 et 50 Mpc du centre de masse Voie lactée + Andromède.
+Masse de chaque groupe = `logMK` de ce catalogue (masse tirée de la luminosité K) ; distance = `Dist` mesurée, sinon
+`VLS/75`. Aucune valeur inventée : chaque masse vient de cette source (PGC1 du groupe dans `maree_ciel_reel_parts.csv`).
+- `maree_ciel_reel.csv` : tenseur de −2 à +10 Ga (pas 0,1 Ga) + écart-type des 3 termes diagonaux (300 tirages :
+  erreurs de distance du catalogue, 20 % pour les distances de vitesse, 0,2 dex sur les masses).
+  Aujourd'hui : diag = (−1,91 ; −0,72 ; +2,63)e-3 ± (0,52 ; 0,49 ; 0,95)e-3 (km/s/kpc)². Trace 2e-17.
+  Variante masses dynamiques (`logMd`) : diag = (−2,93 ; −1,07 ; +4,00)e-3 → écart systématique ~50 % [Certain, calculé].
+- Évolution : positions comobiles et masses figées, T(t) = T(0)·a(t)⁻³ [modèle, signalé] ; les vitesses particulières
+  des groupes ne sont pas suivies.
+- `maree_ciel_reel_parts.csv` : les 15 groupes qui pèsent le plus. Les cinq premiers (part de la norme) : Maffei 1
+  (29 %), NGC 253 / Sculpteur (29 %), NGC 5128 / Centaure A (26 %), NGC 4472 / Vierge (21 %), M81 (18 %).
+
+## Reste fusionné (demande du 20/11) : `v2/reste_fusionne.csv`
+M200 du halo issu de la fusion, de +5,2 à +10 Ga : 4,6e12 → 3,9e12 M☉ (masse liée 5,1 → 6,2e12). **Modèle et à
+prendre avec prudence** : le troisième halo fantôme de ~5e12 M☉ tombe probablement dans ce reste [Probable].
