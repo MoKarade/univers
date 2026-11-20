@@ -229,7 +229,7 @@ def avancement(t0, t1, t):
 DEBUT = time.strftime('%Y-%m-%dT%H:%M:%S')
 
 
-def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, journal=None, a_chaque_releve=None):
+def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, journal=None, a_chaque_releve=None, replacement=None):
     """Avance de t0 à t1 (Ga). Écrit journal.json (centres relatifs à la Voie lactée, énergie) et des instantanés."""
     dt = dt_ma * 1e-3 / T_UNIT
     steps = int(round((t1 - t0) * 1000 / dt_ma)); every = int(round(releve_ma / dt_ma)); snap = int(round(instantane_ga * 1000 / dt_ma))
@@ -255,11 +255,30 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
     for s in range(steps):
         S.pas(dt, t0 + (s + 1) * dt_ma * 1e-3)
         t = t0 + (s + 1) * dt_ma * 1e-3
+        if replacement and not replacement.get('fait') and t >= replacement['t'] - 1e-9: replacer(S, replacement)
         if (s + 1) % every == 0: releve(t)
         if (s + 1) % snap == 0 and s + 1 < steps:
             np.savez(os.path.join(sortie, 'reprise.tmp.npz'), t=t, **S.etat()); os.replace(os.path.join(sortie, 'reprise.tmp.npz'), os.path.join(sortie, 'reprise.npz'))
         S.attendre()
     return journal
+
+
+def replacer(S, r):
+    """Remet une galaxie à une place et une vitesse données (relatives à la Voie lactée) en cours de calcul, d'un bloc.
+    Sert au Petit Nuage : lié au Grand Nuage, il fait plusieurs rencontres serrées en un milliard d'années et son orbite
+    passée ne se laisse pas régler par tirs (20/11/2026 : 30 à 470 kpc d'écart à l'arrivée, sans convergence). On le
+    replace donc quelques centaines de millions d'années avant aujourd'hui, là où le modèle simple le fait remonter depuis
+    sa place mesurée ; avant cette date, sa route dans le calcul n'a pas de valeur. [Modèle, à dire à l'écran]"""
+    cp = S.cp
+    g = ORDRE.index(r['galaxie'])
+    cp_, cv = S.centres()
+    dp = cp.asarray(cp_[0] + np.array(r['pos'], float) - cp_[g]); dv = cp.asarray(cv[0] + np.array(r['vel'], float) - cv[g])
+    qui = cp.asarray(S.gid == g)
+    S.pos[qui] += dp; S.vel[qui] += dv
+    S.forces()
+    if S.gaz: S.gaz._acc = None
+    r['fait'] = True
+    print(f"  {r['galaxie']} replacé à t = {r['t']:+.2f} Ga (déplacement de {float(cp.linalg.norm(dp)):.1f} kpc, {float(cp.linalg.norm(dv)):.1f} km/s)", flush=True)
 
 
 def ecart_a_la_cible(journal, cible):
@@ -357,26 +376,40 @@ def main():
     if mode in ('tir', 'passe'):
         dossier, sortie = args[1], args[2]
         os.makedirs(sortie, exist_ok=True)
+        replacement = None
         if 'etat' in opts:
             precedent = json.load(open(opts['etat'], encoding='utf-8'))
             etat, t_depart = precedent['etat'], float(precedent['t_depart'])
+            if precedent.get('replacement'): replacement = dict(precedent['replacement'], fait=False)
         else:
             # Premier départ : on remonte depuis les places et vitesses mesurées aujourd'hui, dans le modèle simple des centres
             # bâti sur les masses de CE calcul. (Les orbites de la référence, avec leur frottement de formule, ne valent pas
             # pour les Nuages dans ce calcul : tirs 1 à 3 du 13/11, 120 à 250 kpc d'écart.)
             auj = {n: dict(pos=cible['galaxies'][n]['position_aujourdhui'], vel=cible['galaxies'][n]['vitesse_aujourdhui']) for n in ORDRE}
             etat = centres_simples(auj, t_depart / T_UNIT, profils(dossier))
+        if 'replacer' in opts and replacement is None:      # --replacer=petit_nuage:-0.30 : état remonté depuis les mesures, modèle simple
+            nom_r, t_r = opts['replacer'].split(':'); t_r = float(t_r)
+            auj = {n: dict(pos=cible['galaxies'][n]['position_aujourdhui'], vel=cible['galaxies'][n]['vitesse_aujourdhui']) for n in ORDRE}
+            e_r = centres_simples(auj, t_r / T_UNIT, profils(dossier))[nom_r]
+            replacement = dict(galaxie=nom_r, t=t_r, pos=e_r['pos'], vel=e_r['vel'], fait=False)
         angles = {a.split(':')[0]: float(a.split(':')[1]) for a in opts['angles'].split(',')} if 'angles' in opts else None
         p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)), angles=angles)
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
         S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'), t_ga=t_depart)
-        journal = avancer(S, t_depart, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)))
+        journal = avancer(S, t_depart, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)), replacement=replacement)
         ecart = ecart_a_la_cible(journal, cible)
         # Correction du départ : l'écart final de vitesse est retiré de la vitesse de départ ; l'écart final de position est
         # retiré de la position de départ, compte tenu de ce que le changement de vitesse déplace sur la durée du trajet
         # (mouvement libre : une approximation, d'où les tirs successifs). Amorti pour ne pas osciller.
         corrige = corriger(etat, ecart, t_depart, profils(dossier), float(opts.get('amorti', 0.5)))
-        json.dump(dict(t_depart=t_depart, etat=corrige, ecart_du_tir=ecart, particules=int(len(p['m']))), open(os.path.join(sortie, 'etat_corrige.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+        rep_c = None
+        if replacement:      # correction du replacement : mouvement libre sur la durée restante (courte), amortie
+            n_r = replacement['galaxie']; Tr = -replacement['t'] / T_UNIT; am = float(opts.get('amorti', 0.5))
+            dx, dv = np.array(ecart[n_r]['dx'], float), np.array(ecart[n_r]['dv'], float)
+            rep_c = dict(galaxie=n_r, t=replacement['t'], pos=(np.array(replacement['pos'], float) - am * (dx - dv * Tr)).tolist(),
+                         vel=(np.array(replacement['vel'], float) - am * dv).tolist())
+            corrige[n_r] = etat[n_r]      # son départ lointain n'est plus corrigé : il ne compte pas
+        json.dump(dict(t_depart=t_depart, etat=corrige, ecart_du_tir=ecart, particules=int(len(p['m'])), replacement=rep_c), open(os.path.join(sortie, 'etat_corrige.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         json.dump(dict(t_depart=t_depart, etat=etat), open(os.path.join(sortie, 'etat_utilise.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         print('écart à la place mesurée aujourd\'hui :')
         for n, e in ecart.items(): print(f"  {n:12s} {e['distance_kpc']:7.1f} kpc   {e['vitesse_kms']:6.1f} km/s")
