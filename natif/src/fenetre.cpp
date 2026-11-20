@@ -417,6 +417,8 @@ int runWindow(const WindowOptions& opt) {
     GalaxyShapes galaxyShapes;
     galaxyShapes.create(g, dataDir + "/galaxies_formes.bin", HdrTarget::kFormat);
     sim.galaxyShapeCount = galaxyShapes.count;
+    galaxies.setCosmology(sim.cosmology, 1.0);      // table d'aujourd'hui, pour poser les noms sur les formes
+    std::printf("noms poses au centre de leur forme : %d\n", galaxyShapes.snapNames(sim.bodies, galaxies));
     // Grandes structures (Laniakea, flot, vides) et nuage d'Oort (modèle) : structures.h, structures.bin.
     StructureRenderer structuresR;
     const bool structuresOk = structuresR.create(g, dataDir, HdrTarget::kFormat);
@@ -1015,7 +1017,7 @@ int runWindow(const WindowOptions& opt) {
                                ? sim.starShare() * std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0)
                                : 0.0;
             if (sim.gasShare > 0)
-                milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.gasShare), sim.years, true);
+                milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(0.3 * sim.gasShare), sim.years, true);      // 0,3 : sans quoi le gaz couvrait les étoiles de taches roses (contrôle en image)
             gaia.improved = sim.bestLook;
             gaiaSky.update(cam, sim.fovDeg, !sim.deepTime());
             gaia.hideSkyOnly = gaiaSky.active && gaiaSky.shownStars > 0;

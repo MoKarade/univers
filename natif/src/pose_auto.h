@@ -28,9 +28,9 @@ constexpr double kPoseMaxGalaxies = 1000.0;
 // où chaque image compte comme six).
 // Éclat moyen visé à l'écran (Y/(1+Y), lumière linéaire) : Marc, 20/11/2026 soir : « parfois je vois rien, trop de lumière,
 // parfois pas assez ». Mesuré au balayage du zoom : de 1 à 115 sur 255 selon l'échelle. Au-dessus de kMoyHaute (≈ 75/255 à
-// l'écran), la pose baisse doucement ; en dessous de kMoyBasse (≈ 25/255) sans rien de bien visible, elle remonte (jusqu'à
+// l'écran ; 0,15 depuis le contrôle en image), la pose baisse doucement ; en dessous de kMoyBasse (≈ 25/255) sans rien de bien visible, elle remonte (jusqu'à
 // poseMax). Entre les deux, rien ne bouge : la pose ne « pompe » pas.
-constexpr double kMoyHaute = 0.075, kMoyBasse = 0.010;
+constexpr double kMoyHaute = 0.15, kMoyBasse = 0.010;      // 0,15 : une galaxie qui remplit l'écran garde son éclat (contrôle du 20/11 : 0,075 la ternissait ×0,09)
 
 // poseMax : plafond de la pose relevée ; partVisible : part bien visible ; moy : éclat moyen à l'écran.
 inline double suivante(double pose, double partSaturee, double partVisible, double moy, double dt, bool instant, double poseMax) {
