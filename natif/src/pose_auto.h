@@ -28,16 +28,19 @@ constexpr double kPoseMaxGalaxies = 1000.0;
 // où chaque image compte comme six).
 // Éclat moyen visé à l'écran (Y/(1+Y), lumière linéaire) : Marc, 20/11/2026 soir : « parfois je vois rien, trop de lumière,
 // parfois pas assez ». Mesuré au balayage du zoom : de 1 à 115 sur 255 selon l'échelle. Au-dessus de kMoyHaute (≈ 75/255 à
-// l'écran ; 0,15 depuis le contrôle en image), la pose baisse doucement ; en dessous de kMoyBasse (≈ 25/255) sans rien de bien visible, elle remonte (jusqu'à
+// l'écran ; 0,15 depuis le contrôle en image), la pose baisse doucement ; en dessous de kMoyBasse (≈ 13/255 ; 0,003 depuis le balayage du 20/11 : à 0,01, un ciel étoilé ordinaire était relevé ×4), elle remonte (jusqu'à
 // poseMax). Entre les deux, rien ne bouge : la pose ne « pompe » pas.
-constexpr double kMoyHaute = 0.15, kMoyBasse = 0.010;      // 0,15 : une galaxie qui remplit l'écran garde son éclat (contrôle du 20/11 : 0,075 la ternissait ×0,09)
+constexpr double kMoyHaute = 0.15, kMoyBasse = 0.003;      // 0,15 : une galaxie qui remplit l'écran garde son éclat (contrôle du 20/11 : 0,075 la ternissait ×0,09)
 
 // poseMax : plafond de la pose relevée ; partVisible : part bien visible ; moy : éclat moyen à l'écran.
 inline double suivante(double pose, double partSaturee, double partVisible, double moy, double dt, bool instant, double poseMax) {
     const double frames = instant ? 6.0 : std::clamp(dt * 60.0, 0.0, 6.0);      // vitesse réglée pour 60 images par seconde
     if (partSaturee > kPartMax) pose *= std::pow(0.8, frames);                      // ~0,2 s pour un facteur 1/10
-    else if (moy > kMoyHaute) pose *= std::pow(0.97, frames);                       // image trop claire : ~1,3 s pour un facteur 1/10
-    else if (pose < poseMax && moy < kMoyBasse && partVisible < kPartVisible && partSaturee < kPartBasse)
+    // image trop claire : ~1,3 s pour un facteur 1/10 ; seulement aux échelles des étoiles (poseMax ≤ 4) et pas sous ×0,1 :
+    // aux grandes échelles, l'écran est surtout fait de repères (fond diffus, voiles) que la pose ne change pas, et la pose
+    // fondait jusqu'à ×0,004 en éteignant les galaxies (balayage du 20/11)
+    else if (moy > kMoyHaute && poseMax <= 4.0 && pose > 0.1) pose *= std::pow(0.97, frames);
+    else if (pose < poseMax && moy < (poseMax > 4.0 ? 0.010 : kMoyBasse) && partVisible < kPartVisible && partSaturee < kPartBasse)      // galaxies : seuil 0,01
         pose = std::min(poseMax, pose * std::pow(1.04, frames));                   // trop sombre : ~1 s pour un facteur 10
     else if (pose < 1.0 && partSaturee < kPartBasse && moy < 0.6 * kMoyHaute) pose = std::min(1.0, pose * std::pow(1.02, frames));      // retour doux vers la pose de base
     else if (pose > poseMax) pose *= std::pow(0.96, frames);                        // le plafond a baissé : retour doux

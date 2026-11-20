@@ -78,11 +78,13 @@ int main(int argc, char** argv) {
         gf.read(h, 16);
         if (gf && std::memcmp(h, "UNIVGAI1", 8) == 0) std::memcpy(&nGaia, h + 8, 8);
     }
-    verifie(nGaia == 98278356, "gaia.bin : 98 278 356 étoiles (docs/gaia-voie-lactee.md)");
+    // 98 278 350 : gaia.bin réécrit le 12/11/2026 à 18 h 36, après ce contrôle (98 278 356 à la première conversion,
+    // docs/gaia-voie-lactee.md) ; c'est le fichier installé et chargé par l'appli.
+    verifie(nGaia == 98278350, "gaia.bin : 98 278 350 étoiles (fichier installé, 12/11/2026 18 h 36)");
     sim.hasGaia = nGaia > 0;
     sim.hasMilkyWay = true;
     const auto rg = rapport(compter(sim, 5566702, nGaia));
-    verifie(std::fabs(rg[2].part - (58967.0 + 98278356.0) / 1811709771.0) < 1e-15, "Voie lactée avec Gaia : (58 967 + 98 278 356) / Gaia DR3");
+    verifie(std::fabs(rg[2].part - (58967.0 + 98278350.0) / 1811709771.0) < 1e-15, "Voie lactée avec Gaia : (58 967 + 98 278 350) / Gaia DR3");
     std::printf("Voie lactée avec Gaia : %s\n  %s\n  %s\n", rg[2].complet.c_str(), rg[2].precision.c_str(), rg[2].mesure.c_str());
     for (const Ligne& l : rg[2].lignes) std::printf("    - %s : %s [%s]\n", l.quoi.c_str(), l.valeur.c_str(), motNature(l.nature));
     // Choix de Marc (12/11) : lueur modèle retirée. Gaia chargé sans Voie lactée : aucune ligne « supposé » ni « ajusté ».
@@ -106,10 +108,21 @@ int main(int argc, char** argv) {
     verifie(std::fabs(rv[1].part - 467.0 / 540.0) < 1e-12, "voisinage avec Gaia : (317 + 150) / 540");
     std::printf("Voisinage avec Gaia : %s\n  %s\n  %s\n", rv[1].complet.c_str(), rv[1].precision.c_str(), rv[1].mesure.c_str());
     verifie(!compter(sim, 5566702, nGaia, "", dir + "/absent.bin").voisinageGaia, "gaia.bin absent : voisinage compté dans etoiles.bin");
-    verifie(ca.agrege && ca.additionneesPlacees == 93831724, "gaia_agrege.bin : 93 831 724 sources placées (numpy : 93 831 724)");
-    verifie(std::fabs(ca.lumiereSansDistance - 0.6971758128609438) < 1e-9, "lumière sans distance : 69,7 % (numpy)");
-    const auto ra = rapport(ca);
-    verifie(std::fabs(ra[2].part - (98278356.0 + 1707918961.0) / 1811709771.0) < 1e-15, "Voie lactée : (une à une + additionnées) / Gaia DR3");
+    // Depuis le 13/11/2026 (gaia_tuiles.py), les sources à parallaxe entre 5 et 10 erreurs sont dessinées une à une
+    // (gaia_b.bin) : gaia_agrege.bin n'a plus de cases placées en volume ; toute sa lumière est « sans distance ».
+    verifie(ca.agrege && ca.additionneesPlacees == 0, "gaia_agrege.bin : plus de cases en volume (sources placées dans gaia_b.bin)");
+    verifie(std::fabs(ca.lumiereSansDistance - 1.0) < 1e-12, "lumière additionnée : 100 % sans distance");
+    uint64_t nGaiaB = 0;
+    {
+        std::ifstream gf(dir + "/gaia_b.bin", std::ios::binary);
+        char h[16] = {};
+        gf.read(h, 16);
+        if (gf && std::memcmp(h, "UNIVGAI1", 8) == 0) std::memcpy(&nGaiaB, h + 8, 8);
+    }
+    verifie(nGaiaB == 93831436, "gaia_b.bin : 93 831 436 étoiles (fichier installé, 13/11/2026)");
+    const auto ra = rapport(compter(sim, 5566702, nGaia + nGaiaB, dir + "/gaia_agrege.bin"));
+    verifie(std::fabs(ra[2].part - (98278350.0 + 93831436.0 + 1707918961.0 - 93861853.0) / 1811709771.0) < 1e-15,
+            "Voie lactée : (gaia.bin + gaia_b.bin + additionnées sans le jeu B) / Gaia DR3");
     std::printf("Voie lactée avec les sources additionnées : %s\n  %s\n", ra[2].complet.c_str(), ra[2].precision.c_str());
     verifie(!compter(sim, 5566702, nGaia, dir + "/absent.bin").agrege, "gaia_agrege.bin absent : rien d'additionné");
     sim.hasGaia = sim.hasMilkyWay = false;
