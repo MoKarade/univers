@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "arrivee.h"
+#include "rayon_etoile.h"
 #include "interface_outils.h"
 
 namespace {
@@ -63,6 +64,15 @@ int main() {
     const double vela = arrivee::structureSizeLy("superstructure ; taille publiée : au moins 25 deg x 20 deg ~ 115 x 90 h70^-1 Mpc, cz ~ 18000 km/s ; 0.86 milliards dâannées-lumière");
     expect(vela == arrivee::kDefautLy, "Vela : « h70^-1 Mpc » non lu (défaut), et jamais « 1 Mpc »");
     expect(arrivee::structureSizeLy("Grand Attracteur") == arrivee::kDefautLy, "sans taille : 3 × 10^8 al");
+    // Rayon calculé des étoiles (rayon_etoile.h), contre des rayons publiés (interférométrie)
+    auto rsol = [](double mv, double bv) { return rayon_etoile::rayonKm(mv, bv) / rayon_etoile::kRsoleilKm; };
+    const double soleil = rsol(4.83, 0.653), sirius = rsol(1.42, 0.00), vega = rsol(0.58, 0.00), arcturus = rsol(-0.30, 1.23);
+    std::printf("      rayons calculés (R☉) : Soleil %.2f, Sirius A %.2f, Véga %.2f, Arcturus %.1f\n", soleil, sirius, vega, arcturus);
+    expect(soleil > 0.95 && soleil < 1.05, "Soleil : 1 R☉ à 5 % près");
+    expect(sirius > 1.5 && sirius < 1.95, "Sirius A : 1,71 R☉ publié (Kervella et al. 2003), à 15 % près");
+    expect(vega > 2.1 && vega < 3.1, "Véga : 2,36 à 2,82 R☉ publiés (Aufdenberg et al. 2006, aplatie)");
+    expect(arcturus > 20 && arcturus < 30, "Arcturus : 25,4 R☉ publié (Ramírez et Allende Prieto 2011), à 20 % près");
+    expect(rayon_etoile::rayonKm(1.0, 9.0) == 0.0, "indice de couleur absurde : pas de rayon");
     std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
     return failures ? 1 : 0;
 }

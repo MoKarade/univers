@@ -258,8 +258,11 @@ public:
         const double days = sim.years * 365.25 + kTdbMinusUtc / 86400.0;
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
             const Body& b = sim.bodies[static_cast<size_t>(i)];
-            if (b.kind == Kind::Star || !sim.visible(i)) continue;
-            const int naif = b.kind == Kind::Sun ? static_cast<int>(eph::kSun) : b.naif;
+            if ((b.kind == Kind::Star && b.radiusKm <= 0) || !sim.visible(i)) continue;
+            // étoile (audit E3) : disque de son rayon calculé et de sa couleur, sans carte de surface (aucune n'est mesurée) ;
+            // la carte du Soleil sert seulement à remplir l'emplacement de la ressource, elle n'est pas lue
+            const bool star = b.kind == Kind::Star;
+            const int naif = b.kind == Kind::Sun || star ? static_cast<int>(eph::kSun) : b.naif;
             int map = -1;
             for (int k = 0; k < kSphereMapCount; ++k)
                 if (kSphereMaps[k].naif == naif && textures_[k].ready) map = k;
@@ -280,13 +283,23 @@ public:
                               {static_cast<float>(cam.right.x), static_cast<float>(cam.right.y), static_cast<float>(cam.right.z), static_cast<float>(cam.tanHalf * cam.aspect)},
                               {static_cast<float>(cam.up.x), static_cast<float>(cam.up.y), static_cast<float>(cam.up.z), static_cast<float>(cam.tanHalf)},
                               {static_cast<float>(cam.fwd.x), static_cast<float>(cam.fwd.y), static_cast<float>(cam.fwd.z), static_cast<float>(pixel)},
-                              {0, 0, 0, b.kind == Kind::Sun ? -kSunGain : kSurfaceGain},
+                              {0, 0, 0, b.kind == Kind::Sun || star ? -kSunGain : kSurfaceGain},
                               {static_cast<float>(m.m[0][0]), static_cast<float>(m.m[0][1]), static_cast<float>(m.m[0][2]), ringed ? static_cast<float>(kRingInnerKm / b.radiusKm) : 0.0f},
                               {static_cast<float>(m.m[1][0]), static_cast<float>(m.m[1][1]), static_cast<float>(m.m[1][2]), ringed ? static_cast<float>(kRingOuterKm / b.radiusKm) : 0.0f},
                               {static_cast<float>(m.m[2][0]), static_cast<float>(m.m[2][1]), static_cast<float>(m.m[2][2]), 0},
                               {0, 0, 0, 0},
                               {0, 0, 0, 0}};
-            if (b.kind != Kind::Sun) {
+            if (star) {      // couleur de l'étoile (lumière linéaire, plus grande composante 1) ; éclat de surface en (T / T☉)⁴
+                const auto c = colorOfBv(b.bv);
+                const double r = std::pow(c[0] / 255.0, 2.2), gr = std::pow(c[1] / 255.0, 2.2), bl = std::pow(c[2] / 255.0, 2.2);
+                const double mx = std::max({r, gr, bl, 1e-6});
+                const double t = rayon_etoile::temperatureBv(b.bv) / rayon_etoile::kTsoleil;
+                d.pc.ombre[0] = static_cast<float>(r / mx);
+                d.pc.ombre[1] = static_cast<float>(gr / mx);
+                d.pc.ombre[2] = static_cast<float>(bl / mx);
+                d.pc.ombre[3] = -1.0f;      // drapeau : pas de carte, cette couleur
+                d.pc.soleil[3] = static_cast<float>(-kSunGain * std::clamp(t * t * t * t, 0.05, 20.0));
+            } else if (b.kind != Kind::Sun) {
                 const Vec3 toSun = unit(Vec3{-p.x, -p.y, -p.z});
                 d.pc.soleil[0] = static_cast<float>(toSun.x);
                 d.pc.soleil[1] = static_cast<float>(toSun.y);

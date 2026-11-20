@@ -3,11 +3,14 @@
    à la date montrée est calculée ici (équation de Kepler, méthode de Newton). Pas de marée galactique ni d'étoile qui passe. */
 layout(location = 0) in vec4 inA;      /* a (UA), e, inclinaison, nœud ascendant (rad) */
 layout(location = 1) in vec4 inB;      /* argument du périhélie, anomalie moyenne à J2000 (rad), mouvement moyen (rad/an), - */
-layout(push_constant) uniform Pc { mat4 viewProj; vec4 cam; vec4 par; } pc;   /* par : part montrée, hauteur (px), années depuis J2000, al par UA */
+layout(push_constant) uniform Pc { mat4 viewProj; vec4 cam; vec4 par; } pc;   /* par : part montrée, hauteur (px), nombre de millions d'années depuis J2000 (entier), al par UA ; cam.w : le reste (années) */
 layout(location = 0) out vec3 vCol;
 void main() {
     float a = inA.x, e = inA.y, inc = inA.z, node = inA.w, w = inB.x;
-    float M = mod(inB.y + inB.z * pc.par.z, 6.2831853);
+    /* date en deux morceaux (audit C7) : sans « modulo 1 milliard d'années », qui faisait sauter toutes les comètes à chaque
+       milliard d'années */
+    float tour = mod(inB.z * 1.0e6, 6.2831853);      /* avance sur un million d'années, ramenée à un tour */
+    float M = mod(inB.y + mod(tour * pc.par.z, 6.2831853) + inB.z * pc.cam.w, 6.2831853);
     float E = e < 0.8 ? M : 3.14159265;
     for (int k = 0; k < 10; ++k) E -= (E - e * sin(E) - M) / (1.0 - e * cos(E));
     float xo = a * (cos(E) - e), yo = a * sqrt(1.0 - e * e) * sin(E);      /* dans le plan de l'orbite, UA */
