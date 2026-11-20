@@ -382,8 +382,8 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     } else if (fb.kind == Kind::Galaxy) {
         // En temps profond, la place vient du calcul de la rencontre avec Andromède (sauf le centre de la Voie lactée, origine du repère).
         // audit D1 : loin d'aujourd'hui, c'est la distance au Soleil de la date montrée, et la place du Soleil est calculée.
-        if (fb.structure && fb.name == "Univers observable")      // sphère centrée sur nous : son rayon, pas une distance au Soleil
-            row("Rayon aujourd'hui", "46,2 milliards d'années-lumière", "calculé (Planck 2018)", s);
+        if (fb.structure && (fb.name == "Univers observable" || fb.name == "Fond diffus cosmologique"))      // sphère centrée sur nous : son rayon, pas une distance au Soleil
+            row("Rayon aujourd'hui", fb.name == "Univers observable" ? "46,2 milliards d'années-lumière" : "45,3 milliards d'années-lumière (z = 1 090)", "calculé (Planck 2018)", s);
         else
         row(sim.deepTime() ? "Distance au Soleil à cette date" : "Distance au Soleil", frDistance(dSun), sim.deepTime() ? "calculé" : fb.structure ? "publié, catalogue cité" : "mesuré", s);
         if (!fb.blackHoleText.empty()) row("Trou noir central", fb.blackHoleText, "mesuré", s);

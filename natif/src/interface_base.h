@@ -127,7 +127,9 @@ const TourStop kTourGalaxies[] = {
     {"Galaxie du Triangle (M33)", 0, "La galaxie du Triangle, troisième grande galaxie du Groupe local."},
     {"Soleil", 5.0e6, "Le Groupe local : la Voie lactée, Andromède, le Triangle et des dizaines de galaxies naines."},
     {"Laniakea", 0, "Laniakea, le superamas de galaxies dont fait partie la Voie lactée (Tully et al. 2014)."},
-    {"Soleil", 5.0e9, "Des millions de galaxies et de quasars, placés d'après leur décalage vers le rouge mesuré."}};
+    {"Superamas de Shapley", 0, "Le superamas de Shapley : des dizaines d'amas, des milliers de galaxies mesurées."},
+    {"Soleil", 5.0e9, "Des millions de galaxies et de quasars, placés d'après leur décalage vers le rouge mesuré."},
+    {"Fond diffus cosmologique", 0, "Le fond diffus cosmologique mesuré par Planck : la plus vieille lumière, en fausses couleurs."}};
 #define UNIVERS_TOUR(t) t, static_cast<int>(sizeof(t) / sizeof(t[0]))
 const TourDef kTours[] = {{"Visite express", "De la Terre à l'univers lointain", UNIVERS_TOUR(kTourExpress)},
                           {"Le système solaire", "Planètes, lunes et anneaux", UNIVERS_TOUR(kTourSolaire)},
