@@ -398,6 +398,8 @@ void drawOrbits(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     }
 }
 
+bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, float w, float h, double px0, double py0, double boostMag);
+
 // L'astre sous la souris : le point le plus proche à moins de 16 pixels (ou sur son disque), ou -1.
 int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, float h, ImVec2 mouse) {
     int best = -1;
@@ -408,6 +410,9 @@ int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, floa
         if (b.kind == Kind::Star && sim.dist < 0.02 && i != sim.focus) continue;      // dans le système solaire, les étoiles ne se cliquent pas
         double x = 0, y = 0;
         if (!cam.project(sim.position(i), w, h, x, y)) continue;
+        // audit B1 : une galaxie dont le nom est caché à cette échelle (55 000 de Cosmicflows-4, naines vues de loin) ne se
+        // clique pas non plus ; sinon un clic dans le vide faisait voler vers un point invisible.
+        if (b.kind == Kind::Galaxy && i != sim.focus && !labelWanted(sim, ui, cam, i, w, h, x, y, 0.0)) continue;
         const double d = std::hypot(x - mouse.x, y - mouse.y) - std::min(discRadiusPx(sim, cam, i, h), 2000.0);
         if (d < 16.0 * ui.s && d < bestD) {
             bestD = d;

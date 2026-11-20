@@ -131,6 +131,8 @@ void drawStatus(const Sim& sim, const UiState& ui, float h, ImGuiWindowFlags fix
     const Body& fb = sim.bodies[static_cast<size_t>(sim.focus)];
     const std::string where = sim.flying ? "En route vers « " + fb.name + " »…" : "Tu regardes « " + fb.name + " » depuis " + frDistance(sim.dist) + ".";
     ImGui::TextUnformatted(where.c_str());
+    if (!sim.lostName.empty() && !sim.flying)      // audit B4 : on ne change pas d'astre sans le dire
+        ImGui::TextDisabled("« %s » n'a pas de position connue à cette date : la vue est revenue sur « %s ».", sim.lostName.c_str(), fb.name.c_str());
     if (const int k = eclipseNow(sim.years); k >= 0) ImGui::TextDisabled("%s, de Soleil : %s.", kEclipses[k].label, kEclipseStatus);
     if (!ui.details) {      // interface minimaliste : seules les hypothèses du « meilleur rendu » restent toujours écrites
         if (sim.bestLook && !sim.deepTime()) raysNote(sim);

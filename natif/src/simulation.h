@@ -3,6 +3,7 @@
 #include "asteroides_catalogue.h"
 #include <thread>
 #include "avancement.h"
+#include "arrivee.h"
 #include "centres_reference.h"
 #include "film_v2.h"
 #include "film_ancres.h"
@@ -879,7 +880,11 @@ struct Sim {
         if (b.kind == Kind::Asteroid) arrive = 0.05 * kAuInLy;                // astéroïde (un point) : on voit ses voisins de la ceinture
         if (b.kind == Kind::Probe) arrive = 3.0e6 / kLyInKm;                  // sonde (un point) : on voit son voisinage, à 3 millions de km
         double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
+        // Étoile (rayon non lu ici) : jamais plus près que 50 UA en arrivant, même en venant de plus près (audit B2 :
+        // une recherche « Sirius » depuis la Terre arrivait à 28 000 km du centre de l'étoile, dans l'étoile).
+        if (b.kind == Kind::Star) d = std::max(d, 50.0 * kAuInLy);
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
+        if (b.kind == Kind::Galaxy && b.structure) d = std::max(d, 1.5 * arrivee::structureSizeLy(b.natureText));      // audit B3 : la structure entière dans le champ
         if (b.kind == Kind::Galaxy && b.structure && b.name == "Univers observable") d = 1.1e11;      // la sphère entière dans le champ
         if (b.kind == Kind::Galaxy && b.shapeRadiusLy > 0) d = std::clamp(12.0 * b.shapeRadiusLy, 1.0e3, 3.0e5);      // naine dessinée : on la voit entière
         return d;
@@ -892,6 +897,7 @@ struct Sim {
     // Vol fluide vers l'astre i, arrivée à la distance `toDist` (0 : distance d'arrivée habituelle).
     void flyTo(int i, double toDist = 0) {
         if (i < 0 || i >= static_cast<int>(bodies.size()) || !visible(i)) return;
+        lostName.clear();
         remember();
         flyFrom = target();
         flyFromDist = dist;
@@ -947,11 +953,14 @@ struct Sim {
     // comme l'inverse du carré de la distance, si bien que la ceinture garde le même éclat par pixel pendant que ses
     // points se fondent en un anneau, puis en une tache (même principe que pour les étoiles : on regroupe en s'éloignant).
     // Montrés seulement à moins de 300 ans de la date de leurs orbites : au-delà, l'orbite simple ne vaut plus.
+    // Audit A6 et C4 (20/11/2026) : l'éclat de chaque astéroïde est maintenant sa vraie lumière (asteroides.vert,
+    // magnitude H mesurée, distance au Soleil et à la caméra), sous la même pose que les étoiles ; avant, chacun des
+    // 1,58 million de points avait le même éclat et la ceinture faisait une neige autour de la Terre. Reste ici le
+    // fondu en temps : plein jusqu'à 250 ans de la date des orbites, nul à 350 ans (avant : coupure nette à 300 ans).
     double asteroidGain(double epochJd) const {
-        const double au = dist / kAuInLy;
-        const double fade = std::min(1.0, (2.5 / std::max(au, 1e-9)) * (2.5 / std::max(au, 1e-9)));      // 2,5 : avec 1,58 million d'astéroïdes, la ceinture blanchissait au-delà (capture)
         const double epochYears = (epochJd - 2451545.0) / 365.25;
-        return std::fabs(years - epochYears) < 300.0 ? 0.30 * fade : 0.0;
+        const double gap = std::fabs(years - epochYears);
+        return std::clamp((350.0 - gap) / 100.0, 0.0, 1.0);
     }
     // Éclat donné à chaque galaxie des relevés : nul tant qu'on est dans la Voie lactée, plein au-delà de 3 millions d'années-lumière.
     // Vue d'assez loin pour que les galaxies lointaines se mêlent aux étoiles : la ligne de provenance dit ce que sont ces points.
@@ -967,6 +976,7 @@ struct Sim {
         refreshGalaxies();
         stepFlight(dt);
         if (!visible(focus)) {                // l'astre suivi n'a plus de position connue : retour au Soleil, ou au centre de la Voie lactée
+            lostName = bodies[static_cast<size_t>(focus)].name;
             focus = 0;
             if (!visible(0))
                 for (size_t i = 0; i < bodies.size(); ++i)
@@ -975,8 +985,13 @@ struct Sim {
                         dist = std::max(dist, 3.0e5);
                     }
             flying = false;
+            // audit B4 : la distance est reprise pour le nouvel astre (on suivait une lune à 10⁻⁹ al : sans cela, la
+            // caméra se retrouvait dans le Soleil), et on peut revenir en arrière.
+            dist = std::clamp(dist, minDist(focus), kMaxDist);
+            if (focus == 0) dist = std::max(dist, 45.0 * kAuInLy);
         }
     }
+    std::string lostName;      // astre suivi qui n'a plus de position à cette date (dit en bas de l'écran jusqu'au prochain choix)
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
         if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy && bodies[static_cast<size_t>(i)].blackHole >= 0)
             return 3.0 * bodies[static_cast<size_t>(i)].blackHoleRsLy;      // on peut descendre jusqu'à son trou noir central
