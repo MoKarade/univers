@@ -420,6 +420,7 @@ int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, floa
 bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, float w, float h, double px0, double py0, double boostMag) {
     const Body& b = sim.bodies[static_cast<size_t>(i)];
     if (i == sim.focus) return discRadiusPx(sim, cam, i, h) <= 14;      // vu de près : la fiche porte déjà son nom
+    if (b.kind == Kind::Star && b.priority >= 9 && sim.apparentMag(i, cam.pos) - boostMag > 1.0) return false;      // hôtes de planètes : seulement les plus brillants
     if (b.kind == Kind::Star && (sim.dist < 0.02 || sim.dist > 3000.0 || sim.apparentMag(i, cam.pos) - boostMag > 4.5)) return false;
     if (b.kind == Kind::Planet && sim.dist > 0.05) return false;
     if (b.kind == Kind::Planet && b.parent > 0 && b.naif != eph::kMoon && b.radiusKm < 100 && !ui.details) return false;      // minimaliste : petites lunes nommées au survol

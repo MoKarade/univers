@@ -60,6 +60,8 @@ struct Body {
     Vec3 fixedPos{0, 0, 0};     // galaxie : position mesurée (années-lumière), immobile pour l'instant
     int priority = 1;           // galaxie : 1 = nom montré dès qu'on sort de la Voie lactée
     int dwarfModel = -1;        // galaxie naine dessinée d'après ses paramètres mesurés (galaxies_naines.h) ; -1 : non
+    std::vector<std::string> planetLines;      // étoile : ses planètes connues, une ligne chacune (exoplanetes.h)
+    double planetsReachLy = 0;  // étoile : plus grand demi-grand axe de ses planètes (années-lumière)
     int blackHole = -1;         // trou noir central de masse mesurée (trous_noirs.h) ; -1 : aucun relié
     double blackHoleRsLy = 0;   // son rayon de Schwarzschild (années-lumière)
     std::string blackHoleText;  // sa masse mesurée, la méthode et la source (panneau)
@@ -441,6 +443,31 @@ struct Sim {
             body.nature = "étoile";
             if (body.star >= 0 && static_cast<uint64_t>(body.star) < stars->n) {
                 body.bv = stars->bv()[body.star];
+                bodies.push_back(body);
+            }
+        }
+        // Étoiles qui ont des planètes connues (pipeline/natif/exoplanetes_app.py, NASA Exoplanet Archive) : cherchables par
+        // le nom de l'hôte ; une étoile déjà nommée garde son nom.
+        {
+            std::ifstream hf(namesPath.substr(0, namesPath.find_last_of("/\\") + 1) + "etoiles_planetes_noms.tsv");
+            for (std::string hl; std::getline(hf, hl);) {
+                std::vector<std::string> c;
+                size_t from = 0;
+                for (size_t tab; (tab = hl.find('\t', from)) != std::string::npos; from = tab + 1) c.push_back(hl.substr(from, tab - from));
+                c.push_back(hl.substr(from));
+                if (c.size() < 4) continue;
+                const int64_t idx = std::strtoll(c[0].c_str(), nullptr, 10);
+                if (idx < 0 || static_cast<uint64_t>(idx) >= stars->n) continue;
+                bool known = false;
+                for (const Body& b : bodies) known = known || (b.kind == Kind::Star && b.star == idx);
+                if (known) continue;
+                Body body;
+                body.star = idx;
+                body.name = c[1];
+                body.nature = "étoile";
+                body.natureText = "étoile avec " + c[3] + (c[3] == "1" ? " planète connue" : " planètes connues") + " (NASA Exoplanet Archive)";
+                body.priority = 9;
+                body.bv = stars->bv()[idx];
                 bodies.push_back(body);
             }
         }

@@ -172,6 +172,11 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
         next();
         if (ImGui::Button("S'en approcher")) goToBody(sim, ui, f);
     }
+    // Planètes connues de cette étoile (exoplanetes.h) : vol jusqu'à 4 fois la plus grande orbite.
+    if (b.planetsReachLy > 0 && sim.dist > 20.0 * b.planetsReachLy && !sim.flying) {
+        next();
+        if (ImGui::Button("Voir ses planètes")) sim.flyTo(f, 4.0 * b.planetsReachLy);
+    }
     // Trou noir central de masse mesurée (trous_noirs.h) : vol jusqu'à 40 rayons de Schwarzschild, l'anneau de photons en vue.
     if (b.blackHole >= 0 && sim.dist > 400.0 * b.blackHoleRsLy && !sim.flying) {
         next();

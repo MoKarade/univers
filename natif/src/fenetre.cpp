@@ -23,6 +23,7 @@
 #include "points_planetes.h"
 #include "galaxies_naines.h"
 #include "trous_noirs.h"
+#include "exoplanetes.h"
 #include "spheres.h"
 #include "traceurs_bras.h"
 #include "voie_lactee.h"
@@ -382,6 +383,25 @@ int runWindow(const WindowOptions& opt) {
     PlanetPoints planets;
     planets.create(g);
     // Galaxies naines nommées sans forme ni photo : nuage tiré de leurs paramètres mesurés (galaxies_naines.h).
+    // Planètes des autres étoiles (exoplanetes.h) : liste dans la fiche de leur étoile, dessin quand on s'en approche.
+    Exoplanets exoplanets;
+    if (exoplanets.load(dataDir + "/exoplanetes_app.tsv")) {
+        exoplanets.create(g);
+        for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
+            if (const auto* ps = exoplanets.of(sim, i)) {
+                Body& b = sim.bodies[static_cast<size_t>(i)];
+                b.planetsReachLy = Exoplanets::largestOrbitLy(*ps);
+                for (const Exoplanet& p : *ps) {
+                    std::string l = p.name;
+                    if (std::isfinite(p.aAu)) l += " : " + frNum(p.aAu, 3) + " UA";
+                    if (std::isfinite(p.periodDays)) l += ", un tour en " + (p.periodDays < 1000 ? frNum(p.periodDays, 3) + " jours" : frNum(p.periodDays / 365.25, 3) + " ans");
+                    if (std::isfinite(p.massEarth)) l += ", " + frNum(p.massEarth, 3) + " masses terrestres" + (p.massKind == "M-R relationship" ? " (modèle masse-rayon)" : p.massKind == "Msini" ? " (minimum)" : "");
+                    if (std::isfinite(p.radiusEarth)) l += ", rayon " + frNum(p.radiusEarth, 3) + " fois la Terre";
+                    l += " ; " + p.method + " " + std::to_string(p.year);
+                    b.planetLines.push_back(l);
+                }
+            }
+    }
     // Trous noirs centraux de masse mesurée (trous_noirs.h).
     BlackHoles blackHoles;
     if (blackHoles.load(dataDir + "/trous_noirs.tsv", sim)) blackHoles.create(g);
@@ -853,6 +873,7 @@ int runWindow(const WindowOptions& opt) {
         planets.update(sim, cam, asSphere);
         dwarfGalaxies.update(sim);
         blackHoles.update(sim, cam);
+        exoplanets.update(sim, cam);
 
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -1003,6 +1024,7 @@ int runWindow(const WindowOptions& opt) {
         planets.draw(cmd);
         if (!skyOnly) dwarfGalaxies.draw(cmd);
         if (!skyOnly) blackHoles.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
+        if (!skyOnly) exoplanets.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
         vkCmdEndRendering(cmd);
         transition(cmd, hdr.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1130,6 +1152,7 @@ int runWindow(const WindowOptions& opt) {
     planets.release(g);
     dwarfGalaxies.release(g);
     blackHoles.release(g);
+    exoplanets.release(g);
     gaiaSky.destroy(g);
     if (gaiaBOk) gaiaB.release(g);
     filmGpu.release(g);
