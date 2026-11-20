@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "arrivee.h"
 #include "interface_outils.h"
 
 namespace {
@@ -44,6 +45,15 @@ int main() {
     NameIndex first;
     first.build({"Halley~2688", "Ceres~1", "Halley~1P~c"}, {0, 0, 1});
     expect(first.find("halley", 6) == std::vector<int>{2, 0}, "index : la comète passe devant (rangs d'origine)");
+    // Distance d'arrivée sur une structure (arrivee.h) : textes réels de structures_noms.tsv et superstructures_noms.tsv.
+    const double lan = arrivee::structureSizeLy("superamas ; bassin dâattraction de la Voie lactÃ©e, 1.9 millions de (Mpc/h)Â³ (Dupuy et Courtois 2023)");
+    // sphère de 1,9 × 10⁶ (Mpc/h)³ : rayon 76,8 Mpc/h = 114 Mpc ; diamètre 228 Mpc = 7,43 × 10⁸ al
+    expect(lan > 7.3e8 && lan < 7.6e8, "Laniakea : diamètre de 7,4 × 10^8 al");
+    const double vide = arrivee::structureSizeLy("vide ; rayon 33 Mpc/h, centre à 160 Mpc/h (Malandrino et al. 2026)");
+    expect(vide > 3.18e8 && vide < 3.21e8, "vide de rayon 33 Mpc/h : diamètre 3,19 × 10^8 al (le centre à 160 Mpc/h n'est pas pris)");
+    const double mur = arrivee::structureSizeLy("superstructure ; 13 amas ; taille publiée : 1.37 milliard d'années-lumière (Gott et al. 2005) ; 1.14 milliards dâannées-lumière ; source");
+    expect(mur > 1.13e9 && mur < 1.15e9, "Grand Mur de Sloan : 1,14 × 10^9 al");
+    expect(arrivee::structureSizeLy("Grand Attracteur") == arrivee::kDefautLy, "sans taille : 3 × 10^8 al");
     std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
     return failures ? 1 : 0;
 }

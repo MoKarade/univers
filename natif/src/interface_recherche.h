@@ -162,7 +162,8 @@ void goToMenuBodies(Sim& sim, UiState& ui) {
                 list.push_back({std::sqrt(dot(sim.position(i), sim.position(i))), i});
         std::sort(list.begin(), list.end());
         for (const auto& [d, i] : list)
-            if (ImGui::MenuItem(sim.bodies[static_cast<size_t>(i)].name.c_str(), frDistance(d).c_str())) goToBody(sim, ui, i);
+            if (ImGui::MenuItem(sim.bodies[static_cast<size_t>(i)].name.c_str(), sim.visible(i) ? frDistance(d).c_str() : "pas à cette date", false, sim.visible(i)))
+                goToBody(sim, ui, i);      // audit B5 : grisé quand l'astre n'a pas de position à cette date
         ImGui::EndMenu();
     }
 }

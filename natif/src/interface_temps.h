@@ -337,8 +337,8 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         }
     } else if (fb.kind == Kind::Galaxy) {
         // En temps profond, la place vient du calcul de la rencontre avec Andromède (sauf le centre de la Voie lactée, origine du repère).
-        const bool deepCalc = sim.deepTime() && fb.name != "Centre de la Voie lactée";
-        row(sim.deepTime() ? "Distance à la place actuelle du Soleil" : "Distance au Soleil", frDistance(dSun), deepCalc ? "calculé" : fb.structure ? "publié, catalogue cité" : "mesuré", s);
+        // audit D1 : loin d'aujourd'hui, c'est la distance au Soleil de la date montrée, et la place du Soleil est calculée.
+        row(sim.deepTime() ? "Distance au Soleil à cette date" : "Distance au Soleil", frDistance(dSun), sim.deepTime() ? "calculé" : fb.structure ? "publié, catalogue cité" : "mesuré", s);
         if (!fb.blackHoleText.empty()) row("Trou noir central", fb.blackHoleText, "mesuré", s);
         if (!fb.shapeNote.empty()) ImGui::TextWrapped("%s", fb.shapeNote.c_str());
         else if (!fb.structure) ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
