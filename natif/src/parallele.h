@@ -95,10 +95,11 @@ private:
     bool stop_ = false;
 };
 
-// Tranches contiguës de [0, n) : f(debut, fin, morceau).
-inline unsigned morceaux(uint64_t n) { return n < 4096 ? 1u : Reserve::une().fils() * 2; }
-inline void pour(uint64_t n, const std::function<void(uint64_t, uint64_t, unsigned)>& f) {
-    const unsigned m = morceaux(n);
+// Tranches contiguës de [0, n) : f(debut, fin, morceau). seuil : en dessous de ce nombre d'éléments, un seul morceau (travail
+// trop court pour réveiller les fils) ; à baisser quand chaque élément coûte cher (étoiles du cycle de vie : 1).
+inline unsigned morceaux(uint64_t n, uint64_t seuil = 4096) { return n < seuil ? 1u : static_cast<unsigned>(std::min<uint64_t>(n, Reserve::une().fils() * 2)); }
+inline void pour(uint64_t n, const std::function<void(uint64_t, uint64_t, unsigned)>& f, uint64_t seuil = 4096) {
+    const unsigned m = morceaux(n, seuil);
     Reserve::une().lance(m, [&](unsigned k) { f(n * k / m, n * (k + 1) / m, k); });
 }
 
