@@ -127,6 +127,12 @@ int main(int argc, char** argv) {
     const cycle::Vie wolf = cycle::vieEtoile(g, false, 16.56, 2.0);
     verifie(cycle::vuA(wolf, 9.0e9).rayonKm > 0, "naine rouge : toujours là dans 9 Ga (trace MIST arrêtée, état gardé)", cycle::vuA(wolf, 9.0e9).rayonKm);
 
+    // ---- température publiée : Naos (O4, 40 000 K) finit en trou noir ; Bételgeuse (3 500 K, Joyce et al. 2020) : 16 à 20 M☉
+    const cycle::Vie naos = cycle::vieEtoile(g, false, -5.40, -0.27, 40000);
+    verifie(naos.ok() && naos.reste.trouNoir, "Naos (Teff publiée) : trou noir", naos.reste.gravite);
+    const cycle::Vie bet2 = cycle::vieEtoile(g, false, -5.47, 1.50, 3500);
+    verifie(bet2.ok() && bet2.m0 >= 16 && bet2.m0 <= 20 && bet2.fin == 2, "Bételgeuse (Teff publiée) : 16 à 20 M☉, supernova", bet2.m0);
+
     std::printf("%s (%d échec%s)\n", echecs ? "ÉCHEC" : "TOUT PASSE", echecs, echecs > 1 ? "s" : "");
     return echecs ? 1 : 0;
 }

@@ -63,6 +63,7 @@ Get-ChildItem "$Donnees\tuiles" -Directory -ErrorAction SilentlyContinue | ForEa
 if (Test-Path "$Donnees\vieillissement.tsv") { Copier-SiChange "$Donnees\vieillissement.tsv" "$Cible\vieillissement.tsv" }
 # Cycle de vie des étoiles (pipeline/natif/vie_cycle.py : MIST v1.2 + naines blanches de Montréal)
 if (Test-Path "$Donnees\vie_cycle.bin") { Copier-SiChange "$Donnees\vie_cycle.bin" "$Cible\vie_cycle.bin" }
+Copier-SiChange "$PSScriptRoot\etoiles_cycle.tsv" "$Cible\etoiles_cycle.tsv"      # étoiles massives et températures publiées (dans le dépôt)
 if (Test-Path "$Donnees\centres_reference.bin") { Copier-SiChange "$Donnees\centres_reference.bin" "$Cible\centres_reference.bin" }
 # Étoiles visibles du modèle de la Voie lactée (pipeline/natif/etoiles_visibles.py), si elles ont été préparées.
 if (Test-Path "$Donnees\etoiles-visibles\voisines_etoiles.bin") { Copier-SiChange "$Donnees\etoiles-visibles\voisines_etoiles.bin" "$Cible\voisines_etoiles.bin" }
