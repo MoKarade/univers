@@ -611,9 +611,25 @@ int runWindow(const WindowOptions& opt) {
     long pathFrames = 0;
     double titleTimer = 0;
     bool drawable = true;
+    uint32_t pendingIndex = 0;
+    bool hasPending = false;      // image envoyée, pas encore affichée (affichage remis après le travail suivant du processeur)
+    auto presentPending = [&]() {
+        if (!hasPending) return;
+        hasPending = false;
+        VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+        present.waitSemaphoreCount = 1;
+        present.pWaitSemaphores = &rendered;
+        present.swapchainCount = 1;
+        present.pSwapchains = &sc.chain;
+        present.pImageIndices = &pendingIndex;
+        const VkResult pr = vkQueuePresentKHR(g.queue, &present);
+        if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) input.resized = true;
+        else if (pr != VK_SUCCESS) fail("affichage", pr);
+    };
     while (!input.quit) {
         pumpMessages();
         if (input.resized || !drawable) {
+            presentPending();      // avant de refaire la chaîne d'images
             input.resized = false;
             drawable = rebuild();
             if (!drawable) {
@@ -880,6 +896,8 @@ int runWindow(const WindowOptions& opt) {
             if (milkyWayStarsOk && !skyOnlyNow && sim.bestLook) milkyWayStars.select(cam, pc.par[0], sc.extent.height, sim.years);
         }
         chrono.cpu("choix des etoiles (avant l'attente)");
+        presentPending();      // image d'avant, envoyée au tour précédent
+        chrono.cpu("affichage");
         vkWaitForFences(g.dev, 1, &fence, VK_TRUE, UINT64_MAX);
         chrono.cpu("attente de la carte");
         chrono.gpuCollect(g);
@@ -1190,17 +1208,12 @@ int runWindow(const WindowOptions& opt) {
         submit.pSignalSemaphores = &rendered;
         check(vkQueueSubmit(g.queue, 1, &submit, fence), "envoi");
         chrono.cpu("envoi");
-        VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
-        present.waitSemaphoreCount = 1;
-        present.pWaitSemaphores = &rendered;
-        present.swapchainCount = 1;
-        present.pSwapchains = &sc.chain;
-        present.pImageIndices = &index;
-        const VkResult pr = vkQueuePresentKHR(g.queue, &present);
-        if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) input.resized = true;
-        else if (pr != VK_SUCCESS) fail("affichage", pr);
+        // Affichage remis au tour suivant, après le travail du processeur qui ne touche pas à la carte (gestes, date, caméra,
+        // choix des étoiles) : ce travail se fait pendant que la carte dessine cette image (cadence, 20/11/2026 : l'affichage
+        // attendait la fin du dessin, et tout ce travail venait après). Affichée au plus quelques ms plus tard.
+        pendingIndex = index;
+        hasPending = true;
         chrono.gpuSubmitted();
-        chrono.cpu("affichage");
         chrono.endFrame(frameWallMs, sim.dist, sim.years);
 
         ++frame;
@@ -1223,6 +1236,7 @@ int runWindow(const WindowOptions& opt) {
         if (test && frame >= opt.testFrames && sweep.next(g, final, sc.extent, sim)) frame = 0;      // balayage : vue suivante
         else if (test && frame >= opt.testFrames) break;
     }
+    presentPending();
     vkDeviceWaitIdle(g.dev);
     if (outerThread.joinable()) outerThread.join();
     if (test) {
