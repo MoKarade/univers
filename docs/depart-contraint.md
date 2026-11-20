@@ -71,3 +71,9 @@ d'approche plafonne vers −50 à −60 km/s quel que soit le réglage (v16 à v
 Zoom fin (5 298 s, 12 fils) : **paire 2,10 et 1,74e12 M☉, 1 028 kpc, −61 km/s, 27 km/s transverse, isolée (passe HESTIA) ;
 Vierge 1,19e15 M☉ à 5,3 Mpc de sa place.** [Certain, mesuré] Mesuré dans le ciel : 785 kpc, −110 km/s, < 60 km/s.
 Écart restant (modèle à dire à l'écran) : paire 30 % trop lourde et 240 kpc trop écartée ; approche deux fois trop lente.
+
+## Balayage de graines sans réglage de la paire (19-20/11/2026)
+Graines 4 à 21, Vierge imposée, aucun réglage de la paire (graines 4-6 sur l'ancien centre de zoom) :
+**Vierge formée dans 18 graines sur 18 (0,83 à 1,7e15 M☉) ; paire Voie lactée / Andromède dans 0 sur 18.** [Certain, mesuré]
+Conclusion : à cette résolution et avec nos contraintes, la paire ne naît pas toute seule ; l'ajustement genetIC
+(modifications faibles, Δχ² < 5) est indispensable, ou un balayage bien plus large (HESTIA : ~1 000 départs).
