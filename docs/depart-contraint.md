@@ -49,3 +49,18 @@ Référence HESTIA haute résolution : 675 à 866 kpc, −9 à −102 km/s (Libe
 1. Resserrer la paire (viser 785 kpc, −110 km/s) en gardant la zone de v11.
 2. Raccord avec notre film à −1 Ga : croissance des halos, matière qui arrive, satellites, marée de la Vierge.
 3. Zooms plus fins (~15 M particules) puis gaz ; stockage lourd sur le Drive (accord de Marc, ≤ 100 Go).
+
+## Histoire de la paire (zoom fin v11) — `docs/histoire_paire_fin_v11.json`, `pipeline/contraint/histoire_paire.py`
+Suivi simple (groupe le plus proche de la position prédite, masse compatible) [À vérifier : pas d'arbre de fusion complet].
+
+| Temps | Halo 1 | Halo 2 | Séparation |
+|---|---|---|---|
+| −13,2 Ga | 5e9 M☉ | 2e9 M☉ | 276 kpc |
+| −9,9 Ga | 2,6e11 | 1,8e11 | 896 kpc |
+| −4,3 Ga | 8,2e11 | 1,4e12 | 1 319 kpc |
+| −2,5 Ga | 1,52e12 | 1,60e12 | 1 314 kpc |
+| −1,0 Ga (raccord) | ~1,55e12 | ~1,56e12 | ~1 287 kpc, se rapprochent à quelques km/s |
+| aujourd'hui | 1,58e12 | 1,72e12 | 1 262 kpc, −23 km/s |
+
+Pour le raccord : sur le dernier milliard d'années, les halos ne grossissent que de 2 à 10 % [Certain dans ce calcul] ;
+un groupe de 3,8e13 M☉ se forme à ~10 Mpc (modèle, à comparer au groupe de Centaurus A, ~1e13 M☉ à 3,7 Mpc).
