@@ -19,7 +19,9 @@ public:
     bool ready = false;
     uint32_t count = 0, shown = 0;      // galaxies, galaxies montrées en particules à la dernière image
     uint64_t particles = 0;
-    double maxSurface = 0;
+    // Mesure pour la pose « photo » (fenetre.cpp, voir photoMetering) : poids le plus fort des galaxies résolues dans
+    // l'image (0 à 1) et brillance de surface moyenne (flux par pixel, exposition 1) pondérée, en logarithme.
+    double photoWeight = 0, photoSurface = 0;
     float ageing[4] = {1, 1, 1, 1};      // vieillissement : lumière disque (comp. 1), bulbe et elliptiques (comp. 2), puis températures
       // brillance de surface moyenne la plus forte des galaxies résolues (flux par pixel, exposition 1)
 
@@ -104,7 +106,7 @@ public:
         const double tx = cam.tanHalf * cam.aspect * 1.05, ty = cam.tanHalf * 1.05;
         shown = 0;
         particles = 0;
-        maxSurface = 0;
+        double wMax = 0, wSum = 0, logSum = 0;
         for (uint32_t i = 0; i < count; ++i) {
             const W& w = world_[i];
             const double rx = w.x - cam.pos.x, ry = w.y - cam.pos.y, rz = w.z - cam.pos.z;
@@ -124,22 +126,37 @@ public:
             const double size = recs_[i].diam * 2.9088821e-4 * w.d;      // diamètre (al)
             const double px = size / std::max(dc, 1.0) * pxPerRad;
             if (px < 2.0 || shown >= kMaxShown) continue;
-            if (px > 40.0) {      // galaxie bien résolue (plus de 40 pixels) : flux vu de la caméra / surface de son disque à l'écran
-                const double fl = std::pow(10.0, -0.4 * recs_[i].r) * (w.d / std::max(dc, 1.0)) * (w.d / std::max(dc, 1.0));
-                maxSurface = std::max(maxSurface, fl / (0.785398 * px * px * std::max(static_cast<double>(recs_[i].ba), 0.2)));
-            }
             // dans le champ (avec la marge de la taille de la galaxie)
             const double f = rx * cam.fwd.x + ry * cam.fwd.y + rz * cam.fwd.z;
             if (f < -size) continue;
             const double x = rx * cam.right.x + ry * cam.right.y + rz * cam.right.z, y = rx * cam.up.x + ry * cam.up.y + rz * cam.up.z;
             const double fz = std::max(f, 1.0);
             if (std::fabs(x) > fz * tx + size || std::fabs(y) > fz * ty + size) continue;
+            // Mesure « photo » : galaxie résolue et dans l'image. Avant (Marc, 20/11/2026 : « parfois trop clair, parfois trop
+            // sombre ») : toute galaxie de plus de 40 pixels, même hors de l'image, faisait basculer la pose d'un coup (×3
+            // d'éclat d'un degré de défilement au suivant, mesuré). Maintenant son poids monte en continu de 40 à 160 pixels
+            // et suit la part de son disque dans l'image : la pose glisse au lieu de sauter.
+            if (px > 40.0 && f > 0) {
+                const double fl = std::pow(10.0, -0.4 * recs_[i].r) * (w.d / std::max(dc, 1.0)) * (w.d / std::max(dc, 1.0));
+                const double surf = fl / (0.785398 * px * px * std::max(static_cast<double>(recs_[i].ba), 0.2));
+                const double r = 0.5 * size / fz;      // rayon du disque, en tangente
+                const double inX = std::clamp((cam.tanHalf * cam.aspect - std::fabs(x / fz) + r) / (2.0 * r), 0.0, 1.0);
+                const double inY = std::clamp((cam.tanHalf - std::fabs(y / fz) + r) / (2.0 * r), 0.0, 1.0);
+                const double wt = std::clamp(std::log(px / 40.0) / std::log(4.0), 0.0, 1.0) * inX * inY;
+                if (wt > 0 && surf > 0) {
+                    wMax = std::max(wMax, wt);
+                    wSum += wt;
+                    logSum += wt * std::log(surf);
+                }
+            }
             const uint32_t n = static_cast<uint32_t>(std::clamp(px * px * 0.3, 64.0, 30000.0));
             if (particles + n > kMaxParticles) continue;
             np[i] = n;
             particles += n;
             ind[shown++] = {n, 1, 0, i};      // une instance : la galaxie i (gl_InstanceIndex)
         }
+        photoWeight = wMax;
+        photoSurface = wSum > 0 ? std::exp(logSum / wSum) : 0.0;
     }
 
     // Galaxies proches placées d'après leur décalage vers le rouge : sous cz ≈ 1 500 km/s, la vitesse propre de la galaxie

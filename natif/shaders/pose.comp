@@ -1,39 +1,32 @@
 #version 450
-/* Pose automatique contre la saturation (audit A2, 20/11/2026) : mesure, sur une grille de 128 x 72 points de l'image en
-   grande dynamique, la part des points qui sortiraient blancs à l'écran avec la pose actuelle (pc.p.x). Une seule équipe de
-   256 fils ; chacun lit 36 points, puis les comptes sont additionnés en mémoire partagée. Résultat lu par le processeur à
-   l'image suivante (pose_auto.h), sans attente. */
-layout(local_size_x = 256) in;
+/* Pose automatique (pose_auto.h) : histogramme de la luminance de TOUS les pixels de l'image en grande dynamique, avant la
+   pose. Avant (audit A2, 20/11/2026) : 9 216 points fixes, alors qu'une étoile fait un pixel ; selon qu'une étoile tombait
+   ou non sur un point, la mesure changeait en faisant défiler la vue. Ici chaque pixel compte, et la pose n'entre pas dans
+   la mesure : le processeur calcule lui-même, sur l'histogramme, ce que donnerait chaque pose (comme le posemètre d'un
+   appareil photo ; méthode des moteurs de jeu : histogramme en logarithme, Unreal Engine « Auto Exposure Histogram »).
+   128 cases : case 0 = noir (luminance < 2^-30) ; case b >= 1 : log2(Y) dans [-30 + 0,375 (b - 1), -30 + 0,375 b[.
+   Équipes de 16 x 16 fils, chacun lit 2 x 2 pixels ; histogramme de l'équipe en mémoire partagée, puis ajouté au tampon
+   (remis à zéro avant, voir measure). Résultat lu par le processeur à l'image suivante, sans attente. */
+layout(local_size_x = 16, local_size_y = 16) in;
 layout(set = 0, binding = 0) uniform sampler2D hdr;
-layout(set = 0, binding = 1, std430) buffer Out { float part[4]; } outp;      /* part saturée, part bien visible, nombre de points, éclat moyen à l'écran (Y/(1+Y), 0 à 1) */
-layout(push_constant) uniform Pc { vec4 p; } pc;      /* p.x : pose appliquée à l'écran ; p.y : seuil de saturation (après pose) */
-shared float sSat[256];
-shared float sLit[256];
-shared float sMoy[256];
+layout(set = 0, binding = 1, std430) buffer Out { uint hist[128]; } outp;
+shared uint sHist[128];
 void main() {
-    uint t = gl_LocalInvocationID.x;
-    float sat = 0.0, lit = 0.0, moy = 0.0;
-    for (uint k = 0; k < 36; ++k) {
-        uint i = t * 36u + k;      /* 0 à 9215 */
-        vec2 uv = (vec2(float(i % 128u), float(i / 128u)) + 0.5) / vec2(128.0, 72.0);
-        vec3 c = min(texture(hdr, uv).rgb, vec3(6.0e4)) * pc.p.x;
-        float Y = dot(c, vec3(0.2126, 0.7152, 0.0722));
-        sat += Y > pc.p.y ? 1.0 : 0.0;
-        lit += Y > 0.5 ? 1.0 : 0.0;      /* points bien visibles (moitié du blanc après compression) */
-        moy += Y / (1.0 + Y);
-    }
-    sSat[t] = sat;
-    sLit[t] = lit;
-    sMoy[t] = moy;
+    uint t = gl_LocalInvocationIndex;
+    if (t < 128u) sHist[t] = 0u;
     barrier();
-    for (uint s = 128u; s > 0u; s >>= 1) {
-        if (t < s) { sSat[t] += sSat[t + s]; sLit[t] += sLit[t + s]; sMoy[t] += sMoy[t + s]; }
-        barrier();
-    }
-    if (t == 0u) {
-        outp.part[0] = sSat[0] / 9216.0;
-        outp.part[1] = sLit[0] / 9216.0;
-        outp.part[2] = 9216.0;
-        outp.part[3] = sMoy[0] / 9216.0;
-    }
+    ivec2 size = textureSize(hdr, 0);
+    ivec2 base = ivec2(gl_GlobalInvocationID.xy) * 2;
+    for (int dy = 0; dy < 2; ++dy)
+        for (int dx = 0; dx < 2; ++dx) {
+            ivec2 q = base + ivec2(dx, dy);
+            if (q.x >= size.x || q.y >= size.y) continue;
+            vec3 c = min(texelFetch(hdr, q, 0).rgb, vec3(6.0e4));      /* borne : une somme qui déborde les 16 bits (inf) */
+            float Y = dot(max(c, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722));
+            uint b = 0u;
+            if (Y >= exp2(-30.0)) b = uint(clamp(floor((log2(Y) + 30.0) / 0.375) + 1.0, 1.0, 127.0));
+            atomicAdd(sHist[b], 1u);
+        }
+    barrier();
+    if (t < 128u && sHist[t] != 0u) atomicAdd(outp.hist[t], sHist[t]);
 }

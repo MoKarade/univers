@@ -63,9 +63,9 @@ trou noir, 60 M☉ -> effondrement direct sans explosion, supernova au plateau M
 Soleil géante rouge (+6,77 Ga) et sur la branche asymptotique (+6,89 Ga) : grosse sphère orange teintée ; naine blanche
 (+7,5 Ga) : petite sphère bleutée ; Bételgeuse en supernova : photosphère blanche de 50 UA ; Rigel il y a 16,8 Ma :
 nuage sombre qui cache les étoiles derrière lui, puis jeune étoile bleue qui ionise son nuage (lueur bleue, anneau
-sombre de poussière). **Pas vus** : la nébuleuse planétaire du Soleil et le reste de la supernova de Bételgeuse sont
-trop faibles pour se voir à la pose normale. Essai d'une pose « photo » réglée sur eux : refusé, toute l'image
-saturait (le gain plafonne à 10⁶). La nébuleuse du modèle est aussi plus faible que les vraies (voir limites).
+sombre de poussière). La nébuleuse planétaire du Soleil se voit maintenant (anneau à +4 000 ans, coquille verte à +12 000 ans) : la pose
+« photo » se règle aussi sur les nébuleuses, progressivement, et juge la saturation sur la courbe vraiment montrée
+(`docs/exposition-stable.md`, 20/11). Pas encore revu : le reste de la supernova de Bételgeuse. La nébuleuse du modèle est aussi plus faible que les vraies (voir limites).
 
 ## Limites connues
 

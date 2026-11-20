@@ -115,6 +115,12 @@ add_executable(essai_selection src/essai_selection.cpp)
 target_link_libraries(essai_selection PRIVATE volk imgui univers_physique)
 target_compile_options(essai_selection PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
 target_link_options(essai_selection PRIVATE -static)
+
+add_executable(essai_pose src/essai_pose.cpp)      # pose automatique (pose_auto.h), sans carte graphique
+target_link_libraries(essai_pose PRIVATE volk)
+target_compile_options(essai_pose PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_link_options(essai_pose PRIVATE -static)
+
 add_executable(essai_completude src/essai_completude.cpp)
 target_link_libraries(essai_completude PRIVATE volk imgui univers_physique)
 target_compile_options(essai_completude PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)

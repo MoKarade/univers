@@ -300,6 +300,9 @@ struct Sim {
     bool ageingShown = false;      // vieillissement de la lumière du modèle appliqué à cette date (vieillissement.h)
     bool photoExposure = true;
     double exposureEv = 0, photoGain = 1;
+    double photoWeight = 0;      // (suite) photoNebula : la part de ce poids qui vient d'une nébuleuse autour d'une étoile
+    double photoNebula = 0;      // poids des objets qui règlent la pose « photo » (0 à 1) : fond la courbe de l'écran (ecran.frag)
+    double metreSat = 0, metreVis = 0, metreMoy = 0;      // dernière mesure de l'image (pose_auto.h), pour les balayages de contrôle
     double autoPose = 1;      // pose automatique contre la saturation (pose_auto.h) : 1 = aucune baisse
     double galaxyPose = 1;    // pose propre aux galaxies aux grandes échelles (galaxies_pose.h) : 1 = la même que les étoiles
     // Gaz ionisé de la Voie lactée (régions HII de voie_lactee.bin) montré par-dessus les étoiles (Marc, 20/11/2026 soir :

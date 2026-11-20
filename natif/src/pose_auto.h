@@ -2,13 +2,14 @@
 //
 // Avant : l'éclat de toutes les étoiles est multiplié selon la distance à l'astre suivi (Sim::brightnessBoost, ×100 dès
 // 300 al) ; vue de 20 000 al d'Andromède, 47 % de l'image sortait blanche (mesuré, docs/plan-corrections.md). Ici, comme
-// l'œil ou un appareil photo : on mesure à chaque image la part de l'écran qui sature (shaders/pose.comp, grille de
-// 128 × 72 points, lue à l'image suivante sans attendre la carte) et l'on baisse la pose tant qu'elle dépasse 0,5 % ; on la
-// rend doucement quand l'image ne sature plus. La pose ne monte jamais au-dessus de 1 : ce qui était juste reste
+// l'œil ou un appareil photo : on mesure à chaque image l'histogramme de luminance de tous ses pixels (shaders/pose.comp,
+// lu à l'image suivante sans attendre la carte), on en déduit la pose qui garde moins de 0,5 % de l'image blanche et un
+// éclat moyen dans la bande visée, et la pose y glisse (adaptation en logarithme, voir suivante). La pose ne monte jamais au-dessus de 1 : ce qui était juste reste
 // identique ; aucune lumière n'est ajoutée ni retirée, seule la pose change. Elle est dite à l'écran (interface_bas.h).
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 
 #include "commun.h"
@@ -16,35 +17,108 @@
 namespace pose_auto {
 constexpr float kSeuil = 3.0f;          // luminance après pose au-delà de laquelle un point sort presque blanc (Reinhard : 0,75)
 constexpr double kPartMax = 0.005;      // part saturée tolérée (les étoiles brillantes saturent toujours un peu)
-constexpr double kPartBasse = 0.001;    // en dessous : on rend de la pose (écart large avec kPartMax : pas de pompage)
+// Pose réglée sur une nébuleuse autour d'une étoile : comme sur les photos de nébuleuses planétaires, les étoiles du fond
+// saturent ; on en tolère 2 % de l'image (sinon elles ramenaient la pose à ×10 et l'anneau ne se voyait plus, capture du
+// 20/11) [Supposition : réglage d'affichage].
+constexpr double kPartMaxNebuleuse = 0.02;
 constexpr double kPoseMin = 1.0e-3;     // au plus ×1/1000
 // Relever la pose, seulement aux échelles des galaxies (Marc, 20/11/2026 : « Laniakea quasi aucune galaxie, c'est vide ») :
 // vues de centaines de millions d'années-lumière, les galaxies des relevés sont des points très faibles (éclat réel en 1/d²).
 // Comme une longue pose photo, on relève la pose tant que moins de 0,1 % de l'écran est bien visible, jusqu'à ×1000.
 constexpr double kPartVisible = 0.001;
 constexpr double kPoseMaxGalaxies = 1000.0;
+// Éclat moyen visé à l'écran (Y/(1+Y), lumière linéaire) : au-dessus de kMoyHaute, la pose baisse ; en dessous du seuil bas
+// (kMoyBasse aux échelles des étoiles, kMoyBasseGalaxies à celles des galaxies), elle monte. Entre les deux : pose de base.
+// 0,003 ne relève pas un ciel étoilé ordinaire (balayage du zoom du 20/11/2026). 0,05 en haut : l'ancienne pose, qui
+// gardait la mémoire de son chemin, s'arrêtait vers 0,05 au-dessus de la Voie lactée (vue à 30 000 al, mesuré) ; à 0,15
+// puis 0,08, la nouvelle laissait le bulbe et le fond d'étoiles nettement plus clairs (Marc : « parfois trop de lumière »).
+constexpr double kMoyHaute = 0.05, kMoyBasse = 0.003, kMoyBasseGalaxies = 0.010;
+constexpr int kCases = 128;             // histogramme de shaders/pose.comp
+constexpr double kLog2Min = -30.0, kPas = 0.375;
 
-// Nouvelle pose d'après la part saturée mesurée (dt : secondes depuis l'image précédente ; instant : contrôle sans fenêtre,
-// où chaque image compte comme six).
-// Éclat moyen visé à l'écran (Y/(1+Y), lumière linéaire) : Marc, 20/11/2026 soir : « parfois je vois rien, trop de lumière,
-// parfois pas assez ». Mesuré au balayage du zoom : de 1 à 115 sur 255 selon l'échelle. Au-dessus de kMoyHaute (≈ 75/255 à
-// l'écran ; 0,15 depuis le contrôle en image), la pose baisse doucement ; en dessous de kMoyBasse (≈ 13/255 ; 0,003 depuis le balayage du 20/11 : à 0,01, un ciel étoilé ordinaire était relevé ×4), elle remonte (jusqu'à
-// poseMax). Entre les deux, rien ne bouge : la pose ne « pompe » pas.
-constexpr double kMoyHaute = 0.15, kMoyBasse = 0.003;      // 0,15 : une galaxie qui remplit l'écran garde son éclat (contrôle du 20/11 : 0,075 la ternissait ×0,09)
+// Luminance représentative d'une case (avant la pose) : milieu de la case en logarithme ; case 0 : noir.
+inline double luminanceCase(int b) { return b <= 0 ? 0.0 : std::exp2(kLog2Min + kPas * (b - 0.5)); }
 
-// poseMax : plafond de la pose relevée ; partVisible : part bien visible ; moy : éclat moyen à l'écran.
-inline double suivante(double pose, double partSaturee, double partVisible, double moy, double dt, bool instant, double poseMax) {
-    const double frames = instant ? 6.0 : std::clamp(dt * 60.0, 0.0, 6.0);      // vitesse réglée pour 60 images par seconde
-    if (partSaturee > kPartMax) pose *= std::pow(0.8, frames);                      // ~0,2 s pour un facteur 1/10
-    // image trop claire : ~1,3 s pour un facteur 1/10 ; seulement aux échelles des étoiles (poseMax ≤ 4) et pas sous ×0,1 :
-    // aux grandes échelles, l'écran est surtout fait de repères (fond diffus, voiles) que la pose ne change pas, et la pose
-    // fondait jusqu'à ×0,004 en éteignant les galaxies (balayage du 20/11)
-    else if (moy > kMoyHaute && poseMax <= 4.0 && pose > 0.1) pose *= std::pow(0.97, frames);
-    else if (pose < poseMax && moy < (poseMax > 4.0 ? 0.010 : kMoyBasse) && partVisible < kPartVisible && partSaturee < kPartBasse)      // galaxies : seuil 0,01
-        pose = std::min(poseMax, pose * std::pow(1.04, frames));                   // trop sombre : ~1 s pour un facteur 10
-    else if (pose < 1.0 && partSaturee < kPartBasse && moy < 0.6 * kMoyHaute) pose = std::min(1.0, pose * std::pow(1.02, frames));      // retour doux vers la pose de base
-    else if (pose > poseMax) pose *= std::pow(0.96, frames);                        // le plafond a baissé : retour doux
-    return std::clamp(pose, kPoseMin, std::max(poseMax, std::min(pose, kPoseMaxGalaxies)));
+struct Stats {
+    double sat = 0, vis = 0, moy = 0;
+};
+
+// Ce que donnerait la pose p sur l'image mesurée : part saturée, part bien visible, éclat moyen.
+// Valeur à l'écran (0 à 1, lumière linéaire) d'une luminance y après la pose, avec la courbe de l'écran (ecran.frag) :
+// Reinhard y / (1 + y), fondue (photo, 0 à 1) avec l'étirement asinh (Lupton et al. 2004). La mesure suit la courbe
+// réellement montrée : avant, la pose « photo » (asinh) blanchissait l'image à des luminances que la mesure croyait encore
+// sombres (fond d'étoiles tout blanc autour de la nébuleuse du Soleil, capture du 20/11).
+inline double ecran(double y, double photo) {
+    const double nu = y / (1.0 + y);
+    if (photo <= 0) return nu;
+    const double ph = y > 0 ? std::min(1.0, std::asinh(y / 0.05) / std::asinh(1.0 / 0.05)) : 0.0;
+    return nu + (ph - nu) * std::min(photo, 1.0);
+}
+
+// Ce que donnerait la pose p sur l'image mesurée : part saturée (écran > 0,75, soit y > 3 en Reinhard), part bien visible
+// (écran > 1/3, soit y > 0,5 en Reinhard), éclat moyen à l'écran.
+inline Stats statsPour(const uint32_t* h, double p, double photo = 0.0) {
+    double n = 0;
+    Stats s;
+    for (int b = 0; b < kCases; ++b) {
+        if (!h[b]) continue;
+        const double d = ecran(p * luminanceCase(b), photo), c = h[b];
+        n += c;
+        if (d > 0.75) s.sat += c;
+        if (d > 1.0 / 3.0) s.vis += c;
+        s.moy += c * d;
+    }
+    if (n > 0) s.sat /= n, s.vis /= n, s.moy /= n;
+    return s;
+}
+
+// Plus petite pose (en logarithme, de lo à hi) pour laquelle f(pose) devient vrai ; hi si jamais (f croissante).
+template <class F>
+double premierePose(F f, double lo, double hi) {
+    if (f(lo)) return lo;
+    if (!f(hi)) return hi;
+    double a = std::log(lo), b = std::log(hi);
+    for (int k = 0; k < 40; ++k) {
+        const double m = 0.5 * (a + b);
+        if (f(std::exp(m))) b = m;
+        else a = m;
+    }
+    return std::exp(b);
+}
+
+// Pose visée pour l'image mesurée, sans mémoire du chemin : la même vue donne la même pose, qu'on y arrive en zoomant ou
+// en reculant (avant, des règles par paliers gardaient la pose là où elle s'était arrêtée : le même endroit pouvait sortir
+// clair ou sombre selon le geste). poseMax : plafond de la pose relevée, de 4 (étoiles) à 1 000 (galaxies) ; les seuils
+// glissent avec lui au lieu de basculer.
+// nebuleuse : part de la pose réglée par une nébuleuse (0 à 1) : la part saturée tolérée passe de 0,5 % à 2 %.
+inline double cible(const uint32_t* h, double poseMax, double photo = 0.0, double nebuleuse = 0.0) {
+    const double partMax = kPartMax + (kPartMaxNebuleuse - kPartMax) * std::clamp(nebuleuse, 0.0, 1.0);
+    const double g = std::clamp(std::log(poseMax / 4.0) / std::log(10.0), 0.0, 1.0);      // 0 : étoiles (×4) ; 1 : galaxies (×40 et plus)
+    const double basse = std::exp((1.0 - g) * std::log(kMoyBasse) + g * std::log(kMoyBasseGalaxies));
+    const double plancher = std::exp((1.0 - g) * std::log(0.1));      // image trop claire : pas sous ×0,1 (étoiles), ×1 (galaxies)
+    const Stats s1 = statsPour(h, 1.0, photo);
+    double p = 1.0;
+    if (s1.moy > kMoyHaute)      // trop claire : on baisse jusqu'à l'éclat visé
+        p = std::max(plancher, 1.0 / premierePose([&](double q) { return statsPour(h, 1.0 / q, photo).moy <= kMoyHaute; }, 1.0, 1.0 / kPoseMin));
+    else if (s1.moy < basse && s1.vis < kPartVisible)      // trop sombre : on relève jusqu'au seuil bas ou 0,1 % bien visible
+        p = premierePose([&](double q) { const Stats t = statsPour(h, q, photo); return t.moy >= basse || t.vis >= kPartVisible; }, 1.0, std::max(poseMax, 1.0));
+    // jamais plus de 0,5 % de l'image blanche
+    if (statsPour(h, p, photo).sat > partMax) p = 1.0 / premierePose([&](double q) { return statsPour(h, 1.0 / q, photo).sat <= partMax; }, 1.0 / p, 1.0 / kPoseMin);
+    return std::clamp(p, kPoseMin, kPoseMaxGalaxies);
+}
+
+// Adaptation dans le temps, en logarithme (crans d'IL), comme l'œil et les appareils photo : vers une image plus sombre
+// (lumière qui arrive, saturation) demi-temps 0,1 s et au plus 16 IL par seconde ; vers une image plus claire, demi-temps
+// 0,4 s et au plus 4 IL par seconde (l'œil s'adapte plus vite à la lumière qu'à l'obscurité : Pattanaik et al. 2000,
+// « Time-dependent visual adaptation for fast realistic image display », SIGGRAPH ; vitesses de l'ancienne pose
+// automatique : ×10 en 0,2 s vers le sombre, en 1 s vers le clair). instant : contrôles sans fenêtre.
+inline double suivante(double pose, double vise, double dt, bool instant) {
+    if (instant) return vise;
+    const double t = std::clamp(dt, 0.0, 0.5);
+    const bool sombre = vise < pose;
+    const double k = 1.0 - std::exp2(-t / (sombre ? 0.1 : 0.4));
+    const double pas = (std::log2(vise) - std::log2(pose)) * k, pasMax = (sombre ? 16.0 : 4.0) * t;
+    return std::exp2(std::log2(pose) + std::clamp(pas, -pasMax, pasMax));
 }
 }  // namespace pose_auto
 
@@ -53,13 +127,15 @@ namespace {
 class PoseAuto {
 public:
     double pose = 1.0;        // facteur appliqué à l'écran (ecran.frag)
-    double partSaturee = 0, partVisible = 0, moyenne = 0;   // dernière mesure
+    double partSaturee = 0, partVisible = 0, moyenne = 0;   // dernière mesure, avec la pose retenue
+    double vise = 1.0;        // pose visée pour la dernière image mesurée
     bool ready = false;
 
     void create(const Gpu& g) {
-        out_ = createBuffer(g, 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        check(vkMapMemory(g.dev, out_.mem, 0, 16, 0, &mapped_), "pose automatique : accès au tampon");
-        std::memset(mapped_, 0, 16);
+        out_ = createBuffer(g, kBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        check(vkMapMemory(g.dev, out_.mem, 0, kBytes, 0, &mapped_), "pose automatique : accès au tampon");
+        std::memset(mapped_, 0, kBytes);
         VkSamplerCreateInfo sci{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
         sci.magFilter = sci.minFilter = VK_FILTER_NEAREST;
         sci.addressModeU = sci.addressModeV = sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -81,7 +157,7 @@ public:
         da.descriptorSetCount = 1;
         da.pSetLayouts = &setLayout_;
         check(vkAllocateDescriptorSets(g.dev, &da, &set_), "pose automatique : jeu");
-        const VkDescriptorBufferInfo bi{out_.buf, 0, 16};
+        const VkDescriptorBufferInfo bi{out_.buf, 0, kBytes};
         VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         w.dstSet = set_;
         w.dstBinding = 1;
@@ -90,12 +166,9 @@ public:
         w.pBufferInfo = &bi;
         vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
         cs_ = shader(g, "pose.comp.spv");
-        const VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 16};
         VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         li.setLayoutCount = 1;
         li.pSetLayouts = &setLayout_;
-        li.pushConstantRangeCount = 1;
-        li.pPushConstantRanges = &pcr;
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout_), "pose automatique : agencement du calcul");
         VkComputePipelineCreateInfo cp{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
         cp.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
@@ -118,28 +191,36 @@ public:
         w.pImageInfo = &info;
         vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
     }
-    // Après l'attente de la barrière de l'image précédente : lit sa mesure et règle la pose. actif = faux : pose 1.
-    void update(double dt, bool instant, bool actif, double poseMax = 1.0) {
+    // Après l'attente de la barrière de l'image précédente : lit son histogramme et règle la pose. actif = faux : pose 1.
+    // photo : part de l'étirement « photo » dans la courbe de l'écran (0 à 1, comme ecran.frag).
+    void update(double dt, bool instant, bool actif, double poseMax = 1.0, double photo = 0.0, double nebuleuse = 0.0) {
         if (!ready || !actif) {
             pose = 1.0;
             return;
         }
-        float m[4];
-        std::memcpy(m, mapped_, sizeof(m));
-        if (!(m[2] > 0)) return;      // pas encore de mesure
-        partSaturee = m[0];
-        partVisible = m[1];
-        moyenne = m[3];
-        pose = pose_auto::suivante(pose, partSaturee, partVisible, moyenne, dt, instant, poseMax);
+        uint32_t h[pose_auto::kCases];
+        std::memcpy(h, mapped_, sizeof(h));
+        uint64_t n = 0;
+        for (uint32_t c : h) n += c;
+        if (n == 0) return;      // pas encore de mesure
+        vise = pose_auto::cible(h, poseMax, photo, nebuleuse);
+        pose = pose_auto::suivante(pose, vise, dt, instant);
+        const pose_auto::Stats s = pose_auto::statsPour(h, pose, photo);      // ce que montre l'écran avec la pose retenue
+        partSaturee = s.sat;
+        partVisible = s.vis;
+        moyenne = s.moy;
     }
     // Dans le tampon de commandes, quand l'image en grande dynamique est en lecture (après sa passe).
-    void measure(VkCommandBuffer cmd) const {
+    void measure(VkCommandBuffer cmd, VkExtent2D extent) const {
         if (!ready) return;
+        vkCmdFillBuffer(cmd, out_.buf, 0, kBytes, 0);
+        VkMemoryBarrier clear{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+        clear.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        clear.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &clear, 0, nullptr, 0, nullptr);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout_, 0, 1, &set_, 0, nullptr);
-        const float p[4] = {static_cast<float>(pose), pose_auto::kSeuil, 0, 0};
-        vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(p), p);
-        vkCmdDispatch(cmd, 1, 1, 1);
+        vkCmdDispatch(cmd, (extent.width + 31) / 32, (extent.height + 31) / 32, 1);      // 32 x 32 pixels par équipe
         VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
         mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
         mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
@@ -159,6 +240,7 @@ public:
     }
 
 private:
+    static constexpr VkDeviceSize kBytes = sizeof(uint32_t) * pose_auto::kCases;
     Buffer out_;
     void* mapped_ = nullptr;
     VkSampler sampler_{};
