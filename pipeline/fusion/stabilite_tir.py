@@ -140,7 +140,7 @@ def main():
     if 'gaz' in opts:
         import gaz_galaxie
         if 'efficacite' in opts: gaz_galaxie.EFFICACITE = float(opts['efficacite'])      # réglage permis sur UNE mesure : les naissances d'étoiles (1,65 ± 0,19 M☉/an)
-        gaz = gaz_galaxie.Gaz(len(kind)); masse_gaz0 = float(p['m'][kind == 3].sum())
+        gaz = (gaz_galaxie.GazThermique if opts['gaz'] == '2' else gaz_galaxie.Gaz)(len(kind)); masse_gaz0 = float(p['m'][kind == 3].sum())
         if opts.get('retour', '1') != '0': gaz.ages_de_depart(kind)      # --retour=0 : sans le gaz rendu par les étoiles qui vieillissent
 
     def forces(t):
@@ -172,7 +172,7 @@ def main():
             dern = res['releves'][-1]['gaz'] if res['releves'] else dict(nees_msol=0.0, t=0.0)
             taux = (mn - dern['nees_msol']) / max((t - dern['t']) * 1e9, 1.0)      # M☉ par an depuis le relevé d'avant
             r['gaz'] = dict(t=t, gaz_msol=mg_, nees_msol=mn, naissances_msol_par_an=taux, courant=gaz.cfl)
-            print(f"         gaz {mg_:.3e} M☉ ({100 * mg_ / masse_gaz0:.0f} % du départ) | étoiles nées {mn:.3e} M☉ | {taux:.2f} M☉/an | nombre de Courant {gaz.cfl:.2f} avec {gaz.sous_pas} sous-pas", flush=True)
+            print(f"         gaz {mg_:.3e} M☉ ({100 * mg_ / masse_gaz0:.0f} % du départ) | étoiles nées {mn:.3e} M☉ | {taux:.2f} M☉/an | nombre de Courant {gaz.cfl:.2f} avec {gaz.sous_pas} sous-pas" + (f" | {gaz.chauffees} explosions, gaz à plus de 10^5 K : {100 * float((gaz.u[kind_g == 3] * gaz_galaxie.K_PAR_U > 1e5).mean()):.1f} %" if hasattr(gaz, 'chauffees') else ''), flush=True)
         res['releves'].append(r)
         a = [x for x in r['anneaux'] if x]
         print(f"t = {t:5.2f} Ga | A2 par anneau : " + ' '.join(f"{x['a2']:.3f}" for x in a) + f" | épaisseur {a[2]['epaisseur_kpc']:.2f} kpc | agitation {a[3]['sigma_r']:.0f} km/s"
@@ -193,7 +193,7 @@ def main():
         acc, phi = forces((s + 1) * dt_ma * 1e-3)
         vel += 0.5 * dt * acc
         if gaz:
-            gaz.naissances(kind_g, cp.where(kind_g == 3)[0], dt, (s + 1) * dt_ma * 1e-3)
+            gaz.naissances(kind_g, cp.where(kind_g == 3)[0], dt, (s + 1) * dt_ma * 1e-3, pos=pos, m=m)
             gaz.retour(kind_g, dt, (s + 1) * dt_ma * 1e-3)
         if (s + 1) % every == 0: note((s + 1) * dt_ma * 1e-3)
         if inst and (s + 1) % inst == 0 and s + 1 < steps:      # --instantanes=0.5 : état gardé tous les 0,5 Ga, pour le bulletin à plusieurs dates
