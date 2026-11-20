@@ -11,9 +11,11 @@
 
 #include "interface_cosmo_courbes.h"
 #include "interface_cycle.h"
+#include "interface_fiche.h"
 #include "interface_images.h"
 #include "interface_savoir.h"
 #include "interface_temps.h"
+#include "interface_tuiles.h"
 #include "orbites_objet.h"
 
 namespace {
@@ -75,7 +77,7 @@ void plotSeries(const UiState& ui, const char* id, const std::vector<double>& x,
     const double x0 = x.front(), x1 = x.back();
     auto X = [&](double v) { return a.x + static_cast<float>((v - x0) / (x1 - x0)) * (b.x - a.x); };
     auto Y = [&](float v) { return b.y - (v - lo) / (hi - lo) * (b.y - a.y); };
-    dl->AddRectFilled(a, b, IM_COL32(12, 16, 28, 160), 6.0f * ui.s);
+    dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, 8), 8.0f * ui.s);
     for (int k = 1; k < 4; ++k) dl->AddLine({a.x, a.y + (b.y - a.y) * k / 4}, {b.x, a.y + (b.y - a.y) * k / 4}, kGrid);
     auto line = [&](const std::vector<float>& v, ImU32 col, bool dashed) {
         for (size_t i = 1; i < v.size(); ++i) {
@@ -90,10 +92,16 @@ void plotSeries(const UiState& ui, const char* id, const std::vector<double>& x,
         dl->AddLine({xn, a.y}, {xn, b.y}, IM_COL32(255, 255, 255, 120), 1.0f * ui.s);
     }
     char buf[96];
+    // Valeurs extrêmes de l'axe, sur une pastille sombre : lisibles même quand la courbe passe dessous.
+    auto axisLabel = [&](ImVec2 at, const char* text) {
+        const ImVec2 ts = ImGui::CalcTextSize(text);
+        dl->AddRectFilled({at.x - px(ui, 3), at.y}, {at.x + ts.x + px(ui, 3), at.y + ts.y}, IM_COL32(8, 11, 20, 200), px(ui, 4));
+        dl->AddText(at, theme::kMuted, text);
+    };
     std::snprintf(buf, sizeof buf, "%s %s", frNum(hi, 3).c_str(), yUnit);
-    dl->AddText({a.x + px(ui, 4), a.y + px(ui, 2)}, IM_COL32(200, 206, 220, 200), buf);
+    axisLabel({a.x + px(ui, 6), a.y + px(ui, 2)}, buf);
     std::snprintf(buf, sizeof buf, "%s %s", frNum(lo, 3).c_str(), yUnit);
-    dl->AddText({a.x + px(ui, 4), b.y - ImGui::GetFontSize() - px(ui, 2)}, IM_COL32(200, 206, 220, 200), buf);
+    axisLabel({a.x + px(ui, 6), b.y - ImGui::GetFontSize() - px(ui, 2)}, buf);
     std::snprintf(buf, sizeof buf, "%s", (frNum((x0 - xOrigin) * xScale, 3) + " " + xUnit).c_str());
     dl->AddText({a.x, b.y + px(ui, 2)}, IM_COL32(170, 178, 196, 200), buf);
     std::snprintf(buf, sizeof buf, "%s", (frNum((x1 - xOrigin) * xScale, 3) + " " + xUnit).c_str());
@@ -171,7 +179,7 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
     auto next = [&]() { if (line) ImGui::SameLine(); line = true; };
     if (sim.dist > 1.5 * sim.arriveDist(f, 1e300) && !sim.flying) {
         next();
-        if (ImGui::Button("S'en approcher")) goToBody(sim, ui, f);
+        if (ImGui::Button(gIcons ? (std::string(ico::kZoomIn) + "  S'en approcher").c_str() : "S'en approcher")) goToBody(sim, ui, f);
     }
     // Planètes connues de cette étoile (exoplanetes.h) : vol jusqu'à 4 fois la plus grande orbite.
     if (b.planetsReachLy > 0 && sim.dist > 20.0 * b.planetsReachLy && !sim.flying) {
@@ -185,7 +193,7 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
     }
     if (!sim.history.empty()) {
         next();
-        if (ImGui::Button("← Retour")) {
+        if (ImGui::Button(gIcons ? (std::string(ico::kBack) + "  Retour").c_str() : "← Retour")) {
             ui.tour = -1;
             sim.back();
         }
@@ -201,7 +209,7 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
     }
     if (f != 0 && sim.visible(0)) {
         next();
-        if (ImGui::Button("Revenir au Soleil")) goToBody(sim, ui, 0, 45.0 * kAuInLy);
+        if (ImGui::Button(gIcons ? (std::string(ico::kSun) + "  Revenir au Soleil").c_str() : "Revenir au Soleil")) goToBody(sim, ui, 0, 45.0 * kAuInLy);
     }
 }
 
@@ -210,28 +218,44 @@ void bodyOrbit(Sim& sim, UiState& ui, const Body& b, int f);
 void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
     const int f = sim.focus;
     const Body& b = sim.bodies[static_cast<size_t>(f)];
+    // En-tête : nom en grand, nature en pastille, distance au Soleil ; puis les gestes possibles.
     ImGui::PushFont(ui.big);
     ImGui::TextWrapped("%s", b.name.c_str());
     ImGui::PopFont();
-    note("%s", natureOf(b).c_str());
+    chip(natureOf(b).c_str(), kindColor(b));
+    if (b.kind != Kind::Sun && sim.visible(f)) {
+        ImGui::SameLine();
+        ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
+        ImGui::TextColored(theme::v4(theme::kMuted), "distance au Soleil : %s", frDistance(std::sqrt(dot(sim.position(f), sim.position(f)))).c_str());
+        ImGui::PopFont();
+    }
+    ImGui::Spacing();
     bodyActions(sim, ui, f);
+    ImGui::Spacing();
+    // L'essentiel d'abord : les chiffres-clés en tuiles (survol : d'où vient chaque chiffre).
+    drawKeyFacts(sim, ui, f);
+    ImGui::Spacing();
     const BodyText* bt = bodyText(b.name);
     if (bt && bt->image && gUiImages) {
         if (const UiImages::Entry* e = gUiImages->get(bt->image)) {
             const float wImg = ImGui::GetContentRegionAvail().x;
             const float hImg = wImg * static_cast<float>(e->h) / static_cast<float>(std::max(1, e->w));
-            ImGui::Image(reinterpret_cast<ImTextureID>(e->set), {wImg, hImg});
-            note("Carte de sa surface (Solar System Scope, CC BY 4.0, d'après la NASA).");
+            const ImVec2 p0 = ImGui::GetCursorScreenPos();
+            ImGui::Dummy({wImg, hImg});
+            ImGui::GetWindowDrawList()->AddImageRounded(reinterpret_cast<ImTextureID>(e->set), p0, {p0.x + wImg, p0.y + hImg}, {0, 0}, {1, 1},
+                                                        IM_COL32_WHITE, px(ui, 10));
+            smallNote("Carte de sa surface (Solar System Scope, CC BY 4.0, d'après la NASA).", theme::kFaint);
         }
     }
     ImGui::Spacing();
-    ImGui::TextWrapped("%s", bt ? bt->text : b.cluster ? clusterText() : b.structure ? structureText() : kindText(static_cast<int>(b.kind)));
+    drawSummaryText(bt ? bt->text : b.cluster ? clusterText() : b.structure ? structureText() : kindText(static_cast<int>(b.kind)), f);
     ImGui::Spacing();
 
-    // Orbite : courbe et analyse.
     if (b.kind == Kind::Sun || b.kind == Kind::Star) cycleSection(sim, ui, f);      // cycle de vie (interface_cycle.h)
-    if (ImGui::CollapsingHeader("Orbite", ImGuiTreeNodeFlags_DefaultOpen)) bodyOrbit(sim, ui, b, f);
+    // Le détail ensuite, replié : la courbe de l'orbite, puis toutes les valeurs avec leur source.
+    if (ImGui::CollapsingHeader("Orbite : courbe et analyse")) bodyOrbit(sim, ui, b, f);
     if (ImGui::CollapsingHeader("Valeurs", ImGuiTreeNodeFlags_DefaultOpen)) cardRows(sim, ui, cam, f);
+    drawFiche(sim, ui, f);      // fiche complète : données publiées (fiches/*.tsv) et grandeurs calculées ici
 }
 
 // Courbe de l'orbite de l'astre suivi et son analyse (réelle, et « et si… » avec les réglages).
@@ -376,7 +400,7 @@ void tabUniverse(Sim& sim, UiState& ui) {
     // Composition aujourd'hui.
     const cosmo::Params& c = sim.cosmology;
     struct Part { const char* label; double v; ImU32 col; } parts[] = {
-        {"Énergie noire", c.ode, IM_COL32(110, 215, 235, 255)}, {"Matière (dont noire)", c.om, IM_COL32(255, 196, 110, 255)},
+        {"Énergie noire", c.ode, IM_COL32(110, 215, 235, 255)}, {"Matière (dont noire)", c.om, theme::kAccent},
         {"Rayonnement", c.omegaR(), IM_COL32(240, 120, 120, 255)}};
     ImGui::Spacing();
     ImGui::TextUnformatted("De quoi est fait l'univers aujourd'hui");
@@ -513,20 +537,25 @@ void drawObjectOrbit(Sim& sim, UiState& ui, const Camera& cam, float w, float h)
     };
     gBac.track.prepareFrame(sim);
     if (tr.hasWhatIf) draw(tr.gWhatIf, kWhatIf, true);
-    draw(tr.g, IM_COL32(255, 196, 110, 170), false);
+    draw(tr.g, theme::alpha(theme::kAccent, 0.67f), false);
 }
 
 // Colonne des trois onglets, sur le bord droit, quand le panneau est fermé.
 void drawRail(UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
-    ImGui::SetNextWindowPos({w - px(ui, 12), h * 0.42f}, 0, {1, 0.5f});
+    ImGui::SetNextWindowPos({w - px(ui, 16), h * 0.42f}, 0, {1, 0.5f});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 6), px(ui, 6)});
     ImGui::Begin("colonne", nullptr, fixed);
+    cardShadow();
     const char* labels[] = {"Astre", "Univers", "Réglages"};
+    const char* icons[] = {ico::kInfo, ico::kGlobe, ico::kLayers};
+    const char* tips[] = {"Fiche de l'astre suivi", "L'univers à l'époque choisie sur la frise", "Réglages : et si l'univers était différent ?"};
     for (int i = 0; i < 3; ++i)
-        if (ImGui::Button(labels[i], {px(ui, 92), 0})) {
+        if (iconButton(labels[i], icons[i], labels[i], tips[i], false, ImGui::GetFrameHeight() * 1.15f)) {
             gBac.open = true;
             gBac.tab = i;
         }
     ImGui::End();
+    ImGui::PopStyleVar();
     gBac.panelLeft = w;
 }
 
@@ -574,30 +603,43 @@ void drawPanel(Sim& sim, UiState& ui, const Camera& cam, float w, float h, float
     const float pw = std::min(px(ui, 440), w * 0.4f);
     ImGui::SetNextWindowPos({w - px(ui, 16), top}, 0, {1, 0});
     ImGui::SetNextWindowSize({pw, std::max(px(ui, 200), bottom - top)});
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4{1.0f, 0.77f, 0.43f, 0.95f});
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4{1.0f, 0.85f, 0.60f, 1.0f});
-    ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4{1.0f, 0.77f, 0.43f, 1.0f});
     ImGui::Begin("panneau", nullptr, flags);
+    cardShadow();
     gBac.panelLeft = ImGui::GetWindowPos().x;
-    const char* labels[] = {"Astre", "Univers", "Réglages"};
-    for (int i = 0; i < 3; ++i) {
-        if (i) ImGui::SameLine();
-        const bool on = gBac.tab == i;
-        if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.80f, 0.58f, 0.25f, 0.85f});
-        if (ImGui::Button(labels[i])) gBac.tab = i;
-        if (on) ImGui::PopStyleColor();
+    // Onglets : un sélecteur à trois cases sur toute la largeur, et la croix pour fermer.
+    {
+        const char* labels[] = {"Astre", "Univers", "Réglages"};
+        const float hh = ImGui::GetFrameHeight();
+        const float closeW = hh;
+        const float segW = (ImGui::GetContentRegionAvail().x - closeW - ImGui::GetStyle().ItemSpacing.x) / 3.0f;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 p0 = ImGui::GetCursorScreenPos();
+        dl->AddRectFilled(p0, {p0.x + segW * 3, p0.y + hh}, IM_COL32(255, 255, 255, 12), hh * 0.5f);
+        for (int i = 0; i < 3; ++i) {
+            const ImVec2 a{p0.x + segW * i, p0.y};
+            ImGui::SetCursorScreenPos(a);
+            ImGui::PushID(i);
+            if (ImGui::InvisibleButton("onglet", {segW, hh})) gBac.tab = i;
+            const bool hov = ImGui::IsItemHovered();
+            ImGui::PopID();
+            const bool on = gBac.tab == i;
+            if (on) dl->AddRectFilled({a.x + 2, a.y + 2}, {a.x + segW - 2, a.y + hh - 2}, theme::alpha(theme::kAccent, 0.22f), hh * 0.5f);
+            else if (hov) dl->AddRectFilled({a.x + 2, a.y + 2}, {a.x + segW - 2, a.y + hh - 2}, theme::kHover, hh * 0.5f);
+            const ImVec2 ts = ImGui::CalcTextSize(labels[i]);
+            dl->AddText({a.x + (segW - ts.x) * 0.5f, a.y + (hh - ts.y) * 0.5f}, on ? theme::kAccent : theme::kMuted, labels[i]);
+        }
+        ImGui::SetCursorScreenPos({p0.x + segW * 3 + ImGui::GetStyle().ItemSpacing.x, p0.y});
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, hh * 0.5f);
+        if (iconButton("fermer", ico::kClose, "x", "Fermer le panneau")) gBac.open = false;
+        ImGui::PopStyleVar();
     }
-    ImGui::SameLine(ImGui::GetContentRegionMax().x - px(ui, 28));
-    if (ImGui::SmallButton(" × ")) gBac.open = false;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Fermer le panneau");
-    ImGui::Separator();
+    ImGui::Spacing();
     ImGui::BeginChild("contenu", {0, 0}, ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
     if (gBac.tab == 0) tabBody(sim, ui, cam);
     else if (gBac.tab == 1) tabUniverse(sim, ui);
     else tabSettings(sim, ui);
     ImGui::EndChild();
     ImGui::End();
-    ImGui::PopStyleColor(3);
 }
 
 }  // namespace

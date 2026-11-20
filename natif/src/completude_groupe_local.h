@@ -1,5 +1,5 @@
 // Généré par pipeline/natif/completude_groupe_local.py : ne pas éditer à la main.
-// Local Volume Database v1.1.2 (Pace 2024), relevé le 2026-11-12 : 113 galaxies confirmées à moins de 1 Mpc,
+// Local Volume Database v1.1.2 (Pace 2024), relevé le 2026-11-20 : 113 galaxies confirmées à moins de 1 Mpc,
 // 113 retrouvées parmi les 114 galaxies nommées de l'appli (directions à moins de 2°).
 #pragma once
 namespace completude::groupe_local {

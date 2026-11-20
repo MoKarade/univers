@@ -127,3 +127,22 @@ Demande de Marc : il manquait le nuage d'Oort, Laniakea avec le Grand Attracteur
   (Mpc/h)³) ; 3 lignes sur 4 du flot de Laniakea au même puits (les autres s'arrêtent sur des cols) ; Vide local à
   38,8 Mpc/h ; modèle d'Oort : pente -3,36 mesurée sur 200 000 tirages, extérieur isotrope, intérieur aplati.
 - Pas vérifié : la fenêtre réellement affichée (captures en fenêtre cachée seulement), la cadence avec Gaia chargé.
+
+## Interface refondue (20 novembre 2026)
+
+Demande de Marc : l'interface n'était « pas du tout user friendly, pas du tout belle ».
+
+- `src/interface_theme.h` : toute l'apparence au même endroit (couleurs, polices Segoe UI et Segoe UI Semibold, icônes
+  Segoe Fluent Icons de Windows, petits éléments). Couleur du statut d'une valeur, la même partout : mesuré ou publié
+  vert, calculé bleu, modèle violet, supposé orange.
+- `row(libellé, valeur, statut)` (fiche) : le premier mot du statut devient une pastille de couleur, le reste (source,
+  méthode) est écrit en petit sous la valeur. Aucun texte retiré. Le fil « fiche complète » s'en sert tel quel.
+- En haut à gauche : barre d'outils (recherche avec raccourcis et résultats illustrés, retour, aller à, afficher,
+  lumière, exposition, visite guidée, aide). En haut au milieu : « tu regardes ». En haut à droite : sélecteur
+  « 100 % mesuré | Meilleur rendu » (F4), ses hypothèses, puis la complétude.
+- En bas, au-dessus de la frise : le temps comme un lecteur vidéo (reculer, lecture, avancer, date, maintenant, date
+  au choix, bouton « i » pour ce qui est mesuré, calculé ou supposé à cette date ; vitesse en curseur libre).
+- À gauche : échelle de zoom à cinq crans (`src/interface_echelle.h`), le repère ambre montre où est la vue.
+- Astre suivi : repère en quatre coins ; survol : anneau et bulle (nom, nature, distance).
+- Contrôle : `essai_interface` vérifie aussi la lecture du statut et la position sur l'échelle.
+- Pas vérifié : la fenêtre réellement affichée et la souris (captures en fenêtre cachée seulement).

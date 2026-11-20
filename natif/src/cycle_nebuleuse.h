@@ -52,7 +52,7 @@ public:
         li.pPushConstantRanges = &pcr;
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout_), "agencement des nébuleuses");
         vs_ = shader(g, "ecran.vert.spv");
-        fs_ = shader(g, "nebuleuse.frag.spv");
+        fs_ = shader(g, "cycle_nebuleuse.frag.spv");
         absorb_ = pipeline(g, hdrFormat, false);
         emit_ = pipeline(g, hdrFormat, true);
     }

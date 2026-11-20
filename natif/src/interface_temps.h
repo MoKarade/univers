@@ -7,25 +7,6 @@ namespace {
 
 // ---------------------------------------------------------------- temps
 
-// Bouton dessiné : lecture (triangle) ou pause (deux barres).
-bool playButton(const UiState& ui, bool paused) {
-    const float sz = ImGui::GetFrameHeight();
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const bool hit = ImGui::Button("##play", {sz * 1.4f, sz});
-    const bool hov = ImGui::IsItemHovered();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImVec2 c{p.x + sz * 0.7f, p.y + sz * 0.5f};
-    const float r = sz * 0.26f;
-    const ImU32 col = hov ? kAccent : IM_COL32(235, 238, 245, 255);
-    if (paused) dl->AddTriangleFilled({c.x - r * 0.8f, c.y - r}, {c.x - r * 0.8f, c.y + r}, {c.x + r, c.y}, col);
-    else {
-        dl->AddRectFilled({c.x - r * 0.85f, c.y - r}, {c.x - r * 0.25f, c.y + r}, col, 1.5f * ui.s);
-        dl->AddRectFilled({c.x + r * 0.25f, c.y - r}, {c.x + r * 0.85f, c.y + r}, col, 1.5f * ui.s);
-    }
-    if (hov) ImGui::SetTooltip(paused ? "Faire avancer le temps (Espace)" : "Arrêter le temps (Espace)");
-    return hit;
-}
-
 // Écart à aujourd'hui, en mots : « aujourd'hui », « dans 3 jours », « il y a 250 ans ».
 std::string relativeToToday(double years) {
     const double d = years - kStartYears, a = std::fabs(d);
@@ -163,106 +144,166 @@ std::string rateText(double yearsPerSecond) {
     return "";
 }
 
-void drawTimeBar(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
-    // Centrée, sauf si elle mordrait sur la recherche : elle se décale alors vers la droite.
-    const float minX = ui.searchRight + px(ui, 12) + ui.timeW * 0.5f;
-    const bool roomForAll = ui.searchRight + ui.timeW + ui.completenessW + px(ui, 48) <= w;
-    const float maxX = roomForAll ? w - px(ui, 28) - ui.completenessW - ui.timeW * 0.5f : w;
-    ImGui::SetNextWindowPos({std::clamp(w * 0.5f, minX, std::max(minX, maxX)), px(ui, 16)}, 0, {0.5f, 0});
-    ImGui::Begin("temps", nullptr, fixed);
+// Ce qui ne vaut qu'à une autre date qu'aujourd'hui : mesuré, calculé ou supposé (ouvert par le bouton « i » du temps).
+void timeNotes(const Sim& sim) {
+    if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim)) {
+        ImGui::TextDisabled("Planètes non montrées à cette date : leur calcul couvre 10 millions d'années avant et après aujourd'hui.");
+        chaosNote(sim);
+    } else if (!sim.ephemValid && !sim.outer) {
+        ImGui::TextDisabled("Hors de 1550-2650 (plage des éphémérides de la NASA) : calcul des planètes en préparation.");
+    } else if (!sim.ephemValid) {
+        ImGui::TextDisabled("Hors de 1550-2650 : planètes calculées ici (gravité mutuelle partie des éphémérides de la NASA) ; lunes et orbites non montrées.");
+    } else {
+        ImGui::TextDisabled("Planètes, Lune et lunes : éphémérides de la NASA, lues telles quelles.");
+    }
+    deepTimeNote(sim);
+}
+
+// Bouton rond du lecteur de temps (icône), l'actif en ambre.
+bool dockButton(const UiState& ui, const char* id, const char* icon, const char* word, const char* tip, bool on, float size) {
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, size * 0.5f);
+    const bool hit = iconButton(id, icon, word, tip, on, size);
+    ImGui::PopStyleVar();
+    (void)ui;
+    return hit;
+}
+
+// En bas, au-dessus de la frise : le temps, comme un lecteur vidéo. Reculer / lecture-pause / avancer, la date en grand
+// avec son écart à aujourd'hui, puis la vitesse (curseur libre, du temps réel à 200 millions d'années par seconde).
+// `left`, `right` : place libre (le panneau de droite est exclu) ; `bottom` : haut de la frise.
+void drawTimeBar(Sim& sim, UiState& ui, float left, float right, float bottom, ImGuiWindowFlags fixed) {
+    const float dockW = std::min(px(ui, 700), right - left - px(ui, 32));
+    ImGui::SetNextWindowPos({(left + right) * 0.5f, bottom - px(ui, 10)}, 0, {0.5f, 1});
+    ImGui::SetNextWindowSizeConstraints({dockW, 0}, {std::max(dockW, right - left - px(ui, 32)), FLT_MAX});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 14), px(ui, 10)});
+    ImGui::Begin("temps", nullptr, (fixed & ~ImGuiWindowFlags_AlwaysAutoResize) | ImGuiWindowFlags_AlwaysAutoResize);
+    cardShadow();
+    const float big = ImGui::GetFrameHeight() * 1.25f, small = ImGui::GetFrameHeight();
+
+    // Ligne 1 : boutons, date, raccourcis.
+    const float y0 = ImGui::GetCursorPosY();
+    ImGui::SetCursorPosY(y0 + (big - small) * 0.5f);
+    if (dockButton(ui, "recule", ico::kRewind, "<<", "Faire reculer le temps", !sim.paused && sim.backward, small)) {
+        sim.backward = true;
+        sim.paused = false;
+    }
+    ImGui::SameLine();
+    ImGui::SetCursorPosY(y0);
+    ImGui::PushStyleColor(ImGuiCol_Button, theme::v4(theme::alpha(theme::kAccent, 0.22f)));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(theme::alpha(theme::kAccent, 0.38f)));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(theme::kAccent));
+    if (dockButton(ui, "lecture", sim.paused ? ico::kPlay : ico::kPause, sim.paused ? ">" : "||", sim.paused ? "Faire avancer le temps (Espace)" : "Arrêter le temps (Espace)", false, big))
+        sim.paused = !sim.paused;
+    ImGui::PopStyleColor(3);
+    ImGui::SameLine();
+    ImGui::SetCursorPosY(y0 + (big - small) * 0.5f);
+    if (dockButton(ui, "avance", ico::kForward, ">>", "Faire avancer le temps", !sim.paused && !sim.backward, small)) {
+        sim.backward = false;
+        sim.paused = false;
+    }
+    // Date en grand, et en dessous l'écart à aujourd'hui.
+    ImGui::SameLine(0, px(ui, 16));
+    ImGui::SetCursorPosY(y0 - px(ui, 4));
+    ImGui::BeginGroup();
     ImGui::PushFont(ui.big);
     const std::string date = frDate(sim.years, sim.yearsPerSecond() < 0.02);
-    const float rowW = ui.details ? px(ui, 600) : std::max(px(ui, 360), ImGui::CalcTextSize(frDate(sim.years, sim.yearsPerSecond() < 0.02).c_str()).x * 1.25f);
-    ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - ImGui::CalcTextSize(date.c_str()).x) * 0.5f + px(ui, 14)));
     ImGui::TextUnformatted(date.c_str());
     ImGui::PopFont();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic : aller à une date");
     if (ImGui::IsItemClicked()) ImGui::OpenPopup("date");
-    const std::string rel = relativeToToday(sim.years) + (sim.paused ? "   •   temps arrêté" : sim.backward ? "   •   le temps recule" : "");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nClic : aller à une date", rel.c_str());
-    if (ui.details) {
-        ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - ImGui::CalcTextSize(rel.c_str()).x) * 0.5f + px(ui, 14)));
-        ImGui::TextDisabled("%s", rel.c_str());
+    ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
+    const std::string rel = relativeToToday(sim.years) + (sim.paused ? "  ·  temps arrêté" : sim.backward ? "  ·  le temps recule" : "");
+    ImGui::TextColored(theme::v4(sim.paused ? theme::kMuted : theme::kAccent), "%s", rel.c_str());
+    ImGui::PopFont();
+    ImGui::EndGroup();
+    // À droite : maintenant, date, ce qui est mesuré à cette date (jamais sur la date : au besoin, la carte s'élargit).
+    const bool notToday = std::fabs(sim.years - kStartYears) >= 1.0;
+    const float rightW = small * 3 + ImGui::GetStyle().ItemSpacing.x * 2;
+    const float afterDate = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + px(ui, 16);
+    ImGui::SameLine(std::max(afterDate, ImGui::GetWindowContentRegionMax().x - rightW));
+    ImGui::SetCursorPosY(y0 + (big - small) * 0.5f);
+    if (iconButton("maintenant", ico::kClock, "Maintenant", "Revenir à aujourd'hui", false, small)) {
+        sim.years = kStartYears;
+        sim.backward = false;
     }
-
-    // Interface minimaliste (Marc, 13/11/2026) : lecture, vitesse et « … » (sens, plus lent, plus rapide, maintenant, date).
-    ImGui::SetCursorPosX(std::max(px(ui, 14), (rowW - px(ui, 330)) * 0.5f + px(ui, 14)));
-    if (playButton(ui, sim.paused)) sim.paused = !sim.paused;
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(px(ui, 240));
-    const std::string rateNow = sim.speed > 0 ? rateText(sim.speed) : std::string(kRates[sim.rate].label);
-    if (ImGui::BeginCombo("##vitesse", rateNow.c_str())) {
-        for (int i = 0; i < kRateCount; ++i)
-            if (ImGui::Selectable(kRates[i].label, sim.speed <= 0 && i == sim.rate)) {
-                sim.rate = i;
-                sim.speed = 0;
-            }
-        ImGui::EndCombo();
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Vitesse du temps (Page précédente : plus vite, Page suivante : plus lent)");
+    if (iconButton("date", ico::kCalendar, "Date", "Aller à une date (ex. 1969, 21/07/1969, -3000, 5000000000)", false, small)) ImGui::OpenPopup("date");
     ImGui::SameLine();
-    if (ImGui::Button(" … ")) ImGui::OpenPopup("temps-plus");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sens du temps, maintenant, aller à une date");
-    if (ImGui::BeginPopup("temps-plus")) {
-        if (ImGui::MenuItem(sim.backward ? "Faire avancer le temps" : "Faire reculer le temps")) sim.backward = !sim.backward;
-        if (ImGui::MenuItem("Plus lent", "Page suivante", false, sim.yearsPerSecond() > kRates[0].yearsPerSecond * 1.0001)) sim.stepRate(-1);
-        if (ImGui::MenuItem("Plus rapide", "Page précédente", false, sim.yearsPerSecond() < Sim::kMaxYearsPerSecond * 0.9999)) sim.stepRate(+1);
-        if (ImGui::MenuItem("Maintenant")) {
-            sim.years = kStartYears;
-            sim.backward = false;
-        }
-        if (ImGui::MenuItem("Aller à une date…")) ui.openDate = true;
-        ImGui::EndPopup();
+    if (iconButton("notes", ico::kInfo, "i", "Ce qui est mesuré, calculé ou supposé à cette date", ui.openNotes || (notToday && ImGui::IsPopupOpen("notes-date")), small))
+        ImGui::OpenPopup("notes-date");
+    const ImVec2 notesAnchor{ImGui::GetItemRectMax().x, ImGui::GetItemRectMin().y - px(ui, 10)};      // bulle au-dessus du bouton « i »
+    if (ui.openNotes) {
+        ImGui::OpenPopup("notes-date");
+        ui.openNotes = false;
+        ui.keepNotes = true;
     }
     if (ui.openDate) {
         ImGui::OpenPopup("date");
         ui.openDate = false;
     }
-    // Curseur de vitesse, libre (Marc, 18/11/2026) : échelle logarithmique, du temps réel à 1 milliard d'années par seconde.
-    // Le résultat ne dépend pas de la vitesse : à une date donnée, l'image est la même (fenetre.cpp, film_carte.h).
+
+    // Ligne 2 : vitesse, curseur libre (Marc, 18/11/2026), échelle logarithmique. À une date donnée, l'image ne dépend
+    // pas de la vitesse (fenetre.cpp, film_carte.h).
+    ImGui::Dummy({0, px(ui, 2)});
     {
         const float lo = static_cast<float>(std::log10(kRates[0].yearsPerSecond)), hi = static_cast<float>(std::log10(Sim::kMaxYearsPerSecond));
         float lg = static_cast<float>(std::log10(sim.yearsPerSecond()));
         const std::string label = rateText(sim.yearsPerSecond());
-        ImGui::SetCursorPosX(px(ui, 14));
-        ImGui::SetNextItemWidth(rowW);
+        ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(theme::v4(theme::kFaint), "VITESSE");
+        ImGui::PopFont();
+        ImGui::SameLine();
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ImGui::GetFrameHeight() * 0.5f);
+        ImGui::SetNextItemWidth(-small - ImGui::GetStyle().ItemSpacing.x);
         if (ImGui::SliderFloat("##curseur-vitesse", &lg, lo, hi, label.c_str(), ImGuiSliderFlags_NoRoundToFormat | ImGuiSliderFlags_AlwaysClamp))
             sim.speed = std::clamp(std::pow(10.0, static_cast<double>(lg)), kRates[0].yearsPerSecond, Sim::kMaxYearsPerSecond);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Vitesse du temps, au choix : glisser (Ctrl + clic pour taper une valeur)");
-    }
-    dateJumpPopup(sim, ui);
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);      // les remarques passent à la ligne : la barre garde sa largeur
-    if (!sim.spk) ImGui::TextDisabled("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.");
-    // Ce qui ne vaut qu'à une autre date qu'aujourd'hui : rangé sous un titre qui se déplie (la barre restait sinon
-    // haute de sept paragraphes en temps profond). Seul ce qui est en cours reste toujours visible.
-    if (sim.filmEdgeYears != 0) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.43f, 1.0f));
-        ImGui::TextUnformatted(("Fin du film calculé : " + frDate(sim.filmEdgeYears) + ". Le grand calcul continue ; la date ira plus loin à mesure qu'il avance.").c_str());
-        ImGui::PopStyleColor();
-    } else if (sim.timeHeld) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.43f, 1.0f));
-        ImGui::TextUnformatted(("Calcul exact en cours : date demandée " + frDate(sim.yearsGoal) + " ; la date montrée avance au rythme du calcul.").c_str());
-        ImGui::PopStyleColor();
-    } else if (sim.orbitLagSteps > 0) {
-        ImGui::TextDisabled("Calcul exact des orbites en cours : encore %s millions d'années à parcourir.", frInt(static_cast<double>(sim.orbitLagSteps)).c_str());
-    }
-    if (ui.openNotes) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
-    if (std::fabs(sim.years - kStartYears) >= 1.0 && ImGui::CollapsingHeader("Ce qui est mesuré, calculé ou supposé à cette date")) {
-        if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim)) {
-            ImGui::TextDisabled("Planètes non montrées à cette date : leur calcul couvre 10 millions d'années avant et après aujourd'hui.");
-            chaosNote(sim);
+        ImGui::PopStyleVar();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("Vitesse du temps : glisser (Ctrl + clic pour taper une valeur ; Page préc. / suiv.)");
+        ImGui::SameLine();
+        if (iconButton("vitesses", ico::kChevronDown, "v", "Vitesses toutes faites", false, small)) ImGui::OpenPopup("vitesses");
+        if (ImGui::BeginPopup("vitesses")) {
+            for (int i = 0; i < kRateCount; ++i)
+                if (ImGui::MenuItem(kRates[i].label, nullptr, sim.speed <= 0 && i == sim.rate)) {
+                    sim.rate = i;
+                    sim.speed = 0;
+                }
+            ImGui::EndPopup();
         }
-        else if (!sim.ephemValid && !sim.outer) ImGui::TextDisabled("Hors de 1550-2650 (plage des éphémérides de la NASA) : calcul des planètes en préparation.");
-        else if (!sim.ephemValid)
-            ImGui::TextDisabled("Hors de 1550-2650 : planètes calculées ici (gravité mutuelle partie des éphémérides de la NASA) ; lunes et orbites non montrées.");
-        else ImGui::TextDisabled("Planètes, Lune et lunes : éphémérides de la NASA, lues telles quelles.");
-        deepTimeNote(sim);
     }
+
+    // Ce qui est en cours reste toujours écrit, en ambre ; le reste est derrière le bouton « i ».
+    ImGui::PushTextWrapPos(0.0f);
+    if (!sim.spk) smallNote("Planètes absentes : le fichier d'éphémérides de la NASA (de440.bsp) manque à côté du programme.", theme::kSuppose);
+    if (sim.filmEdgeYears != 0)
+        smallNote(("Fin du film calculé : " + frDate(sim.filmEdgeYears) + ". Le grand calcul continue ; la date ira plus loin à mesure qu'il avance.").c_str(), theme::kAccent);
+    else if (sim.timeHeld)
+        smallNote(("Calcul exact en cours : date demandée " + frDate(sim.yearsGoal) + " ; la date montrée avance au rythme du calcul.").c_str(), theme::kAccent);
+    else if (sim.orbitLagSteps > 0)
+        smallNote(("Calcul exact des orbites en cours : encore " + frInt(static_cast<double>(sim.orbitLagSteps)) + " millions d'années à parcourir.").c_str());
     ImGui::PopTextWrapPos();
+
+    dateJumpPopup(sim, ui);
+    ImGui::SetNextWindowSizeConstraints({px(ui, 420), 0}, {px(ui, 620), FLT_MAX});
+    if (ui.keepNotes) ImGui::OpenPopup("notes-date");
+    ImGui::SetNextWindowPos(notesAnchor, ImGuiCond_Appearing, {1, 1});
+    if (ImGui::BeginPopup("notes-date")) {
+        ImGui::PushTextWrapPos(px(ui, 600));
+        ImGui::PushFont(gFontBold ? gFontBold : ImGui::GetFont());
+        ImGui::TextUnformatted(notToday ? "À cette date : mesuré, calculé ou supposé" : "Aujourd'hui");
+        ImGui::PopFont();
+        ImGui::Separator();
+        if (notToday) timeNotes(sim);
+        else ImGui::TextDisabled("Aujourd'hui, planètes, étoiles et galaxies sont à leur place mesurée. Fais avancer ou reculer le temps : "
+                                 "ce bouton dira alors ce qui est calculé et ce qui est supposé.");
+        ImGui::PopTextWrapPos();
+        ImGui::EndPopup();
+    }
+    ui.dockTop = ImGui::GetWindowPos().y;
+    ui.dockLeft = ImGui::GetWindowPos().x;
     ui.timeW = ImGui::GetWindowWidth();
-    ui.timeRight = ImGui::GetWindowPos().x + ImGui::GetWindowWidth();
-    ui.timeBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 // ---------------------------------------------------------------- fiche de l'astre suivi

@@ -35,6 +35,8 @@
 #include "film_carte.h"
 #include "rendu_fenetre.h"
 #include "pose_auto.h"
+#include "chargement.h"
+#include "nebuleuses.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -121,6 +123,9 @@ static std::string sansAccents(const std::string& t) {
 int runWindow(const WindowOptions& opt) {
     const bool test = opt.testFrames > 0;
     gWindowMode = !test;      // dès le début : même un fichier d'étoiles absent est dit à l'écran
+    chargement::Ecran ecran;      // écran de chargement (chargement.h) : rien ne s'ouvre en contrôle
+    ecran.ouvrir(!test);
+    ecran.etape(L"Catalogue d'étoiles", 0.01f);
     const Stars stars = openStars(opt.starsPath.c_str());
 
     // Les données sont rangées à côté du fichier d'étoiles : noms des étoiles, éphémérides de la NASA.
@@ -128,6 +133,7 @@ int runWindow(const WindowOptions& opt) {
     const std::string dataDir = cut == std::string::npos ? std::string(".") : opt.starsPath.substr(0, cut);
     eph::Set spk;
     std::string spkError;
+    ecran.etape(L"Éphémérides de la NASA", 0.04f);
     const bool hasSpk = spk.add(dataDir + "/de440.bsp", spkError);      // absent : le simulateur le dit à l'écran et montre les étoiles
     if (hasSpk)      // lunes : chaque fichier présent ajoute les siennes ; un fichier absent ne bloque rien
         for (const char* f : {"mar099s.bsp", "jup365.bsp", "sat441.bsp", "nep097.bsp", "plu060.bsp",      // grandes lunes
@@ -168,6 +174,8 @@ int runWindow(const WindowOptions& opt) {
                 outerReady = true;
             }
         });
+    gFiches.demarrer(dataDir);      // fiches complètes des astres (fiches/*.tsv), lues en tâche de fond
+    ecran.etape(L"Planètes, lunes, étoiles et galaxies nommées", 0.08f);
     sim.loadBodies(dataDir + "/etoiles_noms.tsv", dataDir + "/galaxies_noms.tsv", dataDir + "/planetes.tsv", dataDir + "/lunes.tsv");
     // Cycle de vie du Soleil et des étoiles nommées (cycle_appli.h) : facultatif, sans vie_cycle.bin rien ne change.
     static CycleAppli cycleApp;
@@ -255,14 +263,8 @@ int runWindow(const WindowOptions& opt) {
                                 nullptr, wc.hInstance, nullptr);
     if (!hwnd) fail("création de la fenêtre");
     SetWindowLongPtrA(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&input));
-    if (!test) {
-        // Deux appels : Windows impose au premier l'état demandé par le lanceur (un raccourci « réduit » donnait une
-        // fenêtre réduite, sans surface à dessiner). Le second s'applique toujours. En contrôle, rien ne s'ouvre.
-        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
-        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
-        SetForegroundWindow(hwnd);
-    }
 
+    ecran.etape(L"Carte graphique", 0.14f);
     const Gpu g = createGpu(true);
     VkWin32SurfaceCreateInfoKHR sci{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
     sci.hinstance = wc.hInstance;
@@ -282,13 +284,16 @@ int runWindow(const WindowOptions& opt) {
     }
     // Étoiles Gaia (98 millions) et Voie lactée en volume (fil « Voie lactée et étoiles Gaia ») : facultatifs. Quand Gaia est
     // là, le dessin d'origine ne garde que le catalogue principal (Gaia en a retiré les doublons).
+    ecran.etape(L"Étoiles Gaia : 98 millions, une par une", 0.20f);
     GaiaRenderer gaia;
     const bool gaiaOk = gaia.create(g, dataDir + "/gaia.bin", HdrTarget::kFormat);
+    ecran.etape(L"Étoiles Gaia : 94 millions de plus", 0.36f);
     GaiaRenderer gaiaB;      // 93,9 M étoiles à parallaxe entre 5 et 10 erreurs (gaia_b.bin), si le fichier est là
     const bool gaiaBOk = gaiaOk && gaiaB.create(g, dataDir + "/gaia_b.bin", HdrTarget::kFormat, false);
     // Voie lactée faite d'étoiles (Marc, 13/11/2026 : « pas une image ») : 4 M étoiles visibles du modèle
     // (pipeline/natif/etoiles_visibles.py, contrat docs/contrat-etoiles-visibles.md), au format de Gaia : niveaux de
     // détail par l'arbre en huit, orbites exactes sur la carte graphique, sans lumière additionnée en double.
+    ecran.etape(L"Voie lactée : étoiles du modèle", 0.50f);
     GaiaRenderer milkyWayStars;
     const bool milkyWayStarsOk = milkyWayStars.create(g, dataDir + "/vl_etoiles.bin", HdrTarget::kFormat, true, false);
     sim.milkyWayStarCount = milkyWayStarsOk ? milkyWayStars.count : 0;
@@ -297,6 +302,7 @@ int runWindow(const WindowOptions& opt) {
     vieillissement.load(dataDir + "/vieillissement.tsv");
     if (milkyWayStarsOk) milkyWayStars.enableSubClouds(16);      // chaque traceur : 16 étoiles en s'approchant (gaia.vert)
     // Film du Groupe local (film_etoiles.h) : s'il est là, ces étoiles le suivent aux dates qu'il couvre.
+    ecran.etape(L"Film de la rencontre avec Andromède", 0.62f);
     FilmStars filmStars;
     std::vector<float> filmStates;
     const bool filmStarsOk = milkyWayStarsOk && milkyWayStars.externalStatesFit() && filmStars.load(dataDir, milkyWayStars.starCount());
@@ -373,7 +379,10 @@ int runWindow(const WindowOptions& opt) {
     sim.gaiaRebalancedShift = gaiaOk ? gaia.rebalancedShift : 0;
     sim.hasMilkyWay = milkyWay.ready;
     StarRenderer sr;
-    sr.create(g, stars, HdrTarget::kFormat, gaiaOk);
+    std::vector<int64_t> starDoublesHidden;
+    for (const auto& [gaiaIdx, mainIdx] : sim.starDoubles) starDoublesHidden.push_back(gaiaIdx);
+    std::printf("etoiles en double (hotes d'exoplanetes) : %zu points Gaia caches\n", starDoublesHidden.size());
+    sr.create(g, stars, HdrTarget::kFormat, gaiaOk, &starDoublesHidden);
     // Ciel dans une autre lumière (radio, infrarouge, X…) : cartes mesurées ciel_NOM.bin, une à la fois (fil longueurs d'onde).
     SkyBandRenderer sky;
     sky.create(g, HdrTarget::kFormat);
@@ -391,7 +400,9 @@ int runWindow(const WindowOptions& opt) {
     // Galaxies naines nommées sans forme ni photo : nuage tiré de leurs paramètres mesurés (galaxies_naines.h).
     // Planètes des autres étoiles (exoplanetes.h) : liste dans la fiche de leur étoile, dessin quand on s'en approche.
     Exoplanets exoplanets;
+    ecran.etape(L"Exoplanètes, trous noirs, galaxies naines", 0.76f);
     if (exoplanets.load(dataDir + "/exoplanetes_app.tsv")) {
+        exoplanets.mergeDoubles(sim.starDoubles);      // planètes d'un double rangées sous l'étoile du catalogue principal
         exoplanets.create(g);
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
             if (const auto* ps = exoplanets.of(sim, i)) {
@@ -420,12 +431,19 @@ int runWindow(const WindowOptions& opt) {
     if (openGalaxies(dataDir + "/galaxies.bin", galaxyFile)) galaxies.create(g, galaxyFile, HdrTarget::kFormat);
     // Galaxies de forme mesurée faites de particules (galaxies_formes.h) : 532 427 du SGA-2020 et d'HyperLEDA.
     GalaxyShapes galaxyShapes;
+    ecran.etape(L"Galaxies : formes et tailles mesurées", 0.85f);
     galaxyShapes.create(g, dataDir + "/galaxies_formes.bin", HdrTarget::kFormat);
     sim.galaxyShapeCount = galaxyShapes.count;
+    galaxies.setCosmology(sim.cosmology, 1.0);      // table d'aujourd'hui, pour poser les noms sur les formes
+    std::printf("galaxies proches : distance de z remplacee par Cosmicflows-4 : %d\n", galaxyShapes.fixNearbyDistances(sim.bodies));
+    std::printf("noms poses au centre de leur forme : %d\n", galaxyShapes.snapNames(sim.bodies, galaxies));
     // Grandes structures (Laniakea, flot, vides) et nuage d'Oort (modèle) : structures.h, structures.bin.
     StructureRenderer structuresR;
     const bool structuresOk = structuresR.create(g, dataDir, HdrTarget::kFormat);
     sim.structures.loaded = structuresOk;
+    NebulaRenderer nebulae;      // nébuleuses planétaires et nuages moléculaires à distance publiée (nebuleuses.h)
+    if (nebulae.create(g, dataDir + "/nebuleuses.bin", HdrTarget::kFormat))
+        std::printf("nebuleuses : %u planetaires, %u nuages moleculaires\n", nebulae.planetary, nebulae.clouds);
     sim.structures.oortComets = structuresR.oortCount;
     sim.structures.flowLines = structuresR.flowLines;
     for (int k = 0; k < 9; ++k) sim.structures.triangles[k] = structuresR.meshTriangles[k];
@@ -471,8 +489,8 @@ int runWindow(const WindowOptions& opt) {
     double galaxyScaleAt = 1e300;      // date (années) du dernier calcul du facteur d'échelle de l'univers
     SphereRenderer spheres;
     spheres.create(g, HdrTarget::kFormat, dataDir + "/textures");
-    NebuleuseRenderer nebulae;      // matière autour des étoiles (cycle_nebuleuse.h)
-    nebulae.create(g, HdrTarget::kFormat);
+    NebuleuseRenderer starMatter;      // matière autour des étoiles (cycle_nebuleuse.h)
+    starMatter.create(g, HdrTarget::kFormat);
     std::vector<bool> asSphere;
     if (test)      // contrôle : on attend les cartes de surface, pour une image reproductible
         for (int tries = 0; tries < 3000 && !spheres.allLoaded(); ++tries) {
@@ -493,6 +511,7 @@ int runWindow(const WindowOptions& opt) {
     autoPose.bindSource(g, hdr.view);
 
     // Interface.
+    ecran.etape(L"Interface", 0.95f);
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;      // aucun fichier de réglages écrit sur le disque
@@ -586,6 +605,7 @@ int runWindow(const WindowOptions& opt) {
         double d0 = 0, d1 = 0;
         int n = 0, k = -1;
         std::string dir;
+        std::vector<double> dates;      // balayage dans le temps (UNIVERS_BALAYAGE_DATES) : une vue par date, distance fixe
         bool next(const Gpu& gg, const Target& img, VkExtent2D ext, Sim& s) {
             if (n <= 0) return false;
             if (k >= 0) {
@@ -593,13 +613,30 @@ int runWindow(const WindowOptions& opt) {
                 char name[32];
                 std::snprintf(name, sizeof(name), "/b_%03d.ppm", k);
                 writeCapture(gg, img, ext, dir + name);
-                std::printf("balayage %d : distance %.4g al, pose automatique %.4g\n", k, s.dist, s.autoPose);
+                std::printf("balayage %d : distance %.4g al, date %.6g, pose automatique %.4g\n", k, s.dist, s.years, s.autoPose);
             }
             if (++k >= n) return false;
-            s.dist = n > 1 ? d0 * std::pow(d1 / d0, static_cast<double>(k) / (n - 1)) : d0;
+            if (!dates.empty()) s.years = dates[static_cast<size_t>(k)];
+            else s.dist = n > 1 ? d0 * std::pow(d1 / d0, static_cast<double>(k) / (n - 1)) : d0;
             return true;
         }
     } sweep;
+    // UNIVERS_BALAYAGE_DATES=<dossier>|<date>,<date>,... : une vue par date (années depuis J2000), à la distance de départ
+    if (const char* b = std::getenv("UNIVERS_BALAYAGE_DATES"); b && test) {
+        const std::string s = b;
+        const size_t bar = s.find('|');
+        if (bar != std::string::npos) {
+            sweep.dir = s.substr(0, bar);
+            for (size_t from = bar + 1; from < s.size();) {
+                const size_t c = s.find(',', from);
+                sweep.dates.push_back(std::atof(s.substr(from, c == std::string::npos ? std::string::npos : c - from).c_str()));
+                if (c == std::string::npos) break;
+                from = c + 1;
+            }
+            sweep.n = static_cast<int>(sweep.dates.size());
+            sweep.next(g, final, sc.extent, sim);
+        }
+    }
     if (const char* b = std::getenv("UNIVERS_BALAYAGE"); b && test) {
         char dir[512] = {};
         if (std::sscanf(b, "%lf:%lf:%d:%511s", &sweep.d0, &sweep.d1, &sweep.n, dir) == 4 && sweep.d0 > 0 && sweep.d1 > 0) {
@@ -612,6 +649,17 @@ int runWindow(const WindowOptions& opt) {
     long pathFrames = 0;
     double titleTimer = 0;
     bool drawable = true;
+    // Tout est chargé : l'écran de chargement se ferme, la fenêtre de l'appli apparaît à sa place.
+    ecran.etape(L"Prêt", 1.0f);
+    ecran.fermer();
+    if (!test) {
+        // Deux appels : Windows impose au premier l'état demandé par le lanceur (un raccourci « réduit » donnait une
+        // fenêtre réduite, sans surface à dessiner). Le second s'applique toujours. En contrôle, rien ne s'ouvre.
+        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+        SetForegroundWindow(hwnd);
+        input.resized = true;      // la fenêtre a pris sa vraie taille : refaire la surface de dessin
+    }
     while (!input.quit) {
         pumpMessages();
         if (input.resized || !drawable) {
@@ -868,9 +916,9 @@ int runWindow(const WindowOptions& opt) {
         // mesure de l'image précédente, lue sans attente (la barrière vient d'être passée) ; relevée seulement aux échelles des
         // galaxies (au-delà de 10 millions d'al regardés), jamais pour les étoiles ; balayage du zoom du 20/11 : un plafond fixe
         // dès 10 Mal donnait ×2,1 d'éclat d'un cran de molette au suivant
-        // plafond qui monte comme l'échelle regardée (1 à 10 Mal, 10 à 100 Mal, 1 000 à 10 Gal) : au plus ×1,26 d'un cran de
+        // plafond : ×4 pour les étoiles, puis comme l'échelle regardée (10 à 100 Mal, 1 000 à 10 Gal) : au plus ×1,26 d'un cran de
         // molette au suivant (en carré, le balayage mesurait ×1,6 par cran)
-        autoPose.update(dt, test, true, std::clamp(sim.dist / 1.0e7, 1.0, pose_auto::kPoseMaxGalaxies));
+        autoPose.update(dt, test, true, std::clamp(sim.dist / 1.0e7, 4.0, pose_auto::kPoseMaxGalaxies));      // ×4 au plus pour les étoiles
         sim.autoPose = autoPose.pose;
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
         // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
@@ -1024,6 +1072,13 @@ int runWindow(const WindowOptions& opt) {
             // avec leurs étoiles visibles (autour d'aujourd'hui), la photo n'a que la part qu'elles laissent
             if (sim.milkyWayModelShare > 0)
                 milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(sim.milkyWayModelShare), sim.years);
+            // Avec les étoiles du modèle : leur gaz ionisé (régions HII) seulement, autour d'aujourd'hui (les bras de la grille
+            // sont ceux d'aujourd'hui ; fondu de 1 à 3 Ma comme les traceurs des bras)
+            sim.gasShare = sim.showGas && milkyWayStarsOk && sim.milkyWayModelShare <= 0
+                               ? sim.starShare() * std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0)
+                               : 0.0;
+            if (sim.gasShare > 0)
+                milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0] * static_cast<float>(0.3 * sim.gasShare), sim.years, true);      // 0,3 : sans quoi le gaz couvrait les étoiles de taches roses (contrôle en image)
             gaia.improved = sim.bestLook;
             gaiaSky.update(cam, sim.fovDeg, !sim.deepTime());
             gaia.hideSkyOnly = gaiaSky.active && gaiaSky.shownStars > 0;
@@ -1089,6 +1144,19 @@ int runWindow(const WindowOptions& opt) {
             clones.draw(cmd);
             armTracers.draw(cmd);
         }
+        if (!skyOnly && sim.showNebulae) {      // après les étoiles et les galaxies (la poussière les assombrit), avant les planètes
+            const double camSun = std::sqrt(dot(cam.pos, cam.pos));
+            const double part = std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0) *
+                                std::clamp((6.0e4 - camSun) / 3.0e4, 0.0, 1.0);
+            nebulae.draw(cmd, cam, sc.extent.width, sc.extent.height, part);
+            // Poussière MESURÉE en 3D (Edenhofer et al. 2024, grille locale de voie_lactee.bin) : vue de loin (plus de 4 000 al
+            // du Soleil, fondu jusqu'à 6 500), ses nuages assombrissent les étoiles derrière eux. Pas de près : les magnitudes
+            // mesurées contiennent déjà la poussière vue du Soleil, elle serait comptée deux fois.
+            const double dustPart = std::clamp((camSun - 4000.0) / 2500.0, 0.0, 1.0) * std::clamp((2.0e5 - camSun) / 1.0e5, 0.0, 1.0) *
+                                    std::clamp((kLinearLimitYears - std::fabs(sim.years - kStartYears)) / (kLinearLimitYears - 1.0e6), 0.0, 1.0);
+            if (dustPart > 0.002) milkyWay.draw(cmd, cam, sc.extent.width, sc.extent.height, static_cast<float>(dustPart), sim.years, false, true);
+            sr.bind(cmd, pc, sc.extent.width, sc.extent.height);      // le dessin des étoiles reprend ensuite
+        }
         asteroids.draw(cmd, cam, {cam.pos.x / kAuInLy, cam.pos.y / kAuInLy, cam.pos.z / kAuInLy}, 2451545.0 + sim.years * 365.25 - asteroids.epochJd,
                        sc.extent.width, sc.extent.height, asteroids.ready && !skyOnly ? pc.par[0] * static_cast<float>(sim.asteroidGain(asteroids.epochJd)) : 0.0f);      // pose des étoiles × fondu en temps (audit A6, C4) ; seulement en lumière visible
         // (l'ordre compte : après les astéroïdes, le dessin des étoiles n'est plus lié ; les planètes le relient)
@@ -1098,7 +1166,7 @@ int runWindow(const WindowOptions& opt) {
         if (!skyOnly) blackHoles.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
         if (!skyOnly) exoplanets.draw(cmd, sr, pc, sc.extent.width, sc.extent.height);
         spheres.draw(cmd, sc.extent.width, sc.extent.height);
-        if (!skyOnly) nebulae.draw(cmd, cycleApp, sim, cam, sc.extent.width, sc.extent.height, pc.par[0]);      // nuage, vents, nébuleuse, reste de supernova
+        if (!skyOnly) starMatter.draw(cmd, cycleApp, sim, cam, sc.extent.width, sc.extent.height, pc.par[0]);      // nuage, vents, nébuleuse, reste de supernova
         if (planets.count > planets.backCount) {      // lunes et planètes devant la sphère la plus proche (audit E2)
             sr.bind(cmd, pc, sc.extent.width, sc.extent.height);
             planets.draw(cmd, true);
@@ -1194,6 +1262,13 @@ int runWindow(const WindowOptions& opt) {
             const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             std::printf("clic sur un asteroide : %.1f ms pour %llu orbites (trouve : %d)\n", ms, static_cast<unsigned long long>(sim.asteroidCat->n), k);
         }
+        if (!opt.capture.empty() && sim.stars) {      // mesure : durée d'une recherche de l'étoile sous un clic au centre de l'image
+            const auto t0 = std::chrono::steady_clock::now();
+            const int64_t k = sim.nearestCatalogStar(sim.camera(static_cast<double>(sc.extent.width) / sc.extent.height), sc.extent.width * 0.5,
+                                                     sc.extent.height * 0.5, sc.extent.width, sc.extent.height, 12.0, 99.0);
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            std::printf("clic sur une etoile : %.1f ms pour %llu etoiles (trouvee : %lld)\n", ms, static_cast<unsigned long long>(sim.stars->n), static_cast<long long>(k));
+        }
         std::printf("premier passage d'Andromede : %.3f milliards d'annees ; etoiles mesurees montrees jusqu'a %.3f (fondu depuis %.3f) ; part des etoiles mesurees a cette date : %.2f\n",
                     sim.firstPassageGa, sim.starEraEndYears / 1.0e9, sim.starEraFadeYears / 1.0e9, sim.starShare());
         if (milkyWayStarsOk)
@@ -1230,6 +1305,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySemaphore(g.dev, rendered, nullptr);
     screen.release(g);
     autoPose.release(g);
+    nebulae.release(g);
     planets.release(g);
     dwarfGalaxies.release(g);
     blackHoles.release(g);
@@ -1252,7 +1328,7 @@ int runWindow(const WindowOptions& opt) {
     galaxyShapes.release(g);
     structuresR.release(g);
     spheres.release(g);
-    nebulae.release(g);
+    starMatter.release(g);
     if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
         const uint32_t n = std::min<uint32_t>(20000, orbits.count);
         const std::vector<float> got = orbits.readBack(g, n);

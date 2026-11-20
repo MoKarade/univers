@@ -45,9 +45,6 @@ void addAsteroidResults(const Sim& sim, UiState& ui, std::vector<int>& found) {
     for (const int k : ui.astFound) found.push_back(-(k + 2));
 }
 
-void lightButton(Sim& sim, UiState& ui);      // interface_lumiere.h
-void faceOnButton(Sim& sim, UiState& ui);     // interface_bras.h
-void viewModeButton(Sim& sim);                // interface_bras.h
 void faceOnGalaxy(Sim& sim, UiState& ui);     // interface_bras.h
 
 // Aller à un résultat : un astre de la liste, ou un astéroïde du catalogue (désigné d'abord).
@@ -69,32 +66,70 @@ void goToBody(Sim& sim, UiState& ui, int i, double distLy = 0) {
     sim.flyTo(i, distLy);
 }
 
-// Une ligne de résultat : le nom, puis en gris sa nature et sa distance au Soleil.
-bool asteroidRow(const Sim& sim, const UiState& ui, int k, bool selected) {
-    const std::string name = sim.asteroidCat->label(static_cast<size_t>(k));
-    ImGui::PushID(-k - 2);
-    const float x0 = ImGui::GetCursorPosX();
-    const bool hit = ImGui::Selectable(name.c_str(), selected, ImGuiSelectableFlags_AllowOverlap, {px(ui, 440), 0});
-    ImGui::SameLine(x0 + ImGui::CalcTextSize(name.c_str()).x + px(ui, 12));
-    const asteroides::Catalogue& c = *sim.asteroidCat;
-    const char* what = c.isComet(static_cast<size_t>(k)) ? "comète" : "astéroïde";
-    if (c.eccentricity(static_cast<size_t>(k)) >= 1.0) ImGui::TextDisabled("%s, orbite ouverte", what);
-    else ImGui::TextDisabled("%s, orbite à %s fois la distance Terre-Soleil", what, frNum(c.semiMajorAxisAu(static_cast<size_t>(k))).c_str());
+// Couleur du petit rond devant un résultat : la famille de l'astre, la même partout dans l'interface.
+ImU32 kindColor(const Body& b) {
+    switch (b.kind) {
+        case Kind::Sun: return theme::kAccent;
+        case Kind::Planet: return b.parent > 0 ? IM_COL32(170, 182, 205, 255) : IM_COL32(110, 170, 255, 255);
+        case Kind::Star: return IM_COL32(255, 236, 200, 255);
+        case Kind::Galaxy: return IM_COL32(186, 146, 255, 255);
+        case Kind::Probe: return theme::kMesure;
+        default: return IM_COL32(150, 150, 160, 255);
+    }
+}
+
+// Une ligne de résultat : rond de couleur, nom, puis en petit gris sa nature et sa distance (calée à droite).
+bool richRow(const UiState& ui, const char* id, const std::string& name, const std::string& detail, ImU32 dot, bool selected) {
+    ImGui::PushID(id);
+    const float wRow = std::max(ImGui::GetContentRegionAvail().x, px(ui, 380));
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float hRow = ImGui::GetTextLineHeight() + px(ui, 10);
+    const bool hit = ImGui::Selectable("##r", selected, ImGuiSelectableFlags_None, {wRow, hRow});
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float cy = p.y + hRow * 0.5f;
+    dl->AddCircleFilled({p.x + px(ui, 10), cy}, px(ui, 4), dot);
+    dl->AddText({p.x + px(ui, 24), cy - ImGui::GetTextLineHeight() * 0.5f}, theme::kText, name.c_str());
+    if (!detail.empty()) {
+        ImFont* f = gFontSmall ? gFontSmall : ImGui::GetFont();
+        const float fs = f->FontSize * ImGui::GetIO().FontGlobalScale;
+        const ImVec2 ds = f->CalcTextSizeA(fs, FLT_MAX, 0, detail.c_str());
+        const float nameRight = p.x + px(ui, 24) + ImGui::CalcTextSize(name.c_str()).x + px(ui, 16);
+        const float dx = std::max(nameRight, p.x + wRow - ds.x - px(ui, 8));
+        dl->AddText(f, fs, {dx, cy - fs * 0.5f}, theme::kMuted, detail.c_str());
+    }
     ImGui::PopID();
     return hit;
+}
+
+bool asteroidRow(const Sim& sim, const UiState& ui, int k, bool selected) {
+    const asteroides::Catalogue& c = *sim.asteroidCat;
+    const char* what = c.isComet(static_cast<size_t>(k)) ? "comète" : "astéroïde";
+    const std::string detail = c.eccentricity(static_cast<size_t>(k)) >= 1.0 ? std::string(what) + ", orbite ouverte"
+                                                                              : std::string(what) + ", à " + frNum(c.semiMajorAxisAu(static_cast<size_t>(k))) + " UA du Soleil";
+    return richRow(ui, ("a" + std::to_string(k)).c_str(), sim.asteroidCat->label(static_cast<size_t>(k)), detail, IM_COL32(150, 150, 160, 255), selected);
 }
 
 bool resultRow(const Sim& sim, const UiState& ui, int i, bool selected) {
     if (i < 0) return asteroidRow(sim, ui, -i - 2, selected);
     const Body& b = sim.bodies[static_cast<size_t>(i)];
-    ImGui::PushID(i);
-    const float x0 = ImGui::GetCursorPosX();
-    const bool hit = ImGui::Selectable(b.name.c_str(), selected, ImGuiSelectableFlags_AllowOverlap, {px(ui, 440), 0});
-    ImGui::SameLine(x0 + ImGui::CalcTextSize(b.name.c_str()).x + px(ui, 12));
-    const std::string where = b.kind == Kind::Sun ? std::string("notre étoile") : natureOf(b) + ", " + frDistance(std::sqrt(dot(sim.position(i), sim.position(i))));
-    ImGui::TextDisabled("%s", where.c_str());
-    ImGui::PopID();
-    return hit;
+    const std::string where = b.kind == Kind::Sun ? std::string("notre étoile") : natureOf(b) + "  ·  " + frDistance(std::sqrt(dot(sim.position(i), sim.position(i))));
+    return richRow(ui, std::to_string(i).c_str(), b.name, where, kindColor(b), selected);
+}
+
+// Raccourcis montrés quand le champ de recherche est vide et choisi : les astres les plus demandés.
+const char* const kSuggestions[] = {"Soleil", "Terre", "Lune", "Mars", "Jupiter", "Saturne", "Centre de la Voie lactée", "Andromède (M31)"};
+
+void drawSuggestions(Sim& sim, UiState& ui) {
+    sectionLabel("Raccourcis");
+    for (const char* n : kSuggestions) {
+        const int i = bodyByName(sim, n);
+        if (i < 0 || !sim.visible(i)) continue;
+        if (resultRow(sim, ui, i, false)) {
+            goToBody(sim, ui, i);
+            return;
+        }
+    }
+    smallNote("Tape un nom : planète, lune, étoile, galaxie, sonde, astéroïde ou comète.", theme::kFaint);
 }
 
 void drawSearchResults(Sim& sim, UiState& ui, bool inputActive, bool entered) {
@@ -111,13 +146,14 @@ void drawSearchResults(Sim& sim, UiState& ui, bool inputActive, bool entered) {
         goToResult(sim, ui, found[static_cast<size_t>(ui.searchSel)]);
         return;
     }
+    ImGui::Spacing();
     for (int k = 0; k < n; ++k)
         if (resultRow(sim, ui, found[static_cast<size_t>(k)], k == ui.searchSel)) {
             goToResult(sim, ui, found[static_cast<size_t>(k)]);
             return;
         }
-    if (!n) ImGui::TextDisabled("Aucun astre nommé ne correspond.");
-    else ImGui::TextDisabled("Entrée : y aller   •   flèches : choisir   •   Échap : fermer");
+    if (!n) smallNote("Aucun astre ne porte ce nom ici.");
+    else smallNote("Entrée : y aller   ·   ↑ ↓ : choisir   ·   Échap : effacer", theme::kFaint);
 }
 
 void goToResult(Sim& sim, UiState& ui, int r) {
@@ -197,6 +233,12 @@ void goToMenuProbes(Sim& sim, UiState& ui) {
     ImGui::EndMenu();
 }
 
+// Ouvre un menu sous le bouton qu'on vient de dessiner.
+void popupUnder(UiState& ui, const char* id) {
+    ui.goToAnchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + px(ui, 8)};
+    ImGui::OpenPopup(id);
+}
+
 void drawGoToMenu(Sim& sim, UiState& ui) {
     if (ui.openGoTo || ui.keepGoTo) {
         ImGui::OpenPopup("aller");
@@ -204,7 +246,7 @@ void drawGoToMenu(Sim& sim, UiState& ui) {
     }
     ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
     if (!ImGui::BeginPopup("aller")) return;
-    ImGui::TextDisabled(sim.visible(0) ? "Échelles (vues depuis le Soleil)" : "Échelles (vues depuis le centre de la Voie lactée)");
+    sectionLabel(sim.visible(0) ? "Échelles, vues depuis le Soleil" : "Échelles, vues depuis le centre de la Voie lactée");
     for (int k = 0; k < kScaleCount; ++k) {
         const char key[2] = {static_cast<char>('1' + k), 0};
         if (ImGui::MenuItem(kScales[k].label, key)) {
@@ -214,86 +256,149 @@ void drawGoToMenu(Sim& sim, UiState& ui) {
         }
     }
     ImGui::Separator();
+    sectionLabel("Astres");
     goToMenuBodies(sim, ui);
     goToMenuProbes(sim, ui);
     ImGui::Separator();
-    if (ImGui::MenuItem("Visite guidée")) startTour(sim, ui, 0);
+    sectionLabel("Moments et vues");
     if (ImGui::BeginMenu("Éclipses de Soleil")) {
         const int next = nextEclipse(kStartYears);
         for (int k = 0; k < kEclipseCount; ++k)
             if (ImGui::MenuItem(kEclipses[k].label, k == next ? "la prochaine" : nullptr)) showEclipse(sim, ui, k);
         ImGui::Separator();
-        ImGui::TextDisabled("Calculées d'après les éphémérides de la NASA,");
-        ImGui::TextDisabled("contrôlées contre le catalogue des éclipses de la NASA.");
+        smallNote("Calculées d'après les éphémérides de la NASA, contrôlées contre le catalogue des éclipses de la NASA.");
         ImGui::EndMenu();
     }
+    if (ImGui::MenuItem("Voie lactée vue de face")) faceOnGalaxy(sim, ui);
     if (ui.gwCount > 0 && ImGui::MenuItem("Ondes gravitationnelles détectées", std::to_string(ui.gwCount).c_str())) ui.gwOpen = true;
-    if (ImGui::MenuItem("Revenir à la vue précédente", "Retour arrière", false, !sim.history.empty())) {
-        ui.tour = -1;
-        sim.back();
-    }
     ImGui::EndPopup();
 }
 
-// En haut à gauche : recherche, « Aller à », aide.
+// Ce qu'on affiche par-dessus le ciel : structures, nuage d'Oort, routes possibles, textes détaillés.
+void drawLayersMenu(Sim& sim, UiState& ui) {
+    ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
+    if (!ImGui::BeginPopup("couches")) return;
+    sectionLabel("Afficher par-dessus le ciel");
+    if (sim.structures.loaded && ImGui::MenuItem("Laniakea, son flot et les vides cosmiques", nullptr, sim.structures.showLarge))
+        sim.structures.showLarge = !sim.structures.showLarge;
+    if (sim.structures.loaded && sim.structures.showLarge &&
+        ImGui::MenuItem("Vides et superamas lointains (formes approchées en sphères)", nullptr, sim.structures.showSpheres))
+        sim.structures.showSpheres = !sim.structures.showSpheres;
+    if (ImGui::MenuItem("Nuage d'Oort (modèle)", nullptr, sim.structures.showOort)) sim.structures.showOort = !sim.structures.showOort;
+    if (ImGui::MenuItem("Gaz ionisé de la Voie lactée (régions HII)", nullptr, sim.showGas)) sim.showGas = !sim.showGas;
+    if (ImGui::MenuItem("Nébuleuses planétaires et nuages de poussière", nullptr, sim.showNebulae)) sim.showNebulae = !sim.showNebulae;
+    if (sim.cloneCount && ImGui::MenuItem("Incertitude : routes possibles des galaxies", nullptr, sim.showClones)) sim.showClones = !sim.showClones;
+    ImGui::Separator();
+    if (ImGui::MenuItem("Explications détaillées à l'écran", nullptr, ui.details)) ui.details = !ui.details;
+    ImGui::EndPopup();
+}
+
+// La lumière dans laquelle on voit le ciel (de la radio au gamma).
+void drawLightMenu(Sim& sim, UiState& ui) {
+    ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
+    if (!ImGui::BeginPopup("lumiere")) return;
+    if (ImGui::MenuItem("Visible (étoiles mesurées)", nullptr, sim.skyBand < 0)) sim.skyBand = -1;
+    ImGui::Separator();
+    sectionLabel("Cartes du ciel mesurées, vues depuis la Terre");
+    for (int k = 0; k < static_cast<int>(sim.skyBandLabels.size()); ++k)
+        if (ImGui::MenuItem(sim.skyBandLabels[static_cast<size_t>(k)].c_str(), nullptr, sim.skyBand == k)) sim.skyBand = k;
+    ImGui::Separator();
+    smallNote("F2 / F3 : lumière précédente / suivante", theme::kFaint);
+    ImGui::EndPopup();
+}
+
+// Exposition de l'image (le mode « 100 % mesuré / meilleur rendu » est en haut à droite).
+void drawExposureMenu(Sim& sim, UiState& ui) {
+    ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
+    if (!ImGui::BeginPopup("exposition")) return;
+    sectionLabel("Exposition de l'image");
+    if (ImGui::MenuItem("Exposition photo automatique", nullptr, sim.photoExposure)) sim.photoExposure = !sim.photoExposure;
+    if (ImGui::MenuItem("Plus claire (+1 IL)")) sim.exposureEv += 1.0;
+    if (ImGui::MenuItem("Plus sombre (−1 IL)")) sim.exposureEv -= 1.0;
+    if (sim.exposureEv != 0 && ImGui::MenuItem("Revenir à la pose normale")) sim.exposureEv = 0;
+    ImGui::Separator();
+    smallNote("Change seulement l'affichage : l'éclat calculé des astres reste le même.", theme::kFaint);
+    ImGui::EndPopup();
+}
+
+// Séparateur vertical fin entre deux groupes de la barre d'outils.
+void toolbarDivider(const UiState& ui) {
+    ImGui::SameLine(0, px(ui, 8));
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float hh = ImGui::GetFrameHeight();
+    ImGui::GetWindowDrawList()->AddLine({p.x, p.y + hh * 0.2f}, {p.x, p.y + hh * 0.8f}, theme::kLine, 1.0f);
+    ImGui::Dummy({1, hh});
+    ImGui::SameLine(0, px(ui, 8));
+}
+
+// En haut à gauche : la barre d'outils. Recherche (avec ses résultats en dessous), puis des boutons-icônes : retour,
+// aller à, affichage, lumière, exposition, visite guidée, aide. Chaque bouton ouvre son menu juste en dessous.
 void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     ImGui::SetNextWindowPos({px(ui, 16), px(ui, 16)});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 8), px(ui, 8)});
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {px(ui, 4), px(ui, 6)});
     ImGui::Begin("chercher", nullptr, fixed);
-    ImGui::SetNextItemWidth(px(ui, 300));
+    cardShadow();
+    // Champ de recherche, la loupe dessinée dedans.
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImGui::SetNextItemWidth(px(ui, 330));
     if (ui.focusSearch) {
         ImGui::SetKeyboardFocusHere();
         ui.focusSearch = false;
     }
-    const bool entered = ImGui::InputTextWithHint("##q", "Chercher : tape un nom (ex. Saturne)", ui.search, sizeof(ui.search),
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {px(ui, gIcons ? 36 : 12), ImGui::GetStyle().FramePadding.y});
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ImGui::GetFrameHeight() * 0.5f);
+    const bool entered = ImGui::InputTextWithHint("##q", "Rechercher un astre…", ui.search, sizeof(ui.search),
                                                   ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_EscapeClearsAll | ImGuiInputTextFlags_CallbackAlways, moveCursorToEnd, &ui);
+    ImGui::PopStyleVar(2);
     const bool active = ImGui::IsItemActive();
     if (ImGui::IsItemEdited()) ui.searchSel = 0;
     if (!active && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ui.search[0] = 0;
+    if (gIcons)
+        ImGui::GetWindowDrawList()->AddText({at.x + px(ui, 13), at.y + ImGui::GetStyle().FramePadding.y}, active ? theme::kAccent : theme::kMuted, ico::kSearch);
+
+    // Boutons-icônes.
+    ImGui::SameLine(0, px(ui, 8));
+    ImGui::BeginDisabled(sim.history.empty());
+    if (iconButton("retour", ico::kBack, "Retour", "Revenir à la vue précédente (Retour arrière)")) {
+        ui.tour = -1;
+        sim.back();
+    }
+    ImGui::EndDisabled();
+    toolbarDivider(ui);
+    if (iconButton("aller", ico::kLocation, "Aller à", "Aller à : échelles, système solaire, étoiles, galaxies, sondes, éclipses", ImGui::IsPopupOpen("aller")))
+        popupUnder(ui, "aller");
+    if (ui.keepGoTo) ui.goToAnchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + px(ui, 8)};
     ImGui::SameLine();
-    // Interface minimaliste (Marc, 13/11/2026) : un seul « Menu » pour tout ce qui n'est pas la recherche.
-    if (ImGui::Button("Menu")) ImGui::OpenPopup("menu");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Menu : aller à, lumière, vue, aide…");
-    ui.goToAnchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + px(ui, 6)};
-    ui.searchRight = ImGui::GetItemRectMax().x;
-    if (sim.bestLook) {      // le mode qui permet des hypothèses reste toujours annoncé
+    if (iconButton("couches", ico::kLayers, "Afficher", "Afficher : Laniakea et les vides, nuage d'Oort, routes possibles, explications", ImGui::IsPopupOpen("couches")))
+        popupUnder(ui, "couches");
+    if (!sim.skyBandLabels.empty()) {
         ImGui::SameLine();
-        viewModeButton(sim);
-    } else if (!ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F4, false)) {
-        sim.bestLook = true;
+        if (iconButton("lumiere", ico::kGlobe, "Lumière", "Voir le ciel dans une autre lumière : radio, infrarouge, X, gamma… (F2 / F3)", sim.skyBand >= 0))
+            popupUnder(ui, "lumiere");
     }
-    if (sim.skyBand >= 0) lightButton(sim, ui);      // une carte « Lumière » choisie : son nom reste à l'écran
+    ImGui::SameLine();
+    if (iconButton("expo", ico::kSun, "Exposition", "Exposition de l'image : plus claire, plus sombre, automatique", sim.exposureEv != 0)) popupUnder(ui, "exposition");
+    toolbarDivider(ui);
+    if (iconButton("visite", ico::kTour, "Découvrir", ui.tour >= 0 ? "Arrêter la visite guidée" : "Découvrir : visites guidées et moments à revivre", ui.tour >= 0 || ui.discover)) {
+        if (ui.tour >= 0) ui.tour = -1;
+        else ui.discover = !ui.discover;
+    }
+    ImGui::SameLine();
+    if (iconButton("aide", ico::kHelp, "Aide", "Toutes les commandes (F1)", ui.help)) ui.help = !ui.help;
     ui.searchRight = ImGui::GetItemRectMax().x;
-    ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
-    if (ImGui::BeginPopup("menu")) {
-        if (ImGui::MenuItem("Aller à…")) ui.openGoTo = true;
-        if (!sim.skyBandLabels.empty() && ImGui::BeginMenu("Lumière")) {
-            if (ImGui::MenuItem("Visible (étoiles mesurées)", nullptr, sim.skyBand < 0)) sim.skyBand = -1;
-            ImGui::Separator();
-            for (int k = 0; k < static_cast<int>(sim.skyBandLabels.size()); ++k)
-                if (ImGui::MenuItem(sim.skyBandLabels[static_cast<size_t>(k)].c_str(), nullptr, sim.skyBand == k)) sim.skyBand = k;
-            ImGui::EndMenu();
-        }
-        if (ImGui::MenuItem("Galaxie de face")) faceOnGalaxy(sim, ui);
-        if (ImGui::MenuItem("Vue : meilleur rendu", "F4", sim.bestLook)) sim.bestLook = !sim.bestLook;
-        if (ImGui::MenuItem("Exposition photo (automatique)", nullptr, sim.photoExposure)) sim.photoExposure = !sim.photoExposure;
-        if (ImGui::MenuItem("Exposition : plus claire (+1 IL)")) sim.exposureEv += 1.0;
-        if (ImGui::MenuItem("Exposition : plus sombre (-1 IL)")) sim.exposureEv -= 1.0;
-        if (sim.structures.loaded && ImGui::MenuItem("Laniakea, son flot et les vides cosmiques", nullptr, sim.structures.showLarge))
-            sim.structures.showLarge = !sim.structures.showLarge;
-        if (sim.structures.loaded && sim.structures.showLarge &&
-            ImGui::MenuItem("Vides et superamas lointains (formes approchées en sphères)", nullptr, sim.structures.showSpheres))
-            sim.structures.showSpheres = !sim.structures.showSpheres;
-        if (ImGui::MenuItem("Nuage d'Oort (modèle)", nullptr, sim.structures.showOort)) sim.structures.showOort = !sim.structures.showOort;
-        if (sim.cloneCount && ImGui::MenuItem("Incertitude : routes possibles des galaxies", nullptr, sim.showClones)) sim.showClones = !sim.showClones;
-        if (ui.gwCount > 0 && ImGui::MenuItem("Ondes gravitationnelles détectées")) ui.gwOpen = true;
-        ImGui::Separator();
-        if (ImGui::MenuItem("Détails à l'écran", nullptr, ui.details)) ui.details = !ui.details;
-        if (ImGui::MenuItem("Aide", "F1", ui.help)) ui.help = !ui.help;
-        ImGui::EndPopup();
-    }
+    if (!ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F4, false)) sim.bestLook = !sim.bestLook;
+
     drawGoToMenu(sim, ui);
-    drawSearchResults(sim, ui, active, entered);
+    drawLayersMenu(sim, ui);
+    drawLightMenu(sim, ui);
+    drawExposureMenu(sim, ui);
+    // Résultats sous la barre ; raccourcis quand le champ est vide et choisi.
+    if (ui.search[0]) drawSearchResults(sim, ui, active, entered);
+    else if (active) drawSuggestions(sim, ui);
+    ui.toolbarBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
     ImGui::End();
+    ImGui::PopStyleVar(2);
 }
 
 }  // namespace

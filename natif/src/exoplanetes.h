@@ -69,6 +69,17 @@ struct Exoplanets {
         return !byStar.empty();
     }
 
+    // Doubles (rang Gaia -> rang du catalogue principal, doublons.h) : leurs planètes passent à l'étoile du catalogue principal.
+    void mergeDoubles(const std::unordered_map<int64_t, int64_t>& doubles) {
+        for (const auto& [g, m] : doubles) {
+            const auto it = byStar.find(g);
+            if (it == byStar.end()) continue;
+            auto& dst = byStar[m];
+            dst.insert(dst.end(), it->second.begin(), it->second.end());
+            byStar.erase(g);
+        }
+    }
+
     const std::vector<Exoplanet>* of(const Sim& sim, int body) const {
         if (body < 0) return nullptr;
         const Body& b = sim.bodies[static_cast<size_t>(body)];

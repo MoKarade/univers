@@ -9,7 +9,7 @@ namespace {
 void drawFieldChip(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     const bool zoomed = sim.fovDeg < Sim::kFovMax - 0.01;
     if (!zoomed && sim.skyBand < 0) return;
-    ImGui::SetNextWindowPos({w * 0.5f, h - px(ui, 16)}, ImGuiCond_Always, {0.5f, 1.0f});
+    ImGui::SetNextWindowPos({w * 0.5f, std::min(h - px(ui, 16), ui.dockTop - px(ui, 12))}, ImGuiCond_Always, {0.5f, 1.0f});
     ImGui::SetNextWindowBgAlpha(0.6f);
     ImGui::Begin("champ", nullptr, fixed);
     const double f = sim.fovDeg;
@@ -23,7 +23,7 @@ void drawFieldChip(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFla
             const std::string lim = sim.gaiaSkyLimit > 50 ? "toutes" : "jusqu'à la magnitude " + frNum(sim.gaiaSkyLimit, 2);
             ImGui::TextDisabled("%s", ("Gaia une à une : " + frInt(sim.gaiaSkyStars) + " sources sans distance mesurée (" + lim + "), direction mesurée").c_str());
             if (sim.gaiaSkyPending > 0) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.43f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(theme::kAccent));
                 ImGui::Text("Chargement depuis le Drive : %u morceaux du ciel…", sim.gaiaSkyPending);
                 ImGui::PopStyleColor();
             }

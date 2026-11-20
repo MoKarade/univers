@@ -14,6 +14,7 @@
 #include "commun.h"
 
 #include "fenetre.h"
+#include "chargement.h"
 
 namespace {
 
@@ -35,6 +36,13 @@ int main(int argc, char** argv) {
     if (argc == 1) {      // double-clic : le simulateur, avec les étoiles rangées à côté du programme
         wopt.starsPath = exeDir() + "/etoiles.bin";
         return runWindow(wopt);
+    }
+    // Contrôle sans fenêtre ni carte graphique : une image de l'écran de chargement (chargement.h).
+    //   univers --chargement-capture f.ppm [part 0 à 1] [secondes]
+    if (argc >= 3 && std::string(argv[1]) == "--chargement-capture") {
+        const float part = argc >= 4 ? static_cast<float>(std::atof(argv[3])) : 0.45f;
+        const double t = argc >= 5 ? std::atof(argv[4]) : 3.0;
+        return chargement::capture(argv[2], 1920, 1080, L"Étoiles Gaia : 98 millions, une par une", part, t) ? 0 : 1;
     }
     if (argc < 3) fail("usage : univers <etoiles.bin> <image.ppm | --fenetre | --fenetre-test n> [--regarde i] [--verifie i,j] [--images n] [--taille LxH] [--champ degres]");
     uint64_t lookIndex = 0;
