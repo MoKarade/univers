@@ -418,6 +418,7 @@ int runWindow(const WindowOptions& opt) {
     galaxyShapes.create(g, dataDir + "/galaxies_formes.bin", HdrTarget::kFormat);
     sim.galaxyShapeCount = galaxyShapes.count;
     galaxies.setCosmology(sim.cosmology, 1.0);      // table d'aujourd'hui, pour poser les noms sur les formes
+    std::printf("galaxies proches : distance de z remplacee par Cosmicflows-4 : %d\n", galaxyShapes.fixNearbyDistances(sim.bodies));
     std::printf("noms poses au centre de leur forme : %d\n", galaxyShapes.snapNames(sim.bodies, galaxies));
     // Grandes structures (Laniakea, flot, vides) et nuage d'Oort (modèle) : structures.h, structures.bin.
     StructureRenderer structuresR;

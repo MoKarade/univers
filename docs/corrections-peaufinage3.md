@@ -1,0 +1,8 @@
+# Peaufinage, troisième passe (20 novembre 2026, soir)
+
+| Point | Avant (mesuré) | Cause | Correction |
+|---|---|---|---|
+| Pose aux très grandes échelles | balayage du zoom : pose ×0,004 à 100 milliards d'al, galaxies éteintes | la règle « image trop claire » baissait la pose alors que l'écran n'était fait que de repères (fond diffus, voiles) que la pose ne change pas | « trop clair » seulement aux échelles des étoiles, et pas sous ×0,1 ; à 100 Gal : ×12,6 |
+| Ciel étoilé relevé ×4 | de 0,01 à 800 al, pose ×4 puis rabaissée en sautant vers 1 000 al | seuil « trop sombre » (0,01) au-dessus d'un ciel étoilé ordinaire | seuil 0,003 aux échelles des étoiles (0,01 gardé pour les galaxies) ; balayage : 6 sauts → 3, dont 2 vrais (passage près de la galaxie du Triangle) et 1 baisse de pose quand les étoiles saturent |
+| NGC 2976, IC 2574, IC 3658 | NGC 2976 posée à 68 000 al (en satellite de la Voie lactée, nommée à côté d'elle à 1 Mal) ; les deux autres à 2 Mal ; comptées dans le Groupe local | distance tirée de z sous cz ≈ 300 km/s, où la vitesse propre domine | distance de Cosmicflows-4 quand une galaxie mesurée est dans la même direction (0,1°) ; sinon, sous z = 0,001, distance inconnue : ni forme, ni point, ni nom |
+| `essai_completude` (échouait avant ce travail) | 6 contrôles en échec | attentes écrites avant la réécriture de `gaia.bin` (12/11 18 h 36 : 98 278 350 étoiles) et le jeu B (13/11 : `gaia_b.bin`, 93 831 436 étoiles, plus de cases en volume dans `gaia_agrege.bin`) ; Groupe local à 117 à cause des trois galaxies ci-dessus | attentes alignées sur les fichiers installés, avec le jeu B compté comme l'appli le charge ; recoupement LVDB relancé (113 sur 113) ; tout passe |

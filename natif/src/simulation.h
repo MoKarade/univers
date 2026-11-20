@@ -48,6 +48,7 @@ struct Body {
     Kind kind = Kind::Star;
     int64_t star = -1;          // étoile : numéro dans le catalogue
     bool emptySlot = false;     // place réservée (étoile désignée au clic) encore vide : ni dessinée ni nommée
+    bool unplaced = false;      // galaxie de distance inconnue (z trop faible, aucune mesure) : ni placée ni nommée
     int probe = -1;             // sonde : son rang dans le fichier des trajectoires
     int naif = 0;               // planète : code du corps dans les éphémérides de la NASA (clé de sa carte et de son orientation)
     int posNaif = 0;            // code utilisé pour sa position : le centre de la planète quand un fichier de lunes le donne
@@ -533,6 +534,37 @@ struct Sim {
             }
             bodies.push_back(body);
         }
+        // Galaxies de forme placées d'après z, proches (z < 0,005) : distance remplacée par celle, mesurée, de la galaxie de
+        // Cosmicflows-4 dans la même direction (moins de 0,1°), comme leur forme (galaxies_formes.h, fixNearbyDistances).
+        // Avant : NGC 2976 à 68 000 al, IC 2574 et IC 3658 à 2 Mal, comptées dans le Groupe local (essai_completude).
+        {
+            std::vector<std::pair<Vec3, double>> cf4;
+            for (const Body& b : bodies)
+                if (b.kind == Kind::Galaxy && b.natureText.find("Cosmicflows-4") != std::string::npos) {
+                    const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
+                    if (n > 0) cf4.push_back({{b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n}, n});
+                }
+            for (Body& b : bodies) {
+                const size_t k = b.natureText.find("distance d'après z = ");
+                if (b.kind != Kind::Galaxy || k == std::string::npos) continue;
+                const double z = std::atof(b.natureText.c_str() + k + 21);
+                const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
+                if (!(z < 0.005) || n <= 0) continue;
+                double best = 0.99999847691, d = 0;      // cos(0,1°)
+                for (const auto& [u, m] : cf4) {
+                    const double c = (u.x * b.fixedPos.x + u.y * b.fixedPos.y + u.z * b.fixedPos.z) / n;
+                    if (c > best) { best = c; d = m; }
+                }
+                if (d <= 0) {
+                    // ni distance mesurée dans la même direction, ni z exploitable (sous 0,001) : distance inconnue, la galaxie
+                    // n'est pas placée (même règle que sa forme, galaxies_formes.h)
+                    if (z < 0.001) b.unplaced = true;
+                    continue;
+                }
+                b.fixedPos = {b.fixedPos.x / n * d, b.fixedPos.y / n * d, b.fixedPos.z / n * d};
+                b.natureText.replace(k, std::string("distance d'après z").size(), "distance mesurée (Cosmicflows-4, même direction) ; z");
+            }
+        }
         // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
         Body centre;
         centre.name = "Centre de la Voie lactée";
@@ -837,7 +869,7 @@ struct Sim {
     // le Soleil, tant que le système solaire est suivi (10 millions d'années) ; une galaxie, si sa position est connue.
     bool visible(int i) const {
         const Body& b = bodies[static_cast<size_t>(i)];
-        if (b.emptySlot) return false;
+        if (b.emptySlot || b.unplaced) return false;
         if (b.kind == Kind::Planet || b.kind == Kind::Probe || b.kind == Kind::Asteroid) return planetValid[static_cast<size_t>(i)] != 0;
         if (b.kind == Kind::Galaxy) return static_cast<size_t>(i) < galValid.size() && galValid[static_cast<size_t>(i)];
         if (b.kind == Kind::Sun) return starShare() > 0;      // suivi sur son orbite autour de la Galaxie, comme les étoiles

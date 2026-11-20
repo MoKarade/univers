@@ -106,6 +106,10 @@ public:
             pos[i * 4 + 2] = static_cast<float>(rz);
             pos[i * 4 + 3] = static_cast<float>(w.d);
             np[i] = 0;
+            if (!hidden_.empty() && hidden_[i]) {      // distance inconnue : ni point ni forme (flux nul : P.w = 0)
+                pos[i * 4 + 3] = 0.0f;
+                continue;
+            }
             const double dc = std::sqrt(rx * rx + ry * ry + rz * rz);
             const double size = recs_[i].diam * 2.9088821e-4 * w.d;      // diamètre (al)
             const double px = size / std::max(dc, 1.0) * pxPerRad;
@@ -126,6 +130,46 @@ public:
             particles += n;
             ind[shown++] = {n, 1, 0, i};      // une instance : la galaxie i (gl_InstanceIndex)
         }
+    }
+
+    // Galaxies proches placées d'après leur décalage vers le rouge : sous cz ≈ 1 500 km/s, la vitesse propre de la galaxie
+    // domine et la distance tirée de z est fausse (NGC 2976 posée à 68 000 al, en satellite de la Voie lactée, alors que
+    // Cosmicflows-4 la mesure à 3,6 Mpc). Quand une galaxie de Cosmicflows-4 (distance mesurée : Tully-Fisher, céphéides,
+    // pointe des géantes rouges…) est dans la même direction (moins de 0,1°), sa distance mesurée remplace celle de z.
+    // À appeler avant snapNames. Rend le nombre de distances remplacées.
+    static constexpr double kZInconnue = 0.001;
+    int fixNearbyDistances(const std::vector<Body>& bodies) {
+        if (!ready) return 0;
+        constexpr double kZMax = 0.005, kCos = 0.99999847691;      // cos(0,1°)
+        // sous z = 0,001 (cz < 300 km/s), z ne dit rien de la distance (vitesses propres et chute vers le Groupe local)
+        std::vector<std::pair<Vec3, double>> cf4;
+        for (const Body& b : bodies)
+            if (b.kind == Kind::Galaxy && b.natureText.find("Cosmicflows-4") != std::string::npos) {
+                const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
+                if (n > 0) cf4.push_back({{b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n}, n});
+            }
+        int fixed = 0;
+        for (uint32_t i = 0; i < count; ++i) {
+            Rec& r = recs_[i];
+            if (r.d > 0 || !(r.z < kZMax)) continue;
+            double best = kCos, d = 0;
+            for (const auto& [u, n] : cf4) {
+                const double c = u.x * r.ux + u.y * r.uy + u.z * r.uz;
+                if (c > best) { best = c; d = n; }
+            }
+            if (d > 0) {
+                r.d = static_cast<float>(d);
+                ++fixed;
+            } else if (r.z < kZInconnue) {      // ni distance mesurée ni z exploitable : distance inconnue, non dessinée
+                if (hidden_.empty()) hidden_.assign(count, 0);
+                hidden_[i] = 1;
+            }
+        }
+        if (fixed) {      // les distances remplacées ne suivent plus la table des décalages vers le rouge
+            byZ_.erase(std::remove_if(byZ_.begin(), byZ_.end(), [&](const ByZ& b) { return recs_[b.i].d > 0; }), byZ_.end());
+            version_ = ~0ull;
+        }
+        return fixed;
     }
 
     // Le nom d'une galaxie de forme (galaxies_formes_noms.tsv) est posé exactement au centre de sa forme : sa place
@@ -320,6 +364,7 @@ private:
     double pxPerRad_ = 1;
     int ring_ = 0;
     Buffer recBuf_, pos_[kRing], np_[kRing], ind_[kRing];
+    std::vector<char> hidden_;      // galaxies de distance inconnue (fixNearbyDistances), non dessinées
     void* posMap_[kRing] = {};
     void* npMap_[kRing] = {};
     void* indMap_[kRing] = {};
