@@ -855,8 +855,9 @@ int runWindow(const WindowOptions& opt) {
         // mesure de l'image précédente, lue sans attente (la barrière vient d'être passée) ; relevée seulement aux échelles des
         // galaxies (au-delà de 10 millions d'al regardés), jamais pour les étoiles ; balayage du zoom du 20/11 : un plafond fixe
         // dès 10 Mal donnait ×2,1 d'éclat d'un cran de molette au suivant
-        // plafond qui monte avec l'échelle regardée (1 à 10 Mal, 100 à 100 Mal, 1 000 au-delà de 316 Mal) : pas de saut
-        autoPose.update(dt, test, true, std::clamp((sim.dist / 1.0e7) * (sim.dist / 1.0e7), 1.0, pose_auto::kPoseMaxGalaxies));
+        // plafond qui monte comme l'échelle regardée (1 à 10 Mal, 10 à 100 Mal, 1 000 à 10 Gal) : au plus ×1,26 d'un cran de
+        // molette au suivant (en carré, le balayage mesurait ×1,6 par cran)
+        autoPose.update(dt, test, true, std::clamp(sim.dist / 1.0e7, 1.0, pose_auto::kPoseMaxGalaxies));
         sim.autoPose = autoPose.pose;
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
         // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
