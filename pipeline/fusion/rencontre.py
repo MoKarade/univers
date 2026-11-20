@@ -102,7 +102,7 @@ def assembler(dossier, etat, fraction=1.0, graine=20261113, angles=None):
 class Calcul:
     """Saute-mouton sur la carte graphique : gravité de toutes les particules (gravite_gpu) + énergie noire."""
 
-    def __init__(self, p, theta=0.7, gaz=False):
+    def __init__(self, p, theta=0.7, gaz=False, maree=None, t_ga=0.0):
         import cupy as cp
         import gravite_gpu
         self.cp, self.gg, self.theta = cp, gravite_gpu, theta
@@ -114,6 +114,15 @@ class Calcul:
         self.lourd = cp.asarray(p['kind'] != 9)      # les traceurs (9) ne comptent pas dans le centre de masse
         self.idx = [cp.asarray(np.where((p['gid'] == g) & np.isin(p['kind'], ETOILES))[0]) for g in range(len(ORDRE))]
         self.t_check = time.time()
+        # Marée extérieure au Groupe local (Vierge, grands voisins) : tenseur 3 x 3 par date au centre de masse de la paire,
+        # tiré d'un départ cosmologique contraint (fil « départ contraint », tables_raccord/maree.csv : T_ij = -d²Phi_ext/dx_i dx_j,
+        # a_i = T_ij x_j, (km/s/kpc)², repère de l'appli, énergie noire non comprise). Même ordre de grandeur que l'énergie
+        # noire (2e-3 contre 3,1e-3). [Modèle : la paire de ce départ contraint s'écarte du ciel réel ; dispersion 20-25 % au
+        # moins.] Hors des dates de la table, la valeur du bord est gardée.
+        self.maree = None; self.t_ga = t_ga
+        if maree:
+            T = np.loadtxt(maree, delimiter=',', skiprows=1)
+            self.maree = (T[:, 0], T[:, 1:10])
         # Gaz (gaz_galaxie.py) : les particules de sorte 3 sentent la pression, les chocs, et deviennent des étoiles (sorte 5).
         # Le gaz de toutes les galaxies est calculé ensemble ; il avance par sous-pas pendant le pas long de la gravité.
         self.gaz = None; self.kind_g = cp.asarray(p['kind'])
@@ -134,6 +143,10 @@ class Calcul:
         cm = cp.sum(self.pos * ml[:, None], axis=0) / cp.sum(ml)
         d = self.pos - cm
         self.acc = acc + self.K * d      # énergie noire : poussée H0² Ω_Λ (x − x_cm)
+        if self.maree is not None:
+            tt, TT = self.maree
+            Tm = cp.asarray(np.array([np.interp(self.t_ga, tt, TT[:, k]) for k in range(9)]).reshape(3, 3))
+            self.acc += d @ Tm.T
         self.phi, self.d2 = phi, cp.sum(d * d, axis=1)
 
     def energie(self):
@@ -142,6 +155,7 @@ class Calcul:
 
     def pas(self, dt, t_ga=0.0):
         cp = self.cp
+        self.t_ga = t_ga
         self.vel += 0.5 * dt * self.acc
         if self.gaz:
             est = self.kind_g == 3; qui = cp.where(est)[0]
@@ -352,7 +366,7 @@ def main():
         angles = {a.split(':')[0]: float(a.split(':')[1]) for a in opts['angles'].split(',')} if 'angles' in opts else None
         p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)), angles=angles)
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
-        S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)))
+        S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'), t_ga=t_depart)
         journal = avancer(S, t_depart, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)))
         ecart = ecart_a_la_cible(journal, cible)
         # Correction du départ : l'écart final de vitesse est retiré de la vitesse de départ ; l'écart final de position est
@@ -551,7 +565,7 @@ def futur(sortie, t_fin, opts, cible):
             if 'age0' in p: ajout['age0'] = [np.full(nt, np.nan, np.float32)]
             if 'u_gaz' in p: ajout['u_gaz'] = [np.zeros(nt, np.float32)]
             p = {k: np.concatenate([p[k]] + ajout[k]) for k in p}
-    S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)))
+    S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'))
     cp = S.cp
     tr = [cp.asarray(np.where((p['kind'] == 9) & (p['gid'] == g))[0]) for g in range(len(ORDRE))]
     print(f"futur : {int((p['kind'] != 9).sum())} particules de masse, {int((p['kind'] == 9).sum())} étoiles visibles, de {t0:+.3f} à {t_fin:+.2f} Ga", flush=True)
