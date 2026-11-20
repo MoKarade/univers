@@ -330,11 +330,18 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
         row("Distance au Soleil", frDistance(dSun), today ? "mesuré" : "calculé : départ mesuré, orbite calculée autour de la Galaxie", s);
         row("Éclat vu de la Terre", "magnitude " + frNum(sim.apparentMag(f, {0, 0, 0})), "calculé", s);
         row(today ? "Vitesse" : "Vitesse aujourd'hui", frNum(sim.speedKms(f)) + " km/s par rapport au Soleil", "mesuré", s);
+        if (!fb.planetLines.empty()) {
+            ImGui::TextUnformatted("Planètes connues (NASA Exoplanet Archive, valeurs mesurées) :");
+            for (const std::string& l : fb.planetLines) ImGui::BulletText("%s", l.c_str());
+            ImGui::TextDisabled("Dessin : orbites mesurées ; inclinaison inconnue -> 60°, orientation sur le ciel inconnue (supposées) ; points = repères, pas leur lumière.");
+        }
     } else if (fb.kind == Kind::Galaxy) {
         // En temps profond, la place vient du calcul de la rencontre avec Andromède (sauf le centre de la Voie lactée, origine du repère).
         const bool deepCalc = sim.deepTime() && fb.name != "Centre de la Voie lactée";
         row(sim.deepTime() ? "Distance à la place actuelle du Soleil" : "Distance au Soleil", frDistance(dSun), deepCalc ? "calculé" : fb.structure ? "publié, catalogue cité" : "mesuré", s);
-        if (!fb.structure) ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
+        if (!fb.blackHoleText.empty()) row("Trou noir central", fb.blackHoleText, "mesuré", s);
+        if (!fb.shapeNote.empty()) ImGui::TextWrapped("%s", fb.shapeNote.c_str());
+        else if (!fb.structure) ImGui::TextDisabled("Sa forme et sa photo ne sont pas encore dessinées ici.");
     } else {
         radiusRow(fb, s);
     }

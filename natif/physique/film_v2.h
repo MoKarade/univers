@@ -92,6 +92,22 @@ public:
         return true;
     }
 
+    // Centre ÉCRIT de la galaxie g à tGa, par la même courbe que ses étoiles (Catmull-Rom sur les quatre images voisines).
+    // Les étoiles sont rangées relativement à ce centre : centre (Catmull-Rom) + position relative (Catmull-Rom) redonne
+    // exactement la courbe de leur position absolue, même quand le centre écrit est bruité (galaxie déchirée, PR « vue ») ;
+    // la courbe de Hermite de centre() utilise la vitesse écrite, qui ne s'accorde plus avec ce centre bruité.
+    bool centreEtoiles(int g, double tGa, Vec3& out) const {
+        int i; double u; if (!place(tGa, i, u)) return false;
+        const int k[4] = {std::max(i - 1, 0), i, i + 1, std::min(i + 2, n_ - 1)};
+        const double u2 = u * u, u3 = u2 * u, w[4] = {0.5 * (-u + 2 * u2 - u3), 0.5 * (2 - 5 * u2 + 3 * u3), 0.5 * (u + 4 * u2 - 3 * u3), 0.5 * (-u2 + u3)};
+        out = {0, 0, 0};
+        for (int j = 0; j < 4; ++j) {
+            const double* a = &c_[((size_t)k[j] * g_ + g) * 3];
+            out.x += w[j] * a[0]; out.y += w[j] * a[1]; out.z += w[j] * a[2];
+        }
+        return true;
+    }
+
     // Positions (x, y, z en kpc, relatives au centre de la galaxie g) de ses étoiles visibles à tGa, dans xyz
     // (au moins 3 x etoiles(g) valeurs). premier, nombre : pour n'en lire qu'une partie. false hors du film ou image absente.
     bool positions(int g, double tGa, std::span<float> xyz, uint64_t premier = 0, uint64_t nombre = UINT64_MAX) {

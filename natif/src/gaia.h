@@ -111,8 +111,9 @@ struct GaiaPush {
     float frac;          // part du pas d'un million d'années écoulée depuis l'état
     float exact;         // 1 : orbite exacte (états calculés à jour) ; 0 : épicycles
     uint32_t cellBase;   // rang du premier état des cases de lumière additionnée
+    float hide[4];       // xyz : place de l'étoile suivie relative à la caméra (al) ; w : rayon où ses copies Gaia sont cachées (0 : rien)
 };
-static_assert(sizeof(GaiaPush) == 128, "constantes Gaia : 128 octets");
+static_assert(sizeof(GaiaPush) == 144, "constantes Gaia : 144 octets (la carte en accepte 256)");
 
 class GaiaRenderer {
 public:
@@ -220,7 +221,8 @@ public:
         PushConstants pc = pushConstants(cam, exposure, height, since);
         pc.par[3] = static_cast<float>(since / 1.0e9);      // orbite autour de la Galaxie (gaia.vert)
         const GaiaPush gp{pc, orbits_.count - 1, orbits_.fraction(since), orbits_.readyToDraw() ? 1.0f : 0.0f,
-                          static_cast<uint32_t>(file_.n) | (improved ? GaiaFiable::kModeRendu : 0u) | (dustReady_ ? GaiaFiable::kPoussiere : 0u)};
+                          static_cast<uint32_t>(file_.n) | (improved ? GaiaFiable::kModeRendu : 0u) | (dustReady_ ? GaiaFiable::kPoussiere : 0u),
+                          {hide[0], hide[1], hide[2], hide[3]}};
         const uint32_t n = selectLeaves(cam, exposure, since, height, static_cast<VkDrawIndirectCommand*>(mapped_[ring_]),
                                         file_.bins ? static_cast<float*>(restMapped_[ring_]) : nullptr);
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
@@ -300,6 +302,10 @@ public:
     // Le film mène les étoiles des galaxies voisines : elles peuvent être arrachées loin de leur galaxie (marées), donc plus
     // de tri par le champ de vue autour du centre de la galaxie.
     void setFreeNeighbours(bool on) { freeNeighbours_ = on; }
+    // Étoile suivie de près : ses copies (Gaia et catalogue brillant ont deux places arrondies différemment, à ~200 UA près)
+    // sont cachées dans un rayon r autour de sa place exacte ; elle reste dessinée une fois, à sa place double (orbites_gpu.h).
+    float hide[4] = {0, 0, 0, 0};
+    void setHide(Vec3 rel, double r) { hide[0] = static_cast<float>(rel.x); hide[1] = static_cast<float>(rel.y); hide[2] = static_cast<float>(rel.z); hide[3] = static_cast<float>(r); }
 
     void setGalaxies(const float* data, int count) {
         if (!galaxiesMapped_) return;

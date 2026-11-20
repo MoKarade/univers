@@ -12,7 +12,7 @@ layout(std430, set = 0, binding = 3) readonly buffer Orb { Etat orb[]; };       
 layout(set = 0, binding = 4) uniform sampler3D dust;      /* poussière 3D (voie_lactee.bin, canal g : A_V par pc), seulement si GF_POUSSIERE */
 struct GalVoisine { vec4 c0; vec4 ct; vec4 axe; vec4 rr; };      /* gaia.h : cases 0-5 setGalaxies (centre à t = 0, à la date, axe + vitesse, rayon) ; 6-7 setAgeing */
 layout(std430, set = 0, binding = 5) readonly buffer Voisines { GalVoisine voisines[]; };
-layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; uint sun; float frac; float exact; uint cellBase; } pc;   /* par : exposition, hauteur en pixels, temps en al par (km/s), temps en Ga */
+layout(push_constant) uniform Pc { mat4 viewProj; vec4 camHi; vec4 camLo; vec4 par; uint sun; float frac; float exact; uint cellBase; vec4 hide; } pc;   /* hide : copie de l'étoile suivie (gaia.h, setHide) */   /* par : exposition, hauteur en pixels, temps en al par (km/s), temps en Ga */
 layout(location = 0) out vec3 vCol;
 const float LY_PER_PC = 3.2615638;
 #include "gaia_acc.glsl"
@@ -100,6 +100,8 @@ void main() {
         } else move = ogDeplacement(pos, v, pc.par.z, pc.par.w);      /* épicycles, le temps que le calcul exact rattrape */
     }
     vec3 p = voisine ? ((voisineBase - pc.camHi.xyz) + pos) - pc.camLo.xyz : ((pos - pc.camHi.xyz) + move) - pc.camLo.xyz;
+    /* copie Gaia de l'étoile suivie : cachée près de sa place exacte (elle est dessinée par etoiles_orbite.vert) */
+    if (pc.hide.w > 0.0 && !voisine && (flags & 16u) == 0u && length(p - pc.hide.xyz) < pc.hide.w) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
     float part = 1.0;
     if ((flags & 16u) != 0u) {
         uint k = uint(gl_InstanceIndex) % GV_SOUS_NUAGE, graine = uint(gl_VertexIndex) * GV_SOUS_NUAGE + k;

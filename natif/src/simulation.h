@@ -5,6 +5,7 @@
 #include "avancement.h"
 #include "centres_reference.h"
 #include "film_v2.h"
+#include "film_ancres.h"
 #include "ciel_bandes.h"
 #include "commun.h"
 #include "completude.h"
@@ -58,6 +59,14 @@ struct Body {
     std::string natureText;     // galaxie : genre lu dans le fichier
     Vec3 fixedPos{0, 0, 0};     // galaxie : position mesurée (années-lumière), immobile pour l'instant
     int priority = 1;           // galaxie : 1 = nom montré dès qu'on sort de la Voie lactée
+    int dwarfModel = -1;        // galaxie naine dessinée d'après ses paramètres mesurés (galaxies_naines.h) ; -1 : non
+    std::vector<std::string> planetLines;      // étoile : ses planètes connues, une ligne chacune (exoplanetes.h)
+    double planetsReachLy = 0;  // étoile : plus grand demi-grand axe de ses planètes (années-lumière)
+    int blackHole = -1;         // trou noir central de masse mesurée (trous_noirs.h) ; -1 : aucun relié
+    double blackHoleRsLy = 0;   // son rayon de Schwarzschild (années-lumière)
+    std::string blackHoleText;  // sa masse mesurée, la méthode et la source (panneau)
+    double shapeRadiusLy = 0;   // rayon de demi-lumière mesuré, si la forme est dessinée d'après lui (galaxies_naines.h)
+    std::string shapeNote;      // ce qui est dessiné de sa forme, et d'où viennent les valeurs (galaxies_naines.h)
     bool structure = false;     // repère de structures_noms.tsv (superamas, attracteur, vide) : pas une galaxie
     const char* natureLabel() const { return natureText.empty() ? nature : natureText.c_str(); }
 };
@@ -242,6 +251,7 @@ struct Sim {
     // Film du Groupe local (film_etoiles.h) : quand il couvre la date montrée, c'est lui qui donne le centre des galaxies
     // voisines et la place des étoiles visibles de la Voie lactée ; sinon les centres et les orbites de référence.
     const phys::film::FilmV2* film = nullptr;
+    const FilmAnchors* anchors = nullptr;      // ancres des voisines dans le film (film_ancres.h) ; nul sans fichier
     bool filmLeads = false;      // à cette image, les étoiles visibles suivent le film
     double filmEdgeYears = 0;    // non nul : la date voulue dépasse le film calculé ; elle est arrêtée à ce bord (fenetre.cpp)
     double gaiaFilmOff = 0;      // part de Gaia éteinte parce que le film mène (0 à 1, revue F1 ; fenetre.cpp)
@@ -263,7 +273,7 @@ struct Sim {
         bool showLarge = true, showOort = true;
         double largeShare = 0, oortShare = 0;      // parts montrées à la dernière image
         uint32_t oortComets = 0, flowLines = 0;
-        uint32_t triangles[5] = {};    // par genre : 1 Laniakea, 2 vides du voisinage, 3 vides SDSS, 4 vides BOSS
+        uint32_t triangles[9] = {};    // par genre : 1 Laniakea, 2 vides du voisinage, 3 vides SDSS, 4 vides BOSS, 5 superamas SDSS, 6 superstructures nommées, 7 univers observable, 8 fond diffus
     } structures;
     bool showClones = false;      // nuage des scénarios : seulement sur demande (Menu), il ne montre pas des galaxies mais leurs routes possibles
     double cloneMergeProbability = 0, cloneMergeGa[3] = {0, 0, 0};
@@ -436,6 +446,31 @@ struct Sim {
                 bodies.push_back(body);
             }
         }
+        // Étoiles qui ont des planètes connues (pipeline/natif/exoplanetes_app.py, NASA Exoplanet Archive) : cherchables par
+        // le nom de l'hôte ; une étoile déjà nommée garde son nom.
+        {
+            std::ifstream hf(namesPath.substr(0, namesPath.find_last_of("/\\") + 1) + "etoiles_planetes_noms.tsv");
+            for (std::string hl; std::getline(hf, hl);) {
+                std::vector<std::string> c;
+                size_t from = 0;
+                for (size_t tab; (tab = hl.find('\t', from)) != std::string::npos; from = tab + 1) c.push_back(hl.substr(from, tab - from));
+                c.push_back(hl.substr(from));
+                if (c.size() < 4) continue;
+                const int64_t idx = std::strtoll(c[0].c_str(), nullptr, 10);
+                if (idx < 0 || static_cast<uint64_t>(idx) >= stars->n) continue;
+                bool known = false;
+                for (const Body& b : bodies) known = known || (b.kind == Kind::Star && b.star == idx);
+                if (known) continue;
+                Body body;
+                body.star = idx;
+                body.name = c[1];
+                body.nature = "étoile";
+                body.natureText = "étoile avec " + c[3] + (c[3] == "1" ? " planète connue" : " planètes connues") + " (NASA Exoplanet Archive)";
+                body.priority = 9;
+                body.bv = stars->bv()[idx];
+                bodies.push_back(body);
+            }
+        }
         // Galaxies nommées (galaxies_noms.tsv : nom, x, y, z en années-lumière, genre, priorité).
         // Puis, s'il est à côté, galaxies_cf4.tsv : 55 637 galaxies à distance mesurée (Cosmicflows-4, noms OpenNGC),
         // écrit par pipeline/natif/galaxies_cf4.py ; priorité 9 : nom montré seulement de près ou au survol.
@@ -445,7 +480,10 @@ struct Sim {
         // Puis structures_noms.tsv : Laniakea, Grand Attracteur, bassins voisins, Vide local et vides du voisinage
         // (pipeline/natif/structures.py).
         const std::string structuresPath = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "structures_noms.tsv";
-        for (const std::string& path : {galaxiesPath, cf4Path, formesPath, structuresPath})
+        // Puis superstructures_noms.tsv : murs et superamas nommés des articles, bord de l'univers observable
+        // (pipeline/natif/superstructures_bin.py).
+        const std::string superPath = galaxiesPath.substr(0, galaxiesPath.find_last_of("/\\") + 1) + "superstructures_noms.tsv";
+        for (const std::string& path : {galaxiesPath, cf4Path, formesPath, structuresPath, superPath})
         for (std::ifstream gf(path); std::getline(gf, line);) {
             std::vector<std::string> cols;
             size_t from = 0;
@@ -458,7 +496,7 @@ struct Sim {
             body.fixedPos = {std::atof(cols[1].c_str()), std::atof(cols[2].c_str()), std::atof(cols[3].c_str())};
             body.natureText = cols[4];
             body.priority = std::atoi(cols[5].c_str());
-            body.structure = path == structuresPath;
+            body.structure = path == structuresPath || path == superPath;
             bodies.push_back(body);
         }
         // Le centre de notre galaxie : Sagittarius A*, à 8,2 kpc dans la direction mesurée (mêmes valeurs que la page).
@@ -667,6 +705,46 @@ struct Sim {
         refreshGalaxies();
     }
 
+    // Centre d'une voisine dans le film, en kpc relatifs à la Voie lactée. follow = true : le point que suivent l'étiquette
+    // et la caméra (ancre, film_ancres.h, si le fichier la couvre) ; false : le centre écrit, par la courbe de ses étoiles
+    // (base où gaia.vert pose leurs positions relatives). Revue F4 : le centre du film à t = 0 n'est pas exactement le
+    // centre mesuré ; l'écart à la date de départ commune est retiré, puis s'efface sur 100 Ma (même décalage pour l'ancre
+    // et pour la base des étoiles : la galaxie ne se décolle pas de son étiquette).
+    bool filmCentre(int ci, double tGa, phys::Vec3& g, bool follow) const {
+        if (!film || !centres || !centres->ready) return false;
+        auto raw = [&](double t, phys::Vec3& o) {
+            if (follow && anchors && anchors->at(*film, ci, t, o)) return true;
+            return follow ? film->centre(ci, t, o) : film->centreEtoiles(ci, t, o);
+        };
+        if (!raw(tGa, g)) return false;
+        const double t0 = std::clamp(0.0, film->debutGa(), film->date(film->images() - 2));
+        phys::Vec3 f0, r0;
+        if (raw(t0, f0) && centres->centre(ci, t0, r0)) {
+            const double w = std::clamp(1.0 - std::fabs(tGa - t0) / 0.1, 0.0, 1.0);
+            g = {g.x - w * (f0.x - r0.x), g.y - w * (f0.y - r0.y), g.z - w * (f0.z - r0.z)};
+        }
+        return true;
+    }
+    // Base des étoiles d'une voisine quand le film les mène (repère du simulateur, années-lumière) : centre écrit par la
+    // courbe des étoiles, pour que centre + position relative redonne exactement la position calculée de chaque étoile.
+    bool filmStarBase(const std::string& name, Vec3& out) const {
+        const int ci = CentresReference::indexOf(name);
+        phys::Vec3 g;
+        const double tGa = replayGa();
+        if (ci < 0 || !filmCovers(tGa) || ci >= film->galaxies() || !filmCentre(ci, tGa, g, false)) return false;
+        const Vec3 w = fromGalactocentric(g), shift = sunShift();
+        out = {w.x + shift.x, w.y + shift.y, w.z + shift.z};
+        return true;
+    }
+    // Part des étoiles d'une voisine encore groupées autour de son cœur à la date montrée (film_ancres.h) ; -1 : inconnue.
+    double groupedShare(const std::string& name) const {
+        const int ci = CentresReference::indexOf(name);
+        phys::Vec3 o;
+        double f = -1;
+        if (ci < 0 || !anchors || !film || !filmCovers(replayGa()) || !anchors->at(*film, ci, replayGa(), o, &f)) return -1;
+        return f;
+    }
+
     void refreshGalaxies() {
         galPos.assign(bodies.size(), {0, 0, 0});
         galValid.assign(bodies.size(), 0);
@@ -682,16 +760,7 @@ struct Sim {
             if (ci >= 0) {
                 phys::Vec3 g;
                 bool ok = false;
-                if (filmCovers(tGa) && ci < film->galaxies() && film->centre(ci, tGa, g)) {
-                    // Revue F4 : le centre du film à t = 0 n'est pas exactement le centre mesuré (decalage_a_t0 n'est pas dans
-                    // l'index du film v2). L'écart à la date de départ commune est retiré, puis s'efface sur 100 Ma : plus de
-                    // saut au passage référence -> film, et le film reprend seul la main loin d'aujourd'hui.
-                    const double t0 = std::clamp(0.0, film->debutGa(), film->date(film->images() - 2));
-                    phys::Vec3 f0, r0;
-                    if (film->centre(ci, t0, f0) && centres->centre(ci, t0, r0)) {
-                        const double w = std::clamp(1.0 - std::fabs(tGa - t0) / 0.1, 0.0, 1.0);
-                        g = {g.x - w * (f0.x - r0.x), g.y - w * (f0.y - r0.y), g.z - w * (f0.z - r0.z)};
-                    }
+                if (filmCovers(tGa) && ci < film->galaxies() && filmCentre(ci, tGa, g, true)) {
                     ok = true;
                 } else
                     ok = centres->centre(ci, tGa, g);
@@ -811,6 +880,8 @@ struct Sim {
         if (b.kind == Kind::Probe) arrive = 3.0e6 / kLyInKm;                  // sonde (un point) : on voit son voisinage, à 3 millions de km
         double d = std::clamp(std::min(from, arrive), minDist(i), kMaxDist);
         if (b.kind == Kind::Galaxy) d = std::max(d, 3.0e5);                  // une galaxie se regarde de loin
+        if (b.kind == Kind::Galaxy && b.structure && b.name == "Univers observable") d = 1.1e11;      // la sphère entière dans le champ
+        if (b.kind == Kind::Galaxy && b.shapeRadiusLy > 0) d = std::clamp(12.0 * b.shapeRadiusLy, 1.0e3, 3.0e5);      // naine dessinée : on la voit entière
         return d;
     }
     void remember() {
@@ -907,11 +978,13 @@ struct Sim {
         }
     }
     double minDist(int i) const {      // on s'arrête un peu au-dessus de la surface (1,25 rayon du centre)
-        if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return 1.0e3;
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy && bodies[static_cast<size_t>(i)].blackHole >= 0)
+            return 3.0 * bodies[static_cast<size_t>(i)].blackHoleRsLy;      // on peut descendre jusqu'à son trou noir central
+        if (bodies[static_cast<size_t>(i)].kind == Kind::Galaxy) return bodies[static_cast<size_t>(i)].shapeRadiusLy > 0 ? std::min(1.0e3, bodies[static_cast<size_t>(i)].shapeRadiusLy) : 1.0e3;
         if (bodies[static_cast<size_t>(i)].kind == Kind::Probe || bodies[static_cast<size_t>(i)].kind == Kind::Asteroid) return 1.0e-10;      // environ 1 000 km
         return std::max(1.25 * bodies[static_cast<size_t>(i)].radiusKm / kLyInKm, 2.0e-10);
     }
-    static constexpr double kMaxDist = 9.0e10;      // un peu plus que la distance des objets les plus lointains (z = 7)
+    static constexpr double kMaxDist = 1.2e11;      // de quoi voir tout l'univers observable (rayon comobile 46 milliards d'al)
     // Champ de vision (Ctrl + molette) : de 60° à 0,5°. Grossit ce qui n'a pas de profondeur (cartes du ciel « Lumière »,
     // ciel lointain), comme une lunette ; la molette seule rapproche la caméra.
     static constexpr double kFovMax = 60.0, kFovMin = 0.5;
