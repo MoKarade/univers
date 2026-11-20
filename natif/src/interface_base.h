@@ -30,7 +30,7 @@ bool projectLoose(const Camera& cam, Vec3 p, float w, float h, ImVec2& out) {
 double discRadiusPx(const Sim& sim, const Camera& cam, int i, float h) {
     const Vec3 d = sim.position(i) - cam.pos;
     const double dist = std::max(std::sqrt(dot(d, d)), 1e-30);
-    return (sim.bodies[static_cast<size_t>(i)].radiusKm / kLyInKm) / dist / (2.0 * cam.tanHalf / h);
+    return sim.drawnRadiusLy(i) / dist / (2.0 * cam.tanHalf / h);
 }
 
 double distBetween(Vec3 a, Vec3 b) {
@@ -401,9 +401,20 @@ int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, floa
         if (!cam.project(sim.position(i), w, h, x, y)) continue;
         // audit B1 : une galaxie dont le nom est caché à cette échelle (55 000 de Cosmicflows-4, naines vues de loin) ne se
         // clique pas non plus ; sinon un clic dans le vide faisait voler vers un point invisible.
-        if (b.kind == Kind::Galaxy && b.priority >= 9 && i != sim.focus && !labelWanted(sim, ui, cam, i, w, h, x, y, 0.0)) continue;
-        const double d = std::hypot(x - mouse.x, y - mouse.y) - std::min(discRadiusPx(sim, cam, i, h), 2000.0);
-        if (d < 16.0 * ui.s && d < bestD) {
+        // Inventaire du 20/11 : une galaxie dont la forme se voit (rayon dessiné d'au moins 6 px) se clique même si son nom est
+        // caché à cette échelle ; avant, 4 180 galaxies de forme mesurée ne se cliquaient qu'à moins de 3 Mal.
+        const double disc = std::min(discRadiusPx(sim, cam, i, h), 1.0e6);
+        // Les grandes structures (vides, bassins : 121 points nommés) ne passent pas par ce filtre des 55 000 galaxies de
+        // Cosmicflows-4 : leur nom n'est montré qu'au survol, mais elles se cliquent (inventaire : 100 sur 121 ne se cliquaient pas).
+        if (b.kind == Kind::Galaxy && b.priority >= 9 && !b.structure && i != sim.focus && disc < 6.0 && !labelWanted(sim, ui, cam, i, w, h, x, y, 0.0)) continue;
+        // Le point de l'astre à moins de 16 px passe d'abord (le plus proche gagne) ; sinon, un clic n'importe où sur son disque
+        // ou sa forme dessinés le choisit (avant : au centre seulement pour les galaxies, à 16 px près). Un petit astre posé
+        // devant une grande galaxie reste donc cliquable.
+        const double r = std::hypot(x - mouse.x, y - mouse.y), nearPx = 16.0 * ui.s;
+        // Le repère d'une grande structure (centre d'un vide, d'un bassin : un point abstrait) passe après tout astre ou toute
+        // forme réellement sous la souris.
+        const double d = r < nearPx ? (b.structure ? 2.0 * nearPx + r : r) : r < disc ? nearPx * (1.0 + r / disc) : 1e30;
+        if (d < bestD) {
             bestD = d;
             best = i;
         }
@@ -476,7 +487,7 @@ void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, f
         const float discR = static_cast<float>(std::min(discRadiusPx(sim, cam, i, h), 3000.0));
         if (isHover && !isFocus) {      // survol : anneau fin et halo doux
             const float r = std::max(11.0f * ui.s, discR + 6.0f * ui.s);
-            dl->AddCircleFilled(p, r, theme::alpha(theme::kAccent, 0.10f), 48);
+            if (discR < 40.0f) dl->AddCircleFilled(p, r, theme::alpha(theme::kAccent, 0.10f), 48);      // une grande forme n'est pas voilée
             dl->AddCircle(p, r, theme::alpha(theme::kAccent, 0.85f), 48, 1.4f * ui.s);
         }
         if (!isHover && !labelWanted(sim, ui, cam, i, w, h, x, y, boostMag)) continue;

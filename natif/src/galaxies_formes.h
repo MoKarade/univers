@@ -23,7 +23,8 @@ public:
     float ageing[4] = {1, 1, 1, 1};      // vieillissement : lumière disque (comp. 1), bulbe et elliptiques (comp. 2), puis températures
       // brillance de surface moyenne la plus forte des galaxies résolues (flux par pixel, exposition 1)
 
-    bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
+    // Lecture des fiches seulement (sans carte graphique) : sert aussi aux contrôles (essai_selection).
+    bool loadRecords(const std::string& path) {
         std::ifstream f(path, std::ios::binary | std::ios::ate);
         if (!f) return false;
         const size_t bytes = static_cast<size_t>(f.tellg());
@@ -36,6 +37,11 @@ public:
         if (bytes < 64 + static_cast<size_t>(count) * sizeof(Rec)) return false;
         recs_.resize(count);
         std::memcpy(recs_.data(), b.data() + 64, static_cast<size_t>(count) * sizeof(Rec));
+        return true;
+    }
+
+    bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
+        if (!loadRecords(path)) return false;
         recBuf_ = uploadStorage(g, recs_.data(), static_cast<VkDeviceSize>(count) * sizeof(Rec));
         for (int r = 0; r < kRing; ++r) {
             pos_[r] = createBuffer(g, static_cast<VkDeviceSize>(count) * 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -55,6 +61,7 @@ public:
 
     // À chaque image, avant le dessin : place de chaque galaxie (distance mesurée, ou décalage vers le rouge par la table de
     // l'appli) et choix de celles assez grandes à l'écran pour être montrées en particules.
+    bool deepTime = false;      // date montrée au-delà de ±3 Ma (posé par la fenêtre, Sim::deepTime)
     void prepare(const Camera& cam, const GalaxyRenderer& cat, uint32_t height) {
         if (!ready) return;
         ring_ = (ring_ + 1) % kRing;
@@ -106,7 +113,10 @@ public:
             pos[i * 4 + 2] = static_cast<float>(rz);
             pos[i * 4 + 3] = static_cast<float>(w.d);
             np[i] = 0;
-            if (!hidden_.empty() && hidden_[i]) {      // distance inconnue : ni point ni forme (flux nul : P.w = 0)
+            // Loin d'aujourd'hui (au-delà de ±3 Ma), une galaxie à moins de 10 Mal n'a pas de place calculée ici (son nom est
+            // caché, simulation.h refreshGalaxies) : sa forme n'est pas laissée à sa place d'aujourd'hui (inventaire du 20/11 :
+            // forme dessinée mais impossible à cliquer).
+            if ((!hidden_.empty() && hidden_[i]) || (deepTime && recs_[i].d > 0 && recs_[i].d <= 1.0e7)) {      // ni point ni forme (flux nul : P.w = 0)
                 pos[i * 4 + 3] = 0.0f;
                 continue;
             }
@@ -138,8 +148,54 @@ public:
     // pointe des géantes rouges…) est dans la même direction (moins de 0,1°), sa distance mesurée remplace celle de z.
     // À appeler avant snapNames. Rend le nombre de distances remplacées.
     static constexpr double kZInconnue = 0.001;
+
+    // Formes rangées par cases de 0,5° du ciel, pour retrouver vite celles d'une direction.
+    using Grid = std::unordered_map<uint64_t, std::vector<uint32_t>>;
+    static uint64_t cellKey(double ux, double uy, double uz, int dl, int db) {
+        constexpr double kBin = 0.5 * 3.14159265358979 / 180.0;      // cases de 0,5° en latitude et longitude
+        const long b = static_cast<long>(std::floor(std::asin(std::clamp(uz, -1.0, 1.0)) / kBin)) + db;
+        const long l = static_cast<long>(std::floor((std::atan2(uy, ux) + 3.14159265358979) / kBin)) + dl;
+        return static_cast<uint64_t>((b + 1000) * 4000 + ((l % 720) + 720) % 720);
+    }
+    Grid makeGrid() const {
+        Grid grid;
+        for (uint32_t i = 0; i < count; ++i) grid[cellKey(recs_[i].ux, recs_[i].uy, recs_[i].uz, 0, 0)].push_back(i);
+        return grid;
+    }
+    // Décalage vers le rouge écrit dans la fiche (« z = 0.0038 ») ; 0 s'il n'y en a pas.
+    static double zOfText(const std::string& t) {
+        const size_t k = t.rfind("z = ");
+        return k == std::string::npos ? 0.0 : std::atof(t.c_str() + k + 4);
+    }
+    // La forme d'une galaxie nommée, dans la direction (ux, uy, uz) : parmi les formes à moins de 0,1°, celle dont le centre
+    // est le plus près EN UNITÉS DE SON PROPRE RAYON ; une forme dont le z (à 0,002 près) ou la distance mesurée (à 2 %)
+    // contredit la fiche passe après. Avant : la plus proche en angle, si bien qu'une petite galaxie de fond posée sur une
+    // grande prenait son nom (IC 3546 nommée sur une galaxie à z = 0,17, à 2,4 milliards d'al ; essai_selection, 20/11/2026).
+    int bestRec(const Grid& grid, double ux, double uy, double uz, double zName, double dName) const {
+        constexpr double kCos = 0.99999847691, kArcmin = 2.9088821e-4;      // cos(0,1°) ; une minute d'arc en radians
+        double best = 1e300;
+        int bi = -1;
+        for (int db = -1; db <= 1; ++db)
+            for (int dl = -1; dl <= 1; ++dl) {
+                const auto it = grid.find(cellKey(ux, uy, uz, dl, db));
+                if (it == grid.end()) continue;
+                for (uint32_t i : it->second) {
+                    const Rec& r = recs_[i];
+                    const double nu = std::sqrt(double(r.ux) * r.ux + double(r.uy) * r.uy + double(r.uz) * r.uz);      // simple précision : renormalisée
+                    const double c = (ux * r.ux + uy * r.uy + uz * r.uz) / nu;
+                    if (c < kCos) continue;
+                    const double ang = std::sqrt(std::max(2.0 * (1.0 - c), 0.0));
+                    double score = ang / std::max(0.5 * static_cast<double>(r.diam) * kArcmin, 1e-6);
+                    if (zName > 0 && r.z > 0 && std::fabs(r.z - zName) > 0.002) score += 100.0;
+                    if (dName > 0 && r.d > 0 && std::fabs(r.d / dName - 1.0) > 0.02) score += 100.0;
+                    if (score < best) { best = score; bi = static_cast<int>(i); }
+                }
+            }
+        return bi;
+    }
+
     int fixNearbyDistances(const std::vector<Body>& bodies) {
-        if (!ready) return 0;
+        if (recs_.empty()) return 0;
         constexpr double kZMax = 0.005, kCos = 0.99999847691;      // cos(0,1°)
         // sous z = 0,001 (cz < 300 km/s), z ne dit rien de la distance (vitesses propres et chute vers le Groupe local)
         std::vector<std::pair<Vec3, double>> cf4;
@@ -165,6 +221,19 @@ public:
                 hidden_[i] = 1;
             }
         }
+        // Plus loin (z ≥ 0,005) : seulement LA forme de la galaxie nommée qui a reçu la distance mesurée de la même galaxie, sous
+        // le même nom (simulation.h, loadBodies : M77, NGC 1646…), choisie comme pour son nom (bestRec) : une petite galaxie
+        // de fond dans la même direction garde sa propre distance.
+        const Grid grid = makeGrid();
+        for (const Body& b : bodies) {
+            if (b.kind != Kind::Galaxy || b.merged || b.natureText.find("SGA-2020") == std::string::npos || b.natureText.find("Cosmicflows-4") == std::string::npos) continue;
+            const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
+            if (n <= 0) continue;
+            const int k = bestRec(grid, b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n, zOfText(b.natureText), 0.0);
+            if (k < 0 || recs_[static_cast<size_t>(k)].d > 0) continue;
+            recs_[static_cast<size_t>(k)].d = static_cast<float>(n);
+            ++fixed;
+        }
         if (fixed) {      // les distances remplacées ne suivent plus la table des décalages vers le rouge
             byZ_.erase(std::remove_if(byZ_.begin(), byZ_.end(), [&](const ByZ& b) { return recs_[b.i].d > 0; }), byZ_.end());
             version_ = ~0ull;
@@ -178,36 +247,28 @@ public:
     // de noms posés.
     int snapNames(std::vector<Body>& bodies, const GalaxyRenderer& cat) const {
         if (!ready) return 0;
-        constexpr double kBin = 0.5 * 3.14159265358979 / 180.0;      // cases de 0,5° en latitude et longitude
-        auto key = [&](double ux, double uy, double uz, int dl, int db) {
-            const long b = static_cast<long>(std::floor(std::asin(std::clamp(uz, -1.0, 1.0)) / kBin)) + db;
-            const long l = static_cast<long>(std::floor((std::atan2(uy, ux) + 3.14159265358979) / kBin)) + dl;
-            return static_cast<uint64_t>((b + 1000) * 4000 + ((l % 720) + 720) % 720);
-        };
-        std::unordered_map<uint64_t, std::vector<uint32_t>> grid;
-        for (uint32_t i = 0; i < count; ++i) grid[key(recs_[i].ux, recs_[i].uy, recs_[i].uz, 0, 0)].push_back(i);
+        return snapNamesWith(bodies, [&](float z) { return cat.distanceLy(z); });
+    }
+    // distanceOfZ : distance (al) d'un décalage vers le rouge, comme la table de l'appli.
+    template <class DistanceOfZ>
+    int snapNamesWith(std::vector<Body>& bodies, DistanceOfZ&& distanceOfZ) const {
+        if (recs_.empty()) return 0;
+        const Grid grid = makeGrid();
         int snapped = 0;
         for (Body& b : bodies) {
-            if (b.kind != Kind::Galaxy || b.natureText.find("SGA-2020") == std::string::npos) continue;
+            if (b.kind != Kind::Galaxy || b.merged || b.natureText.find("SGA-2020") == std::string::npos) continue;
             const double n = std::sqrt(dot(b.fixedPos, b.fixedPos));
             if (n <= 0) continue;
-            const double ux = b.fixedPos.x / n, uy = b.fixedPos.y / n, uz = b.fixedPos.z / n;
-            double best = std::cos(0.1 * 3.14159265358979 / 180.0);      // à moins de 0,1°
-            int bi = -1;
-            for (int db = -1; db <= 1; ++db)
-                for (int dl = -1; dl <= 1; ++dl) {
-                    const auto it = grid.find(key(ux, uy, uz, dl, db));
-                    if (it == grid.end()) continue;
-                    for (uint32_t i : it->second) {
-                        const double c = ux * recs_[i].ux + uy * recs_[i].uy + uz * recs_[i].uz;
-                        if (c > best) { best = c; bi = static_cast<int>(i); }
-                    }
-                }
+            const bool measured = b.natureText.find("Cosmicflows-4") != std::string::npos;
+            const int bi = bestRec(grid, b.fixedPos.x / n, b.fixedPos.y / n, b.fixedPos.z / n, zOfText(b.natureText), measured ? n : 0.0);
             if (bi < 0) continue;
             const Rec& r = recs_[static_cast<size_t>(bi)];
-            const double d = r.d > 0 ? r.d : cat.distanceLy(r.z);
+            const double d = r.d > 0 ? r.d : distanceOfZ(r.z);
             if (!(d > 0)) continue;
             b.fixedPos = {r.ux * d, r.uy * d, r.uz * d};
+            // rayon de la forme dessinée (diamètre mesuré en minutes d'arc × distance, comme prepare) : la galaxie se clique sur
+            // toute sa forme, pas seulement en son centre (inventaire du 20/11/2026)
+            b.drawnRadiusLy = 0.5 * r.diam * 2.9088821e-4 * d;
             ++snapped;
         }
         return snapped;

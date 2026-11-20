@@ -916,8 +916,12 @@ int runWindow(const WindowOptions& opt) {
         sim.autoPose = autoPose.pose;
         // Distances des galaxies des relevés : recalculées quand la cosmologie change, et quand la date s'éloigne
         // d'aujourd'hui (l'univers grandit : facteur d'échelle calculé, mis à jour tous les millions d'années).
-        if (sim.cosmologyDirty || std::fabs(sim.years - galaxyScaleAt) > 1.0e6) {
+        // Tous les 100 000 ans (avant : un million) : M77, à 44 millions d'al, avance alors d'environ 300 al par pas au lieu
+        // de 3 000 ; le nom et la caméra prennent le même facteur (sim.galaxyScale), ils ne glissent plus sur la forme.
+        if (sim.cosmologyDirty || std::fabs(sim.years - galaxyScaleAt) > 1.0e5) {
             galaxies.setCosmology(sim.cosmology, cosmo::scaleFactorAt(sim.cosmology, (sim.years - kStartYears) / 1.0e9));
+            sim.galaxyScale = galaxies.scale;
+            sim.refreshGalaxies();
             galaxyScaleAt = sim.years;
             sim.cosmologyDirty = false;
         }
@@ -1011,6 +1015,7 @@ int runWindow(const WindowOptions& opt) {
         if (skyOnly) sky.draw(cmd, cam, sc.extent.width, sc.extent.height);      // fond du ciel dans la lumière choisie, à la place des étoiles et des galaxies
         if (!skyOnly) galaxies.draw(cmd, cam, sc.extent.width, sc.extent.height, pc.par[0]);      // même exposition que les étoiles
         if (!skyOnly && galaxyShapes.ready) {
+            galaxyShapes.deepTime = sim.deepTime();
             galaxyShapes.prepare(cam, galaxies, sc.extent.height);
             float aL[16], aT[16];
             vieillissement.factors(sim.replayGa(), aL, aT);
