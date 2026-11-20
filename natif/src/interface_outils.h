@@ -126,6 +126,22 @@ struct NameIndex {
     }
 };
 
+// Majuscules d'un texte UTF-8 en français : lettres simples et lettres accentuées latines (é → É, à → À, ç → Ç).
+inline std::string majuscules(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c >= 'a' && c <= 'z') out += static_cast<char>(c - 32);
+        else if (c == 0xC3 && i + 1 < s.size()) {
+            const unsigned char d = static_cast<unsigned char>(s[++i]);
+            out += static_cast<char>(c);
+            out += static_cast<char>(d >= 0xA0 && d <= 0xBE && d != 0xB7 ? d - 0x20 : d);      // U+00E0..U+00FE, sauf ÷
+        } else out += static_cast<char>(c);
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------- statut d'une valeur (refonte de l'interface, 20/11/2026)
 
 // Statut d'une valeur affichée, lu dans le texte libre que chaque ligne de fiche porte déjà (« mesuré », « calculé d'après
