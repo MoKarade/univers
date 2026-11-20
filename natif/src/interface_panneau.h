@@ -10,6 +10,7 @@
 #include <cstdarg>
 
 #include "interface_cosmo_courbes.h"
+#include "interface_cycle.h"
 #include "interface_images.h"
 #include "interface_savoir.h"
 #include "interface_temps.h"
@@ -228,6 +229,7 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
     ImGui::Spacing();
 
     // Orbite : courbe et analyse.
+    if (b.kind == Kind::Sun || b.kind == Kind::Star) cycleSection(sim, ui, f);      // cycle de vie (interface_cycle.h)
     if (ImGui::CollapsingHeader("Orbite", ImGuiTreeNodeFlags_DefaultOpen)) bodyOrbit(sim, ui, b, f);
     if (ImGui::CollapsingHeader("Valeurs", ImGuiTreeNodeFlags_DefaultOpen)) cardRows(sim, ui, cam, f);
 }

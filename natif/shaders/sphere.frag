@@ -68,7 +68,8 @@ void main() {
         float dux = abs(dFdx(u1)) <= abs(dFdx(u2)) ? dFdx(u1) : dFdx(u2);
         float duy = abs(dFdy(u1)) <= abs(dFdy(u2)) ? dFdy(u1) : dFdy(u2);
         vec3 albedo = textureGrad(carte, tc, vec2(dux, dFdx(tc.y)), vec2(duy, dFdy(tc.y))).rgb;
-        if (pc.ombre.w < 0.0) albedo = pc.ombre.xyz;      /* étoile sans carte mesurée : sa couleur, uniforme (spheres.h) */
+        if (pc.ombre.w < -1.5) albedo *= pc.ombre.xyz;     /* Soleil à une autre date : sa carte, teintée par sa température (spheres.h) */
+        else if (pc.ombre.w < 0.0) albedo = pc.ombre.xyz;  /* étoile sans carte mesurée : sa couleur, uniforme (spheres.h) */
         vec3 c;
         if (pc.soleil.w < 0.0) {
             float mu = max(dot(n, -d), 0.0);
