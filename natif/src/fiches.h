@@ -51,10 +51,23 @@ inline void nettoyer(std::string& l, bool premiere) {
 
 // ---------------------------------------------------------------- écriture des nombres (texte seul, sans arrondi)
 
+// Texte sans lettre (« 1829.4 × 1819.4 × 1815.7 ») : virgule décimale entre deux chiffres. Un texte avec des lettres
+// (référence « 2005MNRAS.356 », nom) est gardé tel quel.
+inline std::string texteFr(const std::string& s) {
+    for (char c : s)
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return s;
+    std::string out = s;
+    for (size_t k = 1; k + 1 < out.size(); ++k)
+        if (out[k] == '.' && out[k - 1] >= '0' && out[k - 1] <= '9' && out[k + 1] >= '0' && out[k + 1] <= '9') out[k] = ',';
+    return out;
+}
+
 // Écrit un nombre de la source en français, chiffre pour chiffre : virgule décimale, espace insécable entre les milliers,
 // « 1.989e30 » -> « 1,989 × 10^30 ». Les chiffres de la source sont gardés tels quels : ni précision inventée, ni perdue.
 // Une case qui n'est pas un nombre est rendue telle quelle.
 inline std::string nombreFr(const std::string& s) {
+    static const std::string approche = "\xE2\x89\x88";      // « ≈ » : valeur approchée dans la source
+    if (s.compare(0, approche.size(), approche) == 0 && s.size() > approche.size()) return approche + nombreFr(s.substr(approche.size()));
     size_t i = 0;
     std::string signe;
     if (i < s.size() && (s[i] == '-' || s[i] == '+')) signe = s[i++] == '-' ? "\xE2\x88\x92" : "";
@@ -66,7 +79,7 @@ inline std::string nombreFr(const std::string& s) {
         while (i < s.size() && s[i] >= '0' && s[i] <= '9') ++i;
         frac = s.substr(d, i - d);
     }
-    if (entier.empty() && frac.empty()) return s;
+    if (entier.empty() && frac.empty()) return texteFr(s);
     std::string exposant;
     if (i < s.size() && (s[i] == 'e' || s[i] == 'E')) {
         size_t j = i + 1;
@@ -80,7 +93,7 @@ inline std::string nombreFr(const std::string& s) {
         exposant = e == "0" ? "" : " \xC3\x97 10^" + se + e;
         i = j;
     }
-    if (i != s.size()) return s;      // reste du texte : pas un nombre
+    if (i != s.size()) return texteFr(s);      // reste du texte : pas un nombre
     if (entier.empty()) entier = "0";
     // Espace entre les milliers, sauf un entier de 4 chiffres (une année, « 2007 », reste collée).
     const bool grouper = entier.size() > 4 || (entier.size() == 4 && !frac.empty());

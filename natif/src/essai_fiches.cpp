@@ -24,8 +24,11 @@ int main() {
     expect(nombreFr("1.989e30") == "1,989 \xC3\x97 10^30", "puissance de dix");
     expect(nombreFr("-2.5e-05") == "\xE2\x88\x92" "2,5 \xC3\x97 10^\xE2\x88\x92" "5", "négatif, exposant négatif");
     expect(nombreFr(".5") == "0,5", ".5");
+    expect(nombreFr("≈" "0.5") == "≈" "0,5", "valeur approchée");
     expect(nombreFr("G2V") == "G2V", "texte gardé");
-    expect(nombreFr("1.2.3") == "1.2.3", "faux nombre gardé");
+    expect(nombreFr("1.2.3") == "1,2,3", "suite de nombres : virgules");
+    expect(nombreFr("1829.4 Ã 1819.4") == "1829,4 Ã 1819,4", "dimensions");
+    expect(nombreFr("2005MNRAS.356") == "2005MNRAS.356", "référence gardée");
     expect(incertitudeFr("0.05") == " \xC2\xB1 0,05", "incertitude symétrique");
     expect(incertitudeFr("+0.1/-0.2") == " +0,1 / \xE2\x88\x92" "0,2", "incertitude dissymétrique");
     expect(incertitudeFr("+0.1/-0.1") == " \xC2\xB1 0,1", "dissymétrique égale");
