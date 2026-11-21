@@ -133,6 +133,12 @@ class Calcul:
             if 'h_gaz' in p: self.gaz.h = cp.asarray(p['h_gaz'], dtype=cp.float64)
             if 'naissance' in p: self.gaz.naissance = np.array(p['naissance'], dtype=np.float64)
             self.gaz.ages_de_depart(p['kind'])
+            # Le retour de masse lit l'âge comme age0 + t (gaz_galaxie.retour) : age0 est donc l'âge À LA DATE 0, pas au
+            # départ. Un départ dans le passé (t < 0) sans ce décalage donnait un âge négatif aux étoiles de moins de 1,25 Ga
+            # (12 % du disque mince), prises pour des naissantes et rendues au gaz : 40 % de gaz en trop, naissances × 2,4,
+            # barre deux fois trop faible (essai du groupe du 20/11, mesuré le 21/11). Les états sauvegardés gardent age0
+            # dans cette convention.
+            self.gaz.age0 = self.gaz.age0 - t_ga
             if 'age0' in p: self.gaz.age0 = cp.asarray(p['age0'], dtype=cp.float64)
         self.forces()
 
