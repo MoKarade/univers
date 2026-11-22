@@ -9,7 +9,8 @@
 //   C, M, L : classes de cadence, disjointes, de traceurs P qui tournent vite autour de leur centre ; images aux dates
 //      intermédiaires (C tous les 2 Ma, M tous les 4 Ma, L tous les 10 Ma : bits 1, 3, 4). Le fichier des rangs
 //      (centraux.bin, moyens.bin, lents.bin) donne le rang dans P de chaque traceur de la classe ;
-//   G, Gaia (bit 2, pas encore écrit par le calcul) : traité comme une famille à part, avec ses propres dates.
+//   G, Gaia (bit 2) : étoiles Gaia suivies par le calcul, une famille à part avec ses propres dates (tous les 10 Ma,
+//      jusqu'à +1 Ga, y compris aux dates P) ; gaia.bin du dossier : rang de chaque traceur G dans le gaia.bin de l'appli.
 // Un enregistrement : 18 octets, petit-boutiste. Position x, y, z en entiers 32 bits (0,01 pc), vitesse x, y, z en
 // entiers 16 bits (0,05 km/s), RELATIVES au centre et à la vitesse d'ensemble de la galaxie d'origine à cette date.
 //
@@ -21,6 +22,7 @@
 // Hors du film : false, rien n'est inventé.
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -113,6 +115,9 @@ public:
         // Couverture : de la première à la dernière date P (un traceur sans classe n'a que ces nœuds).
         for (uint32_t k = 0; k < nd; ++k) if (fam_[k] & 1u) { if (premierP_ < 0) premierP_ = (int)k; dernierP_ = (int)k; }
         if (premierP_ < 0 || dernierP_ == premierP_) return echec(err, "moins de deux images P");
+        // Famille G (Gaia) : ses propres dates (bit 2), sa galaxie d'origine dans son bloc.
+        for (uint32_t k = 0; k < nd; ++k) if (fam_[k] & 4u) { if (premierG_ < 0) premierG_ = (int)k; dernierG_ = (int)k; }
+        for (const auto& x : blocs_) if (x.famille == G) { if (x.galaxie >= ng || x.premier + x.nombre > nG_) return echec(err, "film_index.bin : bloc G invalide"); origineG_ = x.galaxie; }
         return true;
     }
 
@@ -198,6 +203,53 @@ public:
         return true;
     }
 
+    // Famille G : étoiles Gaia suivies par le calcul (positions relatives à la Voie lactée), une image tous les 10 Ma
+    // jusqu'à +1 Ga. Couverture : de la première à la dernière date G.
+    bool aGaia() const { return nG_ > 0 && premierG_ >= 0 && dernierG_ > premierG_; }
+    double debutGaGaia() const { return aGaia() ? t_[(size_t)premierG_] : 0; }
+    double finGaGaia() const { return aGaia() ? t_[(size_t)dernierG_] : 0; }
+    bool couvreGaia(double tGa) const { return aGaia() && tGa >= debutGaGaia() && tGa <= finGaGaia(); }
+    // Rang de chaque traceur G dans le gaia.bin de l'appli (fichier gaia.bin du dossier du film, entiers 32 bits).
+    bool chargerRangsGaia(std::vector<uint32_t>& rangs, std::string& err) const {
+        std::vector<char> r;
+        if (!lire(dossier_ + "/gaia.bin", r) || r.size() != nG_ * 4) return echec(err, "gaia.bin du film absent ou de mauvaise taille");
+        rangs.resize(nG_); if (nG_) std::memcpy(rangs.data(), r.data(), r.size());
+        return true;
+    }
+    // Le gaia.bin de l'appli est-il celui du calcul ? Compare la taille, puis le CRC32 (lecture complète : quelques
+    // secondes pour 2,4 Go). false si le fichier manque ou diffère : l'appli ne doit alors pas relier G à ses étoiles.
+    bool gaiaCorrespond(const std::string& cheminGaia) const {
+        if (!gaiaTaille_) return false;
+        FILE* f = std::fopen(cheminGaia.c_str(), "rb"); if (!f) return false;
+        const long long n = film3_taille(f);
+        if (n < 0 || (uint64_t)n != gaiaTaille_) { std::fclose(f); return false; }
+        uint32_t c = 0xFFFFFFFFu; std::vector<uint8_t> tampon(1u << 22); size_t lu;
+        while ((lu = std::fread(tampon.data(), 1, tampon.size(), f)) > 0) c = crc32(c, tampon.data(), lu);
+        std::fclose(f);
+        return (c ^ 0xFFFFFFFFu) == gaiaCrc_;
+    }
+    // États des traceurs G [premier, premier + nombre) à tGa, comme etats().
+    bool etatsGaia(double tGa, uint64_t premier, uint64_t nombre, float* out) {
+        if (!couvreGaia(tGa) || premier + nombre > nG_) return false;
+        Noeuds n; if (!noeuds(tGa, 4u, n)) return false;
+        Vec3 cp, cv; if (!centre(origineG_, tGa, cp, &cv)) return false;
+        const Image* a = image(n.a, 'g', premier, nombre, false, nG_); const Image* b = image(n.b, 'g', premier, nombre, false, nG_);
+        if (!a || !b) return false;
+        const double c[6] = {cp.x, cp.y, cp.z, cv.x, cv.y, cv.z};
+        for (uint64_t s = 0; s < nombre; ++s) {
+            double pa[3], va[3], pb[3], vb[3]; decoder(a->rec(s), pa, va); decoder(b->rec(s), pb, vb);
+            float* o = out + s * 6;
+            for (int k = 0; k < 3; ++k) { double p, v; hermite(pa[k], va[k], pb[k], vb[k], n.h, n.u, p, v); o[k] = (float)(p + c[k]); o[3 + k] = (float)(v + c[3 + k]); }
+        }
+        return true;
+    }
+    // CRC32 (polynôme 0xEDB88320, celui de zlib) : c = 0xFFFFFFFF au départ, résultat ^ 0xFFFFFFFF à la fin.
+    static uint32_t crc32(uint32_t c, const uint8_t* p, size_t n) {
+        static const auto table = [] { std::array<uint32_t, 256> t{}; for (uint32_t i = 0; i < 256; ++i) { uint32_t x = i; for (int k = 0; k < 8; ++k) x = x & 1 ? 0xEDB88320u ^ (x >> 1) : x >> 1; t[i] = x; } return t; }();
+        for (size_t i = 0; i < n; ++i) c = table[(c ^ p[i]) & 0xFFu] ^ (c >> 8);
+        return c;
+    }
+
     // Matière du calcul (bloc P de type Matiere, galaxie après galaxie) : nature à t = 0 (matiere.bin), puis naissances et
     // retours au gaz (evenements.bin, triés par date). natureA rend, pour chaque particule de matière, 1 si c'est une
     // étoile à tGa, 0 si c'est du gaz. false si les fichiers manquent.
@@ -249,7 +301,7 @@ private:
     };
 
     std::string dossier_;
-    int g_ = 0, premierP_ = -1, dernierP_ = -1;
+    int g_ = 0, premierP_ = -1, dernierP_ = -1, premierG_ = -1, dernierG_ = -1, origineG_ = 0;
     double pasBaseMa_ = 0;
     uint64_t nP_ = 0, nC_ = 0, nG_ = 0, nM_ = 0, nL_ = 0, gaiaTaille_ = 0;
     uint32_t gaiaCrc_ = 0;
@@ -299,7 +351,8 @@ private:
         return image(k, l, 0, traceursClasse(f), false);
     }
     const Image* imageP(int k, uint64_t premier, uint64_t nombre) { return image(k, 'p', premier, nombre, true); }
-    const Image* image(int k, char lettre, uint64_t premier, uint64_t nombre, bool estP) {
+    // total : traceurs dans le fichier entier (contrôle de sa taille) ; 0 : nP_ si estP, sinon nombre.
+    const Image* image(int k, char lettre, uint64_t premier, uint64_t nombre, bool estP, uint64_t total = 0) {
         for (auto it = cache_.begin(); it != cache_.end(); ++it)
             if (it->date == k && it->lettre == lettre && it->premier == premier && it->nombre == nombre) {
                 cache_.splice(cache_.begin(), cache_, it); return &cache_.front();
@@ -307,7 +360,7 @@ private:
         char nom[32]; std::snprintf(nom, sizeof nom, "/%c_%05d.bin", lettre, k);
         FILE* f = std::fopen((dossier_ + nom).c_str(), "rb"); if (!f) return nullptr;
         const long long taille = film3_taille(f);
-        const uint64_t attendu = (estP ? nP_ : nombre) * kEnreg;
+        const uint64_t attendu = (total ? total : estP ? nP_ : nombre) * kEnreg;
         Image im; im.date = k; im.lettre = lettre; im.premier = premier; im.nombre = nombre; im.estP = estP;
         bool ok = taille >= 0 && (uint64_t)taille == attendu && film3_seek(f, (long long)(premier * kEnreg)) == 0;
         if (ok) { im.octets.resize(nombre * kEnreg); ok = std::fread(im.octets.data(), 1, im.octets.size(), f) == im.octets.size(); }

@@ -68,6 +68,34 @@ int main(int argc, char** argv) {
                     lu ? "" : " ; ", lu ? "" : e2.c_str());
         ok(pareil && lignes > 0, "nature (étoile ou gaz) de chaque particule = film_v3.py");
     }
+    {   // CRC32 : valeur connue de zlib pour « 123456789 »
+        const char* s = "123456789";
+        ok((F::crc32(0xFFFFFFFFu, (const uint8_t*)s, 9) ^ 0xFFFFFFFFu) == 0xCBF43926u, "CRC32 = celui de zlib");
+    }
+    if (f.traceursG()) {   // famille G (Gaia)
+        std::printf("Gaia : %llu étoiles suivies, de %.4f à %.4f Ga\n", (unsigned long long)f.traceursG(), f.debutGaGaia(), f.finGaGaia());
+        ok(f.aGaia() && f.couvreGaia(f.debutGaGaia()) && f.couvreGaia(f.finGaGaia()) && !f.couvreGaia(f.finGaGaia() + 1e-6), "famille G : couverture");
+        std::vector<uint32_t> rangsG; std::string e3;
+        ok(f.chargerRangsGaia(rangsG, e3) && rangsG.size() == f.traceursG(), "famille G : rangs dans le gaia.bin de l'appli");
+        std::vector<float> eg(f.traceursG() * 6);
+        ok(f.etatsGaia(0.5 * (f.debutGaGaia() + f.finGaGaia()), 0, f.traceursG(), eg.data()), "famille G : états au milieu");
+        if (FILE* ga = std::fopen((dossier + "/gaia_appli.bin").c_str(), "rb")) {     // film d'essai : faux gaia.bin de l'appli
+            std::fclose(ga);
+            ok(f.gaiaCorrespond(dossier + "/gaia_appli.bin"), "famille G : taille et CRC32 du gaia.bin de l'appli reconnus");
+            ok(!f.gaiaCorrespond(dossier + "/gaia.bin"), "famille G : un autre fichier est refusé");
+        }
+        if (FILE* rg = std::fopen((dossier + "/reference_g.txt").c_str(), "r")) {
+            double t, i, x, y, z, X, Y, Z, pire = 0, vrai = 0; size_t n = 0; bool lu = true;
+            while (std::fscanf(rg, "%lf %lf %lf %lf %lf %lf %lf %lf", &t, &i, &x, &y, &z, &X, &Y, &Z) == 8) {
+                if (!f.etatsGaia(t, (uint64_t)i, 1, eg.data())) { lu = false; continue; }
+                pire = std::fmax(pire, std::hypot(eg[0] - x, eg[1] - y, eg[2] - z) / (1e-4 + 2e-7 * std::hypot(x, y, z)));
+                vrai = std::fmax(vrai, std::hypot(eg[0] - X, eg[1] - Y, eg[2] - Z)); ++n;
+            }
+            std::fclose(rg);
+            std::printf("famille G : %zu positions comparées à film_v3.py, pire écart %.2f ; écart à la vérité au plus %.3g kpc\n", n, pire, vrai);
+            ok(lu && n > 0 && pire <= 1.0, "famille G : mêmes positions que le lecteur Python");
+        }
+    }
     FILE* r = std::fopen((dossier + "/reference.txt").c_str(), "r");
     if (!r) { std::printf("(pas de reference.txt : contrôles de forme seulement)\n"); std::printf("%s\n", echecs ? "ECHEC" : "PASSE"); return echecs ? 1 : 0; }
     std::map<double, std::vector<std::array<double, 7>>> lignes;
