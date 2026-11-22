@@ -193,14 +193,14 @@ def ajouter_traceurs(p, positions, vitesses):
     return {k: np.concatenate([v, np.asarray(plus[k], dtype=v.dtype)]) for k, v in p.items()}
 
 
-def preparer(dossier, S, p, galaxies, t0, infos, n_centraux, G, n_gaia=0):
+def preparer(dossier, S, p, galaxies, t0, infos, n_centraux, G, n_gaia=0, n_naines=0):
     """Range les traceurs du film dans leur ordre fixe et choisit les centraux. Rend (écrivain, rangs sur la carte).
     Ordre de P : étoiles visibles galaxie par galaxie, puis matière du calcul (étoiles et gaz) galaxie par galaxie, puis
-    le Soleil. Centraux : les traceurs P de plus grande fréquence de tour, sqrt(G M(<r) / r³), autour de leur galaxie."""
+    les galaxies naines (un point chacune, rapportées à la Voie lactée), puis le Soleil. Centraux : les traceurs P de plus grande fréquence de tour, sqrt(G M(<r) / r³), autour de leur galaxie."""
     cp = S.cp
     kind, gid = p['kind'], p['gid']
-    idx9 = np.where(kind == 9)[0]; soleil = idx9[-1:]      # ordre des traceurs dans le calcul : étoiles visibles, Gaia, Soleil
-    gaia = idx9[len(idx9) - 1 - n_gaia:len(idx9) - 1]; vis = idx9[:len(idx9) - 1 - n_gaia]
+    idx9 = np.where(kind == 9)[0]; soleil = idx9[-1:]      # ordre des traceurs dans le calcul : étoiles visibles, Gaia, naines, Soleil
+    n9 = len(idx9); naines = idx9[n9 - 1 - n_naines:n9 - 1]; gaia = idx9[n9 - 1 - n_naines - n_gaia:n9 - 1 - n_naines]; vis = idx9[:n9 - 1 - n_naines - n_gaia]
     blocs, r_p, matiere, premier = [], [], [], 0
 
     def bloc(type_, g, r):
@@ -211,6 +211,7 @@ def preparer(dossier, S, p, galaxies, t0, infos, n_centraux, G, n_gaia=0):
     for g in range(len(galaxies)): bloc(TYPE_VISIBLES, g, vis[gid[vis] == g])
     for g in range(len(galaxies)):
         r = np.where((kind != 0) & (kind != 9) & (gid == g))[0]; bloc(TYPE_MATIERE, g, r); matiere.append(r)
+    bloc(TYPE_NAINE, 0, naines)
     bloc(TYPE_SOLEIL, 0, soleil)
     P = np.concatenate(r_p); matiere = np.concatenate(matiere); origine = gid[P].astype(int)
     chemins = [os.path.join(dossier, nom) for _, _, nom, _ in CLASSES]
