@@ -465,6 +465,29 @@ JEUNES_GAZ_MIN = 20000      # particules de gaz qu'il faut à une galaxie pour y
 JEUNES_GAZ_VOISINS = 64     # voisines de gaz moyennées (gaz froid : ~1 km/s de bruit restant)
 
 
+def vitesses_de_jeans(x, p, centre, g, rng, n_rayons=48):
+    """Vitesses d'une population d'étoiles en boule (positions x relatives au centre, kpc) pour qu'elle reste en équilibre
+    dans l'attraction de TOUTE la masse du calcul autour de ce centre : agitation égale dans les trois directions,
+    sigma²(r) = (1/nu) * intégrale de r à l'infini de nu(s) G M(<s) / s² ds, nu étant la densité de la population.
+    La vitesse d'ensemble est celle des étoiles de la galaxie à moins de 1 kpc du centre. Rend les vitesses (km/s)."""
+    r = np.linalg.norm(x, axis=1)
+    bords = np.geomspace(max(np.percentile(r, 0.5), 0.02), np.percentile(r, 99.9) * 1.5, n_rayons + 1)
+    milieux = np.sqrt(bords[1:] * bords[:-1])
+    nu = np.histogram(r, bords)[0] / (4.0 / 3.0 * math.pi * (bords[1:] ** 3 - bords[:-1] ** 3))
+    nu = np.maximum(nu, nu[nu > 0].min() * 1e-3)
+    d = np.linalg.norm(p['pos'] - centre, axis=1); lourd = p['kind'] != 9
+    ordre = np.argsort(d[lourd]); cumul = np.cumsum(p['m'][lourd][ordre]); ds = d[lourd][ordre]
+    masse_sous = lambda s_: cumul[np.clip(np.searchsorted(ds, s_) - 1, 0, len(cumul) - 1)]
+    g_r = G * masse_sous(milieux) / milieux ** 2
+    terme = nu * g_r * np.diff(bords)
+    integrale = np.cumsum(terme[::-1])[::-1] - 0.5 * terme      # de r au bord extérieur (au-delà : négligé)
+    sigma = np.sqrt(np.maximum(integrale / nu, 0.0))
+    s_r = np.interp(r, milieux, sigma)
+    et = np.where((p['gid'] == g) & np.isin(p['kind'], ETOILES) & (d < 1.0))[0]
+    v0 = np.average(p['vel'][et], axis=0, weights=p['m'][et]) if len(et) >= 10 else p['vel'][p['gid'] == g].mean(0)
+    return v0 + rng.normal(0.0, 1.0, (len(r), 3)) * s_r[:, None]
+
+
 def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=20261116, sauf=()):
     """Donne à chaque étoile visible la vitesse d'une particule de masse voisine de la même famille (une des `voisins`
     plus proches, au hasard : l'agitation locale est ainsi celle de la masse). Les étoiles visibles sont posées d'après
@@ -484,11 +507,16 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
         qui = np.where(comp == c)[0]
         if not len(qui) or c in sauf: continue      # sauf : étoiles déjà posées sur la masse, position et vitesse
         # Galaxie sans rotation mesurée (Petit Nuage) : elle tient par l'agitation de ses étoiles, pas par un disque qui
-        # tourne. Le courant moyen du gaz y est presque nul et des jeunes posées dessus tombaient au centre (essai du
-        # 22/11 : rayons -28 % en 50 Ma). Elles prennent donc la vitesse d'une étoile voisine de la masse, comme les
-        # vieilles, qui, elles, restent en place à 2 % près. [Modèle : les jeunes y sont aussi agitées que les vieilles.]
+        # tourne. Ses jeunes sont bien plus serrées que ses vieilles (rayon médian 0,7 contre 2,9 kpc). Essais du 22/11 :
+        # posées sur le courant moyen du gaz (presque nul) elles tombaient au centre (-28 % en 50 Ma) ; avec la vitesse
+        # d'une vieille étoile voisine elles s'éparpillaient (+60 à +130 %). Elles reçoivent donc l'agitation qui tient
+        # LEUR répartition en équilibre dans l'attraction de la masse du calcul (équation de Jeans, boule sans direction
+        # préférée). [Modèle : pas de rotation d'ensemble des jeunes.]
         sans_disque = not (C.galaxie(nom).get('disque') or {}).get('axe_rotation')
-        if c == 5 and sans_disque: sortes = (1,)
+        if c == 5 and sans_disque:
+            tv[qui] = vitesses_de_jeans(tp[qui] - centre, p, centre, g, rng)
+            pris[str(c)] = int(len(qui))
+            continue
         if c == 5 and not sans_disque:
             masse = np.where((p['gid'] == g) & ((p['kind'] == 1) | (p['kind'] == 3)))[0]
             # Quand le calcul porte du gaz, les jeunes prennent le courant du GAZ voisin : elles en naissent, et le gaz froid
