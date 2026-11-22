@@ -63,6 +63,18 @@ Captures comparées à l'appli d'avant, mêmes vues (3 dates × 3 distances) :
   calcul : 0,3 image/s contre 4 avec le tracé de points (le calcul de l'appli passe après celui du grand calcul). Gardé
   seulement derrière `UNIVERS_POINTS=calcul` ; le tracé de points reste la règle.
 
+## Mesure finale (22/11/2026, carte seule, `appli-pc` avec les PR 137, 138, 143 et celles des autres fils jusqu'à la 142)
+
+| Date | Pire échelle (im/s) | Autres échelles |
+|---|---|---|
+| Aujourd'hui | 43 (10⁴ al), 60 (10⁵ al), 62 (10³ al) | 72 à 112 |
+| +1 Ma | 41 (10⁴ al), 47 (10³ al) | 55 à 108 |
+| +100 Ma | 71 (10⁴ al) | 80 à 125 |
+| +4 Ga | 52 (10⁵ al) | 67 à 101 |
+| Temps à 100 Ma/s, vu de 30 000 al | 32 | — |
+
+Au départ (20/11) : pire 17 à 23 im/s selon la date ; temps qui défile 9 à 12. [Mesuré]
+
 ## Ce qui reste
 
 - Vers 10 000 al d'aujourd'hui, la carte dessine 140 millions de points Gaia (79 M + 62 M) : 11 ms, autant à 800 × 450 qu'à
