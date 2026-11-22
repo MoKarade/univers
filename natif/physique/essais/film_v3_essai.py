@@ -29,7 +29,9 @@ ordre = np.argsort(-om[:NP])
 C, M, L = np.sort(ordre[:30]), np.sort(ordre[30:70]), np.sort(ordre[70:120])
 P = np.arange(NP)
 GR = np.arange(NP, N)
-blocs = [dict(famille=0, type=1, galaxie=0, premier=0, nombre=N0 - 1), dict(famille=0, type=3, galaxie=0, premier=N0 - 1, nombre=1),
+NN = 3                                  # galaxies naines : 3 points de la galaxie 0, juste avant le Soleil
+blocs = [dict(famille=0, type=1, galaxie=0, premier=0, nombre=N0 - 1 - NN), dict(famille=0, type=F.TYPE_NAINE, galaxie=0, premier=N0 - 1 - NN, nombre=NN),
+         dict(famille=0, type=3, galaxie=0, premier=N0 - 1, nombre=1),
          dict(famille=0, type=1, galaxie=1, premier=N0, nombre=N1)]
 rangs = {F.FAM_P: P, F.FAM_C: C, F.FAM_M: M, F.FAM_L: L, F.FAM_G: GR}
 orig = {f: gal[np.asarray(r, int)] for f, r in rangs.items()}
@@ -40,7 +42,7 @@ import zlib
 appli = rng.integers(0, 256, 5000, dtype=np.uint8).tobytes()      # un faux gaia.bin de l'appli, pour la taille et le CRC32
 open(os.path.join(out, 'gaia_appli.bin'), 'wb').write(appli)
 rng.permutation(10000)[:NG].astype('<u4').tofile(os.path.join(out, 'gaia.bin'))
-E = F.Ecrivain(out, ['Voie lactée', 'Andromède'], rangs, orig, blocs, infos=dict(gaia=dict(taille=len(appli), crc32=zlib.crc32(appli)), decalage_a_t0={'Andromède': dict(position=[1, 2, 3], vitesse=[4, 5, 6])}))
+E = F.Ecrivain(out, ['Voie lactée', 'Andromède'], rangs, orig, blocs, infos=dict(naines=dict(nombre=NN, noms=['Sagittaire', 'Nuage "essai" \\ 2', 'Dragon 😀'], source='essai'), gaia=dict(taille=len(appli), crc32=zlib.crc32(appli)), decalage_a_t0={'Andromède': dict(position=[1, 2, 3], vitesse=[4, 5, 6])}))
 NM = 12
 m = np.zeros(NM, F.DT_MATIERE); m['nature'] = (np.arange(NM) % 3 != 0); m['sorte'] = np.where(m['nature'], 1, F.SORTE_GAZ); m['galaxie'] = np.arange(NM) % 2; m['masse'] = 1e5
 F.ecrire_fichier(os.path.join(out, 'matiere.bin'), m)
@@ -95,4 +97,5 @@ for t in ts:
     x = F.hermite(pa, va, pb, vb, tdt[b] - tdt[a], u); truth, _ = etat(t)
     for s_ in range(NG): refg.append([t, s_, *x[s_], *truth[NP + s_]])
 np.savetxt(os.path.join(out, 'reference_g.txt'), np.array(refg), fmt='%.9g')
+open(os.path.join(out, 'naines_attendues.txt'), 'w', encoding='utf-8', newline='\n').write(''.join(n + '\n' for n in f.meta['naines']['noms']))
 print('film', len(f.dates), 'dates ; référence', len(ref), 'lignes')

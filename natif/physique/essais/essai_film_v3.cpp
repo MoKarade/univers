@@ -68,6 +68,21 @@ int main(int argc, char** argv) {
                     lu ? "" : " ; ", lu ? "" : e2.c_str());
         ok(pareil && lignes > 0, "nature (étoile ou gaz) de chaque particule = film_v3.py");
     }
+    {   // galaxies naines : bloc P de type Naine, noms dans film.json
+        std::vector<std::string> noms; std::string e4;
+        const bool lu = f.nomsNaines(noms, e4);
+        std::printf("naines : %llu dans P%s", (unsigned long long)f.bloc(F::Naine, 0).nombre, lu ? "" : " ; ");
+        if (!lu) std::printf("%s", e4.c_str());
+        for (const auto& n : noms) std::printf(" [%s]", n.c_str());
+        std::printf("\n");
+        ok(lu && noms.size() == f.bloc(F::Naine, 0).nombre, "naines : un nom par point du bloc");
+        if (FILE* ne = std::fopen((dossier + "/naines_attendues.txt").c_str(), "rb")) {   // film d'essai : noms attendus, un par ligne
+            std::string tout; char c[256]; size_t k; while ((k = std::fread(c, 1, sizeof c, ne)) > 0) tout.append(c, k);
+            std::fclose(ne);
+            std::string lus; for (const auto& n : noms) lus += n + "\n";
+            ok(tout == lus, "naines : noms = film.json (guillemets, barre oblique inverse, hors du plan de base)");
+        }
+    }
     {   // CRC32 : valeur connue de zlib pour « 123456789 »
         const char* s = "123456789";
         ok((F::crc32(0xFFFFFFFFu, (const uint8_t*)s, 9) ^ 0xFFFFFFFFu) == 0xCBF43926u, "CRC32 = celui de zlib");
