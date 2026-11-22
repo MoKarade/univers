@@ -3,8 +3,12 @@
 # Il attend que la carte graphique soit libre (pas de jeu, pas d'appli Univers ouverte), lance le calcul, et le relance
 # depuis sa derniere sauvegarde chaque fois qu'il s'est retire pour laisser la carte. Il s'arrete quand le film est fini.
 # N'ouvre aucune fenetre. Arret : Ctrl-C dans ce terminal.
-param([string]$sortie = 'C:/tmp/natif/groupe-local', [string]$galaxies = '', [string]$traceurs = '', [string]$contrat = '', [string]$voisines = '', [string]$etat = '', [string]$fin = '', [switch]$gaz, [string]$gazMode = '', [string]$maree = '', [string]$efficacite = '')
+param([string]$sortie = 'C:/tmp/natif/groupe-local', [string]$galaxies = '', [string]$traceurs = '', [string]$contrat = '', [string]$voisines = '', [string]$etat = '', [string]$fin = '', [switch]$gaz, [string]$gazMode = '', [string]$maree = '', [string]$efficacite = '', [string]$film = '', [string]$gaia = '', [string]$naines = '', [string]$centraux = '')
 if ($efficacite) { $env:UNIVERS_EFFICACITE = $efficacite }
+if ($film) { $env:UNIVERS_FILM = $film }
+if ($gaia) { $env:UNIVERS_GAIA = $gaia }
+if ($naines) { $env:UNIVERS_NAINES = $naines }
+if ($centraux) { $env:UNIVERS_CENTRAUX = $centraux }
 if ($gazMode) { $env:UNIVERS_GAZ = $gazMode }
 if ($maree) { $env:UNIVERS_MAREE = $maree }
 if ($voisines) { $env:UNIVERS_CONTRATS_VOISINES = $voisines }

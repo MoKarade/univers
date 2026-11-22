@@ -789,7 +789,7 @@ def futur(sortie, t_fin, opts, cible):
 
         def date_v3(t, centres, vitesses):
             k = ecr.numero()
-            if champ is not None and k % (ecr.chaque_p * int(opts['champ'])) == 0:
+            if champ is not None and k % (5 * int(opts['champ'])) == 0:      # --champ compté en pas de 10 Ma, comme au format 2
                 try:
                     ecrire_champ(k, centres, vitesses)
                 except Exception as err:
@@ -799,7 +799,7 @@ def futur(sortie, t_fin, opts, cible):
 
         avancer(S, t0, t_fin, film, releve_ma=2.0, instantane_ga=0.05, journal=journal, a_chaque_releve=date_v3)
         ecr.sauver()
-        print('film (format 3) terminé :', ecr.numero(), 'dates')
+        print('film terminé (format 3) :', ecr.numero(), 'dates')
         return
     # Sauvegarde toutes les 5 images (50 Ma, environ 7 minutes de carte) : un arrêt ne perd jamais plus que cela.
     avancer(S, t0, t_fin, film, releve_ma=releve_ma, instantane_ga=0.05, journal=journal, a_chaque_releve=image_et_index)

@@ -69,6 +69,13 @@ if [ -n "${UNIVERS_CONTRAT:-}" ]; then
   TR="$S/etoiles"
 fi
 echo "=== futur : d'aujourd'hui à +10 Ga ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
-"$PY" -u rencontre.py futur "$S" "${UNIVERS_FIN_GA:-10.0}" $GAZ --traceurs="$TR" --releve-ma=10 --champ=2 >> "$S/journal.txt" 2>&1
+# Film au format 3 (UNIVERS_FILM=3) : étoiles Gaia (UNIVERS_GAIA) et naines (UNIVERS_NAINES) suivies, classes de cadence (UNIVERS_CENTRAUX)
+FILM=""
+if [ "${UNIVERS_FILM:-2}" = "3" ]; then
+  FILM="--film=3 --centraux=${UNIVERS_CENTRAUX:-740000,870000,2100000}"
+  [ -n "${UNIVERS_GAIA:-}" ] && FILM="$FILM --gaia=$UNIVERS_GAIA"
+  [ -n "${UNIVERS_NAINES:-}" ] && FILM="$FILM --naines=$UNIVERS_NAINES"
+fi
+"$PY" -u rencontre.py futur "$S" "${UNIVERS_FIN_GA:-10.0}" $GAZ --traceurs="$TR" --releve-ma=10 --champ=2 $FILM >> "$S/journal.txt" 2>&1
 echo "=== fin ($(date '+%d/%m %H:%M')), code $?" >> "$S/journal.txt"
 rm -f "$VERROU"
