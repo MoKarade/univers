@@ -676,11 +676,11 @@ def futur(sortie, t_fin, opts, cible):
             p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}; t0 = float(z['t'])
         meta = json.load(open(os.path.join(film, 'film.json'), encoding='utf-8'))
         journal = json.load(open(os.path.join(film, 'journal.json'), encoding='utf-8'))
-        k = min(len(journal['t']), len(meta['t']))      # on repart du dernier instantané : les images d'après sont refaites
+        k = min(len(journal['t']), len(meta['t'])) if 't' in meta else len(journal['t'])      # on repart du dernier instantané : les images d'après sont refaites
         while k and journal['t'][k - 1] > t0 + 1e-9: k -= 1
         for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas'):
             if cle in journal: journal[cle] = journal[cle][:k]
-        meta['t'] = meta['t'][:k]
+        if 't' in meta: meta['t'] = meta['t'][:k]
     else:
         with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
             p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
@@ -717,6 +717,10 @@ def futur(sortie, t_fin, opts, cible):
             if 'age0' in p: ajout['age0'] = [np.full(nt, np.nan, np.float32)]
             if 'u_gaz' in p: ajout['u_gaz'] = [np.zeros(nt, np.float32)]
             p = {k: np.concatenate([p[k]] + ajout[k]) for k in p}
+        if opts.get('film') == '3':      # le Soleil : sa place et sa vitesse mesurées, dans le repère du calcul
+            import film_v3
+            p = film_v3.ajouter_soleil(p, np.array(C.charger()['repere']['soleil_position']) + cp_[0], np.array(C.charger()['repere']['soleil_vitesse']) + cv[0])
+            meta['soleil'] = dict(ecart_position=[0.0, 0.0, 0.0], ecart_vitesse=[0.0, 0.0, 0.0])
     S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'))
     cp = S.cp
     tr = [cp.asarray(np.where((p['kind'] == 9) & (p['gid'] == g))[0]) for g in range(len(ORDRE))]
@@ -765,6 +769,26 @@ def futur(sortie, t_fin, opts, cible):
         except Exception as err:
             print(f'  index du film non écrit : {err}', flush=True)
 
+    if opts.get('film') == '3':      # format 3 (film_v3.py) : une date tous les 2 Ma, familles P (20 Ma) et C (entre deux)
+        import film_v3
+        infos = {k: meta[k] for k in ('decalage_a_t0', 'vitesses_de_la_masse', 'soleil') if k in meta}
+        ecr, r_matiere = film_v3.preparer(film, S, p, ORDRE, t0, infos, [int(x) for x in opts.get('centraux', '400000,600000,1600000').split(',')], G)
+        journal = journal or dict(t=[], centres=[], vitesses=[], energie=[], e0=S.energie(), galaxies=ORDRE)
+
+        def date_v3(t, centres, vitesses):
+            k = ecr.numero()
+            if champ is not None and k % (ecr.chaque_p * int(opts['champ'])) == 0:
+                try:
+                    ecrire_champ(k, centres, vitesses)
+                except Exception as err:
+                    print(f'  champ non écrit à t = {t:+.3f} Ga : {err}', flush=True)
+            ecr.date(t, lambda r: cp.asnumpy(S.pos[r]), lambda r: cp.asnumpy(S.vel[r]), centres, vitesses, journal['energie'][-1],
+                     sortes_matiere=cp.asnumpy(S.kind_g[r_matiere]))
+
+        avancer(S, t0, t_fin, film, releve_ma=2.0, instantane_ga=0.05, journal=journal, a_chaque_releve=date_v3)
+        ecr.sauver()
+        print('film (format 3) terminé :', ecr.numero(), 'dates')
+        return
     # Sauvegarde toutes les 5 images (50 Ma, environ 7 minutes de carte) : un arrêt ne perd jamais plus que cela.
     avancer(S, t0, t_fin, film, releve_ma=releve_ma, instantane_ga=0.05, journal=journal, a_chaque_releve=image_et_index)
     print('film terminé :', len(meta['t']), 'images')
