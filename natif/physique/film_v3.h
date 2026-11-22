@@ -1,10 +1,11 @@
 // Appli PC « Univers », bibliothèque univers_physique : lecteur du FILM VERSION 3 du Groupe local.
 //
-// Écrit par pipeline/fusion/film_v3.py (branche film-3, commit eed5344 ; docs/format-film-v3.md). Le format 2 garde son
+// Écrit par pipeline/fusion/film_v3.py (branche film-3, commit 72fdd39 ; docs/format-film-v3.md). Le format 2 garde son
 // lecteur (film_v2.h) pour les anciens films.
 //
 // Contenu. Des traceurs dans un ordre FIXE (l'identifiant d'un traceur est son rang) :
-//   P, principaux : étoiles visibles des cinq galaxies, matière du calcul (étoiles et gaz), Soleil (naines à venir) ;
+//   P, principaux : étoiles visibles des cinq galaxies, matière du calcul (étoiles et gaz), galaxies naines
+//      (un point sans masse chacune, noms dans film.json), Soleil ;
 //      une image toutes les 20 Ma (dates dont le bit 0 est levé) ;
 //   C, M, L : classes de cadence, disjointes, de traceurs P qui tournent vite autour de leur centre ; images aux dates
 //      intermédiaires (C tous les 2 Ma, M tous les 4 Ma, L tous les 10 Ma : bits 1, 3, 4). Le fichier des rangs
@@ -26,6 +27,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <list>
 #include <string>
@@ -141,6 +143,45 @@ public:
     Bloc bloc(Type type, int g = -1) const {
         for (const auto& x : blocs_) if (x.famille == P && x.type == type && (g < 0 || x.galaxie == g)) return x;
         return {};
+    }
+
+    // Galaxies naines : un point sans masse chacune, dans P (bloc de type Naine, galaxie 0), positions relatives à la
+    // Voie lactée comme le reste de P. Leurs noms, dans l'ordre du bloc, sont dans film.json (« naines » : « noms »).
+    // false si film.json manque ou n'a pas de noms ; noms vide et true s'il n'y a pas de naines.
+    bool nomsNaines(std::vector<std::string>& noms, std::string& err) const {
+        noms.clear();
+        const Bloc b = bloc(Naine, 0);
+        if (!b.nombre) return true;
+        std::vector<char> j;
+        if (!lire(dossier_ + "/film.json", j)) return echec(err, "film.json absent");
+        const std::string s(j.begin(), j.end());
+        size_t i = s.find("\"naines\""); if (i != std::string::npos) i = s.find("\"noms\"", i);
+        if (i != std::string::npos) i = s.find('[', i);
+        if (i == std::string::npos) return echec(err, "film.json : pas de noms de naines");
+        for (++i; i < s.size();) {
+            while (i < s.size() && (s[i] == ' ' || s[i] == ',' || s[i] == '\n' || s[i] == '\r' || s[i] == '\t')) ++i;
+            if (i >= s.size() || s[i] == ']') break;
+            if (s[i] != '"') return echec(err, "film.json : noms de naines illisibles");
+            std::string n; uint32_t haut = 0;
+            for (++i; i < s.size() && s[i] != '"'; ++i) {
+                if (s[i] != '\\') { n += s[i]; continue; }
+                if (++i >= s.size()) break;
+                const char e = s[i];
+                if (e == 'u' && i + 4 < s.size()) {      // \uXXXX, paires de substitution comprises, écrit en UTF-8
+                    uint32_t c = (uint32_t)std::strtoul(s.substr(i + 1, 4).c_str(), nullptr, 16); i += 4;
+                    if (c >= 0xD800 && c < 0xDC00) { haut = c; continue; }
+                    if (c >= 0xDC00 && c < 0xE000 && haut) c = 0x10000 + ((haut - 0xD800) << 10) + (c - 0xDC00);
+                    haut = 0;
+                    if (c < 0x80) n += (char)c;
+                    else if (c < 0x800) { n += (char)(0xC0 | c >> 6); n += (char)(0x80 | (c & 63)); }
+                    else if (c < 0x10000) { n += (char)(0xE0 | c >> 12); n += (char)(0x80 | (c >> 6 & 63)); n += (char)(0x80 | (c & 63)); }
+                    else { n += (char)(0xF0 | c >> 18); n += (char)(0x80 | (c >> 12 & 63)); n += (char)(0x80 | (c >> 6 & 63)); n += (char)(0x80 | (c & 63)); }
+                } else n += e == 'n' ? '\n' : e == 't' ? '\t' : e == 'r' ? '\r' : e == 'b' ? '\b' : e == 'f' ? '\f' : e;
+            }
+            noms.push_back(n); ++i;
+        }
+        if (noms.size() != b.nombre) return echec(err, "film.json : nombre de noms de naines différent du bloc");
+        return true;
     }
 
     // Dates couvertes par tous les traceurs P (Ga).
