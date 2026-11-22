@@ -1,32 +1,41 @@
 #!/usr/bin/env python3
 """Film du Groupe local, format 3 (docs/format-film-v3.md) : écrivain (pour rencontre.py, mode « futur ») et lecteur.
 
-Trois familles de traceurs, chacune dans un ordre fixe : P (principaux, une image tous les 20 Ma), C (centraux, les
-traceurs P qui tournent le plus vite, à toutes les dates intermédiaires, tous les 2 Ma), G (Gaia, tous les 10 Ma
-jusqu'à +1 Ga). Un enregistrement = 18 octets, petit-boutiste : position x, y, z en entiers 32 bits signés (unité
-0,01 pc), vitesse x, y, z en entiers 16 bits signés (unité 0,05 km/s, saturée), RELATIVES au centre et à la vitesse
-d'ensemble de la galaxie d'origine du traceur à la date de l'image.
+Familles de traceurs, chacune dans un ordre fixe : P (principaux : étoiles visibles, matière du calcul, Soleil ; une
+image tous les 20 Ma) ; trois classes de cadence ENTRE deux images P, disjointes, choisies parmi P par fréquence de tour
+décroissante : C (tous les 2 Ma), M (tous les 4 Ma), L (tous les 10 Ma) ; G (Gaia, tous les 10 Ma jusqu'à +1 Ga).
+Mesuré le 22/11/2026 : avec une image tous les 20 Ma seulement, l'interpolation se trompe de 0,7 à 1,2 kpc sous 1 kpc
+du centre, de 0,5 kpc entre 1 et 2 kpc, de 90 à 330 pc entre 2 et 3,5 kpc ; d'où les classes.
+Un enregistrement = 18 octets, petit-boutiste : position x, y, z en entiers 32 bits signés (unité 0,01 pc), vitesse
+x, y, z en entiers 16 bits signés (unité 0,05 km/s, saturée), RELATIVES au centre et à la vitesse d'ensemble de la
+galaxie d'origine du traceur à la date de l'image. Entre deux images : Hermite cubique en (x, y, z) (fonction hermite ;
+en rayon et angle c'est pire dans le bulbe, mesuré) ; le centre de la galaxie s'interpole de la même façon, avec la
+vitesse de centre de l'index, sinon son bruit (10 à 50 pc) passe dans toutes les étoiles.
 
 Fichiers du dossier du film :
-  film.json          lisible : version, unités, blocs, cadence, rayon couvert par C, décalages à t = 0
+  film.json          lisible : version, unités, blocs, cadences, classes (effectif, rayon couvert par galaxie), décalages
   film_index.bin     index binaire (disposition ci-dessous)
-  p_NNNNN.bin, c_NNNNN.bin, g_NNNNN.bin   enregistrements, sans en-tête ; NNNNN = rang de la date dans l'index
-  centraux.bin       rang dans P de chaque traceur C (entiers 32 bits non signés)
+  p_NNNNN.bin, c_NNNNN.bin, m_NNNNN.bin, l_NNNNN.bin, g_NNNNN.bin   enregistrements, sans en-tête ; NNNNN = rang de la
+                     date dans l'index (une date tous les 2 Ma). À une date P, seul p_ existe (il contient tout le monde).
+  centraux.bin, moyens.bin, lents.bin   rang dans P de chaque traceur des classes C, M, L (entiers 32 bits non signés)
   matiere.bin        une ligne de 8 octets par particule du bloc « matière du calcul » : nature à t = 0 (octet : 0 gaz,
                      1 étoile), sorte du calcul (octet), galaxie (entier 16 bits), masse en M☉ (flottant 32 bits)
   evenements.bin     lignes de 16 octets, triées par date : rang dans le bloc matière (entier 32 bits), nouvelle nature
                      (octet : 0 gaz, 1 étoile), 3 octets nuls, date en Ga (flottant 64 bits)
 
 film_index.bin :
-  en-tête, 64 octets : « UNIVFLM3 » (8), version (u32 = 3), galaxies (u32), blocs (u32), dates (u32), traceurs P (u64),
-                       C (u64), G (u64), pas de base en Ma (f64), taille d'un enregistrement (u32 = 18), réserve (u32)
-  blocs, 32 octets chacun : famille (u8 : 0 P, 1 C, 2 G), type (u8 : 1 étoiles visibles, 2 matière du calcul, 3 Soleil,
-                       4 naine, 5 Gaia), galaxie d'origine (u16), réserve (u32), premier rang (u64), nombre (u64), réserve (u64)
+  en-tête, 80 octets : « UNIVFLM3 » (8), version (u32 = 3), galaxies (u32), blocs (u32), dates (u32), traceurs P (u64),
+                       C (u64), G (u64), M (u64), L (u64), pas de base en Ma (f64), taille d'un enregistrement (u32 = 18),
+                       réserve (u32)
+  blocs, 32 octets chacun : famille (u8 : 0 P, 1 C, 2 G, 3 M, 4 L), type (u8 : 0 mélange, voir le fichier de rangs ;
+                       1 étoiles visibles, 2 matière du calcul, 3 Soleil, 4 naine, 5 Gaia), galaxie d'origine (u16,
+                       65535 = aucune), réserve (u32), premier rang (u64), nombre (u64), réserve (u64)
   décalage à t = 0 : par galaxie, 6 f64 (place calculée moins place mesurée en kpc, puis vitesse en km/s) ;
                        puis 6 f64 pour le Soleil (place et vitesse du film moins mesurées)
   Gaia, 16 octets : taille du gaia.bin utilisé (u64), CRC32 (u32), réserve (u32) ; zéros si pas de famille G
-  dates : par date, t en Ga (f64), familles présentes (u32 : bit 0 P, bit 1 C, bit 2 G), réserve (u32), puis par galaxie
-                       centre (3 f64, kpc) et vitesse (3 f64, km/s) relatifs à la Voie lactée, puis écart d'énergie (f64)
+  dates : par date, t en Ga (f64), familles présentes (u32 : bit 0 P, 1 C, 2 G, 3 M, 4 L), réserve (u32), puis par
+                       galaxie centre (3 f64, kpc) et vitesse (3 f64, km/s) relatifs à la Voie lactée, puis écart
+                       d'énergie (f64)
 """
 import json
 import os
@@ -175,20 +184,23 @@ def hermite(p0, v0, p1, v1, h_ga, u):
     return (2 * u ** 3 - 3 * u ** 2 + 1) * p0 + (u ** 3 - 2 * u ** 2 + u) * k * v0 + (-2 * u ** 3 + 3 * u ** 2) * p1 + (u ** 3 - u ** 2) * k * v1
 
 
-def ajouter_soleil(p, position, vitesse):
-    """Ajoute le Soleil aux particules du calcul : un traceur sans masse (sorte 9) de la Voie lactée, en dernier."""
-    plus = dict(pos=np.asarray(position, float)[None], vel=np.asarray(vitesse, float)[None], m=[1e-6], eps=[0.05], kind=np.array([9], np.int8),
-                gid=np.array([0], np.int8), h_gaz=np.array([0.2], np.float32), naissance=[np.nan], age0=np.array([np.nan], np.float32), u_gaz=np.zeros(1, np.float32))
+def ajouter_traceurs(p, positions, vitesses):
+    """Ajoute des traceurs sans masse (sorte 9) de la Voie lactée à la fin des particules du calcul (étoiles Gaia, puis
+    le Soleil en tout dernier). positions (n, 3) en kpc, vitesses (n, 3) en km/s, repère du calcul."""
+    positions = np.atleast_2d(np.asarray(positions, float)); n = len(positions)
+    plus = dict(pos=positions, vel=np.atleast_2d(np.asarray(vitesses, float)), m=np.full(n, 1e-6), eps=np.full(n, 0.05), kind=np.full(n, 9, np.int8),
+                gid=np.zeros(n, np.int8), h_gaz=np.full(n, 0.2, np.float32), naissance=np.full(n, np.nan), age0=np.full(n, np.nan, np.float32), u_gaz=np.zeros(n, np.float32))
     return {k: np.concatenate([v, np.asarray(plus[k], dtype=v.dtype)]) for k, v in p.items()}
 
 
-def preparer(dossier, S, p, galaxies, t0, infos, n_centraux, G):
+def preparer(dossier, S, p, galaxies, t0, infos, n_centraux, G, n_gaia=0):
     """Range les traceurs du film dans leur ordre fixe et choisit les centraux. Rend (écrivain, rangs sur la carte).
     Ordre de P : étoiles visibles galaxie par galaxie, puis matière du calcul (étoiles et gaz) galaxie par galaxie, puis
     le Soleil. Centraux : les traceurs P de plus grande fréquence de tour, sqrt(G M(<r) / r³), autour de leur galaxie."""
     cp = S.cp
     kind, gid = p['kind'], p['gid']
-    idx9 = np.where(kind == 9)[0]; soleil, vis = idx9[-1:], idx9[:-1]
+    idx9 = np.where(kind == 9)[0]; soleil = idx9[-1:]      # ordre des traceurs dans le calcul : étoiles visibles, Gaia, Soleil
+    gaia = idx9[len(idx9) - 1 - n_gaia:len(idx9) - 1]; vis = idx9[:len(idx9) - 1 - n_gaia]
     blocs, r_p, matiere, premier = [], [], [], 0
 
     def bloc(type_, g, r):
@@ -226,7 +238,8 @@ def preparer(dossier, S, p, galaxies, t0, infos, n_centraux, G):
         m = np.zeros(len(matiere), DT_MATIERE); m['nature'] = kind[matiere] != SORTE_GAZ; m['sorte'] = kind[matiere]; m['galaxie'] = gid[matiere]; m['masse'] = p['m'][matiere]
         ecrire_fichier(os.path.join(dossier, 'matiere.bin'), m)
     blocs = blocs + [dict(famille=fam, type=0, galaxie=None, premier=0, nombre=int(len(cl))) for (fam, _, _, _), cl in zip(CLASSES, classes) if len(cl)]
-    rangs = {FAM_P: cp.asarray(P), FAM_G: cp.asarray(np.zeros(0, np.int64))}; orig = {FAM_P: origine, FAM_G: np.zeros(0, int)}
+    if len(gaia): blocs = blocs + [dict(famille=FAM_G, type=TYPE_GAIA, galaxie=0, premier=0, nombre=int(len(gaia)))]
+    rangs = {FAM_P: cp.asarray(P), FAM_G: cp.asarray(gaia)}; orig = {FAM_P: origine, FAM_G: np.zeros(len(gaia), int)}
     for (fam, _, _, _), cl in zip(CLASSES, classes): rangs[fam] = cp.asarray(P[cl]); orig[fam] = origine[cl]
     ecr = Ecrivain(dossier, galaxies, rangs, orig, blocs, infos=infos, t0=t0)
     ecr.nature = (cp.asnumpy(S.kind_g[cp.asarray(matiere)]) != SORTE_GAZ).astype(np.uint8)

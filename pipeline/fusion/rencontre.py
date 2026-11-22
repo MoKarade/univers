@@ -717,9 +717,15 @@ def futur(sortie, t_fin, opts, cible):
             if 'age0' in p: ajout['age0'] = [np.full(nt, np.nan, np.float32)]
             if 'u_gaz' in p: ajout['u_gaz'] = [np.zeros(nt, np.float32)]
             p = {k: np.concatenate([p[k]] + ajout[k]) for k in p}
-        if opts.get('film') == '3':      # le Soleil : sa place et sa vitesse mesurées, dans le repère du calcul
+        if opts.get('film') == '3':      # traceurs mesurés de la Voie lactée, dans le repère du calcul : étoiles Gaia, puis le Soleil
             import film_v3
-            p = film_v3.ajouter_soleil(p, np.array(C.charger()['repere']['soleil_position']) + cp_[0], np.array(C.charger()['repere']['soleil_vitesse']) + cv[0])
+            if 'gaia' in opts:      # traceurs_gaia.py : places et vitesses mesurées, gardées telles quelles
+                with np.load(opts['gaia']) as z:
+                    p = film_v3.ajouter_traceurs(p, z['pos'] + cp_[0], z['vel'].astype(np.float64) + cv[0])
+                    meta['gaia'] = dict(nombre=int(len(z['rang'])), taille=int(z['taille']), crc32=int(z['crc32']), source=os.path.basename(opts['gaia']))
+                    z['rang'].astype('<u4').tofile(os.path.join(film, 'gaia.bin'))
+            rep_ = C.charger()['repere']
+            p = film_v3.ajouter_traceurs(p, np.array(rep_['soleil_position']) + cp_[0], np.array(rep_['soleil_vitesse']) + cv[0])
             meta['soleil'] = dict(ecart_position=[0.0, 0.0, 0.0], ecart_vitesse=[0.0, 0.0, 0.0])
     S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'))
     cp = S.cp
@@ -771,8 +777,9 @@ def futur(sortie, t_fin, opts, cible):
 
     if opts.get('film') == '3':      # format 3 (film_v3.py) : une date tous les 2 Ma, familles P (20 Ma) et C (entre deux)
         import film_v3
-        infos = {k: meta[k] for k in ('decalage_a_t0', 'vitesses_de_la_masse', 'soleil') if k in meta}
-        ecr, r_matiere = film_v3.preparer(film, S, p, ORDRE, t0, infos, [int(x) for x in opts.get('centraux', '400000,600000,1600000').split(',')], G)
+        infos = {k: meta[k] for k in ('decalage_a_t0', 'vitesses_de_la_masse', 'soleil', 'gaia') if k in meta}
+        n_gaia = int((meta.get('gaia') or {}).get('nombre', 0))
+        ecr, r_matiere = film_v3.preparer(film, S, p, ORDRE, t0, infos, [int(x) for x in opts.get('centraux', '400000,600000,1600000').split(',')], G, n_gaia=n_gaia)
         journal = journal or dict(t=[], centres=[], vitesses=[], energie=[], e0=S.energie(), galaxies=ORDRE)
 
         def date_v3(t, centres, vitesses):
