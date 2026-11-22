@@ -442,6 +442,8 @@ def main():
         if mode == 'passe':
             np.savez(os.path.join(sortie, 'aujourdhui.npz'), t=0.0, **S.etat())
             print('instantané d\'aujourd\'hui écrit')
+    elif mode == 'tourner':      # python rencontre.py tourner <dossier> --traceurs=<étoiles visibles> [--galaxie=andromede]
+        tourner(args[1], opts, cible)
     elif mode == 'barre':
         barre(args[1], opts, cible)
     elif mode == 'futur':
@@ -595,6 +597,47 @@ def phase_barre(x, y, r0=1.0, r1=4.0):
     r = np.hypot(x, y); m = (r > r0) & (r < r1)
     c = np.mean(np.exp(2j * np.arctan2(y[m], x[m])))
     return float(abs(c)), float(np.degrees(np.angle(c)) / 2)
+
+
+def tourner(sortie, opts, cible, tolerance=3.0):
+    """Tourne d'un bloc une galaxie ISOLÉE autour de son propre axe, à t = 0 (positions et vitesses de toutes ses
+    particules), pour amener la barre de sa masse sur la barre mesurée. Réservé à Andromède : sa barre naît tard et sa
+    direction finale ne suit pas la rotation du départ (essai du 22/11 : départ tourné de +79,5°, arrivée à -84° au lieu
+    de -2,6°, comme au premier passage). À 770 kpc de tout voisin lourd, un tour sur elle-même ne change rien à ce
+    qu'elle subit : la marée extérieure y est mille fois plus faible que son attraction propre. La Voie lactée, elle,
+    est calée par le départ (second passage) : le Grand Nuage, à 50 kpc, interdit de la tourner après coup.
+    Vérifie l'angle obtenu ; garde l'état d'avant dans aujourdhui_avant_tour.npz."""
+    nom = opts.get('galaxie', 'andromede'); g = ORDRE.index(nom)
+    f_auj = os.path.join(sortie, 'aujourdhui.npz')
+    with np.load(f_auj) as z: p = {k: z[k] for k in z.files}
+    with np.load(os.path.join(opts['traceurs'], f'etoiles_visibles_{nom}.npz')) as z: tp = z['pos'].astype(np.float64)
+    td = repere_disque(nom, tp, np.array(cible['galaxies'][nom]['position_aujourdhui']))
+    _, cible_angle = phase_barre(td[:, 0], td[:, 1], 1.0, 5.0)
+    qui = np.where(p['gid'] == g)[0]; et = qui[np.isin(p['kind'][qui], ETOILES)]
+    c = np.median(p['pos'][et], axis=0)
+    for _ in range(8):      # centre des étoiles, sphère qui rétrécit
+        d = np.linalg.norm(p['pos'][et] - c, axis=1); c = np.average(p['pos'][et][d < np.percentile(d, 50)], axis=0, weights=p['m'][et][d < np.percentile(d, 50)])
+    d = np.linalg.norm(p['pos'][et] - c, axis=1); v0 = np.average(p['vel'][et][d < 2.0], axis=0, weights=p['m'][et][d < 2.0])
+    Rv = rotation_vers((C.galaxie(nom).get('disque') or {}).get('axe_rotation'))
+    masse = qui[p['kind'][qui] != 0]
+    def angle_de(pos):
+        md = (pos[masse] - c) @ Rv
+        return phase_barre(md[:, 0], md[:, 1], 1.0, 5.0)
+    f0, a0 = angle_de(p['pos'])
+    a = math.radians((cible_angle - a0 + 90.0) % 180.0 - 90.0)
+    Z = np.array([[math.cos(a), -math.sin(a), 0.0], [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]])
+    T = Rv @ Z.T @ Rv.T      # vecteurs en ligne : nouveau = ancien @ T
+    pos, vel = p['pos'].copy(), p['vel'].copy()
+    pos[qui] = (p['pos'][qui] - c) @ T + c; vel[qui] = (p['vel'][qui] - v0) @ T + v0
+    f1, a1 = angle_de(pos)
+    ecart = abs((a1 - cible_angle + 90.0) % 180.0 - 90.0)
+    print(f"{nom} : barre de la masse {f0:.3f} à {a0:+.1f}° ; tournée de {math.degrees(a):+.1f}° ; maintenant {f1:.3f} à {a1:+.1f}° (mesurée {cible_angle:+.1f}°, écart {ecart:.1f}°)")
+    if ecart > tolerance or abs(f1 - f0) > 0.005: raise SystemExit(f"tour raté : écart {ecart:.1f}°")
+    os.replace(f_auj, os.path.join(sortie, 'aujourdhui_avant_tour.npz'))
+    q = dict(p, pos=pos.astype(p['pos'].dtype), vel=vel.astype(p['vel'].dtype))
+    np.savez(os.path.join(sortie, 'aujourdhui.tmp.npz'), **q); os.replace(os.path.join(sortie, 'aujourdhui.tmp.npz'), f_auj)
+    json.dump(dict(galaxie=nom, tour_degres=round(math.degrees(a), 2), avant=round(a0, 1), apres=round(a1, 1), mesuree=round(cible_angle, 1)),
+              open(os.path.join(sortie, 'tour.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 
 def barre(sortie, opts, cible):

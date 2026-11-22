@@ -39,6 +39,8 @@ if [ ! -f "$S/aujourdhui.npz" ]; then
   echo "=== passe avec la barre calée : $(cat "$S/angles.txt") ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
   "$PY" -u rencontre.py passe "$GAL" "$S" --etat="$ETAT" $GAZ --releve-ma=50 --angles="$(cat "$S/angles.txt")" >> "$S/journal.txt" 2>&1 || { echo "ECHEC du passe" >> "$S/journal.txt"; exit 1; }
   "$PY" -u rencontre.py barre "$S" --traceurs="$TR" >> "$S/journal.txt" 2>&1
+  # Andromède : sa barre ne suit pas la rotation du départ ; isolée, elle est tournée sur elle-même à t = 0 (mode « tourner »).
+  [ -f "$S/tour.json" ] || "$PY" -u rencontre.py tourner "$S" --traceurs="$TR" >> "$S/journal.txt" 2>&1 || echo "tour d'Andromède raté : barre laissée telle quelle" >> "$S/journal.txt"
 fi
 # Contrôle de l'arrivée : on ne continue que si chaque galaxie est assez près de sa place mesurée.
 "$PY" - "$S" >> "$S/journal.txt" 2>&1 <<'EOF' || { echo "ARRÊT : arrivée trop loin des mesures, le futur n'est pas lancé" >> "$S/journal.txt"; exit 2; }
