@@ -461,6 +461,10 @@ def repere_disque(nom, pos, centre):
     return (pos - centre) @ rotation_vers(axe)
 
 
+JEUNES_GAZ_MIN = 20000      # particules de gaz qu'il faut à une galaxie pour y lire le courant des jeunes
+JEUNES_GAZ_VOISINS = 64     # voisines de gaz moyennées (gaz froid : ~1 km/s de bruit restant)
+
+
 def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=20261116, sauf=()):
     """Donne à chaque étoile visible la vitesse d'une particule de masse voisine de la même famille (une des `voisins`
     plus proches, au hasard : l'agitation locale est ainsi celle de la masse). Les étoiles visibles sont posées d'après
@@ -481,6 +485,14 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
         if not len(qui) or c in sauf: continue      # sauf : étoiles déjà posées sur la masse, position et vitesse
         if c == 5:
             masse = np.where((p['gid'] == g) & ((p['kind'] == 1) | (p['kind'] == 3)))[0]
+            # Quand le calcul porte du gaz, les jeunes prennent le courant du GAZ voisin : elles en naissent, et le gaz froid
+            # tourne à la vitesse du cercle, courant de la barre compris. Le courant moyen des étoiles, lui, traîne derrière
+            # (étoiles agitées) : sous 6 kpc, où il était gardé tel quel, les jeunes tombaient ensemble vers le centre puis
+            # remontaient (essai du groupe du 22/11 : rayon médian 5,93 -> 5,44 -> 5,81 kpc en 100 Ma, seul échec du critère
+            # d'équilibre de la Voie lactée avec le disque mince à 3 %).
+            gaz_voisin = np.where((p['gid'] == g) & (p['kind'] == 3))[0]
+            sur_le_gaz = len(gaz_voisin) >= JEUNES_GAZ_MIN
+            if sur_le_gaz: masse = gaz_voisin
             if len(masse) >= 320:
                 md = repere_disque(nom, p['pos'][masse], centre)
                 arbre = cKDTree(md[:, :2])
@@ -490,7 +502,7 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
                 # plusieurs km/s de bruit, ce qui suffisait à épaissir les jeunes : 49 -> 220 pc en 100 Ma, mesuré)
                 vm = np.zeros((len(qui), 3)); vmasse = (p['vel'][masse] - p['vel'][masse].mean(0)) @ R
                 for a0 in range(0, len(qui), 100000):      # 1 024 voisines : la moyenne garde ~1 km/s de bruit, y compris en hauteur (le disque ondule)
-                    _, v = arbre.query(td[qui[a0:a0 + 100000], :2], k=1024, workers=-1)
+                    _, v = arbre.query(td[qui[a0:a0 + 100000], :2], k=JEUNES_GAZ_VOISINS if sur_le_gaz else 1024, workers=-1)
                     vm[a0:a0 + 100000] = vmasse[v].mean(axis=1)
                 # Les étoiles agitées tournent moins vite que la vitesse circulaire (ici 196 au lieu de ~235 km/s au Soleil) ;
                 # des jeunes lancées à cette vitesse tomberaient vers le centre. Leur vitesse de rotation est donc remise à
@@ -508,6 +520,7 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
                 # la remise à l'échelle entre progressivement de 6 à 9 kpc (run du 16/11 : appliquée partout, elle éjectait
                 # les jeunes du centre, rayon médian 5,9 -> 8,1 kpc en 50 Ma)
                 u_ = np.clip((Rj - 6.0) / 3.0, 0.0, 1.0); fj = 1.0 + (fj - 1.0) * u_ * u_ * (3 - 2 * u_)
+                if sur_le_gaz: fj = np.ones(len(qui))      # le gaz tourne déjà à la vitesse du cercle : pas de remise à l'échelle
                 er = td[qui, :2] / np.maximum(Rj, 1e-6)[:, None]; ep = np.stack([-er[:, 1], er[:, 0]], 1)
                 vr = (vm[:, :2] * er).sum(1); vp = (vm[:, :2] * ep).sum(1) * fj
                 vm[:, :2] = er * vr[:, None] + ep * vp[:, None]
