@@ -483,7 +483,13 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
     for c, sortes in PORTEUSES.items():
         qui = np.where(comp == c)[0]
         if not len(qui) or c in sauf: continue      # sauf : étoiles déjà posées sur la masse, position et vitesse
-        if c == 5:
+        # Galaxie sans rotation mesurée (Petit Nuage) : elle tient par l'agitation de ses étoiles, pas par un disque qui
+        # tourne. Le courant moyen du gaz y est presque nul et des jeunes posées dessus tombaient au centre (essai du
+        # 22/11 : rayons -28 % en 50 Ma). Elles prennent donc la vitesse d'une étoile voisine de la masse, comme les
+        # vieilles, qui, elles, restent en place à 2 % près. [Modèle : les jeunes y sont aussi agitées que les vieilles.]
+        sans_disque = not (C.galaxie(nom).get('disque') or {}).get('axe_rotation')
+        if c == 5 and sans_disque: sortes = (1,)
+        if c == 5 and not sans_disque:
             masse = np.where((p['gid'] == g) & ((p['kind'] == 1) | (p['kind'] == 3)))[0]
             # Quand le calcul porte du gaz, les jeunes prennent le courant du GAZ voisin : elles en naissent, et le gaz froid
             # tourne à la vitesse du cercle, courant de la barre compris. Le courant moyen des étoiles, lui, traîne derrière
