@@ -1,5 +1,18 @@
 # Film du Groupe local, format 3 (proposition du 18 novembre 2026)
 
+> **État au 22 novembre 2026 : codé et testé.** La disposition exacte, octet par octet, est en tête de
+> `pipeline/fusion/film_v3.py` (écrivain et lecteur Python) ; le lecteur de l'appli est `natif/physique/film_v3.h`.
+> Ce qui a changé depuis la proposition ci-dessous, d'après les mesures du 22/11 :
+> - une image tous les 20 Ma ne suffit pas près des centres (erreur d'interpolation mesurée : 0,7 à 1,2 kpc sous 1 kpc,
+>   0,5 kpc entre 1 et 2 kpc, 90 à 330 pc entre 2 et 3,5 kpc). La famille C seule (2 Ma) ne couvrait que le premier kpc.
+>   Il y a donc trois classes de cadence entre deux images P, choisies par fréquence de tour : **C** tous les 2 Ma
+>   (740 000 traceurs, jusqu'à 1 kpc), **M** tous les 4 Ma (870 000, jusqu'à 2 kpc), **L** tous les 10 Ma (2,1 M,
+>   jusqu'à 4,5 kpc) ; erreur typique restante : moins de 50 pc ;
+> - taille : P 101 + C 56 + M 31 + L 19 + G 12,5 = **environ 219 Go** ;
+> - 40 naines (et non 38), sans masse ; Sagittaire n'attire donc pas le disque (écart écrit dans `ecarts.txt`) ;
+> - l'en-tête de l'index fait 80 octets (il compte aussi M et L) ; bits des familles : 0 P, 1 C, 2 G, 3 M, 4 L ;
+> - le centre de chaque galaxie s'interpole comme les traceurs (Hermite, vitesse de centre de l'index).
+
 Écrit par `pipeline/fusion/rencontre.py` (mode `futur`), lu par l'appli (`natif/physique/film_v3.h`, fil « Analyser le
 code »). Remplace le format 2 (`film_v2.py`, `film_v2.h`), que le lecteur garde pour les anciens films.
 
