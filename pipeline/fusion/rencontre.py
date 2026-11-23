@@ -681,6 +681,9 @@ def futur(sortie, t_fin, opts, cible):
         for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas'):
             if cle in journal: journal[cle] = journal[cle][:k]
         if 't' in meta: meta['t'] = meta['t'][:k]
+        if opts.get('film') == '3':
+            import film_v3
+            p = film_v3.retirer_gaia_apres_la_fin(p, meta, t0)
     else:
         with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
             p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
@@ -783,7 +786,8 @@ def futur(sortie, t_fin, opts, cible):
     if opts.get('film') == '3':      # format 3 (film_v3.py) : une date tous les 2 Ma, familles P (20 Ma) et C (entre deux)
         import film_v3
         infos = {k: meta[k] for k in ('decalage_a_t0', 'vitesses_de_la_masse', 'soleil', 'gaia', 'naines') if k in meta}
-        n_gaia = int((meta.get('gaia') or {}).get('nombre', 0)); n_naines = int((meta.get('naines') or {}).get('nombre', 0))
+        n_naines = int((meta.get('naines') or {}).get('nombre', 0))
+        n_gaia = film_v3.gaia_presentes(p, meta) if 'blocs' in meta else int((meta.get('gaia') or {}).get('nombre', 0))
         ecr, r_matiere = film_v3.preparer(film, S, p, ORDRE, t0, infos, [int(x) for x in opts.get('centraux', '400000,600000,1600000').split(',')], G, n_gaia=n_gaia, n_naines=n_naines)
         journal = journal or dict(t=[], centres=[], vitesses=[], energie=[], e0=S.energie(), galaxies=ORDRE)
 

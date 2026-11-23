@@ -193,6 +193,33 @@ def ajouter_traceurs(p, positions, vitesses):
     return {k: np.concatenate([v, np.asarray(plus[k], dtype=v.dtype)]) for k, v in p.items()}
 
 
+def _comptes(meta):
+    """Nombres de traceurs du film d'après film.json : étoiles visibles, Gaia, naines."""
+    nv = sum(b['nombre'] for b in meta['blocs'] if b['famille'] == FAM_P and b['type'] == TYPE_VISIBLES)
+    return nv, int((meta.get('gaia') or {}).get('nombre', 0)), int((meta.get('naines') or {}).get('nombre', 0))
+
+
+def gaia_presentes(p, meta):
+    """Nombre d'étoiles Gaia encore portées par le calcul (0 une fois retirées, voir retirer_gaia_apres_la_fin)."""
+    nv, ng, nn = _comptes(meta)
+    n9 = int((p['kind'] == 9).sum())
+    if n9 == nv + ng + nn + 1: return ng
+    if n9 == nv + nn + 1: return 0
+    raise SystemExit(f"traceurs incohérents avec film.json : {n9} dans le calcul, attendu {nv + ng + nn + 1} ou {nv + nn + 1}")
+
+
+def retirer_gaia_apres_la_fin(p, meta, t0):
+    """À une reprise après la dernière image G (+1 Ga), retire les étoiles Gaia du calcul : elles ne sont plus écrites,
+    et les porter jusqu'à +10 Ga coûterait un quart du temps de carte pour rien (6,9 M de traceurs sur 25 M). Leurs images
+    déjà écrites restent dans le film. Ordre des traceurs dans le calcul : étoiles visibles, Gaia, naines, Soleil."""
+    nv, ng, nn = _comptes(meta)
+    if not ng or t0 < float(meta.get('fin_g_ga', 1.0)) - 1e-9 or gaia_presentes(p, meta) == 0: return p
+    idx9 = np.where(p['kind'] == 9)[0]; retirer = idx9[nv:nv + ng]
+    garde = np.ones(len(p['kind']), bool); garde[retirer] = False
+    print(f"reprise après la dernière image Gaia : {ng} étoiles Gaia retirées du calcul", flush=True)
+    return {k: v[garde] for k, v in p.items()}
+
+
 def preparer(dossier, S, p, galaxies, t0, infos, n_centraux, G, n_gaia=0, n_naines=0):
     """Range les traceurs du film dans leur ordre fixe et choisit les centraux. Rend (écrivain, rangs sur la carte).
     Ordre de P : étoiles visibles galaxie par galaxie, puis matière du calcul (étoiles et gaz) galaxie par galaxie, puis
