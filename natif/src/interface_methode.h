@@ -110,11 +110,12 @@ void tasksTable(const Sim& sim) {
 void drawHow(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     if (sim.calcStates.empty() && sim.tasks.empty()) return;
     if (!ui.details && runningTasks(sim) == 0 && !ui.howOpen && !ui.tasksOpen) return;      // minimaliste : rien à montrer
-    // Sous la complétude ; si elle mordrait sur la barre du temps, sous celle-ci.
-    float y = ui.completenessBottom + px(ui, 8);
-    if (w - px(ui, 16) - ui.howW < ui.timeRight + px(ui, 8)) y = std::max(y, ui.timeBottom + px(ui, 8));
+    // Sous la complétude, en haut à droite.
+    const float y = ui.completenessBottom + px(ui, 8);
     ImGui::SetNextWindowPos({w - px(ui, 16), y}, 0, {1, 0});
+    ImGui::SetNextWindowSizeConstraints({ui.completenessW, 0}, {std::max(ui.completenessW, px(ui, 200)), FLT_MAX});      // même largeur que la carte du dessus
     ImGui::Begin("methode-ligne", nullptr, fixed);
+    cardShadow();
     if (!sim.calcStates.empty() && ui.details) {      // minimaliste : « comment c'est obtenu » seulement avec les détails
         bool warn = false;
         const std::string line = howSummary(sim, warn) + " (clic : détail)";
@@ -133,7 +134,7 @@ void drawHow(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
         if (ImGui::Selectable(line.c_str(), ui.tasksOpen)) ui.tasksOpen = !ui.tasksOpen;
         if (slow && slow->total > 0) {
             const std::string over = slow->name + " : " + frInt(slow->percent) + " %";
-            ImGui::ProgressBar(static_cast<float>(slow->percent / 100.0), {ui.details ? -1.0f : px(ui, 140), ImGui::GetFontSize() * 0.9f}, ui.details ? over.c_str() : "");
+            ImGui::ProgressBar(static_cast<float>(slow->percent / 100.0), {-1.0f, ui.details ? ImGui::GetFontSize() * 0.9f : px(ui, 6)}, ui.details ? over.c_str() : "");
             if (!ui.details && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", over.c_str());
         }
     }

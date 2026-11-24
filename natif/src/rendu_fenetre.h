@@ -195,15 +195,17 @@ struct ScreenPass {
     }
 
     // À appeler dans la passe de l'image finale.
-    // photo : 0 = œil nu (compression de Reinhard, couleur par couleur) ; 1 = photo (étirement asinh sur la luminance).
-    void draw(VkCommandBuffer cmd, VkExtent2D extent, float photo = 0.0f) const {
+    // photo : 0 = œil nu (compression de Reinhard, couleur par couleur) ; 1 = photo (étirement asinh sur la luminance) ;
+    // entre les deux : mélange des deux images (passage sans à-coup).
+    // pose : facteur de la pose automatique contre la saturation (pose_auto.h), 1 = aucun.
+    void draw(VkCommandBuffer cmd, VkExtent2D extent, float photo = 0.0f, float pose = 1.0f) const {
         const VkViewport vp{0, 0, static_cast<float>(extent.width), static_cast<float>(extent.height), 0, 1};
         const VkRect2D scissor{{0, 0}, extent};
         vkCmdSetViewport(cmd, 0, 1, &vp);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &set, 0, nullptr);
-        const float p[4] = {photo, 0, 0, 0};
+        const float p[4] = {photo, pose, 0, 0};
         vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(p), p);
         vkCmdDraw(cmd, 3, 1, 0, 0);
     }

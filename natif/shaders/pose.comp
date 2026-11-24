@@ -1,0 +1,32 @@
+#version 450
+/* Pose automatique (pose_auto.h) : histogramme de la luminance de TOUS les pixels de l'image en grande dynamique, avant la
+   pose. Avant (audit A2, 20/11/2026) : 9 216 points fixes, alors qu'une étoile fait un pixel ; selon qu'une étoile tombait
+   ou non sur un point, la mesure changeait en faisant défiler la vue. Ici chaque pixel compte, et la pose n'entre pas dans
+   la mesure : le processeur calcule lui-même, sur l'histogramme, ce que donnerait chaque pose (comme le posemètre d'un
+   appareil photo ; méthode des moteurs de jeu : histogramme en logarithme, Unreal Engine « Auto Exposure Histogram »).
+   128 cases : case 0 = noir (luminance < 2^-30) ; case b >= 1 : log2(Y) dans [-30 + 0,375 (b - 1), -30 + 0,375 b[.
+   Équipes de 16 x 16 fils, chacun lit 2 x 2 pixels ; histogramme de l'équipe en mémoire partagée, puis ajouté au tampon
+   (remis à zéro avant, voir measure). Résultat lu par le processeur à l'image suivante, sans attente. */
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(set = 0, binding = 0) uniform sampler2D hdr;
+layout(set = 0, binding = 1, std430) buffer Out { uint hist[128]; } outp;
+shared uint sHist[128];
+void main() {
+    uint t = gl_LocalInvocationIndex;
+    if (t < 128u) sHist[t] = 0u;
+    barrier();
+    ivec2 size = textureSize(hdr, 0);
+    ivec2 base = ivec2(gl_GlobalInvocationID.xy) * 2;
+    for (int dy = 0; dy < 2; ++dy)
+        for (int dx = 0; dx < 2; ++dx) {
+            ivec2 q = base + ivec2(dx, dy);
+            if (q.x >= size.x || q.y >= size.y) continue;
+            vec3 c = min(texelFetch(hdr, q, 0).rgb, vec3(6.0e4));      /* borne : une somme qui déborde les 16 bits (inf) */
+            float Y = dot(max(c, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722));
+            uint b = 0u;
+            if (Y >= exp2(-30.0)) b = uint(clamp(floor((log2(Y) + 30.0) / 0.375) + 1.0, 1.0, 127.0));
+            atomicAdd(sHist[b], 1u);
+        }
+    barrier();
+    if (t < 128u && sHist[t] != 0u) atomicAdd(outp.hist[t], sHist[t]);
+}

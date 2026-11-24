@@ -63,6 +63,44 @@ const BodyText kBodyTexts[] = {
     {"Grand Nuage de Magellan", nullptr,
      "Galaxie satellite de la Voie lactée, à environ 160 000 années-lumière, visible à l'œil nu depuis l'hémisphère Sud. "
      "Source : Pietrzyński et al. 2019."},
+    // Amas et superamas de galaxies_noms.tsv (Marc, 20/11/2026 : « ça dit que le superamas c'est une seule galaxie ») :
+    // ce ne sont pas des galaxies ; leurs galaxies sont les points autour du nom.
+    {"Amas de la Vierge", nullptr,
+     "Amas de galaxies, le plus proche de nous : environ 1 500 galaxies liées par la gravité, à environ 54 millions "
+     "d'années-lumière (16,5 Mpc). Il est au cœur de notre superamas local. Ce n'est pas une galaxie : ses galaxies sont les "
+     "points autour du nom. Sources : Binggeli et al. 1985 ; Mei et al. 2007."},
+    {"Amas de Coma", nullptr,
+     "Amas de galaxies riche, plus de 1 000 galaxies, à environ 320 millions d'années-lumière. C'est en mesurant la vitesse "
+     "de ses galaxies que Fritz Zwicky a soupçonné en 1933 l'existence de la matière noire. Ce n'est pas une galaxie : ses "
+     "galaxies sont les points autour du nom. Source : Zwicky 1933 ; Abell 1958 (Abell 1656)."},
+    {"Amas du Fourneau", nullptr,
+     "Amas de galaxies proche, dans le ciel austral, à environ 65 millions d'années-lumière (20 Mpc). Ce n'est pas une "
+     "galaxie : ses galaxies sont les points autour du nom. Source : Blakeslee et al. 2009."},
+    {"Amas de Persée", nullptr,
+     "Amas de galaxies (Abell 426), le plus brillant du ciel en rayons X, à environ 240 millions d'années-lumière. Ce n'est "
+     "pas une galaxie : ses galaxies sont les points autour du nom. Source : Abell 1958 ; Fabian et al. 2011."},
+    {"Superamas de Shapley", nullptr,
+     "Superamas : des dizaines d'amas de galaxies, la plus grande concentration de masse à moins d'un milliard "
+     "d'années-lumière, à environ 650 millions d'années-lumière. Ce n'est pas une galaxie. Sources : Shapley 1930 ; "
+     "Proust et al. 2006."},
+    {"Grand Attracteur", nullptr,
+     "Région de forte densité au cœur de Laniakea, vers laquelle tombent les galaxies de notre voisinage, à environ "
+     "250 millions d'années-lumière, en partie cachée derrière la Voie lactée. Ce n'est pas une galaxie. Sources : "
+     "Lynden-Bell et al. 1988 ; Tully et al. 2014."},
+    {"Fond diffus cosmologique", nullptr,
+     "La plus vieille lumière de l'univers, partie 380 000 ans après le Big Bang (z = 1 090), quand l'univers est devenu "
+     "transparent. Elle nous arrive de partout, d'une sphère de 45 milliards d'années-lumière de rayon aujourd'hui (distance "
+     "comobile). La carte posée sur cette sphère est celle MESURÉE par le satellite Planck (SMICA 2018), en fausses couleurs : "
+     "bleu plus froid, rouge plus chaud, à ±300 millionièmes de degré autour de 2,7255 K. Ce rayonnement est en micro-ondes : "
+     "l'œil ne le verrait pas. Les taches sont les graines des futurs amas de galaxies. Sources : Planck Collaboration 2020 "
+     "(A&A 641, A1, A4 et A6) ; Fixsen 2009."},
+    {"Univers observable", nullptr,
+     "Tout ce dont la lumière a eu le temps de nous parvenir depuis le Big Bang : une sphère de 46 milliards "
+     "d'années-lumière de rayon aujourd'hui (distance comobile, cosmologie Planck 2018). Juste en dedans, la surface d'où est "
+     "partie la lumière du fond diffus cosmologique (z = 1 090) porte la carte MESURÉE par le satellite Planck (SMICA 2018), "
+     "en fausses couleurs : bleu plus froid, rouge plus chaud, à ±300 millionièmes de degré autour de 2,7255 K. Ce "
+     "rayonnement est en micro-ondes : l'œil ne le verrait pas. Sources : Planck Collaboration 2020 (A&A 641, A1 et A6) ; "
+     "Fixsen 2009."},
     {"Centre de la Voie lactée", nullptr,
      "Au centre de notre galaxie, à environ 26 700 années-lumière, se trouve Sagittarius A*, un trou noir de 4 millions de masses "
      "solaires dont l'ombre a été photographiée en 2022 (Event Horizon Telescope). Sources : GRAVITY 2019 ; EHT 2022."},
@@ -79,6 +117,13 @@ const char* kindText(int kind) {
         case 5: return "Petit corps du système solaire. Son orbite vient de la base du JPL (NASA), sans l'attraction des planètes.";
         default: return "";
     }
+}
+
+// Amas de galaxies sans texte propre.
+const char* clusterText() {
+    return "Amas de galaxies : des centaines à des milliers de galaxies liées par la gravité, sur quelques millions "
+           "d'années-lumière. Ce n'est pas une galaxie : ses galaxies sont les points autour du nom. Sa place vient des "
+           "catalogues cités ci-dessous.";
 }
 
 // Repères des grandes structures (structures_noms.tsv) : ni galaxie ni lumière.

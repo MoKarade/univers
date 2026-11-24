@@ -288,7 +288,7 @@ Comptes compter(const SimT& sim, uint64_t galaxiesReleves, uint64_t etoilesGaia 
             if (systeme >= 0 && systeme < 10) ++c.lunes[systeme];
         }
         if (b.kind == K::Probe) ++c.sondes;
-        if (b.kind == K::Galaxy && b.natureText.rfind("centre", 0) != 0) {
+        if (b.kind == K::Galaxy && b.natureText.rfind("centre", 0) != 0 && !b.unplaced && !b.merged && !b.structure && !b.nebula) {      // ni les galaxies sans distance, ni les doublons fondus, ni les repères
             const double d = std::sqrt(b.fixedPos.x * b.fixedPos.x + b.fixedPos.y * b.fixedPos.y + b.fixedPos.z * b.fixedPos.z);
             if (d > 0 && d < kRayonGroupeLocalLy) ++c.galaxiesGroupeLocal;
         }

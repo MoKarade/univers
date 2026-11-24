@@ -44,3 +44,9 @@ add_executable(essai_film essais/essai_film.cpp)
 target_link_libraries(essai_film PRIVATE univers_physique)
 target_compile_options(essai_film PRIVATE -Wall -Wextra)
 target_link_options(essai_film PRIVATE -static)
+
+# Essai : lecteur du film version 3 (pipeline/fusion/film_v3.py), contre le lecteur Python sur un petit film d'essai.
+add_executable(essai_film_v3 essais/essai_film_v3.cpp)
+target_include_directories(essai_film_v3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(essai_film_v3 PRIVATE -Wall -Wextra)
+target_link_options(essai_film_v3 PRIVATE -static)

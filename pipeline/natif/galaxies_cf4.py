@@ -62,6 +62,34 @@ def lire_openngc(dossier: str) -> dict[int, tuple[str, str]]:
     return noms
 
 
+def lire_coords_openngc(dossier: str) -> dict[int, tuple[float, float]]:
+    """PGC -> (ascension droite, déclinaison) en degrés J2000, telles qu'OpenNGC les donne pour la galaxie elle-même."""
+    coords: dict[int, tuple[float, float]] = {}
+    for f in ('NGC.csv', 'addendum.csv'):
+        chemin = os.path.join(dossier, 'openngc', f)
+        if not os.path.exists(chemin):
+            continue
+        for r in csv.DictReader(open(chemin, encoding='utf-8'), delimiter=';'):
+            pgc = re.search(r'PGC (\d+)', r.get('Identifiers') or '')
+            if not pgc or not r.get('RA') or not r.get('Dec'):
+                continue
+            h, m, s = (float(x) for x in r['RA'].split(':'))
+            sg = -1.0 if r['Dec'].strip().startswith('-') else 1.0
+            d, dm, ds = (abs(float(x)) for x in r['Dec'].split(':'))
+            coords.setdefault(int(pgc.group(1)), (15.0 * (h + m / 60 + s / 3600), sg * (d + dm / 60 + ds / 3600)))
+    return coords
+
+
+def lire_groupes(chemin: str) -> list[dict]:
+    """Cosmicflows-4, table 3 (VizieR J/ApJ/944/94/groups) : distance de chaque groupe, moyenne pondérée de ses membres."""
+    if not os.path.exists(chemin):
+        return []
+    lignes = [l for l in open(chemin, encoding='utf-8', errors='replace') if l.strip() and not l.startswith('#')]
+    entete = lignes[0].rstrip('\n').split('\t')
+    rangs = (l.rstrip('\n').split('\t') for l in lignes[3:])      # VizieR : noms, unités, tirets, puis les données
+    return [dict(zip(entete, (v.strip() for v in c))) for c in rangs if len(c) == len(entete)]
+
+
 def ecliptique(ra: float, dec: float) -> np.ndarray:
     a, d = math.radians(ra), math.radians(dec)
     x, y, z = math.cos(d) * math.cos(a), math.cos(d) * math.sin(a), math.sin(d)
@@ -103,11 +131,40 @@ def main() -> None:
         texte = (f'{genre} ; distance mesurée {mpc} Mpc ({mal} millions d’al) ± {max(1, round(46.1 * edm))} % '
                  f'({methodes} ; Cosmicflows-4, Tully et al. 2023)')
         lignes.append(f'{nom}\t{p[0]:.6g}\t{p[1]:.6g}\t{p[2]:.6g}\t{texte}\t9\n')
+    # Galaxie dominante d'un groupe, sans distance à elle dans la table 2 (M77 = NGC 1068 : Seyfert vue de face, ni
+    # Tully-Fisher ni autre mesure) : elle prend la distance MESURÉE de son groupe (table 3, moyenne pondérée des modules de
+    # ses membres, échelle DMzp, la même que la table 2), dans sa propre direction (OpenNGC). Marc, 20/11/2026 : « M77 se
+    # balade » ; avant, sa distance venait de son décalage vers le rouge (z = 0,0038 : 55 millions d'al au lieu de 44).
+    individuelles = {int(r['PGC']) for r in cf4 if r.get('PGC', '').isdigit()}
+    coords = lire_coords_openngc(raw)
+    de_groupe = 0
+    for g in lire_groupes(os.path.join(raw, 'cf4groupes', 'groupes.tsv')):
+        try:
+            pgc, ngal, dm, edm = int(g['1PGC']), int(g['Ngal']), float(g['DMzp']), float(g['e_DMzp'])
+        except (KeyError, ValueError):
+            continue
+        if pgc in individuelles or pgc not in coords or pgc not in noms:
+            continue
+        d = 10 ** ((dm - 25) / 5) * MPC_LY
+        p = ecliptique(*coords[pgc]) * d
+        cosang = (E @ p) / (En * d)
+        if np.any((cosang > math.cos(math.radians(0.2))) & (np.abs(En / d - 1) < 0.3)):
+            doubles += 1
+            continue
+        nom, genre = noms[pgc]
+        mpc = f'{d / MPC_LY:.1f}'.replace('.', ',')
+        mal = f'{d / 1e6:,.0f}'.replace(',', ' ')
+        vpec = f' ; vitesse propre du groupe {g["Vpec"]} km/s (Cosmicflows-4)' if g.get('Vpec') else ''
+        texte = (f'{genre} ; distance mesurée du groupe {mpc} Mpc ({mal} millions d’al) ± {max(1, round(46.1 * edm))} % '
+                 f'(moyenne des {ngal} galaxies mesurées de son groupe, pas d’elle-même ; Cosmicflows-4 table 3, '
+                 f'Tully et al. 2023){vpec}')
+        lignes.append(f'{nom}\t{p[0]:.6g}\t{p[1]:.6g}\t{p[2]:.6g}\t{texte}\t9\n')
+        de_groupe += 1
     os.makedirs(sortie, exist_ok=True)
     with open(os.path.join(sortie, 'galaxies_cf4.tsv'), 'w', encoding='utf-8', newline='\n') as f:
         f.writelines(lignes)
-    print(f'{len(lignes)} galaxies écrites ({nommees} avec un nom OpenNGC) ; {doubles} déjà nommées par l\'appli ; '
-          f'{len(cf4)} lignes dans CF4')
+    print(f'{len(lignes)} galaxies écrites ({nommees} avec un nom OpenNGC, {de_groupe} à la distance de leur groupe) ; '
+          f'{doubles} déjà nommées par l\'appli ; {len(cf4)} lignes dans CF4')
 
 
 if __name__ == '__main__':
