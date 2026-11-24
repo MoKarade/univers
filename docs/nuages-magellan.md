@@ -65,9 +65,8 @@ ici (`HORS_GN_KPC`, `HORS_PN_KPC`, `PONT_LARGEUR_KPC`, `COURANT_L_DEG`) [Supposi
 2. **Petit Nuage tourné du mauvais côté** : sa queue part derrière et vers le nord, la mesure met l'est devant. Piste :
    régler la rencontre des deux Nuages dans la remontée sur la mesure de Zivick et al. 2018 (il y a 147 ± 33 Ma, à
    7,5 ± 2,5 kpc) [Probable], puis remesurer avec l'outil.
-3. **Étoiles du Petit Nuage d'aujourd'hui** : la profondeur peut venir des céphéides et RR Lyrae d'OGLE (distance de
-   chaque étoile mesurée), au lieu de la masse du calcul. À faire pour les étoiles de départ du prochain film ; changer
-   celles du film en cours casserait le contrat (ligne k du fichier = ligne k du film).
+3. **Étoiles du Petit Nuage d'aujourd'hui** : FAIT pour le prochain film (§ 6). Changer celles du film en cours
+   casserait le contrat (ligne k du fichier = ligne k du film).
 4. **Vieilles étoiles du Petit Nuage qui tournent** (20 km/s) alors que la mesure n'en voit pas nettement.
 
 ## 5. Vérifié, pas vérifié
@@ -78,3 +77,31 @@ ici (`HORS_GN_KPC`, `HORS_PN_KPC`, `PONT_LARGEUR_KPC`, `COURANT_L_DEG`) [Supposi
 - Pas vérifié : la comparaison à une carte HI réelle du Courant (non téléchargée : la carte montre seulement les places
   mesurées des deux Nuages) ; les valeurs « résumé » de `nuages_magellan.json` n'ont pas été relues dans l'article
   lui-même.
+
+## 6. Petit Nuage en 3D d'après les étoiles variables mesurées (24 novembre 2026)
+
+Script : `pipeline/natif/petit_nuage_profondeur.py` (essais : `test_petit_nuage_profondeur.py`, 6 vérifications vertes).
+Chaque étoile visible garde sa place sur le ciel (photo) ; sa distance vient des variables OGLE-IV voisines sur le ciel :
+4 235 céphéides (pour les étoiles jeunes) et 4 403 RR Lyrae RRab (pour les autres), distances relatives par la relation
+période-Wesenheit ajustée ici, zéro sur Graczyk et al. 2020. Largeur propre de la relation, prise dans le Grand Nuage et
+retirée : 0,073 mag (céphéides), 0,117 mag (RR Lyrae) ; le Petit Nuage en a 0,148 et 0,158 : la différence est sa
+profondeur [Certain, calculé]. Données brutes : `%LOCALAPPDATA%\univers-raw\ogle` (VizieR, miroir de Harvard).
+
+Résultat (`C:\tmp\natif\nuages-3d\etoiles_visibles_petit_nuage.npz`, à partir des étoiles du fil des spirales ;
+carte : `docs/captures-nuages/petit_nuage_3d_aujourdhui.png`), mesuré par `forme_nuages.py` :
+
+| | Avant (photo remise à plat) | Film 3 à t = 0 | Après (variables mesurées) | Mesure publiée |
+|---|---|---|---|---|
+| Profondeur des vieilles étoiles (écart type) | 1,2 kpc | 2,1 kpc | 2,2 kpc | 2,0 ± 0,4 (RR Lyrae, Haschke 2012) |
+| Profondeur des jeunes (écart type) | — | — | 2,5 kpc | 2,7 ± 0,3 (céphéides, Haschke 2012) |
+| Côté le plus proche | ouest (249°) | nord (353°) | **est (98°)** ; jeunes : nord-est (54°) | est |
+| Grand axe / ligne de visée | 0° (disque vu de face) | 45° | 5° : étiré le long de la visée | étiré le long de la visée (Ripepi 2017) |
+
+Ce n'est pas un contrôle indépendant pour la profondeur : Haschke et al. 2012 utilisent les mêmes étoiles (OGLE III)
+[Certain]. Le côté proche, lui, vient des données seules : aucun réglage ne le force.
+
+Limites : vitesses non recalculées pour la nouvelle place [modèle] ; le milieu des étoiles est 1,1 kpc plus loin que le
+centre de la table (les variables et la lumière de la photo ne pèsent pas les mêmes endroits) [Probable] ; l'étendue
+5e-95e centile (10 kpc) reste sous les 25 à 30 kpc de Ripepi 2017, qui comptent les céphéides isolées du pont et de l'aile
+[Probable]. Pour le film, les vieilles étoiles sont ensuite posées sur la masse du calcul : leur profondeur ne viendra
+de ces mesures que si le réglage de la rencontre (point 2) place la masse elle-même du bon côté.
