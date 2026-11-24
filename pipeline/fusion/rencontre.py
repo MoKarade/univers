@@ -421,7 +421,7 @@ def main():
                 if replacement and t_reprise >= replacement['t'] - 1e-9: replacement['fait'] = True
                 print(f"reprise à {t_reprise:+.3f} Ga", flush=True)
         S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'), t_ga=t_reprise)
-        journal = avancer(S, t_reprise, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)), replacement=replacement, journal=journal0,
+        journal = avancer(S, t_reprise, 0.0, sortie, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=float(opts.get('releve-ma', 50.0)), replacement=replacement, journal=journal0,
                           instantane_ga=0.05 if mode == 'passe' else 0.5)
         ecart = ecart_a_la_cible(journal, cible)
         # Correction du départ : l'écart final de vitesse est retiré de la vitesse de départ ; l'écart final de position est
@@ -505,6 +505,13 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
     tv = tv.copy(); pris = {}
     echelle = np.array([1.0, 1.0, 3.0])
     td = repere_disque(nom, tp, centre) * echelle
+    # Halo d'étoiles (6) : une boule tenue par son agitation. Ses vitesses du contrat viennent d'une formule qui n'est pas
+    # à l'équilibre dans la masse du calcul (film d'essai à 20 M du 24/11 : rayon à 10 % -32 %, à 90 % +47 % en 40 Ma).
+    # Il reçoit l'agitation qui tient SA répartition en équilibre (équation de Jeans). [Modèle : agitation égale dans
+    # les trois directions, pas de rotation d'ensemble.]
+    qui = np.where(comp == 6)[0]
+    if len(qui) and 6 not in sauf:
+        tv[qui] = vitesses_de_jeans(tp[qui] - centre, p, centre, g, rng); pris['6'] = int(len(qui))
     for c, sortes in PORTEUSES.items():
         qui = np.where(comp == c)[0]
         if not len(qui) or c in sauf: continue      # sauf : étoiles déjà posées sur la masse, position et vitesse
@@ -808,7 +815,7 @@ def futur(sortie, t_fin, opts, cible):
             ecr.date(t, lambda r: cp.asnumpy(S.pos[r]), lambda r: cp.asnumpy(S.vel[r]), centres, vitesses, journal['energie'][-1],
                      sortes_matiere=cp.asnumpy(S.kind_g[r_matiere]))
 
-        avancer(S, t0, t_fin, film, releve_ma=2.0, instantane_ga=0.05, journal=journal, a_chaque_releve=date_v3)
+        avancer(S, t0, t_fin, film, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=2.0, instantane_ga=0.05, journal=journal, a_chaque_releve=date_v3)
         ecr.sauver()
         print('film terminé (format 3) :', ecr.numero(), 'dates')
         return

@@ -15,7 +15,7 @@ PYU="$PY"      # même python que les calculs : celui de AppData\Local est invis
 G="${UNIVERS_GALAXIES:?dossier des cinq galaxies de départ : UNIVERS_GALAXIES}"
 GAL="$G"      # dossier des cinq galaxies de départ
 ETAT="${UNIVERS_ETAT:?état de départ (etat_corrige.json) : UNIVERS_ETAT}"      # places et vitesses de départ des cinq galaxies (sortie des tirs de réglage)
-GAZ=""; [ "${UNIVERS_GAZ:-0}" != "0" ] && GAZ="--gaz=${UNIVERS_GAZ}"; [ -n "${UNIVERS_MAREE:-}" ] && GAZ="$GAZ --maree=$UNIVERS_MAREE"; [ -n "${UNIVERS_EFFICACITE:-}" ] && GAZ="$GAZ --efficacite=$UNIVERS_EFFICACITE"      # gaz, naissances d'étoiles, retour de masse (gaz_galaxie.py)
+GAZ=""; [ "${UNIVERS_GAZ:-0}" != "0" ] && GAZ="--gaz=${UNIVERS_GAZ}"; [ -n "${UNIVERS_MAREE:-}" ] && GAZ="$GAZ --maree=$UNIVERS_MAREE"; [ -n "${UNIVERS_EFFICACITE:-}" ] && GAZ="$GAZ --efficacite=$UNIVERS_EFFICACITE"; [ -n "${UNIVERS_PAS_MA:-}" ] && GAZ="$GAZ --pas-ma=$UNIVERS_PAS_MA"      # gaz, naissances d'étoiles, retour de masse (gaz_galaxie.py)
 TR="${UNIVERS_TRACEURS:-$D/donnees/etoiles-visibles}"      # dossier des étoiles visibles
 S="${1:?dossier de sortie}"
 export PYTHONIOENCODING=utf-8
