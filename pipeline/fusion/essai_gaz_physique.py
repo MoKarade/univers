@@ -2,7 +2,8 @@
 """Contrôles de la physique du gaz (gaz_physique.py) et du jumeau sur processeur (gaz_cpu.py). Sans carte graphique,
 sauf `gpu` (comparaison au code de la carte, à lancer quand elle est libre).
 
-Usage : python essai_gaz_physique.py [refroid] [etoiles] [reserve] [gradient] [sod] [sedov] [bilan] [gpu]
+Usage : python essai_gaz_physique.py [refroid] [etoiles] [reserve] [gradient] [sod] [sedov] [bilan] [thermique] [gpu]
+(thermique : seulement là où gaz_galaxie.py existe, branche film-3 et suites)
 Sans argument : tout sauf gpu. Code de sortie 0 si tout passe. Chaque ligne dit la valeur mesurée et la référence.
 """
 import math
@@ -103,30 +104,37 @@ def etoiles():
 
 # ---------------------------------------------------------------------------------------------------------------
 def reserve():
-    """La réserve d'énergie : énergie déposée + restante = énergie libérée, exactement ; masses inchangées."""
-    print('Réserve d\'énergie des explosions (bilan exact) :')
+    """Réserve d'énergie des explosions : registre exact (libérée = déposée + réserve), écart par particule sous un saut,
+    chauffes au rythme des explosions (pas après les Ia), énergie bien reçue par le gaz."""
+    print("Réserve d'énergie des explosions :")
     rng = np.random.default_rng(1)
     e = gp.Explosions()
-    n_et, n_gaz = 200, 5000
-    m_et = rng.uniform(5e3, 5e4, n_et); age = rng.uniform(0, 5e7, n_et)
-    m_gaz = rng.uniform(5e3, 5e4, n_gaz); u = np.full(n_gaz, gp.T_PLANCHER / gp.K_PAR_U)
-    m_avant = m_gaz.sum() + m_et.sum()
-    res = np.zeros(n_et); libere = depose = 0.0
-    for _ in range(400):
+    n_et, n_gaz, m1 = 400, 20000, 1e4
+    m_et = np.full(n_et, m1); age = np.zeros(n_et)
+    m_gaz = np.full(n_gaz, m1); u = np.full(n_gaz, gp.T_PLANCHER / gp.K_PAR_U)
+    q = gp.energie_quantum(m1)
+    res = np.zeros(n_et); libere = depose = 0.0; pire = 0.0
+    for _ in range(200):      # 50 Ma par pas de 0,25 Ma
         dE = m_et * e.energie_liberee(age, 2.5e5)
         res += dE; libere += dE.sum(); age += 2.5e5
-        vois = rng.integers(0, n_gaz, (n_et, 16))
-        _, d = gp.deposer(res, vois, m_gaz, u, rng)
-        depose += d
+        n = gp.nombre_de_chauffes(res, q, rng)
+        vois = rng.choice(n_gaz, (n_et, 16))
+        _, d = gp.deposer(res, n, vois, m_gaz, u, rng)
+        depose += d; pire = max(pire, float(np.abs(res).max()))
     u_depose = float(((u - gp.T_PLANCHER / gp.K_PAR_U) * m_gaz).sum()) * gp.M_SOL * 1e10     # erg
     # énergie d'un saut de 10^7,5 K écrite à la main : 3/2 k ΔT par particule, m / (mu m_p) particules
-    q = 1.5 * 1.380649e-16 * 10 ** 7.5 * 1e4 * 1.98841e33 / (0.59906 * 1.67262192e-24)
-    ok = _ligne("énergie d'un saut de 10^7,5 K pour 10^4 M☉", gp.energie_quantum(1e4), q, 1e-4, ' erg')
-    ok &= _ligne('énergie déposée + réserve / libérée', (depose + res.sum()) / libere, 1.0, 1e-12)
+    qm = 1.5 * 1.380649e-16 * 10 ** 7.5 * 1e4 * 1.98841e33 / (0.59906 * 1.67262192e-24)
+    ok = _ligne("énergie d'un saut de 10^7,5 K pour 10^4 M☉", q, qm, 1e-4, ' erg')
+    ok &= _ligne('registre : (déposée + réserve) / libérée', (depose + res.sum()) / libere, 1.0, 1e-12)
     ok &= _ligne('énergie reçue par le gaz / déposée', u_depose / depose, 1.0, 1e-9)
-    ok &= _ligne('masse totale', m_gaz.sum() + m_et.sum(), m_avant, 0.0)
-    print(f'    {libere / gp.E51:.0f} supernovæ libérées, {100 * depose / libere:.1f} % déjà déposés, le reste en réserve')
-    return ok
+    borne = pire < q
+    print(f"  plus grand écart d'une particule (|réserve|) : {pire / q:.3f} saut  {'bon' if borne else 'MAUVAIS'}")
+    # à 50 Ma, toutes les supernovæ à effondrement ont explosé : le gaz doit avoir reçu ~ l'énergie libérée
+    # (à 1/sqrt(nombre de chauffes) près), pas l'attendre jusqu'aux Ia
+    nb = depose / q
+    ok &= _ligne('déposée / libérée à 50 Ma', depose / libere, 1.0, 3.0 / math.sqrt(max(nb, 1.0)))
+    print(f'    {libere / gp.E51:.0f} supernovæ libérées, {nb:.0f} chauffes de 10^7,5 K')
+    return ok and borne
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -240,7 +248,7 @@ def bilan():
     res = np.array([m_et * float(e.energie_cumulee(4e7))])  # supernovæ des 40 premiers Ma, d'un coup
     vois = np.argsort(np.linalg.norm(p, axis=1))[:32][None, :]
     rng = np.random.default_rng(2)
-    _, depose = gp.deposer(res, vois, m, u, rng)
+    _, depose = gp.deposer(res, gp.nombre_de_chauffes(res, gp.energie_quantum(m[0]), rng), vois, m, u, rng)
     dep_u = depose / (gp.M_SOL * 1e10)                     # M☉ (km/s)²
     R = gp.Refroidissement()
     pos, vel, u2, r, perdu = _avancer_adiabatique(p, np.zeros((n, 3)), u, m, np.full(n, 1.2 * d), 0.002,
@@ -251,6 +259,61 @@ def bilan():
     print(f'    déposé {depose / gp.E51:.0f} × 10^51 erg ; rayonné {100 * perdu / (E0 + dep_u):.1f} % ; '
           f'cinétique {100 * K / (E0 + dep_u):.1f} % ; reste {res[0] / gp.E51:.2f} × 10^51 erg en réserve')
     return _ligne('cinétique + interne + rayonnée / départ + déposé', (K + U + perdu) / (E0 + dep_u), 1.0, 0.02)
+
+
+def _gaz_galaxie_sur_processeur():
+    """Charge gaz_galaxie.py avec numpy à la place de cupy et gaz_cpu à la place de gaz_gpu : le même code, sans toucher
+    à la carte graphique (prise par le grand calcul)."""
+    import importlib
+    import types
+    faux_cp = types.ModuleType('cupy')
+    faux_cp.__dict__.update({k: getattr(np, k) for k in dir(np) if not k.startswith('_')})
+    faux_cp.asnumpy = np.asarray
+    faux_gpu = types.ModuleType('gaz_gpu')
+    faux_gpu.sph = gaz_cpu.sph
+    vrais = {k: sys.modules.get(k) for k in ('cupy', 'gaz_gpu', 'gaz_galaxie')}
+    sys.modules['cupy'] = faux_cp; sys.modules['gaz_gpu'] = faux_gpu; sys.modules.pop('gaz_galaxie', None)
+    try:
+        return importlib.import_module('gaz_galaxie')
+    finally:
+        for k, v in vrais.items():
+            if v is None: sys.modules.pop(k, None)
+            else: sys.modules[k] = v
+
+
+def thermique():
+    """GazThermique tel qu'il tournera dans le grand calcul (sur processeur ici) : une jeune particule d'étoiles de
+    10^5 M☉ au centre d'une boîte de gaz à 1 atome/cm³, 20 Ma. Bilan : cinétique + interne + rayonnée - ajoutée par les
+    planchers = départ + déposée ; registre libérée = déposée + réserve ; énergie libérée = table des supernovæ."""
+    gg = _gaz_galaxie_sur_processeur()
+    nx = 16; L = 0.4; d = L / nx
+    rho_kpc = 1.0 / (gp.X / gp.M_P * gp.RHO_CGS)
+    B = verre(nx + 4, nx + 4, nx + 4, d, 7) - (nx / 2 + 2) * d
+    p = B[(np.abs(B) < L / 2).all(1)]
+    pos = np.concatenate([p, [[0.0, 0.0, 0.0]]]); n = len(pos)
+    m = np.concatenate([np.full(n - 1, rho_kpc * d ** 3), [1e5]]); vel = np.zeros((n, 3))
+    kind = np.full(n, 3, np.int8); kind[-1] = 5
+    g = gg.GazThermique(n)
+    g.naissance[-1] = 0.0                                   # née à t = 0
+    g.u[:] = gp.T_PLANCHER / gp.K_PAR_U
+    E0 = float((m * g.u).sum()) * gg.ERG_PAR_MU
+    dt = 2.5e5 / gg.AN_PAR_UNITE; t_ga = 0.0; debut = time.time()
+    for s in range(80):
+        qui = np.where(kind == 3)[0]
+        g.avancer(pos, vel, m, qui, dt)
+        t_ga += 2.5e-4
+        g.naissances(kind, np.where(kind == 3)[0], dt, t_ga, pos=pos, m=m)
+    K = float(0.5 * (m * (vel ** 2).sum(1)).sum()) * gg.ERG_PAR_MU; U = float((m * g.u).sum()) * gg.ERG_PAR_MU
+    et = np.where(~np.isnan(g.naissance))[0]                 # la particule du départ et les étoiles nées pendant l'essai
+    attendu = float((m[et] * g.explo.energie_cumulee((t_ga - g.naissance[et]) * 1e9)).sum())
+    print(f'GazThermique sur processeur, {n} particules, 20 Ma, {time.time() - debut:.0f} s : {g.chauffees} chauffes, '
+          f'{int((kind == 5).sum()) - 1} étoiles nées ; rayonné {g.e_rayonnee / 1e51:.1f}, planchers {g.e_plancher / 1e51:.2f}, '
+          f'déposé {g.e_deposee / 1e51:.1f} × 10^51 erg')
+    ok = _ligne('énergie libérée / table des supernovæ', g.e_liberee, attendu, 1e-9)
+    ok &= _ligne('registre (déposée + réserve) / libérée', (g.e_deposee + float(g.reserve.sum())) / g.e_liberee, 1.0, 1e-9)
+    ok &= _ligne('bilan (cin. + int. + rayonnée - planchers) / (départ + déposée)',
+                 (K + U + g.e_rayonnee - g.e_plancher) / (E0 + g.e_deposee), 1.0, 0.02)
+    return ok and g.chauffees > 0
 
 
 def gpu():

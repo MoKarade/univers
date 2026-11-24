@@ -44,10 +44,12 @@ film-3), écrit le 19/11 et jamais exécuté. Chaque fonction marche avec numpy 
    - Supernovæ thermonucléaires (Ia) : 1,3 × 10^-3 par M☉ formée en un temps de Hubble, délai ∝ 1/t à partir de 40 Ma
      (Maoz & Mannucci 2012, PASA 29, 447 ; Maoz & Graur 2017, ApJ 848, 25) [Probable], 10^51 erg chacune.
    - Dépôt : chauffage thermique « stochastique » de Dalla Vecchia & Schaye 2012 (MNRAS 426, 140), saut de 10^7,5 K,
-     mais avec une RÉSERVE d'énergie par particule d'étoiles au lieu d'un tirage au sort : l'énergie libérée pendant le pas
-     s'ajoute à la réserve, et chaque fois qu'elle suffit à chauffer une voisine de gaz de 10^7,5 K, on la chauffe et on
-     retire exactement cette énergie de la réserve. L'énergie est conservée exactement (pas seulement en moyenne) ; le
-     reste attend le pas suivant. [Choix d'ici, même esprit que l'article.]
+     avec la même probabilité moyenne que l'article (énergie du pas / énergie d'un saut), mais tirée sur une RÉSERVE
+     par particule d'étoiles (énergie libérée moins énergie déposée) : le registre est exact (libérée = déposée +
+     réserve) et l'écart par particule reste sous un saut (voir nombre_de_chauffes). [Choix d'ici, même esprit.]
+     À masses égales, une particule d'étoiles ne libère en tout qu'environ un saut (1,3 × 10^49 erg/M☉ contre
+     1,3 × 10^49 erg par M☉ chauffé de 10^7,5 K : Dalla Vecchia & Schaye 2012, éq. 8, ⟨N_heat⟩ ≈ 1,3) : sans tirage, la
+     chauffe n'arriverait qu'après les Ia, des milliards d'années trop tard ; d'où le tirage.
    Ce qui n'est pas calculé (à dire) : vents des étoiles massives, pression de la lumière, gaz froid sous 10^4 K, champ
    magnétique, rayons cosmiques, noyau actif, métaux (Z fixe, solaire).
 """
@@ -234,24 +236,27 @@ class Explosions:
         self.n_sn_ii = float(self._nii[-1])
         self.avec_ia = avec_ia
 
-    def n_ii_cumule(self, age):
-        age = np.asarray(age, float)
-        out = np.interp(np.log(np.maximum(age, 1.0)), self._la, self._nii, left=0.0, right=self.n_sn_ii)
-        return out
+    def n_ii_cumule(self, age, xp=np):
+        age = xp.asarray(age, dtype=xp.float64)
+        la, nii = (self._la, self._nii) if xp is np else (xp.asarray(self._la), xp.asarray(self._nii))
+        x = xp.log(xp.maximum(age, 1.0))
+        out = xp.interp(x, la, nii)
+        return xp.where(x < self._la[0], 0.0, xp.where(x > self._la[-1], self.n_sn_ii, out))
 
-    def n_ia_cumule(self, age):
+    def n_ia_cumule(self, age, xp=np):
+        age = xp.asarray(age, dtype=xp.float64)
         if not self.avec_ia:
-            return np.zeros_like(np.asarray(age, float))
-        age = np.asarray(age, float)
-        return NIA_PAR_MSOL * np.clip(np.log(np.maximum(age, T_IA_DEBUT) / T_IA_DEBUT) / math.log(T_HUBBLE / T_IA_DEBUT), 0.0, 1.0)
+            return xp.zeros_like(age)
+        return NIA_PAR_MSOL * xp.clip(xp.log(xp.maximum(age, T_IA_DEBUT) / T_IA_DEBUT) / math.log(T_HUBBLE / T_IA_DEBUT), 0.0, 1.0)
 
-    def energie_cumulee(self, age):
-        """erg par M☉ formée, libérés entre la naissance et `age` (ans)."""
-        return E51 * (self.n_ii_cumule(age) + self.n_ia_cumule(age))
+    def energie_cumulee(self, age, xp=np):
+        """erg par M☉ formée, libérés entre la naissance et `age` (ans). numpy ou cupy (xp)."""
+        return E51 * (self.n_ii_cumule(age, xp) + self.n_ia_cumule(age, xp))
 
-    def energie_liberee(self, age, dt_ans):
-        """erg par M☉ formée, libérés entre age et age + dt_ans (tableaux numpy)."""
-        return self.energie_cumulee(np.asarray(age) + dt_ans) - self.energie_cumulee(age)
+    def energie_liberee(self, age, dt_ans, xp=np):
+        """erg par M☉ formée, libérés entre age et age + dt_ans."""
+        age = xp.asarray(age, dtype=xp.float64)
+        return self.energie_cumulee(age + dt_ans, xp) - self.energie_cumulee(age, xp)
 
 
 def energie_quantum(m_gaz):
@@ -259,27 +264,37 @@ def energie_quantum(m_gaz):
     return m_gaz * M_SOL * K_B * DT_CHAUFFE / ((GAMMA - 1.0) * MU * M_P)
 
 
-def deposer(reserve, voisines, m_gaz, u_gaz, rng):
-    """Dépense la réserve d'énergie de chaque particule d'étoiles en chauffant ses voisines de gaz de 10^7,5 K.
+def nombre_de_chauffes(reserve, quantum, rng, xp=np):
+    """Combien de voisines chauffer ce pas, pour chaque particule d'étoiles.
+
+    Dalla Vecchia & Schaye 2012 (éq. 5) chauffent au hasard avec la probabilité (énergie du pas) / (énergie d'un saut) :
+    les chauffes arrivent en moyenne au moment des explosions, mais l'énergie n'est conservée qu'en moyenne. Ici, la
+    même probabilité est tirée sur la RÉSERVE (énergie libérée moins énergie déjà déposée, par particule) :
+    n = partie entière de reserve / quantum, plus 1 avec la probabilité de la partie fractionnaire. En moyenne c'est la
+    même règle ; en plus, la réserve garde la trace exacte de ce qui a été donné en avance (elle devient négative) ou en
+    retard, et le tirage suivant compense. Écart entre énergie libérée et déposée : moins d'un saut par particule, à
+    tout instant, et le registre (libérée = déposée + réserve) est exact."""
+    x = xp.maximum(reserve, 0.0) / quantum
+    n = xp.floor(x)
+    return (n + (rng.random(x.shape) < (x - n))).astype(xp.int64)
+
+
+def deposer(reserve, n_chauffes, voisines, m_gaz, u_gaz, rng):
+    """Chauffe de 10^7,5 K, pour chaque particule d'étoiles s, n_chauffes[s] voisines de gaz différentes, tirées au hasard
+    parmi ses candidates (comme Dalla Vecchia & Schaye 2012), et retire de sa réserve l'énergie exacte donnée.
 
     reserve (n_etoiles,) en erg, modifiée sur place ; voisines (n_etoiles, k) indices de gaz candidats (les plus proches,
-    -1 si absent) ; m_gaz, u_gaz : masses (M☉) et énergies internes ((km/s)²) de toutes les particules de gaz, u_gaz
-    modifiée sur place. Chaque quantum chauffe une voisine différente, tirée au hasard parmi les candidates (comme Dalla
-    Vecchia & Schaye 2012) ; une voisine déjà chauffée au même appel n'est pas rechauffée. Rend (nombre de chauffes,
-    énergie déposée en erg). Version numpy (peu de particules d'étoiles actives par pas)."""
+    -1 si absent) ; m_gaz, u_gaz : masses (M☉) et énergies internes ((km/s)²) des particules de gaz, u_gaz modifiée sur
+    place. Une voisine n'est chauffée qu'une fois par appel. Rend (nombre de chauffes, énergie déposée en erg).
+    Version numpy : seules les quelques particules qui chauffent ce pas y passent."""
     du = DT_CHAUFFE / K_PAR_U
     chauffes, depose = 0, 0.0
     prises = set()
-    assez = reserve >= energie_quantum(float(np.min(m_gaz)))      # les autres gardent leur reste pour plus tard
-    for s in np.nonzero(assez)[0]:
-        cand = list(dict.fromkeys(int(j) for j in voisines[s] if j >= 0))
+    for s in np.nonzero(n_chauffes > 0)[0]:
+        cand = [j for j in dict.fromkeys(int(j) for j in voisines[s] if j >= 0) if j not in prises]
         rng.shuffle(cand)
-        for j in cand:
-            if j in prises:
-                continue
+        for j in cand[:int(n_chauffes[s])]:
             e = energie_quantum(m_gaz[j])
-            if reserve[s] < e:
-                continue
             reserve[s] -= e; u_gaz[j] += du; prises.add(j)
             chauffes += 1; depose += e
     return chauffes, depose
