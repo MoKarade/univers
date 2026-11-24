@@ -285,3 +285,21 @@ Nouveaux retours de Marc, avec ce qui a été trouvé :
 | E4 Nuages de Magellan | Grand Nuage : traits allongés [Probable] = cases de lumière Gaia additionnée (morceau de ciel × tranche de parallaxe) étirées le long de la ligne de visée ; Petit Nuage : ovale lisse = forme du modèle du grand calcul (pas de forme mesurée). À traiter avec le fil du grand calcul |
 | E2 points cachés par les sphères | à faire |
 | E5 simple précision des galaxies | sans effet visible tant qu'on ne peut s'approcher à moins de 1 000 al : laissé |
+
+## 9. État final (24 novembre 2026)
+
+Toutes les corrections de ce plan sont fusionnées dans `appli-pc` (PR 121 à 126, 128, 130, 131, 134, 135), et elles sont
+toujours dans le code au commit `ff4cab4`.
+
+| Point | PR | Point | PR |
+|---|---|---|---|
+| A1 étoile sous son cercle | 118 (fil correcteur), vérifié | C1 galaxies lointaines à toute date | 124 |
+| A2 pose automatique | 122, 123, 126, 128 (puis 142, autre fil) | C2, C5, C6 fondus et coupures | 123 |
+| A3 Voie lactée pâle de loin | mesurée : pas pâle, retiré | C4 astéroïdes à 300 ans | 121 |
+| A4, A5 univers lointain | 122, 126, 128 (puis 141, autre fil) | C7 comètes d'Oort | 124 |
+| A6 neige d'astéroïdes | 121 | D1, D2, D3 libellés et noms | 121, 123 |
+| B1 à B5 caméra et clic | 121, 122 | E1, E2, E3 disques et étoiles | 123, 124, 125 |
+| Retours de Marc du 20/11 (zoom, boules, fond diffus, amas, sélection, M77, gaz, nébuleuses, poussière, doublons) | 122, 123, 126, 128, 130, 134, 135 | E4 Nuages de Magellan | fil « forme des Nuages » (PR 148) |
+
+Outils laissés pour les contrôles : `natif/balayage.py` (zoom en un lancement ; `--temps` pour le passé et l'avenir),
+`UNIVERS_ECRAN=etoile:<rang>`.
