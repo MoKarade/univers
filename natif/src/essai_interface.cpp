@@ -94,6 +94,16 @@ int main() {
     expect(near(positionEchelle(std::sqrt(30.0 * 300.0), ech, 5), 1.5), "échelle : milieu logarithmique");
     expect(majuscules("Température") == "TEMPÉRATURE" && majuscules("à revivre, ça") == "À REVIVRE, ÇA", "majuscules accentuées");
     expect(majuscules("1 ÷ 2") == "1 ÷ 2", "majuscules : le signe ÷ reste tel quel");
+    // Naines rouges (séquence de Pecaut et Mamajek 2013) contre des rayons mesurés par interférométrie (Boyajian et al. 2012 ;
+    // Proxima : Kervella et al. 2017). M_V d'après V et la parallaxe publiés.
+    const double proxima = rsol(15.56, 1.82), lalande = rsol(10.49, 1.51), lacaille = rsol(9.75, 1.48), barnard = rsol(13.20, 1.73);
+    std::printf("      naines rouges (R☉) : Proxima %.3f (0,154), Lalande 21185 %.3f (0,392), Lacaille 9352 %.3f (0,460), Barnard %.3f (0,187)\n",
+                proxima, lalande, lacaille, barnard);
+    expect(std::fabs(proxima / 0.154 - 1.0) < 0.10, "Proxima : 0,154 R☉ mesuré, à 10 % près (avant : 0,075)");
+    expect(std::fabs(lalande / 0.392 - 1.0) < 0.12, "Lalande 21185 : 0,392 R☉ mesuré, à 12 % près");
+    expect(std::fabs(lacaille / 0.460 - 1.0) < 0.12, "Lacaille 9352 : 0,460 R☉ mesuré, à 12 % près");
+    expect(std::fabs(barnard / 0.187 - 1.0) < 0.35, "Étoile de Barnard : 0,187 R☉ mesuré, à 35 % près (pauvre en métaux : plus petite que la séquence moyenne)");
+    expect(std::fabs(rsol(11.2, 0.0) - rsol(11.2, 0.0)) < 1e-12 && rsol(11.2, 0.0) < 0.05, "naine blanche (bleue, M_V 11) : pas prise pour une naine rouge");
     std::printf(failures ? "ECHEC (%d)\n" : "PASSE\n", failures);
     return failures ? 1 : 0;
 }

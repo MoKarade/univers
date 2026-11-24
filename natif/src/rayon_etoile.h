@@ -8,6 +8,11 @@
 //   Rayon : loi de Stefan-Boltzmann, R/R☉ = √(L/L☉) (5 772 K / T)² (T☉ : UAI 2015).
 // Approché : la couleur B-V donne mal la température des étoiles rougies par la poussière ou très froides ; l'écran dit
 // « calculé, approché ».
+//
+// Naines rouges (M0V à M9,5V : B-V > 1,3 et M_V ≥ 8,8) : sous 3 500 K, la correction bolométrique de Flower est faible et
+// le calcul ci-dessus sous-estimait le rayon de moitié (Proxima : 0,075 R☉ contre 0,154 mesuré). Pour elles, le rayon est
+// lu dans la séquence moyenne des naines de Pecaut et Mamajek (2013, ApJS 208, 9, table 5 ; version 2022.04.16 de la table
+// d'E. Mamajek, colonnes Mv et R_Rsun), interpolé sur M_V.
 #pragma once
 #include <algorithm>
 #include <cmath>
@@ -17,6 +22,20 @@ namespace rayon_etoile {
 constexpr double kTsoleil = 5772.0;       // K (UAI 2015, résolution B3)
 constexpr double kMbolSoleil = 4.74;      // UAI 2015, résolution B2
 constexpr double kRsoleilKm = 695700.0;   // UAI 2015, résolution B3
+
+// Séquence des naines M (Mamajek 2022.04.16) : magnitude absolue V et rayon (R☉), de M0V à M9,5V.
+constexpr double kNainesMv[] = {8.80, 9.20, 9.64, 9.85, 10.21, 10.61, 11.15, 12.10, 12.61, 13.58, 14.15, 15.30, 16.32, 17.10, 17.70, 18.16, 18.60, 19.20, 19.40, 19.75};
+constexpr double kNainesR[] = {0.588, 0.544, 0.501, 0.482, 0.446, 0.421, 0.361, 0.300, 0.274, 0.217, 0.196, 0.156, 0.137, 0.126, 0.120, 0.116, 0.114, 0.104, 0.102, 0.101};
+inline double rayonNaineM(double mv) {
+    constexpr int n = sizeof(kNainesMv) / sizeof(kNainesMv[0]);
+    if (mv >= kNainesMv[n - 1]) return kNainesR[n - 1];
+    for (int k = 1; k < n; ++k)
+        if (mv <= kNainesMv[k]) {
+            const double f = (mv - kNainesMv[k - 1]) / (kNainesMv[k] - kNainesMv[k - 1]);
+            return kNainesR[k - 1] + f * (kNainesR[k] - kNainesR[k - 1]);
+        }
+    return kNainesR[0];
+}
 
 inline double temperatureBv(double bv) { return 4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62)); }
 
@@ -32,6 +51,7 @@ inline double correctionBolometrique(double teff) {
 // Rayon (km) d'une étoile de magnitude absolue V et d'indice B-V donnés ; 0 si les valeurs n'ont pas de sens.
 inline double rayonKm(double absMagV, double bv) {
     if (!std::isfinite(absMagV) || !std::isfinite(bv) || bv < -0.5 || bv > 3.5) return 0.0;
+    if (bv > 1.3 && absMagV >= kNainesMv[0]) return rayonNaineM(absMagV) * kRsoleilKm;      // naine rouge : séquence mesurée
     const double t = temperatureBv(bv);
     const double mbol = absMagV + correctionBolometrique(t);
     const double l = std::pow(10.0, -0.4 * (mbol - kMbolSoleil));
