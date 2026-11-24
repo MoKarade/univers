@@ -218,7 +218,7 @@ def sedov(nx=32):
     R_calc = float(mil[int(np.argmax(prof))]); R_ex = 1.1527 * (0.06 ** 2) ** 0.2
     E = float((m * u).sum() + 0.5 * (m * (vel ** 2).sum(1)).sum())
     print(f'Explosion de Sedov (jumeau processeur), {n} particules, {time.time() - debut:.0f} s :')
-    ok = _ligne('rayon du choc', R_calc, R_ex, 0.08)
+    ok = _ligne('rayon du choc', R_calc, R_ex, 0.06)
     ok &= _ligne('énergie totale', E, 1.0 + float((np.full(n, d ** 3) * 1e-5).sum()), 0.03)
     print(f'    densité au choc {prof.max():.2f} (exacte 4, lissée par la méthode)')
     return ok and prof.max() > 1.8

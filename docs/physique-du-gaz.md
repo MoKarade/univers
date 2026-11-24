@@ -23,9 +23,16 @@ Labels : [Certain] lu ou mesuré aujourd'hui ; [Probable] publié, source connue
 | Instant de chaque explosion (durée de vie des étoiles) | `duree_de_vie`, `Explosions` | Raiteri et al. 1996 : 8 M☉ → 39,7 Ma, 100 M☉ → 3,35 Ma [Probable] |
 | Supernovæ thermonucléaires (Ia) | `Explosions` | 1,3 × 10⁻³ par M☉, délai en 1/t dès 40 Ma (Maoz & Mannucci 2012) [Probable] |
 | Dépôt de l'énergie, saut de 10^7,5 K | `deposer` | Dalla Vecchia & Schaye 2012, avec une **réserve** par particule d'étoiles : énergie conservée exactement [Certain, contrôlé] |
-| Gaz sur processeur, mêmes équations que la carte | `gaz_cpu.sph` | Jumeau de `gaz_gpu.sph` en double précision [Certain pour la correspondance ligne à ligne ; comparaison chiffrée à faire quand la carte est libre : `essai_gaz_physique.py gpu`] |
+| Gaz sur processeur, mêmes équations que la carte (plus la forme d'énergie de Monaghan, défaut) | `gaz_cpu.sph` | Jumeau de `gaz_gpu.sph` en double précision [Certain pour la correspondance ligne à ligne ; comparaison chiffrée à faire quand la carte est libre : `essai_gaz_physique.py gpu`] |
 
-## Défauts trouvés dans `GazThermique` (branche film-3, jamais exécutée)
+## Défauts trouvés dans `gaz_gpu` et `GazThermique` (branche film-3 ; gaz « chaud » jamais exécuté)
+
+0. **Le gaz chaud crée de l'énergie** (`gaz_gpu.py`, noyau `forces`, `du += 0.5f * f * vr`) : une particule froide
+   voisine d'une particule très chaude perd de l'énergie au nom de la pression de sa voisine, passe sous zéro, et le
+   plancher la remet à zéro : +6,6 % d'énergie sur l'explosion de Sedov (mesuré sur le jumeau, entièrement dû au
+   plancher). Remède d'une ligne : `du += mass[j] * (pr[k] + 0.5f * visc) * g * vr` (forme de Monaghan 1992, celle de
+   GADGET-2) ; mesuré : −0,09 %. Le film en cours est en gaz tiède (`--gaz=1`, sans énergie interne) : non touché.
+   [Certain, mesuré]
 
 1. **Refroidissement tronqué** : la boucle s'arrête après 24 sous-pas de 20 % et jette le temps restant. Du gaz à
    10^7,5 K dans un milieu dense resterait vers 10^5-10^6 K au lieu de se refroidir. Remède : `Refroidissement.refroidir`
@@ -50,7 +57,20 @@ Labels : [Certain] lu ou mesuré aujourd'hui ; [Probable] publié, source connue
 - jumeau processeur : gradient connu, tube à choc, explosion de Sedov ; puis explosion d'étoiles dans du gaz qui
   rayonne (cinétique + interne + rayonnée = départ + déposé).
 
-Résultats chiffrés : voir la description de la PR.
+Résultats du 24/11/2026 (processeur, `TOUT BON`) :
+
+| Contrôle | Mesuré | Référence |
+|---|---|---|
+| Refroidissement exact, 28 cas de 2 × 10⁴ à 10¹⁰ K | écart < 10⁻⁴ | Runge-Kutta fin |
+| Supernovæ 6-100 M☉ par M☉ (Chabrier) | 1,7359 × 10⁻² | 1,736 × 10⁻² (Dalla Vecchia & Schaye 2012) |
+| Réserve : déposée + restante / libérée | 1 à 10⁻¹² | 1 |
+| Tube à choc isotherme, 13 143 particules | densité −4,1 %, vitesse −0,7 % | solution exacte |
+| Sedov, 32 736 particules, forme de Monaghan | rayon −5,4 %, énergie −0,09 % | 1,1527 (E t²/ρ)^(1/5) |
+| Sedov, même montage, forme « moyenne » de gaz_gpu | énergie +6,6 % à 8 000 particules, entièrement due au plancher | 0 |
+| Explosion dans du gaz à 1 atome/cm³ qui rayonne, 2 Ma | bilan −0,08 % ; 68 % de l'énergie rayonnée, 17 % en mouvement | 0 |
+
+Le 68 % rayonné à cette finesse (particules de 268 M☉, 20 pc) est attendu : c'est le « sur-refroidissement » des
+explosions mal résolues que le saut de 10^7,5 K atténue sans le supprimer [Probable].
 
 ## Ce qui n'est pas calculé, et doit être dit à l'écran
 
