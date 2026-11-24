@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "date": "2026-11-24",
+  "but": "Mesures publiées de la FORME des Nuages de Magellan, pour juger ce que montrent l'appli et le grand calcul (pipeline/fusion/forme_nuages.py). Place, distance, vitesse et masse d'ensemble : pipeline/constantes/univers.json (non répétées ici).",
+  "statuts": "lu = valeur relue dans le résumé ou le texte de l'article ; résumé = valeur lue dans un autre article ou une revue qui le cite ; contesté = des mesures publiées se contredisent",
+  "repere_courant": {
+    "nom": "coordonnées du Courant magellanique (L_MS, B_MS)",
+    "pole_galactique_deg": [188.5, -7.5],
+    "zero_galactique_deg": [280.47, -32.75],
+    "controle": {"grand_nuage": [-0.14, 2.43], "petit_nuage": [-15.53, -11.58]},
+    "src": "Nidever et al. 2008 (ApJ 679, 432) : pôle ; longitude nulle au Grand Nuage, comme le cadre MagellanicStreamNidever08 de gala ; places de contrôle des deux Nuages : Belokurov et al. 2017 (MNRAS 466, 4711, arXiv:1611.04614)",
+    "statut": "résumé"
+  },
+  "grand_nuage": {
+    "disque": {
+      "inclinaison_deg": {"valeur": 34.7, "err": 6.2, "src": "van der Marel & Kallivayalil 2014 (ApJ 781, 121), déjà dans univers.json", "statut": "lu"},
+      "ligne_des_noeuds_deg": {"valeur": 139.1, "err": 4.1, "src": "van der Marel & Kallivayalil 2014", "statut": "lu"},
+      "disque_interieur": {"inclinaison_deg": 25.32, "ligne_des_noeuds_deg": 142.34, "rayon": "moins de 7° du centre", "src": "étoiles du « red clump », arXiv:2512.04200 (« Warped & Hooked », prépublication)", "statut": "résumé"},
+      "fourchette_inclinaison_deg": [20.0, 40.0],
+      "fourchette_noeuds_deg": [130.0, 150.0],
+      "src_fourchettes": "l'inclinaison publiée va de ~24° (disque intérieur, Gaia) à ~36° (bords, Olsen & Salyk 2002 ; MagES, arXiv:2203.05450) : le disque est gauchi et tordu (Choi et al. 2018), l'inclinaison et la ligne des nœuds changent avec le rayon",
+      "cote_proche": {"valeur": "nord-est", "angle_deg": 49.0, "src": "ligne des nœuds 139° moins 90° : le côté nord-est est le plus proche de nous (van der Marel 2001, van der Marel & Kallivayalil 2014)", "statut": "résumé"},
+      "statut": "lu"
+    },
+    "barre": {
+      "decalage_centre_disque_kpc": {"valeur": 0.4, "src": "van der Marel 2001 (AJ 122, 1827), cité par Pardy et al. 2016 (arXiv:1602.07689)", "statut": "résumé"},
+      "decalage_centre_HI_kpc": {"minimum": 1.0, "src": "même source : plus de 1 kpc entre le centre de la barre et le centre de rotation du gaz HI", "statut": "résumé"},
+      "centre_dynamique_etoiles": {"texte": "le centre de rotation des étoiles tombe sur celui du gaz HI, décalé du centre photométrique (van der Marel & Kallivayalil 2014, résumé) ; d'autres placent le centre de rotation près de la barre (Gaia DR3)", "statut": "contesté"},
+      "vitesse_de_figure_kms_kpc": {"valeur": 18.5, "err_haut": 1.2, "err_bas": 1.1, "corotation_kpc": 4.2, "src": "Jiménez-Arranz et al. 2024 (A&A, modèle bisymétrique, Gaia DR3) ; la méthode de Dehnen du même article donne -1,0 ± 0,5 (barre presque immobile)", "statut": "contesté"},
+      "statut": "résumé"
+    },
+    "statut": "lu"
+  },
+  "petit_nuage": {
+    "profondeur": {
+      "hauteur_rr_lyrae_kpc": {"valeur": 2.0, "err": 0.4, "src": "Haschke, Grebel & Duffau 2012 (AJ 144, 107), OGLE III, RR Lyrae", "statut": "lu"},
+      "hauteur_cepheides_kpc": {"valeur": 2.7, "err": 0.3, "src": "Haschke et al. 2012, céphéides", "statut": "lu"},
+      "etendue_cepheides_kpc": {"valeur": [25.0, 30.0], "src": "Ripepi et al. 2017 (MNRAS 472, 808), VMC : céphéides étirées sur 25 à 30 kpc, de l'est / nord-est vers le sud-ouest", "statut": "lu"},
+      "cote_proche": {"valeur": "est", "angle_deg": 90.0, "src": "structure de l'est du Petit Nuage plus proche que le corps principal, étoiles du « red clump » (Nidever et al. 2013), citée par Ripepi et al. 2017", "statut": "résumé"},
+      "deux_systemes": {"texte": "deux structures séparées d'environ 5 kpc le long de la ligne de visée, de compositions différentes (Murray et al. 2024, ApJ 962, 120) ; interprétation discutée", "statut": "contesté"},
+      "statut": "lu"
+    },
+    "rotation": {"texte": "les étoiles les plus vieilles sont réparties en boule sans tourner nettement ; les jeunes et le gaz tournent (~25 km/s, Stanimirović et al. 2004) ; la marée du Grand Nuage peut imiter une rotation", "src": "Murray et al. 2024 (présentation de l'article par AAS Nova) ; Stanimirović et al. 2004", "statut": "résumé"},
+    "statut": "lu"
+  },
+  "pont": {
+    "rencontre": {"il_y_a_ma": 147.0, "err_ma": 33.0, "parametre_impact_kpc": 7.5, "err_kpc": 2.5, "src": "Zivick et al. 2018 (ApJ 864, 55), mouvements propres du Petit Nuage", "statut": "résumé"},
+    "vieilles_etoiles": {"texte": "un pont de RR Lyrae (étoiles vieilles) relie les deux Nuages, décalé d'environ 5° du pont de gaz et du pont d'étoiles jeunes : une partie au moins a été arrachée au Petit Nuage par le Grand", "src": "Belokurov et al. 2017 (MNRAS 466, 4711) ; confirmé avec Gaia DR2 ; OGLE (Jacyszyn-Dobrzeniecka et al.) y voit plutôt deux structures étendues qui se recouvrent", "statut": "contesté"},
+    "statut": "résumé"
+  },
+  "gaz_hors_des_nuages": {
+    "hi_total_msol_a_55kpc": {"valeur": 4.87e8, "src": "Brüns et al. 2005 (A&A 432, 45), relevé HI de Parkes : HI des structures (pont, interface, courant, bras avant), toutes placées à 55 kpc ; la masse varie comme le carré de la distance", "statut": "lu"},
+    "parts": {"pont_et_interface": 0.67, "courant": 0.25, "bras_avant": 0.06, "src": "Brüns et al. 2005, résumé : « environ deux tiers » près des Nuages (pont et interface), 25 % dans le Courant, 6 % dans le bras avant", "statut": "lu"},
+    "helium": {"facteur": 1.33, "src": "même facteur que univers.json (petit_nuage) : masse de gaz = HI × 1,33", "statut": "lu"},
+    "ionise_total_msol_a_55kpc": {"valeur": 2.0e9, "src": "Fox et al. 2014 (ApJ 787, 147) : Courant, gaz neutre et ionisé, environ 2 × 10⁹ M☉ (d/55 kpc)² ; l'ionisé pèse 2 à 3 fois le neutre", "statut": "lu"},
+    "distance_du_courant_kpc": {"valeur": [55.0, 200.0], "src": "distance du Courant mal connue : entre 55 et 200 kpc (prépublications récentes)", "statut": "résumé"},
+    "longueur_du_courant_deg": {"valeur": 200.0, "src": "Nidever et al. 2010 (ApJ 723, 1618) : « The 200°-long Magellanic Stream System », bras avant compris", "statut": "lu"},
+    "statut": "lu"
+  }
+}
