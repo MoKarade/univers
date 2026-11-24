@@ -1,6 +1,6 @@
 # Forme des Nuages de Magellan : état, mesures, ce que donne le grand calcul (24 novembre 2026)
 
-Outil : `pipeline/fusion/forme_nuages.py` (essais : `pipeline/fusion/test_forme_nuages.py`, 21 vérifications, toutes
+Outil : `pipeline/fusion/forme_nuages.py` (essais : `pipeline/fusion/test_forme_nuages.py`, 23 vérifications, toutes
 vertes). Mesures publiées : `pipeline/constantes/nuages_magellan.json` (source et statut pour chaque valeur).
 Tout est calculé sur le processeur, sans la carte graphique, et sans rien écrire dans les films.
 
