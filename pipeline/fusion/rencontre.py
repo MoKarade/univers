@@ -604,15 +604,20 @@ def tourner(sortie, opts, cible, tolerance=3.0):
     particules), pour amener la barre de sa masse sur la barre mesurée. Réservé à Andromède : sa barre naît tard et sa
     direction finale ne suit pas la rotation du départ (essai du 22/11 : départ tourné de +79,5°, arrivée à -84° au lieu
     de -2,6°, comme au premier passage). À 770 kpc de tout voisin lourd, un tour sur elle-même ne change rien à ce
-    qu'elle subit : la marée extérieure y est mille fois plus faible que son attraction propre. La Voie lactée, elle,
-    est calée par le départ (second passage) : le Grand Nuage, à 50 kpc, interdit de la tourner après coup.
-    Vérifie l'angle obtenu ; garde l'état d'avant dans aujourdhui_avant_tour.npz."""
+    qu'elle subit : la marée extérieure y est mille fois plus faible que son attraction propre.
+    Voie lactée (--galaxie=voie_lactee) : permis pour un PETIT angle seulement (--angle-max, 15° par défaut). Un second
+    passage au départ tourné ne redonne pas la même barre (essai à 20 M du 24/11 : départ tourné de -7,8°, barre arrivée
+    à +5° au lieu de +39° et deux fois plus faible). Tourner la Voie lactée d'un bloc de quelques degrés autour de l'axe
+    de son disque ne déplace que la barre et les bras par rapport au Grand Nuage ; le sillage que le Nuage creuse dans
+    le halo se retrouve décalé d'autant [écart assumé, à écrire dans ecarts.txt].
+    Vérifie l'angle obtenu ; garde l'état d'avant dans aujourdhui_avant_tour[_<galaxie>].npz."""
     nom = opts.get('galaxie', 'andromede'); g = ORDRE.index(nom)
     f_auj = os.path.join(sortie, 'aujourdhui.npz')
     with np.load(f_auj) as z: p = {k: z[k] for k in z.files}
     with np.load(os.path.join(opts['traceurs'], f'etoiles_visibles_{nom}.npz')) as z: tp = z['pos'].astype(np.float64)
     td = repere_disque(nom, tp, np.array(cible['galaxies'][nom]['position_aujourdhui']))
-    _, cible_angle = phase_barre(td[:, 0], td[:, 1], 1.0, 5.0)
+    r1 = 4.0 if nom == 'voie_lactee' else 5.0      # comme le mode « barre »
+    _, cible_angle = phase_barre(td[:, 0], td[:, 1], 1.0, r1)
     qui = np.where(p['gid'] == g)[0]; et = qui[np.isin(p['kind'][qui], ETOILES)]
     c = np.median(p['pos'][et], axis=0)
     for _ in range(8):      # centre des étoiles, sphère qui rétrécit
@@ -622,9 +627,11 @@ def tourner(sortie, opts, cible, tolerance=3.0):
     masse = qui[p['kind'][qui] != 0]
     def angle_de(pos):
         md = (pos[masse] - c) @ Rv
-        return phase_barre(md[:, 0], md[:, 1], 1.0, 5.0)
+        return phase_barre(md[:, 0], md[:, 1], 1.0, r1)
     f0, a0 = angle_de(p['pos'])
     a = math.radians((cible_angle - a0 + 90.0) % 180.0 - 90.0)
+    if nom == 'voie_lactee' and abs(math.degrees(a)) > float(opts.get('angle-max', 15.0)):
+        raise SystemExit(f"Voie lactée : il faudrait la tourner de {math.degrees(a):+.1f}°, trop pour un tour d'un bloc")
     Z = np.array([[math.cos(a), -math.sin(a), 0.0], [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]])
     T = Rv @ Z.T @ Rv.T      # vecteurs en ligne : nouveau = ancien @ T
     pos, vel = p['pos'].copy(), p['vel'].copy()
@@ -633,11 +640,11 @@ def tourner(sortie, opts, cible, tolerance=3.0):
     ecart = abs((a1 - cible_angle + 90.0) % 180.0 - 90.0)
     print(f"{nom} : barre de la masse {f0:.3f} à {a0:+.1f}° ; tournée de {math.degrees(a):+.1f}° ; maintenant {f1:.3f} à {a1:+.1f}° (mesurée {cible_angle:+.1f}°, écart {ecart:.1f}°)")
     if ecart > tolerance or abs(f1 - f0) > 0.005: raise SystemExit(f"tour raté : écart {ecart:.1f}°")
-    os.replace(f_auj, os.path.join(sortie, 'aujourdhui_avant_tour.npz'))
+    os.replace(f_auj, os.path.join(sortie, 'aujourdhui_avant_tour.npz' if nom == 'andromede' else f'aujourdhui_avant_tour_{nom}.npz'))
     q = dict(p, pos=pos.astype(p['pos'].dtype), vel=vel.astype(p['vel'].dtype))
     np.savez(os.path.join(sortie, 'aujourdhui.tmp.npz'), **q); os.replace(os.path.join(sortie, 'aujourdhui.tmp.npz'), f_auj)
     json.dump(dict(galaxie=nom, tour_degres=round(math.degrees(a), 2), avant=round(a0, 1), apres=round(a1, 1), mesuree=round(cible_angle, 1)),
-              open(os.path.join(sortie, 'tour.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+              open(os.path.join(sortie, 'tour.json' if nom == 'andromede' else f'tour_{nom}.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 
 def barre(sortie, opts, cible):
