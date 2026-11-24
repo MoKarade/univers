@@ -6,6 +6,7 @@ joue (mesuré le 19/11/2026 : l'essai du groupe a attendu deux heures pour rien)
 un programme d'un dossier de jeux (steamapps), Call of Duty, ou l'appli Univers ; et, en secours, une mémoire graphique
 prise par les autres programmes au-delà de MEMOIRE_AUTRES_MO.
 """
+import os
 import subprocess
 
 # L'appli de Marc est UniversPC.exe (raccourci du Bureau, sans console). univers.exe (avec console) sert aux essais en fenêtre
@@ -13,6 +14,7 @@ import subprocess
 # 20/11 : six tirs d'orbites refusés d'affilée).
 JEUX = (r'steamapps\common', 'cod.exe', 'universpc.exe', 'epic games', 'riot games', 'battle.net')
 MEMOIRE_AUTRES_MO = 7000
+PAUSE = 'C:/tmp/natif/pause_carte.txt'
 
 
 def _smi(args):
@@ -50,6 +52,7 @@ def memoire_des_essais():
 
 def prise(memoire_a_moi_mo=0.0):
     """Rend la raison (texte) si Marc utilise la carte, sinon None. memoire_a_moi_mo : mémoire graphique de ce calcul."""
+    if os.path.exists(PAUSE): return 'pause demandée (' + PAUSE + ')'      # créneau cédé à un autre fil : supprimer le fichier pour reprendre
     try:
         noms = _smi(['--query-compute-apps=name', '--format=csv,noheader']).lower()
         for j in JEUX:
@@ -58,7 +61,6 @@ def prise(memoire_a_moi_mo=0.0):
         # Marc, on ne l'applique pas (20/11 : sept retraits d'affilée, le compteur Windows par programme répondait trop tard).
         if 'univers.exe' in noms: return None
         utilisee = float(_smi(['--query-gpu=memory.used', '--format=csv,noheader,nounits']).split()[0])
-        import os
         exacte = memoire_de(os.getpid())
         if exacte is not None: memoire_a_moi_mo = max(memoire_a_moi_mo, exacte)
         if utilisee - memoire_a_moi_mo > MEMOIRE_AUTRES_MO: memoire_a_moi_mo += memoire_des_essais()
