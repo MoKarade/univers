@@ -130,6 +130,7 @@ class Calcul:
             import gaz_galaxie
             self.gaz = (gaz_galaxie.GazThermique if gaz == 2 else gaz_galaxie.Gaz)(len(p['kind']))
             if 'u_gaz' in p and hasattr(self.gaz, 'u'): self.gaz.u = cp.asarray(p['u_gaz'], dtype=cp.float64)
+            if 'reserve_sn' in p and hasattr(self.gaz, 'reserve'): self.gaz.reserve = cp.asarray(p['reserve_sn'], dtype=cp.float64)      # erg, gaz_galaxie.GazThermique
             if 'h_gaz' in p: self.gaz.h = cp.asarray(p['h_gaz'], dtype=cp.float64)
             if 'naissance' in p: self.gaz.naissance = np.array(p['naissance'], dtype=np.float64)
             self.gaz.ages_de_depart(p['kind'])
@@ -213,6 +214,7 @@ class Calcul:
         e = dict(pos=cp.asnumpy(self.pos), vel=cp.asnumpy(self.vel), m=cp.asnumpy(self.m), eps=cp.asnumpy(self.eps), kind=cp.asnumpy(self.kind_g), gid=self.gid)
         if self.gaz: e.update(h_gaz=cp.asnumpy(self.gaz.h).astype(np.float32), naissance=self.gaz.naissance, age0=cp.asnumpy(self.gaz.age0).astype(np.float32))
         if self.gaz is not None and hasattr(self.gaz, 'u'): e['u_gaz'] = cp.asnumpy(self.gaz.u).astype(np.float32)
+        if self.gaz is not None and hasattr(self.gaz, 'reserve'): e['reserve_sn'] = cp.asnumpy(self.gaz.reserve)      # erg, en double : registre exact
         return e
 
 
@@ -410,7 +412,7 @@ def main():
             j0 = json.load(open(f_jou, encoding='utf-8'))
             with np.load(f_rep) as z:
                 if len(z['m']) == len(p['m']) and j0['t'] and abs(j0['t'][0] - t_depart) < 1e-6:
-                    p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
+                    p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz', 'reserve_sn') if k in z.files}
                     t_reprise = float(z['t'])
             if t_reprise > t_depart:
                 k = len(j0['t'])
@@ -658,7 +660,7 @@ def barre(sortie, opts, cible):
     """Compare, à t = 0, la barre de la masse (aujourdhui.npz) à celle des étoiles visibles, galaxie par galaxie, et
     écrit l'angle dont il faut tourner la galaxie de départ autour de son axe (--angles du mode « passe »)."""
     with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
-        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
+        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz', 'reserve_sn') if k in z.files}
     S0 = Calcul(p); cp_, _ = S0.centres(); del S0
     res = {}
     for g, nom in enumerate(ORDRE):
@@ -687,7 +689,7 @@ def futur(sortie, t_fin, opts, cible):
     releve_ma = float(opts.get('releve-ma', 10.0))
     if os.path.exists(reprise) and os.path.exists(os.path.join(film, 'film.json')):      # reprise après un arrêt
         with np.load(reprise) as z:
-            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}; t0 = float(z['t'])
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz', 'reserve_sn') if k in z.files}; t0 = float(z['t'])
         meta = json.load(open(os.path.join(film, 'film.json'), encoding='utf-8'))
         journal = json.load(open(os.path.join(film, 'journal.json'), encoding='utf-8'))
         k = min(len(journal['t']), len(meta['t'])) if 't' in meta else len(journal['t'])      # on repart du dernier instantané : les images d'après sont refaites
@@ -700,7 +702,7 @@ def futur(sortie, t_fin, opts, cible):
             p = film_v3.retirer_gaia_apres_la_fin(p, meta, t0)
     else:
         with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
-            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz', 'reserve_sn') if k in z.files}
         t0, journal = 0.0, None
         S0 = Calcul(p, theta=float(opts.get('theta', 0.7)))
         cp_, cv = S0.centres(); del S0
@@ -733,6 +735,7 @@ def futur(sortie, t_fin, opts, cible):
             if 'naissance' in p: ajout['naissance'] = [np.full(nt, np.nan)]
             if 'age0' in p: ajout['age0'] = [np.full(nt, np.nan, np.float32)]
             if 'u_gaz' in p: ajout['u_gaz'] = [np.zeros(nt, np.float32)]
+            if 'reserve_sn' in p: ajout['reserve_sn'] = [np.zeros(nt)]
             p = {k: np.concatenate([p[k]] + ajout[k]) for k in p}
         if opts.get('film') == '3':      # traceurs mesurés de la Voie lactée, dans le repère du calcul : étoiles Gaia, puis le Soleil
             import film_v3

@@ -110,7 +110,7 @@ extern "C" __global__ void densite(int n, const float* pos, const float* vel, co
 extern "C" __global__ void forces(int n, const float* pos, const float* vel, const float* mass, const float* h,
                                   const float* rho, const float* pr, const float* cs, const float* bal,
                                   const int* left, const int* right, const float* box, const float* hmax,
-                                  float alpha, float beta, float* acc, float* dudt, float* vsig) {
+                                  float alpha, float beta, int monaghan, float* acc, float* dudt, float* vsig) {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     float px = pos[3*k], py = pos[3*k+1], pz = pos[3*k+2], hi = h[k];
@@ -141,7 +141,7 @@ extern "C" __global__ void forces(int n, const float* pos, const float* vel, con
             }
             float f = mass[j] * (pr[k] + pr[j] + visc) * g;
             ax -= f * dx; ay -= f * dy; az -= f * dz;
-            du += 0.5f * f * vr;
+            du += monaghan ? mass[j] * (pr[k] + 0.5f * visc) * g * vr : 0.5f * f * vr;
         } else if (sp < 126) { stack[sp++] = left[node]; stack[sp++] = right[node]; }
     }
     acc[3*k] = ax; acc[3*k+1] = ay; acc[3*k+2] = az; dudt[k] = du; vsig[k] = vs;
@@ -176,11 +176,18 @@ class Arbre:
         _boites(_grid(self.n), (BLOCK,), (np.int32(self.n), self.p, h, self.left, self.right, self.parent, flag, self.box, self.hmax))
 
 
-def sph(pos, vel, m, h, u=None, cs=None, gamma=5.0 / 3.0, h_min=0.0, h_max=np.inf, passes=3):
+def sph(pos, vel, m, h, u=None, cs=None, gamma=5.0 / 3.0, h_min=0.0, h_max=np.inf, passes=3, energie='monaghan'):
     """Un pas d'hydrodynamique. pos, vel (n,3), m, h (n,) : tableaux CuPy en double ; h : longueurs de lissage du pas d'avant
     (une première estimation suffit). u : énergie interne par unité de masse (gaz adiabatique) OU cs : vitesse du son
     (gaz isotherme, nombre ou tableau). Rend un dictionnaire : acc (n,3), dudt, rho, h (mis à jour), nvois, vsig (vitesse de
-    signal, pour le pas de temps), dans l'ordre d'entrée."""
+    signal, pour le pas de temps), dans l'ordre d'entrée.
+    energie : forme de du/dt. 'monaghan' (défaut depuis le 24/11/2026) : du_i/dt = somme_j m_j (P_i/rho_i² + Pi_ij/2)
+    v_ij.gradW (Monaghan 1992 ; GADGET-2). 'moyenne' (avant) : 1/2 somme_j m_j (P_i/rho_i² + P_j/rho_j² + Pi_ij) v_ij.gradW,
+    qui fait passer sous zéro le gaz froid voisin du gaz chaud ; le plancher crée alors de l'énergie (+6,6 % sur
+    l'explosion de Sedov, mesuré sur le jumeau gaz_cpu.py). Même énergie totale en théorie ; sans effet en isotherme
+    (dudt n'y sert pas)."""
+    if energie not in ('monaghan', 'moyenne'):
+        raise ValueError("forme d'énergie inconnue : " + str(energie))
     n = int(pos.shape[0])
     A = Arbre(pos, vel, m)
     o = A.order
@@ -206,7 +213,7 @@ def sph(pos, vel, m, h, u=None, cs=None, gamma=5.0 / 3.0, h_min=0.0, h_max=np.in
     A.boites(hs)
     acc = cp.empty(3 * n, cp.float32); du = cp.empty(n, cp.float32); vs = cp.empty(n, cp.float32)
     _forces(_grid(n), (BLOCK,), (np.int32(n), A.p, A.v, A.m, hs, rho, pr, son, bal, A.left, A.right, A.box, A.hmax,
-                                 np.float32(ALPHA), np.float32(BETA), acc, du, vs))
+                                 np.float32(ALPHA), np.float32(BETA), np.int32(energie == 'monaghan'), acc, du, vs))
     out = {}
     for nom, t, forme in (('acc', acc.reshape(n, 3), (n, 3)), ('dudt', du, (n,)), ('rho', rho, (n,)), ('h', hs, (n,)), ('vsig', vs, (n,)), ('divv', dv, (n,))):
         x = cp.empty(forme, cp.float64); x[o] = t; out[nom] = x

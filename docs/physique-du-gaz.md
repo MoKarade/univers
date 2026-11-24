@@ -22,7 +22,7 @@ Labels : [Certain] lu ou mesuré aujourd'hui ; [Probable] publié, source connue
 | Nombre de supernovæ par masse d'étoiles formée | `nombre_sn_par_masse` | Chabrier 2003 ; 6-100 M☉ donne 1,7359 × 10⁻², la valeur publiée par Dalla Vecchia & Schaye 2012 est 1,736 × 10⁻² [Certain, mesuré] |
 | Instant de chaque explosion (durée de vie des étoiles) | `duree_de_vie`, `Explosions` | Raiteri et al. 1996 : 8 M☉ → 39,7 Ma, 100 M☉ → 3,35 Ma [Probable] |
 | Supernovæ thermonucléaires (Ia) | `Explosions` | 1,3 × 10⁻³ par M☉, délai en 1/t dès 40 Ma (Maoz & Mannucci 2012) [Probable] |
-| Dépôt de l'énergie, saut de 10^7,5 K | `deposer` | Dalla Vecchia & Schaye 2012, avec une **réserve** par particule d'étoiles : énergie conservée exactement [Certain, contrôlé] |
+| Dépôt de l'énergie, saut de 10^7,5 K | `nombre_de_chauffes`, `deposer` | Probabilité de Dalla Vecchia & Schaye 2012 (éq. 5), tirée sur une **réserve** par particule d'étoiles : registre exact (libérée = déposée + réserve), écart par particule sous un saut [Certain, contrôlé] |
 | Gaz sur processeur, mêmes équations que la carte (plus la forme d'énergie de Monaghan, défaut) | `gaz_cpu.sph` | Jumeau de `gaz_gpu.sph` en double précision [Certain pour la correspondance ligne à ligne ; comparaison chiffrée à faire quand la carte est libre : `essai_gaz_physique.py gpu`] |
 
 ## Défauts trouvés dans `gaz_gpu` et `GazThermique` (branche film-3 ; gaz « chaud » jamais exécuté)
@@ -41,9 +41,16 @@ Labels : [Certain] lu ou mesuré aujourd'hui ; [Probable] publié, source connue
    valeurs de cette courbe tombent sur celles des tables normalisées par n_e n_i (Sutherland & Dopita 1993). Avec n², le
    gaz se refroidirait environ 4 fois trop vite. Choix ici : n_e n_i ; l'autre reste disponible pour comparer.
    [Probable ; à vérifier contre une table de Sutherland & Dopita 1993 ou Gnat & Sternberg 2007]
+4. **Forces des sous-pas évaluées avec la vitesse de mi-pas** (pas de prédiction) : la viscosité dépend de la vitesse,
+   d'où une erreur d'énergie du premier ordre dans les chocs : +3,1 % sur l'essai `thermique`, −0,04 % avec la prédiction
+   (comme essai_gaz.py). Corrigé dans GazThermique. Le gaz tiède des films (`Gaz.avancer`) a la même forme ; sans
+   énergie suivie, l'effet est sur la dissipation des chocs, pas un bilan : à voir par le fil du grand calcul. [Certain
+   pour le thermique, mesuré]
 3. **Explosions au moment de la naissance**, toutes d'un coup, et énergie conservée seulement en moyenne (tirage au
    sort). Remède : les supernovæ partent entre 3,4 et 40 Ma selon la masse des étoiles, puis les Ia ; l'énergie passe
-   par une réserve, conservée exactement.
+   par une réserve tenue au registre exact. Pourquoi un tirage : à masses égales, une particule d'étoiles ne libère en
+   tout qu'environ un saut (Dalla Vecchia & Schaye 2012, éq. 8) ; attendre que la réserve soit pleine repousserait la
+   chauffe après les Ia, des milliards d'années trop tard.
 
 ## Contrôles (sans carte graphique)
 
@@ -53,7 +60,8 @@ Labels : [Certain] lu ou mesuré aujourd'hui ; [Probable] publié, source connue
   densités 0,01 et 1 atome/cm³, pas de 0,1 à 2 temps de refroidissement : écart < 10⁻⁴ ; un pas = mille petits pas à
   10⁻⁶ près ; plancher de 10⁴ K exact ;
 - supernovæ par masse formée contre la valeur publiée ; somme des pas = total ;
-- réserve d'énergie : déposée + restante = libérée à 10⁻¹² près ; masse inchangée ;
+- réserve d'énergie : registre exact à 10⁻¹² ; écart par particule sous un saut ; à 50 Ma, le gaz a reçu l'énergie
+  des supernovæ (au bruit du tirage près) ;
 - jumeau processeur : gradient connu, tube à choc, explosion de Sedov ; puis explosion d'étoiles dans du gaz qui
   rayonne (cinétique + interne + rayonnée = départ + déposé).
 
@@ -63,11 +71,12 @@ Résultats du 24/11/2026 (processeur, `TOUT BON`) :
 |---|---|---|
 | Refroidissement exact, 28 cas de 2 × 10⁴ à 10¹⁰ K | écart < 10⁻⁴ | Runge-Kutta fin |
 | Supernovæ 6-100 M☉ par M☉ (Chabrier) | 1,7359 × 10⁻² | 1,736 × 10⁻² (Dalla Vecchia & Schaye 2012) |
-| Réserve : déposée + restante / libérée | 1 à 10⁻¹² | 1 |
+| Réserve : registre (déposée + réserve) / libérée | 1 à 10⁻¹² | 1 |
 | Tube à choc isotherme, 13 143 particules | densité −4,1 %, vitesse −0,7 % | solution exacte |
 | Sedov, 32 736 particules, forme de Monaghan | rayon −5,4 %, énergie −0,09 % | 1,1527 (E t²/ρ)^(1/5) |
 | Sedov, même montage, forme « moyenne » de gaz_gpu | énergie +6,6 % à 8 000 particules, entièrement due au plancher | 0 |
 | Explosion dans du gaz à 1 atome/cm³ qui rayonne, 2 Ma | bilan −0,08 % ; 68 % de l'énergie rayonnée, 17 % en mouvement | 0 |
+| `GazThermique` complet (branche gaz-physique-film-3), 10^5 M☉ d'étoiles jeunes dans du gaz à 1 atome/cm³, 20 Ma | libérée = table à 10⁻⁹ ; registre exact ; bilan −0,04 % (+3,1 % avant la correction ci-dessous) | 0 |
 
 Le 68 % rayonné à cette finesse (particules de 268 M☉, 20 pc) est attendu : c'est le « sur-refroidissement » des
 explosions mal résolues que le saut de 10^7,5 K atténue sans le supprimer [Probable].
@@ -86,13 +95,17 @@ forme d'un disque) ; noyau actif (négligeable aujourd'hui, incertain pendant la
 - Énergie noire : la gravité du gaz passe par le même calcul N-corps que tout le reste, avec le terme d'énergie noire du
   grand calcul (energie_noire.py). Ce lot ne touche pas à la gravité. [Certain]
 
-## Branchement dans le grand calcul (après le film)
+## Branchement dans le grand calcul
 
-1. Dans `gaz_galaxie.GazThermique` : remplacer `_refroidir` par `Refroidissement.refroidir(u, rho, d, xp=cp)` ;
-   remplacer le chauffage à la naissance par : réserve par particule d'étoiles (`Explosions.energie_liberee` selon l'âge,
-   étoiles du départ comprises pour les Ia), puis `deposer` sur les voisines de gaz (version carte à écrire : même
-   règle, voisines déjà trouvées par l'arbre de gaz_gpu).
-2. `essai_gaz_physique.py gpu` : jumeau processeur contre carte, puis `essai_gaz.py sedov` sur la carte.
-3. Galaxie seule 0,5 Ga en `--gaz=2` : sursaut central, barre, nombre de sous-pas (le gaz à 10^7,5 K demande des
+Fait le 24/11/2026 sur la branche `gaz-physique-film-3` (tirée de film-3 ; le fil du grand calcul la fusionnera dans
+film-3 après les films en cours, qui relisent leur code à chaque reprise) : `gaz_gpu.sph(energie='monaghan')` par
+défaut ; `GazThermique` refait sur `gaz_physique` (refroidissement exact, explosions retardées, réserve, bilan
+e_liberee / e_deposee / e_rayonnee / e_plancher) ; `rencontre.py` sauve et relit la réserve (`reserve_sn`). Contrôle
+sur processeur : `essai_gaz_physique.py thermique` (le vrai GazThermique avec numpy et le jumeau à la place de la carte).
+
+Restait à faire, carte libre :
+
+1. `essai_gaz_physique.py gpu` : jumeau processeur contre carte, puis `essai_gaz.py sedov` sur la carte.
+2. Galaxie seule 0,5 Ga en `--gaz=2` : sursaut central, barre, nombre de sous-pas (le gaz à 10^7,5 K demande des
    sous-pas ~10 fois plus courts : coût à mesurer avant de l'annoncer).
-4. Bulletin : taux de naissance (1,65 ± 0,19 M☉/an) **et** sa répartition en rayon (Elia et al. 2022).
+3. Bulletin : taux de naissance (1,65 ± 0,19 M☉/an) **et** sa répartition en rayon (Elia et al. 2022).
