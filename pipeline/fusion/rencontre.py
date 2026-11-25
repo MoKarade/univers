@@ -251,6 +251,7 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
             journal.setdefault('gaz', []).append([float(mm[(k_ == 3) & (S.gid == g)].sum()) for g in range(len(ORDRE))])
             journal.setdefault('nees', []).append([float(mm[(k_ == 5) & (S.gid == g)].sum()) for g in range(len(ORDRE))])
             journal.setdefault('sous_pas', []).append(int(S.gaz.sous_pas))
+            journal.setdefault('courant', []).append(round(float(S.gaz.cfl), 3))      # nombre de Courant atteint : > 0,3 quand les sous-pas butent sur leur maximum
         d = np.linalg.norm(cp_ - cp_[0], axis=1)
         print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % | {time.time() - debut:6.0f} s", flush=True)
         json.dump(journal, open(os.path.join(sortie, 'journal.json.tmp'), 'w', encoding='utf-8')); os.replace(os.path.join(sortie, 'journal.json.tmp'), os.path.join(sortie, 'journal.json'))
@@ -415,7 +416,7 @@ def main():
             if t_reprise > t_depart:
                 k = len(j0['t'])
                 while k and j0['t'][k - 1] > t_reprise + 1e-9: k -= 1
-                for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas'):
+                for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas', 'courant'):
                     if cle in j0: j0[cle] = j0[cle][:k]
                 journal0 = j0
                 if replacement and t_reprise >= replacement['t'] - 1e-9: replacement['fait'] = True
@@ -692,7 +693,7 @@ def futur(sortie, t_fin, opts, cible):
         journal = json.load(open(os.path.join(film, 'journal.json'), encoding='utf-8'))
         k = min(len(journal['t']), len(meta['t'])) if 't' in meta else len(journal['t'])      # on repart du dernier instantané : les images d'après sont refaites
         while k and journal['t'][k - 1] > t0 + 1e-9: k -= 1
-        for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas'):
+        for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas', 'courant'):
             if cle in journal: journal[cle] = journal[cle][:k]
         if 't' in meta: meta['t'] = meta['t'][:k]
         if opts.get('film') == '3':
