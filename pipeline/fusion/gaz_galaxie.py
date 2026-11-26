@@ -40,7 +40,10 @@ import gaz_gpu
 G = 4.30091e-6
 CS = 10.0                 # km/s
 COURANT = 0.3
-SOUS_PAS_MAX = 64
+# Plafond des sous-pas du gaz par pas de gravité. 64 jusqu'au 26/11/2026 : atteint dans 98 % des pas des films 10 M et 20 M,
+# et dépassé (nombre de Courant jusqu'à 0,53 au lieu de 0,3) dans 57 à 70 % des relevés après +8 Ga du film 10 M, dans les
+# chocs de la rencontre. 256 comme la version thermique ; réglable par UNIVERS_SOUS_PAS_MAX (puissance de 2).
+SOUS_PAS_MAX = int(os.environ.get('UNIVERS_SOUS_PAS_MAX', '256'))
 C_SEUIL2 = 54.2             # (km/s)² : k T / (mu m_p) à 8 000 K, gaz neutre (mu = 1,22)
 SEUIL_NH = 0.1            # cm^-3 (seuil de naissance d'étoiles, ordre de grandeur des simulations EAGLE : Schaye et al. 2015)
 # 1 M☉/kpc³ = 1e-9 M☉/pc³ = 1e-9 x 40,46 protons/cm³ ; avec 76 % d'hydrogène : n_H = 3,075e-8 cm^-3 par M☉/kpc³
@@ -178,7 +181,7 @@ T_PLANCHER = 1.0e4
 U_PLANCHER = T_PLANCHER / K_PAR_U
 DT_EXPLOSION = 10 ** 7.5                                             # kelvins
 E_SN_PAR_MASSE = 1.0e51 / (100.0 * 1.989e33) * 1.0e-10               # (km/s)² par unité de masse d'étoiles formée : 5,03e5
-SOUS_PAS_MAX_THERMIQUE = 256
+SOUS_PAS_MAX_THERMIQUE = max(256, SOUS_PAS_MAX)
 
 
 def lambda_refroidissement(T):
