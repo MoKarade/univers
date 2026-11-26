@@ -14,7 +14,8 @@ et on calcule jusqu'à t_fin. Le fichier source n'est que lu ; tout est écrit d
 
 Sans --gaz ni --maree, l'énergie (énergie noire comprise) doit se conserver : tout écart est une erreur du calcul. Avec le gaz
 et la marée, seule la DIFFÉRENCE entre deux variantes compte. Le plafond du gaz se règle par UNIVERS_SOUS_PAS_MAX.
-Comparer : python essai_rencontre.py compare <sortie A> <sortie B> [...]."""
+Comparer : python essai_rencontre.py compare <sortie A> <sortie B> [...] (E indicateur/corrigée : la corrigée retire le travail
+de la pression du gaz et de la marée, et ne doit bouger que par l'erreur du calcul)."""
 import json
 import math
 import os
@@ -66,20 +67,24 @@ def comparer(dossiers):
         j = json.load(open(os.path.join(d, 'journal.json'), encoding='utf-8'))
         r = json.load(open(os.path.join(d, 'reglages.json'), encoding='utf-8'))
         t = np.array(j['t']); e = 100 * np.array(j['energie'])
+        ec = 100 * np.array(j['energie_corrigee']) if 'energie_corrigee' in j else None      # sans le travail de la pression et de la marée
         dm31 = np.array([math.dist(c[1], c[0]) for c in j['centres']])
         pas = 25      # 50 Ma
         saut = max((e[i + pas] - e[i] for i in range(len(e) - pas)), key=abs) if len(e) > pas else float('nan')
-        res[d] = dict(t=t, e=e, d=dm31)
+        res[d] = dict(t=t, e=e, d=dm31, ec=ec)
+        sc = max((ec[i + pas] - ec[i] for i in range(len(ec) - pas)), key=abs) if ec is not None and len(ec) > pas else float('nan')
         print(f"{os.path.basename(d.rstrip('/'))}: gaz={r['gaz']} marée={'oui' if r['maree'] else 'non'} pas={r['pas_ma']} rencontre={r['pas_rencontre_ma']} "
               f"plafond gaz={r['sous_pas_max_gaz']} | énergie finale {e[-1]:+.3f} % | plus grand saut sur 50 Ma {saut:+.3f} % | "
-              f"Andromède au plus près {dm31.min():.1f} kpc à {t[dm31.argmin()]:+.3f} Ga")
+              f"Andromède au plus près {dm31.min():.1f} kpc à {t[dm31.argmin()]:+.3f} Ga"
+              + (f" | corrigée : finale {ec[-1]:+.3f} %, plus grand saut {sc:+.3f} %" if ec is not None else ''))
     print('\ndate      ' + ' '.join(f'{os.path.basename(d.rstrip("/"))[:22]:>24}' for d in dossiers))
     t_ref = res[dossiers[0]]['t']
     for T in t_ref[::25]:
         ligne = []
         for d in dossiers:
             i = int(np.argmin(abs(res[d]['t'] - T)))
-            ligne.append(f"E {res[d]['e'][i]:+.3f} % d {res[d]['d'][i]:6.1f}")
+            c = f"/{res[d]['ec'][i]:+.3f}" if res[d]['ec'] is not None else ''
+            ligne.append(f"E {res[d]['e'][i]:+.3f}{c} % d {res[d]['d'][i]:6.1f}")
         print(f'{T:+.3f}  ' + ' '.join(f'{x:>24}' for x in ligne))
 
 

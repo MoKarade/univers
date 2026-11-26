@@ -140,6 +140,7 @@ class Calcul:
             # dans cette convention.
             self.gaz.age0 = self.gaz.age0 - t_ga
             if 'age0' in p: self.gaz.age0 = cp.asarray(p['age0'], dtype=cp.float64)
+        self.travail_maree = 0.0      # M☉ (km/s)², cumulé : voir energie_corrigee dans avancer
         self.forces()
 
     def forces(self):
@@ -149,10 +150,12 @@ class Calcul:
         cm = cp.sum(self.pos * ml[:, None], axis=0) / cp.sum(ml)
         d = self.pos - cm
         self.acc = acc + self.K * d      # énergie noire : poussée H0² Ω_Λ (x − x_cm)
+        self.a_maree = None
         if self.maree is not None:
             tt, TT = self.maree
             Tm = cp.asarray(np.array([np.interp(self.t_ga, tt, TT[:, k]) for k in range(9)]).reshape(3, 3))
-            self.acc += d @ Tm.T
+            self.a_maree = d @ Tm.T
+            self.acc += self.a_maree
         self.phi, self.d2 = phi, cp.sum(d * d, axis=1)
 
     def energie(self):
@@ -163,6 +166,8 @@ class Calcul:
         cp = self.cp
         self.t_ga = t_ga
         self.vel += 0.5 * dt * self.acc
+        if self.a_maree is not None:      # travail de la marée extérieure (hors de l'indicateur d'énergie), demi-pas par demi-pas
+            self.travail_maree += 0.5 * dt * float(cp.sum(self.m * cp.sum(self.vel * self.a_maree, axis=1)))
         if self.gaz:
             est = self.kind_g == 3; qui = cp.where(est)[0]
             self.pos[~est] += dt * self.vel[~est]
@@ -170,6 +175,8 @@ class Calcul:
         else:
             self.pos += dt * self.vel
         self.forces()
+        if self.a_maree is not None:
+            self.travail_maree += 0.5 * dt * float(cp.sum(self.m * cp.sum(self.vel * self.a_maree, axis=1)))
         self.vel += 0.5 * dt * self.acc
         if self.gaz:
             n1 = self.gaz.naissances(self.kind_g, cp.where(self.kind_g == 3)[0], dt, t_ga, pos=self.pos, m=self.m)
@@ -309,6 +316,8 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
     pas_rencontre_ma, rencontres : pas réduit quand une paire de galaxies est plus proche que son seuil (voir plus haut)."""
     dt = dt_ma * 1e-3 / T_UNIT
     etat_r = dict(k=1)
+    j_ = journal or {}
+    travail0 = ((j_.get('travail_gaz') or [0.0])[-1], (j_.get('travail_maree') or [0.0])[-1])      # cumul repris après une reprise
     steps = int(round((t1 - t0) * 1000 / dt_ma)); every = int(round(releve_ma / dt_ma)); snap = int(round(instantane_ga * 1000 / dt_ma))
     journal = journal or dict(t=[], centres=[], vitesses=[], energie=[], e0=S.energie(), galaxies=ORDRE)
     debut = time.time()
@@ -317,6 +326,11 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
         cp_, cv = S.centres()
         journal['t'].append(round(t, 5)); journal['centres'].append((cp_ - cp_[0]).round(4).tolist()); journal['vitesses'].append((cv - cv[0]).round(3).tolist())
         journal['energie'].append(S.energie() / journal['e0'] - 1)
+        # Énergie corrigée (26/11/2026) : l'indicateur moins le travail reçu de la pression du gaz et de la marée extérieure, qui
+        # ne sont pas dans son bilan. Elle ne doit bouger que par l'erreur du calcul ; l'indicateur seul mélange erreur et physique.
+        wg = (S.gaz.travail if S.gaz else 0.0) + travail0[0]; wm = S.travail_maree + travail0[1]
+        journal.setdefault('travail_gaz', []).append(wg); journal.setdefault('travail_maree', []).append(wm)
+        journal.setdefault('energie_corrigee', []).append(journal['energie'][-1] - (wg + wm) / journal['e0'])
         if S.gaz:      # masse de gaz et d'étoiles nées, par galaxie d'origine (M☉) : le taux de naissance s'en déduit
             k_, mm = S.cp.asnumpy(S.kind_g), S.cp.asnumpy(S.m)
             journal.setdefault('gaz', []).append([float(mm[(k_ == 3) & (S.gid == g)].sum()) for g in range(len(ORDRE))])
@@ -324,7 +338,7 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
             journal.setdefault('sous_pas', []).append(int(S.gaz.sous_pas))
             journal.setdefault('courant', []).append(round(float(S.gaz.cfl), 3))      # nombre de Courant atteint : > 0,3 quand les sous-pas butent sur leur maximum
         d = np.linalg.norm(cp_ - cp_[0], axis=1)
-        print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % | {time.time() - debut:6.0f} s", flush=True)
+        print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % (corrigée {100 * journal['energie_corrigee'][-1]:+.3f} %) | {time.time() - debut:6.0f} s", flush=True)
         json.dump(journal, open(os.path.join(sortie, 'journal.json.tmp'), 'w', encoding='utf-8')); os.replace(os.path.join(sortie, 'journal.json.tmp'), os.path.join(sortie, 'journal.json'))
         k = sous_pas_rencontre(cp_, rencontres, dt_ma, pas_rencontre_ma)
         if k != etat_r['k']: print(f"  t = {t:+.3f} Ga : pas de gravité {dt_ma / k:g} Ma ({'rencontre' if k > 1 else 'hors rencontre'})", flush=True)
@@ -355,7 +369,7 @@ def tronquer_journal(j, k):
     courtes que t et alignées sur sa FIN : on en retire autant de relevés qu'on en retire à t (avant le 26/11, [:k] les
     laissait entières, et une reprise y dupliquait les derniers relevés)."""
     n = len(j['t'])
-    for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas', 'courant', 'sous_pas_gravite'):
+    for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas', 'courant', 'sous_pas_gravite', 'travail_gaz', 'travail_maree', 'energie_corrigee'):
         if cle in j and isinstance(j[cle], list): j[cle] = j[cle][:max(0, len(j[cle]) - (n - k))]
 
 
