@@ -24,7 +24,7 @@
 
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct ArmTracerPoints {
     Buffer vb[StarRenderer::kCols];
@@ -134,4 +134,4 @@ struct ArmTracerPoints {
     }
 };
 
-}  // namespace
+}  // namespace univers

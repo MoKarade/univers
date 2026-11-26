@@ -18,7 +18,7 @@
 #include "parallele.h"
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct DwarfGalaxies {
     // Points par galaxie : 3 000, jusqu'à 30 000 pour les plus brillantes (moins de lumière par point, grain plus fin).
@@ -180,4 +180,4 @@ struct DwarfGalaxies {
     }
 };
 
-}  // namespace
+}  // namespace univers

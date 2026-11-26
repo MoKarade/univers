@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace {
+namespace univers {
 
 class Vieillissement {
 public:
@@ -55,4 +55,4 @@ private:
     std::vector<Row> rows_;
 };
 
-}  // namespace
+}  // namespace univers

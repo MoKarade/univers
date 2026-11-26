@@ -6,6 +6,8 @@
 #include "commun.h"
 #include "ciel_bandes.h"
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 namespace {
 uint64_t spread(uint64_t x) {
     uint64_t r = 0;

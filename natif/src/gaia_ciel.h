@@ -24,7 +24,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace {
+namespace univers {
 
 class GaiaSkyTiles {
 public:
@@ -163,7 +163,7 @@ private:
     VkPipeline pipeline_{};
     VkShaderModule vs_{}, fs_{};
 
-    static void destroy(const Gpu& g, Buffer& b) { ::destroy(g, b); }
+    static void destroy(const Gpu& g, Buffer& b) { univers::destroy(g, b); }
 
     bool readIndex(const std::string& path) {
         std::ifstream f(path, std::ios::binary);
@@ -318,4 +318,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

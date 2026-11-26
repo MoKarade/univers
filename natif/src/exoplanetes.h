@@ -24,7 +24,7 @@
 
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct Exoplanet {
     std::string name, massKind, method;
@@ -186,4 +186,4 @@ struct Exoplanets {
     }
 };
 
-}  // namespace
+}  // namespace univers

@@ -25,6 +25,8 @@
 #include "commun.h"
 #include "orbite_galactique.h"
 
+namespace univers {
+
 struct FusionCloud {
     bool ready = false, physical = false;
     uint32_t n = 0;
@@ -366,3 +368,5 @@ private:
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_), "dessin du nuage de la fusion");
     }
 };
+
+}  // namespace univers

@@ -22,7 +22,7 @@
 #include "film_v2.h"
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct FilmStars {
     phys::film::FilmV2 film;
@@ -170,4 +170,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

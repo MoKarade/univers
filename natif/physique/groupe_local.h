@@ -84,7 +84,8 @@ private:
     bool lerp(const std::vector<double>& A, int stride, int k, double t, double out[3]) const {
         const double x = t / dt_; if (n_ < 2 || !(x >= 0 && x <= n_ - 1)) return false;
         const long i = std::min((long)x, n_ - 2); const double f = x - i; const double* a = &A[((size_t)i * stride + k) * 3]; const double* b = &A[((size_t)(i + 1) * stride + k) * 3];
-        for (int c = 0; c < 3; c++) out[c] = a[c] + (b[c] - a[c]) * f; return true;
+        for (int c = 0; c < 3; c++) out[c] = a[c] + (b[c] - a[c]) * f;
+        return true;
     }
 };
 

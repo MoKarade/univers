@@ -3,14 +3,14 @@
 #include "interface_base.h"
 #include "interface_temps.h"
 
-namespace {
+namespace univers {
 
 // ---------------------------------------------------------------- bas de l'écran
 
 // Un à un ou en somme (demande de Marc, 12/11 : « quand on augmente les distances on généralise au fur et à mesure ») :
 // de près chaque point est un objet mesuré ; en s'éloignant, chaque pixel additionne la lumière de plus en plus d'étoiles
 // mesurées (éclat par pixel constant au-delà de 3 000 al, simulation.h). La vue lointaine est leur somme, jamais un modèle.
-const char* grainLine(const Sim& sim) {
+inline const char* grainLine(const Sim& sim) {
     if (sim.starShare() <= 0) return nullptr;      // seul le calcul de la fusion est montré : voir la ligne suivante
     if (sim.dist < 0.05) {
         if (sim.asteroidCount && sim.asteroidGain(sim.asteroidEpochJd) > 0 && sim.dist > 8.0 * kAuInLy)
@@ -25,7 +25,7 @@ const char* grainLine(const Sim& sim) {
 
 // Les rayons autour du Soleil, vus de loin (fil Gaia, mesure du 12/11/2026, docs/gaia-rayons.md) : Gaia ne mesure pas aussi
 // loin dans toutes les directions. Une ligne courte ; le survol explique.
-void raysNote(const Sim& sim) {
+inline void raysNote(const Sim& sim) {
     if (sim.bestLook && sim.gaiaRebalancedCount)
         ImGui::TextDisabled("Meilleur rendu : étoiles Gaia floutées de 3° et éclat rééquilibré d'une direction à l'autre (%s de la lumière) : hypothèses (survol).",
                             (frNum(100.0 * sim.gaiaRebalancedShift, 2) + " %").c_str());
@@ -44,8 +44,8 @@ void raysNote(const Sim& sim) {
         ImGui::TextWrapped("En vue « meilleur rendu » (bouton Vue, touche F4), l'éclat de %s étoiles est rééquilibré vu de loin : chaque morceau "
                            "de ciel, à une distance donnée, est ramené à la moyenne de ses voisins sur 15°. HYPOTHÈSE : à même distance, le "
                            "nombre d'étoiles varie lentement d'une direction à l'autre. Chaque étoile est aussi dessinée décalée d'un petit angle "
-                           "au hasard (3° en moyenne, autant que l'incertitude de sa distance, 5 %). Aucune étoile n'est ajoutée ; vu du "
-                           "Soleil, le ciel reste celui mesuré. En vue « 100 % mesuré », rien n'est corrigé.",
+                           "au hasard (3° en moyenne, autant que l'incertitude de sa distance, 5 %%). Aucune étoile n'est ajoutée ; vu du "
+                           "Soleil, le ciel reste celui mesuré. En vue « 100 %% mesuré », rien n'est corrigé.",
                            frInt(static_cast<double>(sim.gaiaRebalancedCount)).c_str());
     ImGui::TextDisabled("Source : Gaia DR3 (Gaia Collaboration 2023).");
     ImGui::PopTextWrapPos();
@@ -54,7 +54,7 @@ void raysNote(const Sim& sim) {
 
 void armLegend(const Sim& sim);      // interface_bras.h
 
-void whatYouSee(const Sim& sim) {
+inline void whatYouSee(const Sim& sim) {
     if (const char* grain = grainLine(sim)) ImGui::TextUnformatted(grain);
     const double boost = sim.brightnessBoost();
     if (boost > 1.5 && sim.dist < 1.0e5) ImGui::TextDisabled("Éclat des étoiles multiplié par %s pour qu'elles restent visibles de si loin.", frNum(boost, 2).c_str());
@@ -125,7 +125,7 @@ void whatYouSee(const Sim& sim) {
     }
 }
 
-void drawStatus(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
+inline void drawStatus(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     // En haut, entre la barre d'outils et le mode de vue : où l'on est. Si la place manque, sous la barre d'outils.
     const float gapL = ui.searchRight + px(ui, 24), gapR = w - px(ui, 16) - ui.completenessW - px(ui, 24);
     const bool fits = gapR - gapL >= std::max(ui.statusW, px(ui, 260));
@@ -172,7 +172,7 @@ void drawStatus(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
 }
 
 // En bas à droite, quand on regarde l'univers lointain : les réglages de l'expansion, recalculés en direct.
-void drawCosmology(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
+inline void drawCosmology(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     if (sim.dist <= 2.0e6) return;
     cosmo::Params& c = sim.cosmology;
     float h0 = static_cast<float>(c.h0), om = static_cast<float>(c.om), ode = static_cast<float>(c.ode), w0 = static_cast<float>(c.w0), wa = static_cast<float>(c.wa);
@@ -207,7 +207,7 @@ void drawCosmology(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFla
 
 // ---------------------------------------------------------------- accueil, visite, aide
 
-void drawWelcome(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
+inline void drawWelcome(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     if (!ui.welcome) return;
     ImGui::SetNextWindowPos({w * 0.5f, std::min(h - px(ui, 120), ui.dockTop - px(ui, 14))}, 0, {0.5f, 1});
     ImGui::Begin("accueil", nullptr, fixed);
@@ -234,7 +234,7 @@ void drawWelcome(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed
     ImGui::End();
 }
 
-std::string tourCaption(const Sim& sim, int step) {
+inline std::string tourCaption(const Sim& sim, int step) {
     switch (step) {
         case 0: return "La Terre, éclairée par le Soleil à la date affichée.";
         case 1: return "La Lune, à la place donnée par les éphémérides de la NASA.";
@@ -253,7 +253,7 @@ std::string tourCaption(const Sim& sim, int step) {
     }
 }
 
-void drawTour(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
+inline void drawTour(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     if (ui.tour < 0) return;
     ImGuiIO& io = ImGui::GetIO();
     // La main reprend la visite : un clic, la molette ou un glisser sur l'image l'arrête.
@@ -288,7 +288,7 @@ void drawTour(Sim& sim, UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
 }
 
 // Une carte cliquable de la fenêtre « Découvrir » : titre, phrase, pied de carte. Rend vrai au clic.
-bool discoverCard(const UiState& ui, const char* id, const char* icon, const char* title, const char* blurb, const std::string& foot, float w, float h) {
+inline bool discoverCard(const UiState& ui, const char* id, const char* icon, const char* title, const char* blurb, const std::string& foot, float w, float h) {
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const bool hit = ImGui::InvisibleButton(id, {w, h});
     const bool hov = ImGui::IsItemHovered();
@@ -314,7 +314,7 @@ bool discoverCard(const UiState& ui, const char* id, const char* icon, const cha
 
 // « Découvrir » : les visites guidées à thème et quelques moments à revivre, en cartes. Ouvert depuis le mot d'accueil
 // ou le bouton « Visite » de la barre d'outils.
-void drawDiscover(Sim& sim, UiState& ui, float w, float h) {
+inline void drawDiscover(Sim& sim, UiState& ui, float w, float h) {
     if (!ui.discover) return;
     ImGui::SetNextWindowPos({w * 0.5f, std::min(h * 0.45f, ui.dockTop - px(ui, 14))}, ImGuiCond_Always, {0.5f, ui.dockTop - px(ui, 14) < h * 0.45f ? 1.0f : 0.5f});
     ImGui::SetNextWindowBgAlpha(0.96f);
@@ -356,14 +356,14 @@ void drawDiscover(Sim& sim, UiState& ui, float w, float h) {
 }
 
 // Une commande de l'aide : la touche dans une petite pastille claire, puis ce qu'elle fait.
-void helpLine(const UiState& ui, const char* key, const char* what) {
+inline void helpLine(const UiState& ui, const char* key, const char* what) {
     const float x0 = ImGui::GetCursorPosX();
     chip(key, theme::kText);
     ImGui::SameLine(x0 + px(ui, 200));
     ImGui::TextDisabled("%s", what);
 }
 
-void drawHelp(UiState& ui, float w, float h) {
+inline void drawHelp(UiState& ui, float w, float h) {
     if (!ui.help) return;
     ImGui::SetNextWindowBgAlpha(0.97f);
     ImGui::SetNextWindowPos({w * 0.5f, h * 0.5f}, 0, {0.5f, 0.5f});
@@ -394,7 +394,7 @@ void drawHelp(UiState& ui, float w, float h) {
 // ---------------------------------------------------------------- complétude (choix de Marc : toujours visible, détail au clic)
 
 // Sélecteur à deux cases « 100 % mesuré | Meilleur rendu » (F4). Le mode qui permet des hypothèses se voit toujours.
-void viewModeSwitch(Sim& sim, const UiState& ui) {
+inline void viewModeSwitch(Sim& sim, const UiState& ui) {
     const char* labels[2] = {"100 % mesuré", "Meilleur rendu"};
     const char* tips[2] = {"100 % mesuré : seulement ce qui a été mesuré, et ce qui en est calculé (F4 pour changer).",
                            "Meilleur rendu : quelques corrections NON mesurées sont permises pour une plus belle image ;\nchacune est dite à l'écran (F4 pour changer)."};
@@ -425,7 +425,7 @@ void viewModeSwitch(Sim& sim, const UiState& ui) {
 
 // En haut à droite (choix de Marc : toujours visible) : le mode de vue, puis ce qui est présent à l'échelle regardée,
 // comparé à ce qui est connu. Un clic sur la ligne ouvre le détail.
-void drawCompleteness(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
+inline void drawCompleteness(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     ImGui::SetNextWindowPos({w - px(ui, 16), px(ui, 16)}, 0, {1, 0});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 8), px(ui, 8)});
     ImGui::Begin("completude-ligne", nullptr, fixed);
@@ -472,7 +472,7 @@ void drawCompleteness(Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
 
 // Clic sur l'image, hors d'un astre nommé : l'étoile dessinée la plus brillante à moins de 12 pixels (n'importe laquelle
 // des 6,15 millions du catalogue, Marc 20/11/2026), sinon l'astéroïde visible le plus proche (au clic seulement).
-void clickAsteroid(Sim& sim, UiState& ui, const Camera& cam, float w, float h, int hovered) {
+inline void clickAsteroid(Sim& sim, UiState& ui, const Camera& cam, float w, float h, int hovered) {
     if (hovered >= 0 || ImGui::GetIO().WantCaptureMouse) return;
     const ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 4.0f);
     if (!ImGui::IsMouseReleased(ImGuiMouseButton_Left) || drag.x != 0 || drag.y != 0) return;
@@ -514,4 +514,4 @@ void clickAsteroid(Sim& sim, UiState& ui, const Camera& cam, float w, float h, i
     if (i >= 0 && sim.visible(i)) goToBody(sim, ui, i);
 }
 
-}  // namespace
+}  // namespace univers

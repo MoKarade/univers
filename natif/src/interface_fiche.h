@@ -10,12 +10,12 @@
 #include "fiches.h"
 // row(), frDistance… : déjà inclus par interface_panneau.h, qui inclut ce fichier.
 
-namespace {
+namespace univers {
 
-fiches::Index gFiches;      // démarré par fenetre.cpp dès que le dossier des données est connu
+inline fiches::Index gFiches;      // démarré par fenetre.cpp dès que le dossier des données est connu
 
 // Remarque en gris qui revient à la ligne (même allure que note() du panneau).
-void noteFiche(const char* texte) {
+inline void noteFiche(const char* texte) {
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::TextWrapped("%s", texte);
     ImGui::PopStyleColor();
@@ -25,7 +25,7 @@ void noteFiche(const char* texte) {
 
 // Coordonnées sur le ciel d'une direction (repère écliptique J2000 de l'appli) : ascension droite, déclinaison
 // (équatorial J2000) et longitude, latitude galactiques (matrice ICRS -> galactique, Hipparcos 1997, vol. 1, § 1.5.3).
-void ciel(Vec3 d, double& ad, double& dec, double& l, double& b) {
+inline void ciel(Vec3 d, double& ad, double& dec, double& l, double& b) {
     const double eps = 84381.448 / 3600.0 * kPi / 180.0;
     const Vec3 q{d.x, d.y * std::cos(eps) - d.z * std::sin(eps), d.y * std::sin(eps) + d.z * std::cos(eps)};
     const double r = std::sqrt(dot(q, q));
@@ -42,7 +42,7 @@ void ciel(Vec3 d, double& ad, double& dec, double& l, double& b) {
     b = std::asin(std::clamp(g[2] / r, -1.0, 1.0));
 }
 
-std::string heuresFr(double rad) {
+inline std::string heuresFr(double rad) {
     const double h = rad * 12.0 / kPi;
     const int hh = static_cast<int>(h), mm = static_cast<int>((h - hh) * 60.0);
     const double ss = ((h - hh) * 60.0 - mm) * 60.0;
@@ -53,10 +53,10 @@ std::string heuresFr(double rad) {
     return s;
 }
 
-std::string degresFr(double rad) { return frNum(rad * 180.0 / kPi, 6) + "°"; }
+inline std::string degresFr(double rad) { return frNum(rad * 180.0 / kPi, 6) + "°"; }
 
 // Durée écrite dans l'unité qui parle.
-std::string dureeFr(double secondes) {
+inline std::string dureeFr(double secondes) {
     if (secondes < 120) return frNum(secondes, 3) + " secondes";
     if (secondes < 7200) return frNum(secondes / 60.0, 3) + " minutes";
     if (secondes < 172800) return frNum(secondes / 3600.0, 3) + " heures";
@@ -67,7 +67,7 @@ std::string dureeFr(double secondes) {
     return frNum(ans / 1e9, 3) + " milliards d'années";
 }
 
-void groupeCalcule(const Sim& sim, const UiState& ui, int f) {
+inline void groupeCalcule(const Sim& sim, const UiState& ui, int f) {
     const Body& b = sim.bodies[static_cast<size_t>(f)];
     if (b.structure && (b.name == "Univers observable" || b.name == "Fond diffus cosmologique")) return;      // sphère centrée sur nous : pas de direction
     const bool proche = b.kind == Kind::Planet || b.kind == Kind::Asteroid || b.kind == Kind::Probe;
@@ -99,16 +99,16 @@ struct FicheCache {
     bool pret = false;
     std::vector<fiches::Ligne> lignes;
 };
-FicheCache gFicheCache;
+inline FicheCache gFicheCache;
 
 // Les groupes de la fiche, chacun repliable, dans l'ordre des fichiers.
 // Contrôle sans fenêtre : UNIVERS_FICHE=tout ouvre tous les groupes et fait défiler le panneau jusqu'à la fiche (captures).
-bool ficheTout() {
+inline bool ficheTout() {
     static const bool tout = std::getenv("UNIVERS_FICHE") != nullptr;
     return tout;
 }
 
-void drawFicheRows(const std::vector<fiches::Ligne>& lignes, const UiState& ui) {
+inline void drawFicheRows(const std::vector<fiches::Ligne>& lignes, const UiState& ui) {
     std::vector<std::string> groupes;
     for (const auto& l : lignes)
         if (std::find(groupes.begin(), groupes.end(), l.groupe) == groupes.end()) groupes.push_back(l.groupe);
@@ -123,7 +123,7 @@ void drawFicheRows(const std::vector<fiches::Ligne>& lignes, const UiState& ui) 
     }
 }
 
-void drawFiche(const Sim& sim, const UiState& ui, int f) {
+inline void drawFiche(const Sim& sim, const UiState& ui, int f) {
     const Body& b = sim.bodies[static_cast<size_t>(f)];
     // Relue seulement quand l'astre change (ou quand le parcours des fichiers vient de finir).
     if (gFicheCache.cle != b.name || gFicheCache.pret != gFiches.pret()) {
@@ -149,4 +149,4 @@ void drawFiche(const Sim& sim, const UiState& ui, int f) {
          "d'une hypothèse. Publié : valeur de catalogue. Incertitudes telles que publiées (± 1 écart type sauf mention).");
 }
 
-}  // namespace
+}  // namespace univers

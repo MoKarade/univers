@@ -5,7 +5,7 @@
 #pragma once
 #include "interface_recherche.h"
 
-namespace {
+namespace univers {
 
 struct Tuile {
     std::string label, valeur;
@@ -14,7 +14,7 @@ struct Tuile {
 };
 
 // Une tuile : petit libellé en capitales, valeur en grand, point de couleur du statut.
-void drawTile(const UiState& ui, const Tuile& t, float w) {
+inline void drawTile(const UiState& ui, const Tuile& t, float w) {
     const ImVec2 p = ImGui::GetCursorScreenPos();
     ImFont* fs = gFontSmall ? gFontSmall : ImGui::GetFont();
     ImFont* fb = gFontBold ? gFontBold : ImGui::GetFont();
@@ -47,7 +47,7 @@ void drawTile(const UiState& ui, const Tuile& t, float w) {
     }
 }
 
-std::string durationText(double years) {
+inline std::string durationText(double years) {
     const double days = years * 365.25;
     if (years >= 1) return frNum(years, years >= 100 ? 0 : 2) + " ans";
     if (days >= 2) return frNum(days, days >= 100 ? 0 : 1) + " jours";
@@ -55,7 +55,7 @@ std::string durationText(double years) {
 }
 
 // Les chiffres-clés de l'astre suivi, tirés des mêmes données que la fiche détaillée.
-std::vector<Tuile> keyFacts(const Sim& sim, int f) {
+inline std::vector<Tuile> keyFacts(const Sim& sim, int f) {
     using ui_outils::Statut;
     const Body& b = sim.bodies[static_cast<size_t>(f)];
     std::vector<Tuile> out;
@@ -126,7 +126,7 @@ std::vector<Tuile> keyFacts(const Sim& sim, int f) {
 }
 
 // Les tuiles en grille de deux colonnes.
-void drawKeyFacts(const Sim& sim, const UiState& ui, int f) {
+inline void drawKeyFacts(const Sim& sim, const UiState& ui, int f) {
     const std::vector<Tuile> facts = keyFacts(sim, f);
     if (facts.empty()) return;
     const float gap = px(ui, 8);
@@ -140,7 +140,7 @@ void drawKeyFacts(const Sim& sim, const UiState& ui, int f) {
 }
 
 // Texte d'un astre : les deux premières phrases d'abord ; « Lire la suite » montre le reste.
-void drawSummaryText(const char* text, int focus) {
+inline void drawSummaryText(const char* text, int focus) {
     static int openFor = -1;
     const std::string all = text;
     size_t cut = std::string::npos, from = 0;
@@ -163,4 +163,4 @@ void drawSummaryText(const char* text, int focus) {
     ImGui::PopStyleColor();
 }
 
-}  // namespace
+}  // namespace univers

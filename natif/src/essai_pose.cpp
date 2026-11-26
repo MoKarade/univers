@@ -9,6 +9,8 @@
 
 #include "pose_auto.h"
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 namespace {
 
 int gEchecs = 0;

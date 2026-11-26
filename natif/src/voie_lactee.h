@@ -11,7 +11,7 @@
 #include "../physique/galaxie_orbites.h"
 #include "orbite_galactique.h"
 
-namespace {
+namespace univers {
 
 struct MilkyWayParams {      // copie de l'en-tête de voie_lactee.bin (voir ENTETE dans le script)
     float nx, ny, nz, halfXY, halfZ, r0, sun[3], gal2ecl[9];
@@ -360,4 +360,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

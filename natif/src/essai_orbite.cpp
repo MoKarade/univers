@@ -13,6 +13,8 @@
 
 #include "orbite_galactique.h"
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 namespace {
 int echecs = 0;
 void verifie(bool ok, const std::string& quoi) {

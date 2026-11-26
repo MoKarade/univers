@@ -17,7 +17,7 @@
 #include <filesystem>
 #include <limits>
 
-namespace {
+namespace univers {
 
 struct SkyBandUbo {      // std140 : tout en vec4
     float right[4], up[4], fwd[4];
@@ -688,4 +688,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

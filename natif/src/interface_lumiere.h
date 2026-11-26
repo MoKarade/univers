@@ -6,30 +6,30 @@
 #pragma once
 #include "interface_bas.h"
 
-namespace {
+namespace univers {
 
 // Nom court de la lumière choisie, pour le bouton.
-std::string lightLabel(const Sim& sim) {
+inline std::string lightLabel(const Sim& sim) {
     if (sim.skyBand < 0 || static_cast<size_t>(sim.skyBand) >= sim.skyBandLabels.size()) return "Visible";
     return sim.skyBandLabels[static_cast<size_t>(sim.skyBand)];
 }
 
 // Passer à la lumière suivante (+1) ou précédente (-1), de la radio au gamma, en passant par le visible.
-void stepLight(Sim& sim, int step) {
+inline void stepLight(Sim& sim, int step) {
     const int n = static_cast<int>(sim.skyBandLabels.size());
     if (n == 0) return;
     const int at = sim.skyBand + 1;      // 0 : visible, puis les cartes
     sim.skyBand = (at + step + n + 1) % (n + 1) - 1;
 }
 
-void lightKeys(Sim& sim) {
+inline void lightKeys(Sim& sim) {
     if (ImGui::GetIO().WantTextInput) return;
     if (ImGui::IsKeyPressed(ImGuiKey_F3, false)) stepLight(sim, +1);
     if (ImGui::IsKeyPressed(ImGuiKey_F2, false)) stepLight(sim, -1);
 }
 
 // Encadré permanent en bas à droite tant qu'une carte est choisie : le texte de la carte, ligne par ligne.
-void drawLightLegend(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
+inline void drawLightLegend(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     if (sim.skyBand < 0 || sim.skyLegend.empty()) return;
     ImGui::SetNextWindowPos({w - px(ui, 16), std::min(h - px(ui, 16), ui.dockTop - px(ui, 12))}, 0, {1, 1});      /* au-dessus du temps, à gauche du panneau */
     ImGui::Begin("lumiere-legende", nullptr, fixed);
@@ -46,4 +46,4 @@ void drawLightLegend(Sim& sim, const UiState& ui, float w, float h, ImGuiWindowF
     ImGui::End();
 }
 
-}  // namespace
+}  // namespace univers

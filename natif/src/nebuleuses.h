@@ -17,7 +17,7 @@
 
 #include "commun.h"
 
-namespace {
+namespace univers {
 
 class NebulaRenderer {
 public:
@@ -169,4 +169,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

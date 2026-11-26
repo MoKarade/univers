@@ -13,7 +13,7 @@
 
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct ClonePoints {
     Buffer vb[StarRenderer::kCols];
@@ -145,4 +145,4 @@ struct ClonePoints {
     }
 };
 
-}  // namespace
+}  // namespace univers

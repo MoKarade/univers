@@ -23,7 +23,7 @@
 
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 // Numéros Messier, NGC, IC, UGC d'un nom (« Andromède (M31) » -> {« M31 »} ; « M87 (NGC 4486) » -> {« M87 », « NGC4486 »}).
 inline std::set<std::string> catalogueKeys(const std::string& name) {
@@ -167,4 +167,4 @@ struct BlackHoles {
     }
 };
 
-}  // namespace
+}  // namespace univers

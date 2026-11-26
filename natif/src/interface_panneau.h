@@ -18,7 +18,7 @@
 #include "interface_tuiles.h"
 #include "orbites_objet.h"
 
-namespace {
+namespace univers {
 
 struct BacState {
     int tab = 0;               // 0 Astre, 1 Univers, 2 Réglages
@@ -33,10 +33,10 @@ struct BacState {
     float panelLeft = 1e9f;    // bord gauche du panneau (image précédente), pour ne pas poser d'autres fenêtres dessous
     float friseTop = 1e9f;     // haut de la frise (image précédente)
 };
-BacState gBac;
+inline BacState gBac;
 
 // Texte secondaire qui revient à la ligne (le panneau est étroit).
-void note(const char* fmt, ...) {
+inline void note(const char* fmt, ...) {
     char buf[1024];
     va_list args;
     va_start(args, fmt);
@@ -53,7 +53,7 @@ const ImU32 kGrid = IM_COL32(120, 135, 165, 60);
 // ---------------------------------------------------------------- courbe
 
 // Une courbe (et sa variante « et si… ») avec ses bornes, la date montrée et la valeur sous la souris.
-void plotSeries(const UiState& ui, const char* id, const std::vector<double>& x, const std::vector<float>& y, const std::vector<float>* y2,
+inline void plotSeries(const UiState& ui, const char* id, const std::vector<double>& x, const std::vector<float>& y, const std::vector<float>* y2,
                 double xNow, const char* xUnit, double xScale, const char* yUnit, float height, double xOrigin = 0.0) {
     if (x.size() < 2 || y.size() != x.size()) return;
     const float wAvail = ImGui::GetContentRegionAvail().x;
@@ -127,7 +127,7 @@ struct OrbitFacts {
 };
 
 // Étoile : rayons extrêmes, hauteur au-dessus du plan, durée moyenne d'un tour (angle parcouru sur la fenêtre).
-OrbitFacts starFacts(const std::vector<phys::Vec3>& g, const std::vector<double>& t) {
+inline OrbitFacts starFacts(const std::vector<phys::Vec3>& g, const std::vector<double>& t) {
     OrbitFacts f;
     if (g.size() < 3 || t.size() != g.size()) return f;
     f.rMin = 1e300;
@@ -153,11 +153,11 @@ OrbitFacts starFacts(const std::vector<phys::Vec3>& g, const std::vector<double>
 // ---------------------------------------------------------------- onglet Astre
 
 // Dates de la rencontre rejouée (groupe_local_scenario.h) : valeurs mesurées, puis tes réglages.
-std::string mergeText(const scenario::Result& r) {
+inline std::string mergeText(const scenario::Result& r) {
     return r.mergeM31Ga > 0 ? "dans " + frNum(r.mergeM31Ga, 3) + " milliards d'années" : "pas avant 10 milliards d'années";
 }
 
-void groupFacts(const UiState& ui, const ObjectTrack& tr) {
+inline void groupFacts(const UiState& ui, const ObjectTrack& tr) {
     if (!tr.groupBase.ok) return;
     row("Voie lactée et Andromède fusionnent", mergeText(tr.groupBase), "calculé, valeurs mesurées", ui.s);
     if (tr.groupWhatIf.ok) {
@@ -173,7 +173,7 @@ void groupFacts(const UiState& ui, const ObjectTrack& tr) {
 }
 
 // Les gestes de l'ancienne fiche : s'approcher, revenir, prochaine éclipse, revenir au Soleil.
-void bodyActions(Sim& sim, UiState& ui, int f) {
+inline void bodyActions(Sim& sim, UiState& ui, int f) {
     const Body& b = sim.bodies[static_cast<size_t>(f)];
     bool line = false;
     auto next = [&]() { if (line) ImGui::SameLine(); line = true; };
@@ -215,7 +215,7 @@ void bodyActions(Sim& sim, UiState& ui, int f) {
 
 void bodyOrbit(Sim& sim, UiState& ui, const Body& b, int f);
 
-void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
+inline void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
     const int f = sim.focus;
     const Body& b = sim.bodies[static_cast<size_t>(f)];
     // En-tête : nom en grand, nature en pastille, distance au Soleil ; puis les gestes possibles.
@@ -259,7 +259,7 @@ void tabBody(Sim& sim, UiState& ui, const Camera& cam) {
 }
 
 // Courbe de l'orbite de l'astre suivi et son analyse (réelle, et « et si… » avec les réglages).
-void bodyOrbit(Sim& sim, UiState& ui, const Body& b, int f) {
+inline void bodyOrbit(Sim& sim, UiState& ui, const Body& b, int f) {
     gBac.track.update(sim, gBac.sandbox, ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::IsAnyItemActive());
     ObjectTrack& tr = gBac.track;
     const bool planet = b.kind == Kind::Planet;
@@ -343,7 +343,7 @@ void bodyOrbit(Sim& sim, UiState& ui, const Body& b, int f) {
 
 // ---------------------------------------------------------------- onglet Univers
 
-std::string sinceBigBangText(double years) {
+inline std::string sinceBigBangText(double years) {
     if (years < 1.0 / 525960.0 * 60) return frNum(years * 525960.0, 2) + " minutes après le Big Bang";
     if (years < 1.0) return frNum(years * 365.25, 3) + " jours après le Big Bang";
     if (years < 1e6) return frInt(years) + " ans après le Big Bang";
@@ -352,7 +352,7 @@ std::string sinceBigBangText(double years) {
 }
 
 
-void tabUniverse(Sim& sim, UiState& ui) {
+inline void tabUniverse(Sim& sim, UiState& ui) {
     CosmoHistory& h = gBac.history;
     h.update(sim.cosmology);
     gBac.reference.update(cosmo::Params{});
@@ -434,7 +434,7 @@ void tabUniverse(Sim& sim, UiState& ui) {
 
 // ---------------------------------------------------------------- onglet Réglages
 
-void tabSettings(Sim& sim, UiState& ui) {
+inline void tabSettings(Sim& sim, UiState& ui) {
     cosmo::Params& c = sim.cosmology;
     float h0 = static_cast<float>(c.h0), om = static_cast<float>(c.om), ode = static_cast<float>(c.ode), w0 = static_cast<float>(c.w0), wa = static_cast<float>(c.wa);
     ImGui::TextWrapped("Change les lois de l'univers. Les galaxies lointaines, la courbe de l'univers et l'orbite « et si… » de l'astre suivi "
@@ -510,7 +510,7 @@ void tabSettings(Sim& sim, UiState& ui) {
 
 // ---------------------------------------------------------------- panneau et colonne
 
-void drawObjectOrbit(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
+inline void drawObjectOrbit(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     if (!gBac.showOrbit) return;
     const Body& b = sim.bodies[static_cast<size_t>(sim.focus)];
     if (b.kind == Kind::Planet) return;      // déjà tracée par drawOrbits
@@ -541,7 +541,7 @@ void drawObjectOrbit(Sim& sim, UiState& ui, const Camera& cam, float w, float h)
 }
 
 // Colonne des trois onglets, sur le bord droit, quand le panneau est fermé.
-void drawRail(UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
+inline void drawRail(UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
     ImGui::SetNextWindowPos({w - px(ui, 16), h * 0.42f}, 0, {1, 0.5f});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 6), px(ui, 6)});
     ImGui::Begin("colonne", nullptr, fixed);
@@ -561,7 +561,7 @@ void drawRail(UiState& ui, float w, float h, ImGuiWindowFlags fixed) {
 
 // Contrôles sans fenêtre : UNIVERS_PANNEAU=astre | univers[:<époque>] | reglages | ferme, suivi au besoin de
 // « ,halo:<facteur> », « ,w0:<valeur> », « ,ode:<valeur> » (réglages posés avant la capture).
-void panelTestHook(Sim& sim) {
+inline void panelTestHook(Sim& sim) {
     static bool done = false;
     if (done) return;
     done = true;
@@ -588,7 +588,7 @@ void panelTestHook(Sim& sim) {
     gBac.lastFocus = sim.focus;
 }
 
-void drawPanel(Sim& sim, UiState& ui, const Camera& cam, float w, float h, float top, float bottom) {
+inline void drawPanel(Sim& sim, UiState& ui, const Camera& cam, float w, float h, float top, float bottom) {
     panelTestHook(sim);
     if (sim.focus != gBac.lastFocus) {
         gBac.lastFocus = sim.focus;
@@ -642,4 +642,4 @@ void drawPanel(Sim& sim, UiState& ui, const Camera& cam, float w, float h, float
     ImGui::End();
 }
 
-}  // namespace
+}  // namespace univers

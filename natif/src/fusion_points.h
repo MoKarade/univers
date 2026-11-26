@@ -5,7 +5,7 @@
 #pragma once
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct FusionPoints {
     Buffer vb[StarRenderer::kCols];
@@ -91,4 +91,4 @@ struct FusionPoints {
     }
 };
 
-}  // namespace
+}  // namespace univers

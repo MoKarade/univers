@@ -8,9 +8,9 @@
 #pragma once
 #include "interface_lumiere.h"
 
-namespace {
+namespace univers {
 
-const char* howWord(CalcMode m) {
+inline const char* howWord(CalcMode m) {
     switch (m) {
         case CalcMode::Measured: return "mesuré";
         case CalcMode::Exact: return "calculé";
@@ -20,7 +20,7 @@ const char* howWord(CalcMode m) {
     }
 }
 
-ImVec4 howColor(CalcMode m) {
+inline ImVec4 howColor(CalcMode m) {
     switch (m) {
         case CalcMode::Measured: return {0.55f, 0.82f, 0.59f, 1.0f};
         case CalcMode::Exact: return {0.55f, 0.71f, 0.94f, 1.0f};
@@ -31,7 +31,7 @@ ImVec4 howColor(CalcMode m) {
 }
 
 // La ligne permanente : les approximations et les calculs en retard s'il y en a.
-std::string howSummary(const Sim& sim, bool& warn) {
+inline std::string howSummary(const Sim& sim, bool& warn) {
     std::string approx;
     long lag = 0;
     for (const CalcState& c : sim.calcStates) {
@@ -45,7 +45,7 @@ std::string howSummary(const Sim& sim, bool& warn) {
 }
 
 // Durée en mots : « 40 s », « 3 min », « 1 h 20 », « 2,5 j ».
-std::string frDuration(double s) {
+inline std::string frDuration(double s) {
     if (s < 60) return frInt(std::max(1.0, s)) + " s";
     if (s < 3600) return frInt(s / 60) + " min";
     if (s < 86400) {
@@ -55,13 +55,13 @@ std::string frDuration(double s) {
     return frNum(s / 86400, 2) + " j";
 }
 
-int runningTasks(const Sim& sim) {
+inline int runningTasks(const Sim& sim) {
     int n = 0;
     for (const TaskProgress& t : sim.tasks) n += !t.finished;
     return n;
 }
 
-void howTable(const Sim& sim) {
+inline void howTable(const Sim& sim) {
     ImGui::TextDisabled("À la date et à l'échelle affichées, pour chaque famille d'objets :");
     if (!ImGui::BeginTable("methode", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX)) return;
     for (const CalcState& c : sim.calcStates) {
@@ -81,7 +81,7 @@ void howTable(const Sim& sim) {
     ImGui::TextDisabled("calculé : calculé ici pendant que tu regardes   •   approximation : méthode approchée, plus rapide");
 }
 
-void tasksTable(const Sim& sim) {
+inline void tasksTable(const Sim& sim) {
     if (sim.tasks.empty()) {
         ImGui::TextDisabled("Aucun calcul de fond en cours sur le PC.");
         return;
@@ -107,7 +107,7 @@ void tasksTable(const Sim& sim) {
     ImGui::EndTable();
 }
 
-void drawHow(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
+inline void drawHow(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     if (sim.calcStates.empty() && sim.tasks.empty()) return;
     if (!ui.details && runningTasks(sim) == 0 && !ui.howOpen && !ui.tasksOpen) return;      // minimaliste : rien à montrer
     // Sous la complétude, en haut à droite.
@@ -163,4 +163,4 @@ void drawHow(const Sim& sim, UiState& ui, float w, ImGuiWindowFlags fixed) {
     }
 }
 
-}  // namespace
+}  // namespace univers

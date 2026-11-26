@@ -22,6 +22,8 @@
 
 namespace scenario {
 
+using namespace univers;      // briques communes de l'appli (commun.h…)
+
 constexpr int kN = 5;
 constexpr double kG = 43007.0;                                    // kpc (km/s)² / 10^10 M☉
 constexpr double kUnitGa = 3.0856775814913673e16 / 3.15576e16;    // kpc/(km/s) en Ga
