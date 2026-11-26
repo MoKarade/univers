@@ -32,14 +32,15 @@ void main() {
     float x;
     if (xlim >= 1.0) { x = xlim - log(r1); }      /* queue exponentielle au-delà de L* */
     else {      /* loi en L^-1 de xlim à 1, puis queue exponentielle (poids des deux morceaux) */
-        float a1 = log(1.0 / xlim) * 0.6065, a2 = 0.2194;
+        float xl = max(xlim, 1e-30);
+        float a1 = log(1.0 / xl) * 0.6065, a2 = 0.2194;
         float p1 = a1 / (a1 + a2);
-        x = r2 < p1 ? pow(xlim, 1.0 - r1) : 1.0 - log(r1);
+        x = r2 < p1 ? pow(xl, 1.0 - r1) : 1.0 - log(r1);
     }
     /* Magnitude absolue r tirée : M = M* - 2,5 log10(L/L*) [supposé, voir plus haut]. Vue de la caméra : distance de
        luminosité depuis le Soleil, puis 1/d² entre le Soleil et la caméra (distance comobile), comme galaxie_formes.vert.
        Pas de correction K ni d'évolution de la lumière avec z [supposé]. */
-    float mApp = inCol.a > 0.99 ? 20.0 : MSTAR - 2.5 * log(x) / log(10.0) + DM;
+    float mApp = inCol.a > 0.99 ? 20.0 : MSTAR - 2.5 * log(max(x, 1e-30)) / log(10.0) + DM;
     float dCom = max(mix(a, b, u - float(k)), 1.0);
     float dc = max(length(p), 1.0);
     float flux = pc.par.x * pow(10.0, -0.4 * mApp) * (dCom / dc) * (dCom / dc);
@@ -50,7 +51,7 @@ void main() {
        orange sur toute la vue de Laniakea (capture du 20/11). Au-delà, éclat réel sous la pose des étoiles. */
     float fondu = smoothstep(1.5 * pc.par.w, 4.0 * pc.par.w, dc);
     flux *= pow(max(pc.cam.w, 1.0), 1.0 - fondu);
-    vec3 c = pow(inCol.rgb, vec3(2.2));      /* couleurs de la page (valeurs d'écran) ramenées en lumière linéaire */
+    vec3 c = pow(max(inCol.rgb, vec3(0.0)), vec3(2.2));      /* couleurs de la page (valeurs d'écran) ramenées en lumière linéaire */
     c /= max(max(c.r, c.g), max(c.b, 1e-4));      /* teinte seule, de plus grande composante 1 (comme couleurT des galaxies de forme) */
     vCol = c * min(flux, 3.0e4) / (size * size);      /* même énergie quelle que soit la taille du point */
     gl_Position = pc.viewProj * vec4(p, 1.0);
