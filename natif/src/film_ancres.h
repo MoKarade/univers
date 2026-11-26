@@ -17,7 +17,7 @@
 
 #include "film_v2.h"
 
-namespace {
+namespace univers {
 
 struct FilmAnchors {
     bool ready = false;
@@ -64,4 +64,4 @@ struct FilmAnchors {
     }
 };
 
-}  // namespace
+}  // namespace univers

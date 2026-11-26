@@ -122,7 +122,7 @@ inline double suivante(double pose, double vise, double dt, bool instant) {
 }
 }  // namespace pose_auto
 
-namespace {
+namespace univers {
 
 class PoseAuto {
 public:
@@ -252,4 +252,4 @@ private:
     VkShaderModule cs_{};
 };
 
-}  // namespace
+}  // namespace univers

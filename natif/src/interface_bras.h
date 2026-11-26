@@ -11,10 +11,10 @@
 
 #include "interface_methode.h"
 
-namespace {
+namespace univers {
 
 // Nom d'un bras d'après le code de Reid et al. 2019 ; les deux moitiés d'un même bras (proche, lointaine) sont réunies.
-std::string armName(const std::string& code) {
+inline std::string armName(const std::string& code) {
     if (code == "Per") return "Bras de Persée";
     if (code == "SgN" || code == "SgF") return "Bras du Sagittaire";
     if (code == "ScN" || code == "ScF") return "Bras de l'Écu-Centaure";
@@ -29,7 +29,7 @@ std::string armName(const std::string& code) {
 const ImU32 kArmInk = IM_COL32(255, 150, 190, 235);
 
 // Nom de chaque bras, au milieu de ses masers (au moins 5), à la date montrée.
-void drawArmLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, float h) {
+inline void drawArmLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, float h) {
     if (!sim.armTracers || !sim.armTracerWorld || !sim.armTracersShown || sim.dist < 8000.0) return;
     struct Sum {
         Vec3 p{0, 0, 0};
@@ -70,7 +70,7 @@ void drawArmLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w
 }
 
 // Légende des points, dans le texte du bas de l'écran.
-void armLegend(const Sim& sim) {
+inline void armLegend(const Sim& sim) {
     if (!sim.armTracers || !sim.armTracersShown || sim.dist < 3000.0) return;
     ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(kArmInk), "Points roses : régions où naissent des étoiles massives, distance mesurée par radio (Reid et al. 2019) ; elles jalonnent les bras.");
     ImGui::TextDisabled("Points bleutés : amas d'étoiles de moins de 100 millions d'années ; gris : amas plus vieux (Hunt & Reffert 2023). Clic : la fiche.");
@@ -87,7 +87,7 @@ void armLegend(const Sim& sim) {
 }
 
 // Clic sur l'image, hors d'un astre nommé : le traceur le plus proche à moins de 9 pixels (les masers d'abord).
-void clickArmTracer(const Sim& sim, UiState& ui, const Camera& cam, float w, float h, int hovered) {
+inline void clickArmTracer(const Sim& sim, UiState& ui, const Camera& cam, float w, float h, int hovered) {
     if (hovered >= 0 || ImGui::GetIO().WantCaptureMouse || !sim.armTracers || !sim.armTracerWorld || !sim.armTracersShown) return;
     const ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 4.0f);
     if (!ImGui::IsMouseReleased(ImGuiMouseButton_Left) || drag.x != 0 || drag.y != 0) return;
@@ -109,7 +109,7 @@ void clickArmTracer(const Sim& sim, UiState& ui, const Camera& cam, float w, flo
 }
 
 // Fiche du traceur choisi, à gauche, et un cercle autour de lui.
-void drawArmCard(const Sim& sim, UiState& ui, const Camera& cam, float w, float h, ImGuiWindowFlags fixed) {
+inline void drawArmCard(const Sim& sim, UiState& ui, const Camera& cam, float w, float h, ImGuiWindowFlags fixed) {
     if (ui.armSel < 0 || !sim.armTracers || !sim.armTracerWorld || !sim.armTracersShown || static_cast<size_t>(ui.armSel) >= sim.armTracers->size()) {
         ui.armSel = -1;
         return;
@@ -136,7 +136,7 @@ void drawArmCard(const Sim& sim, UiState& ui, const Camera& cam, float w, float 
 
 // Bouton « Galaxie de face » de la barre du haut : le centre de la Voie lactée vu du pôle nord de la Galaxie.
 // Vue de la Voie lactée d'en haut, depuis le pôle nord de la Galaxie (bouton ou menu « ≡ »).
-void faceOnGalaxy(Sim& sim, UiState& ui) {
+inline void faceOnGalaxy(Sim& sim, UiState& ui) {
     int centre = -1;
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
         if (sim.bodies[static_cast<size_t>(i)].name == "Centre de la Voie lactée") centre = i;
@@ -147,4 +147,4 @@ void faceOnGalaxy(Sim& sim, UiState& ui) {
     sim.touched = true;
 }
 
-}  // namespace
+}  // namespace univers

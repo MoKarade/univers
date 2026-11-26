@@ -17,6 +17,8 @@
 
 #include "structures.h"
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 static int gEchecs = 0;
 static void verifie(bool ok, const char* quoi) {
     std::printf("  %s  %s\n", ok ? "ok    " : "ECHEC ", quoi);

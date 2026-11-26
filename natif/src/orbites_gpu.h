@@ -18,6 +18,8 @@
 #include "galaxie_orbites.h"
 #include "orbite_galactique.h"
 
+namespace univers {
+
 struct OrbitGpu {
     static constexpr double kStepYears = 1.0e6;
     bool ready = false;
@@ -349,3 +351,5 @@ private:
         check(vkCreateGraphicsPipelines(g.dev, VK_NULL_HANDLE, 1, &pci, nullptr, &drawPipe), "dessin des orbites");
     }
 };
+
+}  // namespace univers

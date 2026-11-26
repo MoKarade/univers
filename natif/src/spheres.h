@@ -14,7 +14,7 @@
 #include "orientation.h"
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct SphereMap {
     int naif;
@@ -444,4 +444,4 @@ private:
     std::atomic<bool> stop_{false};
 };
 
-}  // namespace
+}  // namespace univers

@@ -11,7 +11,7 @@
 #pragma once
 #include "commun.h"
 
-namespace {
+namespace univers {
 
 class GaiaPointsSum {
 public:
@@ -181,4 +181,4 @@ private:
     bool cleared_ = false, used_ = false;
 };
 
-}  // namespace
+}  // namespace univers

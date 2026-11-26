@@ -5,7 +5,7 @@
 #pragma once
 #include "cycle_appli.h"
 
-namespace {
+namespace univers {
 
 class NebuleuseRenderer {
 public:
@@ -212,4 +212,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

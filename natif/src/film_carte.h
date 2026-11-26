@@ -34,7 +34,7 @@
 #include "film_etoiles.h"
 #include "gaia_orbites.h"
 
-namespace {
+namespace univers {
 
 class FilmGpu {
 public:
@@ -454,4 +454,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

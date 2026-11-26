@@ -6,7 +6,7 @@
 #pragma once
 #include "interface_bras.h"
 
-namespace {
+namespace univers {
 
 struct GravWave {
     std::string name, date, catalog;
@@ -14,10 +14,10 @@ struct GravWave {
     double distMpc = 0;
 };
 
-std::vector<GravWave> gGravWaves;
+inline std::vector<GravWave> gGravWaves;
 
 // « v;basse;haute » -> « v (basse à haute) », virgule décimale ; vide si la valeur n'est pas publiée.
-std::string gwRange(const std::string& s, double* value = nullptr) {
+inline std::string gwRange(const std::string& s, double* value = nullptr) {
     if (s.empty()) return "";
     std::vector<std::string> p;
     size_t from = 0;
@@ -30,7 +30,7 @@ std::string gwRange(const std::string& s, double* value = nullptr) {
     return out;
 }
 
-void loadGravWaves(const std::string& path) {
+inline void loadGravWaves(const std::string& path) {
     std::ifstream f(path);
     for (std::string line; std::getline(f, line);) {
         std::vector<std::string> c;
@@ -52,7 +52,7 @@ void loadGravWaves(const std::string& path) {
     }
 }
 
-void drawGravWaves(UiState& ui, float w, float h) {
+inline void drawGravWaves(UiState& ui, float w, float h) {
     ui.gwCount = static_cast<int>(gGravWaves.size());
     if (const char* e = std::getenv("UNIVERS_ECRAN"); e && std::string(e) == "ondes") ui.gwOpen = true;      // contrôle par capture
     if (!ui.gwOpen || gGravWaves.empty()) return;
@@ -90,4 +90,4 @@ void drawGravWaves(UiState& ui, float w, float h) {
     ImGui::End();
 }
 
-}  // namespace
+}  // namespace univers

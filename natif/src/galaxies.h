@@ -4,7 +4,7 @@
 #include "commun.h"
 #include "cosmologie.h"
 
-namespace {
+namespace univers {
 
 constexpr double kGalaxyZMax = 7.0;      // borne de la table des distances (DATA.SURV_ZMAX de la page)
 
@@ -16,7 +16,7 @@ struct GalaxyFile {
 };
 
 // Rend false si le fichier manque (le simulateur le dit et continue sans galaxies).
-bool openGalaxies(const std::string& path, GalaxyFile& out) {
+inline bool openGalaxies(const std::string& path, GalaxyFile& out) {
     const HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
     LARGE_INTEGER size;
@@ -238,4 +238,4 @@ private:
     VkShaderModule vs_{}, fs_{};
 };
 
-}  // namespace
+}  // namespace univers

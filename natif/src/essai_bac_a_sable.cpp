@@ -17,6 +17,8 @@
 #include "groupe_local_scenario.h"
 #include "interface_cosmo_courbes.h"
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 namespace {
 bool check(const char* what, double got, double want, double tol) {
     const bool good = std::fabs(got / want - 1.0) < tol;

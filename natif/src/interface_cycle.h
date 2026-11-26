@@ -4,12 +4,12 @@
 #pragma once
 #include "cycle_appli.h"
 
-namespace {
+namespace univers {
 
-CycleAppli* gCycle = nullptr;
+inline CycleAppli* gCycle = nullptr;
 void note(const char* fmt, ...);      // interface_panneau.h
 
-std::string dureeAns(double ans) {
+inline std::string dureeAns(double ans) {
     const double a = std::fabs(ans);
     if (a >= 1e9) return frNum(a / 1e9, 3) + " milliards d'années";
     if (a >= 1e6) return frNum(a / 1e6, 3) + " millions d'années";
@@ -17,7 +17,7 @@ std::string dureeAns(double ans) {
     if (a >= 1.0) return frNum(a, 3) + " ans";
     return frNum(a * 365.25, 2) + " jours";
 }
-std::string quandAns(double ans) { return std::fabs(ans) < 0.5 / 365.25 ? "maintenant" : (ans > 0 ? "dans " : "il y a ") + dureeAns(ans); }
+inline std::string quandAns(double ans) { return std::fabs(ans) < 0.5 / 365.25 ? "maintenant" : (ans > 0 ? "dans " : "il y a ") + dureeAns(ans); }
 
 struct EtapeBouton {
     cycle::Etape e;
@@ -25,7 +25,7 @@ struct EtapeBouton {
     double vueAl;      // distance de la caméra pour la voir (années-lumière) ; 0 : d'après le rayon de l'étoile
 };
 
-void cycleSection(Sim& sim, UiState& ui, int f) {
+inline void cycleSection(Sim& sim, UiState& ui, int f) {
     if (!gCycle) return;
     const CycleAppli::Astre* a = gCycle->of(f);
     if (!a) return;
@@ -137,4 +137,4 @@ void cycleSection(Sim& sim, UiState& ui, int f) {
     }
 }
 
-}  // namespace
+}  // namespace univers

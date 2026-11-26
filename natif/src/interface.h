@@ -8,13 +8,13 @@
 #include "interface_frise.h"
 #include "interface_echelle.h"
 
-namespace {
+namespace univers {
 
 // ---------------------------------------------------------------- tout
 
 // Dessine toute l'interface pour cette image et applique ce qu'on y fait. Rend toujours -1 : les vols vers un astre
 // sont lancés ici (Sim::flyTo), pas par l'appelant.
-int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
+inline int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     applyScale(ui, h);
     firstFrame(sim, ui);
     if (sim.touched && ui.welcome && ui.tour < 0 && std::getenv("UNIVERS_ECRAN") == nullptr) ui.welcome = false;      // on a pris la main
@@ -68,4 +68,4 @@ int drawInterface(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     return -1;
 }
 
-}  // namespace
+}  // namespace univers

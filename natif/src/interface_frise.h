@@ -12,7 +12,7 @@
 #pragma once
 #include "interface_panneau.h"
 
-namespace {
+namespace univers {
 
 struct FriseGeom {
     float x0, x1, y0, y1;       // cadre
@@ -21,12 +21,12 @@ struct FriseGeom {
     double sLo, sHi;            // simulée : s(dt) = signe(dt) log10(1 + |dt| / 1 an)
 };
 
-double symLog(double dt) { return dt >= 0 ? std::log10(1.0 + dt) : -std::log10(1.0 - dt); }
-double symLogInv(double s) { return s >= 0 ? std::pow(10.0, s) - 1.0 : 1.0 - std::pow(10.0, -s); }
+inline double symLog(double dt) { return dt >= 0 ? std::log10(1.0 + dt) : -std::log10(1.0 - dt); }
+inline double symLogInv(double s) { return s >= 0 ? std::pow(10.0, s) - 1.0 : 1.0 - std::pow(10.0, -s); }
 
 // Couleur d'une température de rayonnement : bleu nuit à froid, puis rouge, orange, blanc. Repère visuel seulement :
 // la valeur exacte est dans l'info-bulle.
-ImU32 heatColor(double kelvin) {
+inline ImU32 heatColor(double kelvin) {
     const double u = std::clamp((std::log10(std::max(kelvin, 1.0)) - 0.4) / 3.6, 0.0, 1.0);      // 2,5 K à 10 000 K
     const float r = static_cast<float>(std::clamp(u * 2.2 - 0.25, 0.08, 1.0)), g = static_cast<float>(std::clamp(u * 1.8 - 0.75, 0.10, 1.0));
     const float b = static_cast<float>(u < 0.35 ? 0.35 + u * 0.6 : std::clamp((u - 0.75) * 3.0, 0.15, 1.0));
@@ -34,7 +34,7 @@ ImU32 heatColor(double kelvin) {
 }
 
 
-void drawFrise(Sim& sim, UiState& ui, float h, float height) {
+inline void drawFrise(Sim& sim, UiState& ui, float h, float height) {
     CosmoHistory& hist = gBac.history;
     hist.update(sim.cosmology);
     const double ageYears = hist.ageGa * 1e9;
@@ -166,4 +166,4 @@ void drawFrise(Sim& sim, UiState& ui, float h, float height) {
     ImGui::End();
 }
 
-}  // namespace
+}  // namespace univers

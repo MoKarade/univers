@@ -19,7 +19,7 @@
 
 #include "commun.h"
 
-namespace {
+namespace univers {
 
 class UiImages {
 public:
@@ -194,6 +194,6 @@ private:
 };
 
 // Posé par fenetre.cpp ; nul dans les contrôles sans images.
-UiImages* gUiImages = nullptr;
+inline UiImages* gUiImages = nullptr;
 
-}  // namespace
+}  // namespace univers

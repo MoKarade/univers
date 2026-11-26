@@ -173,7 +173,7 @@ inline double largeShare(double viewDistLy) {
 
 }  // namespace structures
 
-namespace {
+namespace univers {
 
 class StructureRenderer {
 public:
@@ -482,4 +482,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

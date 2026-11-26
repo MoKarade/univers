@@ -2,18 +2,18 @@
 #pragma once
 #include "interface_base.h"
 
-namespace {
+namespace univers {
 
 // ---------------------------------------------------------------- recherche et « Aller à »
 
-int kindRank(const Body& b) {
+inline int kindRank(const Body& b) {
     if (b.kind == Kind::Sun) return 0;
     if (b.kind == Kind::Planet) return b.parent == 0 ? 0 : 1;
     if (b.kind == Kind::Probe || b.kind == Kind::Asteroid) return 1;
     return b.kind == Kind::Star ? 2 : 3;
 }
 
-std::vector<int> searchResults(const Sim& sim, const char* text) {
+inline std::vector<int> searchResults(const Sim& sim, const char* text) {
     const std::string q = ui_outils::fold(text);
     std::vector<std::pair<int, int>> scored;      // (rang, numéro)
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
@@ -30,7 +30,7 @@ std::vector<int> searchResults(const Sim& sim, const char* text) {
 
 // Astéroïdes du catalogue dont le nom ou le numéro contient le texte (au plus 6), rangés après les astres nommés.
 // Codés -(k + 2) dans la liste des résultats (k : rang dans le catalogue).
-void addAsteroidResults(const Sim& sim, UiState& ui, std::vector<int>& found) {
+inline void addAsteroidResults(const Sim& sim, UiState& ui, std::vector<int>& found) {
     if (!sim.asteroidCat || sim.asteroidBody < 0) return;
     const std::string q = ui.search;
     if (q != ui.astQuery) {
@@ -50,7 +50,7 @@ void faceOnGalaxy(Sim& sim, UiState& ui);     // interface_bras.h
 // Aller à un résultat : un astre de la liste, ou un astéroïde du catalogue (désigné d'abord).
 void goToResult(Sim& sim, UiState& ui, int r);
 
-int moveCursorToEnd(ImGuiInputTextCallbackData* d) {
+inline int moveCursorToEnd(ImGuiInputTextCallbackData* d) {
     auto* ui = static_cast<UiState*>(d->UserData);
     if (ui->cursorToEnd) {
         d->CursorPos = d->SelectionStart = d->SelectionEnd = d->BufTextLen;
@@ -59,7 +59,7 @@ int moveCursorToEnd(ImGuiInputTextCallbackData* d) {
     return 0;
 }
 
-void goToBody(Sim& sim, UiState& ui, int i, double distLy = 0) {
+inline void goToBody(Sim& sim, UiState& ui, int i, double distLy = 0) {
     ui.tour = -1;
     ui.welcome = false;
     ui.search[0] = 0;
@@ -67,7 +67,7 @@ void goToBody(Sim& sim, UiState& ui, int i, double distLy = 0) {
 }
 
 // Couleur du petit rond devant un résultat : la famille de l'astre, la même partout dans l'interface.
-ImU32 kindColor(const Body& b) {
+inline ImU32 kindColor(const Body& b) {
     switch (b.kind) {
         case Kind::Sun: return theme::kAccent;
         case Kind::Planet: return b.parent > 0 ? IM_COL32(170, 182, 205, 255) : IM_COL32(110, 170, 255, 255);
@@ -79,7 +79,7 @@ ImU32 kindColor(const Body& b) {
 }
 
 // Une ligne de résultat : rond de couleur, nom, puis en petit gris sa nature et sa distance (calée à droite).
-bool richRow(const UiState& ui, const char* id, const std::string& name, const std::string& detail, ImU32 dot, bool selected) {
+inline bool richRow(const UiState& ui, const char* id, const std::string& name, const std::string& detail, ImU32 dot, bool selected) {
     ImGui::PushID(id);
     const float wRow = std::max(ImGui::GetContentRegionAvail().x, px(ui, 380));
     const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -101,7 +101,7 @@ bool richRow(const UiState& ui, const char* id, const std::string& name, const s
     return hit;
 }
 
-bool asteroidRow(const Sim& sim, const UiState& ui, int k, bool selected) {
+inline bool asteroidRow(const Sim& sim, const UiState& ui, int k, bool selected) {
     const asteroides::Catalogue& c = *sim.asteroidCat;
     const char* what = c.isComet(static_cast<size_t>(k)) ? "comète" : "astéroïde";
     const std::string detail = c.eccentricity(static_cast<size_t>(k)) >= 1.0 ? std::string(what) + ", orbite ouverte"
@@ -109,7 +109,7 @@ bool asteroidRow(const Sim& sim, const UiState& ui, int k, bool selected) {
     return richRow(ui, ("a" + std::to_string(k)).c_str(), sim.asteroidCat->label(static_cast<size_t>(k)), detail, IM_COL32(150, 150, 160, 255), selected);
 }
 
-bool resultRow(const Sim& sim, const UiState& ui, int i, bool selected) {
+inline bool resultRow(const Sim& sim, const UiState& ui, int i, bool selected) {
     if (i < 0) return asteroidRow(sim, ui, -i - 2, selected);
     const Body& b = sim.bodies[static_cast<size_t>(i)];
     const std::string where = b.kind == Kind::Sun ? std::string("notre étoile") : natureOf(b) + "  ·  " + frDistance(std::sqrt(dot(sim.position(i), sim.position(i))));
@@ -119,7 +119,7 @@ bool resultRow(const Sim& sim, const UiState& ui, int i, bool selected) {
 // Raccourcis montrés quand le champ de recherche est vide et choisi : les astres les plus demandés.
 const char* const kSuggestions[] = {"Soleil", "Terre", "Lune", "Mars", "Jupiter", "Saturne", "Centre de la Voie lactée", "Andromède (M31)"};
 
-void drawSuggestions(Sim& sim, UiState& ui) {
+inline void drawSuggestions(Sim& sim, UiState& ui) {
     sectionLabel("Raccourcis");
     for (const char* n : kSuggestions) {
         const int i = bodyByName(sim, n);
@@ -132,7 +132,7 @@ void drawSuggestions(Sim& sim, UiState& ui) {
     smallNote("Tape un nom : planète, lune, étoile, galaxie, sonde, astéroïde ou comète.", theme::kFaint);
 }
 
-void drawSearchResults(Sim& sim, UiState& ui, bool inputActive, bool entered) {
+inline void drawSearchResults(Sim& sim, UiState& ui, bool inputActive, bool entered) {
     if (!ui.search[0]) return;
     std::vector<int> found = searchResults(sim, ui.search);
     addAsteroidResults(sim, ui, found);
@@ -156,7 +156,7 @@ void drawSearchResults(Sim& sim, UiState& ui, bool inputActive, bool entered) {
     else smallNote("Entrée : y aller   ·   ↑ ↓ : choisir   ·   Échap : effacer", theme::kFaint);
 }
 
-void goToResult(Sim& sim, UiState& ui, int r) {
+inline void goToResult(Sim& sim, UiState& ui, int r) {
     if (r >= 0) {
         goToBody(sim, ui, r);
         return;
@@ -166,7 +166,7 @@ void goToResult(Sim& sim, UiState& ui, int r) {
     else ui.search[0] = 0;      // hors des 300 ans autour de la date des orbites : position inconnue
 }
 
-void goToMenuBodies(Sim& sim, UiState& ui) {
+inline void goToMenuBodies(Sim& sim, UiState& ui) {
     const int count = static_cast<int>(sim.bodies.size());
     if (ImGui::BeginMenu("Système solaire")) {
         if (ImGui::MenuItem("Soleil")) goToBody(sim, ui, 0);
@@ -205,7 +205,7 @@ void goToMenuBodies(Sim& sim, UiState& ui) {
 }
 
 // Voyager 1 au plus près de Jupiter, le 5 mars 1979 (sim.years = -20,826, donnée par le fil du rendu).
-void showVoyagerJupiter(Sim& sim, UiState& ui) {
+inline void showVoyagerJupiter(Sim& sim, UiState& ui) {
     const int v = bodyByName(sim, "Voyager 1");
     ui.tour = -1;
     ui.welcome = false;
@@ -218,7 +218,7 @@ void showVoyagerJupiter(Sim& sim, UiState& ui) {
     if (v >= 0 && sim.visible(v)) sim.flyTo(v);
 }
 
-void goToMenuProbes(Sim& sim, UiState& ui) {
+inline void goToMenuProbes(Sim& sim, UiState& ui) {
     bool any = false;
     for (const Body& b : sim.bodies) any |= b.kind == Kind::Probe;
     if (!any || !ImGui::BeginMenu("Sondes")) return;
@@ -234,12 +234,12 @@ void goToMenuProbes(Sim& sim, UiState& ui) {
 }
 
 // Ouvre un menu sous le bouton qu'on vient de dessiner.
-void popupUnder(UiState& ui, const char* id) {
+inline void popupUnder(UiState& ui, const char* id) {
     ui.goToAnchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + px(ui, 8)};
     ImGui::OpenPopup(id);
 }
 
-void drawGoToMenu(Sim& sim, UiState& ui) {
+inline void drawGoToMenu(Sim& sim, UiState& ui) {
     if (ui.openGoTo || ui.keepGoTo) {
         ImGui::OpenPopup("aller");
         ui.openGoTo = false;
@@ -275,7 +275,7 @@ void drawGoToMenu(Sim& sim, UiState& ui) {
 }
 
 // Ce qu'on affiche par-dessus le ciel : structures, nuage d'Oort, routes possibles, textes détaillés.
-void drawLayersMenu(Sim& sim, UiState& ui) {
+inline void drawLayersMenu(Sim& sim, UiState& ui) {
     ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
     if (!ImGui::BeginPopup("couches")) return;
     sectionLabel("Afficher par-dessus le ciel");
@@ -294,7 +294,7 @@ void drawLayersMenu(Sim& sim, UiState& ui) {
 }
 
 // La lumière dans laquelle on voit le ciel (de la radio au gamma).
-void drawLightMenu(Sim& sim, UiState& ui) {
+inline void drawLightMenu(Sim& sim, UiState& ui) {
     ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
     if (!ImGui::BeginPopup("lumiere")) return;
     if (ImGui::MenuItem("Visible (étoiles mesurées)", nullptr, sim.skyBand < 0)) sim.skyBand = -1;
@@ -308,7 +308,7 @@ void drawLightMenu(Sim& sim, UiState& ui) {
 }
 
 // Exposition de l'image (le mode « 100 % mesuré / meilleur rendu » est en haut à droite).
-void drawExposureMenu(Sim& sim, UiState& ui) {
+inline void drawExposureMenu(Sim& sim, UiState& ui) {
     ImGui::SetNextWindowPos(ui.goToAnchor, ImGuiCond_Appearing);
     if (!ImGui::BeginPopup("exposition")) return;
     sectionLabel("Exposition de l'image");
@@ -322,7 +322,7 @@ void drawExposureMenu(Sim& sim, UiState& ui) {
 }
 
 // Séparateur vertical fin entre deux groupes de la barre d'outils.
-void toolbarDivider(const UiState& ui) {
+inline void toolbarDivider(const UiState& ui) {
     ImGui::SameLine(0, px(ui, 8));
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const float hh = ImGui::GetFrameHeight();
@@ -333,7 +333,7 @@ void toolbarDivider(const UiState& ui) {
 
 // En haut à gauche : la barre d'outils. Recherche (avec ses résultats en dessous), puis des boutons-icônes : retour,
 // aller à, affichage, lumière, exposition, visite guidée, aide. Chaque bouton ouvre son menu juste en dessous.
-void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
+inline void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     ImGui::SetNextWindowPos({px(ui, 16), px(ui, 16)});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px(ui, 8), px(ui, 8)});
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {px(ui, 4), px(ui, 6)});
@@ -401,4 +401,4 @@ void drawTopLeft(Sim& sim, UiState& ui, ImGuiWindowFlags fixed) {
     ImGui::PopStyleVar(2);
 }
 
-}  // namespace
+}  // namespace univers

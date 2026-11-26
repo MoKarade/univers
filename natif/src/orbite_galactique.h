@@ -24,6 +24,8 @@
 
 namespace orbite {
 
+using namespace univers;      // briques communes de l'appli (commun.h…)
+
 constexpr double kKpcLy = 3261.5637769;
 constexpr double kRaccordAns = 3.0e5;      // échelle du raccord ligne droite -> orbite
 constexpr double kAmplitudeMax = 0.8;      // oscillation radiale bornée à cette part du rayon de l'orbite

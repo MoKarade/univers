@@ -3,7 +3,7 @@
 #pragma once
 #include "commun.h"
 
-namespace {
+namespace univers {
 
 struct AsteroidPush {
     float viewProj[16];
@@ -154,4 +154,4 @@ private:
     VkShaderModule vs_{}, fs_{};
 };
 
-}  // namespace
+}  // namespace univers

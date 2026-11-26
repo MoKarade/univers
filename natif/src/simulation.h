@@ -24,7 +24,7 @@
 #include "systeme_solaire.h"
 #include "chaos.h"
 
-namespace {
+namespace univers {
 
 constexpr double kLyInMeters = 9.4607304725808e15;      // année-lumière julienne (UAI)
 constexpr double kLyInKm = kLyInMeters / 1000.0;
@@ -1436,7 +1436,7 @@ struct Sim {
 };
 
 // ---------------------------------------------------------------- textes en français
-std::string frNum(double v, int digits = 3) {
+inline std::string frNum(double v, int digits = 3) {
     char buf[64];
     const double a = std::fabs(v);
     const int dec = a < 1e-12 ? 0 : std::clamp(digits - 1 - static_cast<int>(std::floor(std::log10(a))), 0, 6);
@@ -1454,10 +1454,10 @@ std::string frNum(double v, int digits = 3) {
     if (!frac.empty()) out += "," + frac;
     return out;
 }
-std::string frInt(double v) { return frNum(std::round(v), 1 + static_cast<int>(std::floor(std::log10(std::max(1.0, std::fabs(v)))))); }
+inline std::string frInt(double v) { return frNum(std::round(v), 1 + static_cast<int>(std::floor(std::log10(std::max(1.0, std::fabs(v)))))); }
 
 // Une longueur donnée en années-lumière, écrite dans l'unité qui parle.
-std::string frDistance(double ly) {
+inline std::string frDistance(double ly) {
     const double km = ly * kLyInKm, au = ly / kAuInLy;
     if (ly >= 1.0e9) return frNum(ly / 1.0e9) + " milliards d'années-lumière";
     if (ly >= 1.0e6) return frNum(ly / 1.0e6) + " millions d'années-lumière";
@@ -1468,7 +1468,7 @@ std::string frDistance(double ly) {
 }
 
 // Date : jour, mois, année tant que le calendrier a un sens ; sinon l'année seule.
-std::string frDate(double years, bool withTime = false) {
+inline std::string frDate(double years, bool withTime = false) {
     static const char* months[] = {"janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"};
     if (std::fabs(years) > 6000.0) {      // hors de la plage où le calcul du calendrier est sûr
         const double y = 2000.0 + years;
@@ -1495,4 +1495,4 @@ std::string frDate(double years, bool withTime = false) {
     return buf;
 }
 
-}  // namespace
+}  // namespace univers

@@ -10,6 +10,8 @@
 
 #include "simulation.h"
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 int main(int argc, char** argv) {
     if (argc < 2) { std::printf("usage : essai_temps_rapide <etoiles.bin> [pas en années] [arrivée]\n"); return 2; }
     const double pas = argc > 2 ? std::atof(argv[2]) : 166.67, arrivee = argc > 3 ? std::atof(argv[3]) : 3000.0;

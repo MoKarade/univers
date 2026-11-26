@@ -6,11 +6,11 @@
 #include "interface_base.h"
 #include "interface_recherche.h"
 
-namespace {
+namespace univers {
 
 const char* const kScaleShort[kScaleCount] = {"Système solaire", "Étoiles voisines", "Étoiles mesurées", "Groupe local", "Univers lointain"};
 
-void drawScaleLadder(Sim& sim, UiState& ui, float h, ImGuiWindowFlags fixed) {
+inline void drawScaleLadder(Sim& sim, UiState& ui, float h, ImGuiWindowFlags fixed) {
     double dists[kScaleCount];
     for (int k = 0; k < kScaleCount; ++k) dists[k] = kScales[k].distLy;
     const double pos = ui_outils::positionEchelle(sim.dist, dists, kScaleCount);
@@ -64,4 +64,4 @@ void drawScaleLadder(Sim& sim, UiState& ui, float h, ImGuiWindowFlags fixed) {
     ImGui::PopStyleVar(2);
 }
 
-}  // namespace
+}  // namespace univers

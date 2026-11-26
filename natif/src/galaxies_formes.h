@@ -12,7 +12,7 @@
 #include "galaxies.h"
 #include <unordered_map>
 
-namespace {
+namespace univers {
 
 class GalaxyShapes {
 public:
@@ -454,4 +454,4 @@ private:
     VkShaderModule vs_{}, fs_{};
 };
 
-}  // namespace
+}  // namespace univers

@@ -15,7 +15,7 @@
 
 #include "galaxie_orbites.h"
 
-namespace {
+namespace univers {
 
 class CentresReference {
 public:
@@ -85,4 +85,4 @@ private:
     std::vector<float> pos_, vel_;
 };
 
-}  // namespace
+}  // namespace univers
