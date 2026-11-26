@@ -9,7 +9,7 @@
 #include "rayon_etoile.h"
 #include "doublons.h"
 #include "centres_reference.h"
-#include "film_v2.h"
+#include "film_vue.h"
 #include "film_ancres.h"
 #include "ciel_bandes.h"
 #include "commun.h"
@@ -286,12 +286,12 @@ struct Sim {
     const CentresReference* centres = nullptr;      // centres de référence des galaxies (fenetre.cpp), sinon le calcul de la fusion
     // Film du Groupe local (film_etoiles.h) : quand il couvre la date montrée, c'est lui qui donne le centre des galaxies
     // voisines et la place des étoiles visibles de la Voie lactée ; sinon les centres et les orbites de référence.
-    const phys::film::FilmV2* film = nullptr;
+    phys::film::FilmVue film;      // format 2 ou 3 (film_vue.h) ; vide sans film
     const FilmAnchors* anchors = nullptr;      // ancres des voisines dans le film (film_ancres.h) ; nul sans fichier
     bool filmLeads = false;      // à cette image, les étoiles visibles suivent le film
     double filmEdgeYears = 0;    // non nul : la date voulue dépasse le film calculé ; elle est arrêtée à ce bord (fenetre.cpp)
     double gaiaFilmOff = 0;      // part de Gaia éteinte parce que le film mène (0 à 1, revue F1 ; fenetre.cpp)
-    bool filmCovers(double tGa) const { return film && film->images() >= 5 && tGa >= film->debutGa() && tGa <= film->date(film->images() - 2); }
+    bool filmCovers(double tGa) const { return film.couvre(tGa); }
     uint64_t milkyWayStarCount = 0;   // étoiles visibles du modèle de la Voie lactée (vl_etoiles.bin)
     double milkyWayStarShare = 0;     // part montrée à cette image
     // Exposition (Marc, 13/11/2026) : « photo » (meilleur rendu) = exposition automatique sur la galaxie la plus brillante
@@ -841,7 +841,7 @@ struct Sim {
     // du mouvement en ligne droite (revue F8 : le film seul ne laissait pas dépasser cette limite).
     double maxYears() const {
         double finGa = replay ? replay->finGa() : 0.0;
-        if (film && film->images() >= 5) finGa = std::max(finGa, film->date(film->images() - 2));
+        if (film.pret()) finGa = std::max(finGa, film.finSureGa());
         return kStartYears + (finGa > 0.0 ? finGa * 1.0e9 : kLinearLimitYears);
     }
     double minYears() const { return kStartYears - kOrbitLimitYears; }
@@ -922,11 +922,11 @@ struct Sim {
     bool filmCentre(int ci, double tGa, phys::Vec3& g, bool follow) const {
         if (!film || !centres || !centres->ready) return false;
         auto raw = [&](double t, phys::Vec3& o) {
-            if (follow && anchors && anchors->at(*film, ci, t, o)) return true;
-            return follow ? film->centre(ci, t, o) : film->centreEtoiles(ci, t, o);
+            if (follow && anchors && film.v2 && anchors->at(*film.v2, ci, t, o)) return true;      // ancres : film v2 seulement
+            return follow ? film.centre(ci, t, o) : film.centreEtoiles(ci, t, o);
         };
         if (!raw(tGa, g)) return false;
-        const double t0 = std::clamp(0.0, film->debutGa(), film->date(film->images() - 2));
+        const double t0 = std::clamp(0.0, film.debutGa(), film.finSureGa());
         phys::Vec3 f0, r0;
         if (raw(t0, f0) && centres->centre(ci, t0, r0)) {
             const double w = std::clamp(1.0 - std::fabs(tGa - t0) / 0.1, 0.0, 1.0);
@@ -940,7 +940,7 @@ struct Sim {
         const int ci = CentresReference::indexOf(name);
         phys::Vec3 g;
         const double tGa = replayGa();
-        if (ci < 0 || !filmCovers(tGa) || ci >= film->galaxies() || !filmCentre(ci, tGa, g, false)) return false;
+        if (ci < 0 || !filmCovers(tGa) || ci >= film.galaxies() || !filmCentre(ci, tGa, g, false)) return false;
         const Vec3 w = fromGalactocentric(g), shift = sunShift();
         out = {w.x + shift.x, w.y + shift.y, w.z + shift.z};
         return true;
@@ -950,7 +950,7 @@ struct Sim {
         const int ci = CentresReference::indexOf(name);
         phys::Vec3 o;
         double f = -1;
-        if (ci < 0 || !anchors || !film || !filmCovers(replayGa()) || !anchors->at(*film, ci, replayGa(), o, &f)) return -1;
+        if (ci < 0 || !anchors || !film.v2 || !filmCovers(replayGa()) || !anchors->at(*film.v2, ci, replayGa(), o, &f)) return -1;
         return f;
     }
 
@@ -1000,7 +1000,7 @@ struct Sim {
             if (ci >= 0) {
                 phys::Vec3 g;
                 bool ok = false;
-                if (filmCovers(tGa) && ci < film->galaxies() && filmCentre(ci, tGa, g, true)) {
+                if (filmCovers(tGa) && ci < film.galaxies() && filmCentre(ci, tGa, g, true)) {
                     ok = true;
                 } else
                     ok = centres->centre(ci, tGa, g);

@@ -65,3 +65,12 @@ add_executable(essai_film_v3 essais/essai_film_v3.cpp)
 target_include_directories(essai_film_v3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(essai_film_v3 PRIVATE -Wall -Wextra)
 target_link_options(essai_film_v3 PRIVATE ${UNIVERS_LIEN_STATIQUE})
+
+# Essai : robustesse d'univers_physique face aux entrées hostiles ou limites (NaN/Inf, traversée de chemin, bornes ULP).
+add_executable(essai_robustesse essais/essai_robustesse.cpp)
+target_link_libraries(essai_robustesse PRIVATE univers_physique)
+target_compile_options(essai_robustesse PRIVATE -Wall -Wextra)
+target_link_options(essai_robustesse PRIVATE ${UNIVERS_LIEN_STATIQUE})
+
+enable_testing()
+add_test(NAME essai_robustesse COMMAND essai_robustesse)

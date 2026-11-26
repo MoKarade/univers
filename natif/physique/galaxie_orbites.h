@@ -119,7 +119,10 @@ public:
     size_t taille() const { return sub_.size(); }
     // Avance jusqu'à tGa (arrondi au pas de 1 Ma ; vers le passé si tGa < temps()).
     void avance(double tGa, unsigned fils = std::thread::hardware_concurrency()) {
-        const long n = std::lround((tGa - t_) / kDtGa);
+        if (!std::isfinite(tGa) || !std::isfinite(t_)) return;
+        const double brut = (tGa - t_) / kDtGa;
+        if (!std::isfinite(brut) || std::fabs(brut) > 1e7) return;
+        const long n = std::lround(brut);
         if (n == 0) return;
         const double dt = n > 0 ? kDtGa : -kDtGa; const long steps = n > 0 ? n : -n;
         if (fils < 1) fils = 1;

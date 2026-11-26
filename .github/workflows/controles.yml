@@ -79,6 +79,7 @@ jobs:
         run: |
           set -e
           ./build-linux/physique/essai_galaxie
+          ./build-linux/physique/essai_robustesse
           ./build-linux/physique/essai_film_v3 natif/physique/essais/film_v3_essai
           ./build-linux/essai_cosmologie
           ./build-linux/essai_interface

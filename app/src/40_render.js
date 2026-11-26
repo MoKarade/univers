@@ -409,7 +409,7 @@ function createRenderer(canvas, Q, generated) {
   { const e = new THREE.Matrix4().makeRotationFromQuaternion(m31.quaternion).elements, Qm = [[e[0], e[4], e[8]], [e[1], e[5], e[9]], [e[2], e[6], e[10]]];
     R.m31Rot = [0, 1, 2].map(i => [0, 1, 2].map(j => M[0][i] * Qm[0][j] + M[1][i] * Qm[1][j] + M[2][i] * Qm[2][j])); }      // repère propre d'Andromède -> axes galactiques
   let dyn = null, dynU = null;
-  R.setDyn = D => { if (dyn) { scene.remove(dyn); dyn.geometry.dispose(); } dynU = galU(); dyn = pts({ position: [D.out, 3], aOm: [new Float32Array(D.n * 2), 2], aCol: [D.col, 3], aLook: [D.look, 2] }, mk(SH.galaxy, dynU), 6); dyn.quaternion.copy(qGal); };
+  R.setDyn = D => { if (dyn) { scene.remove(dyn); dyn.geometry.dispose(); dyn.material.dispose(); } dynU = galU(); dyn = pts({ position: [D.out, 3], aOm: [new Float32Array(D.n * 2), 2], aCol: [D.col, 3], aLook: [D.look, 2] }, mk(SH.galaxy, dynU), 6); dyn.quaternion.copy(qGal); };
   const mwU = galU();
   const galaxy = pts({ position: [G.gal.pos, 3], aOm: [G.gal.om, 2], aCol: [G.gal.col, 3], aLook: [G.gal.look, 2] }, mk(SH.galaxy, mwU), 6);
   galaxy.quaternion.copy(qGal);
@@ -521,7 +521,7 @@ void main(){ float e=aEl.x; float M=mod(aEl.y+aEl.z*uT,6.2831853); float E=M+e*s
     for (let k = 0; k < NCELL; k++) cnt[k + 1] += cnt[k];
     const idx = new Uint32Array(n), fill = cnt.slice(0, NCELL), leaves = []; for (let i = 0; i < n; i++) idx[fill[key[i]]++] = i;
     for (let k = 0; k < NCELL; k++) { const a = cnt[k], b = cnt[k + 1]; if (b <= a) continue;
-      idx.set(Array.from(idx.subarray(a, b)).sort((p, q) => mag[p] - mag[q]), a);        // dans chaque cellule : de la plus brillante à la plus faible
+      idx.subarray(a, b).sort((p, q) => mag[p] - mag[q]);        /* dans chaque cellule : de la plus brillante à la plus faible */
       let x0 = 1e30, x1 = -1e30, y0 = 1e30, y1 = -1e30, z0 = 1e30, z1 = -1e30;
       for (let q = a; q < b; q++) { const j = idx[q] * 3, x = pos[j], y = pos[j + 1], z = pos[j + 2]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z; }
       let sx = 0, sy = 0, sz = 0, rmin = 1e30, rmax = 0; for (let q = a; q < b; q++) { const j = idx[q] * 3, x = pos[j], y = pos[j + 1], z = pos[j + 2], d = Math.hypot(x, y, z) || 1e-9; sx += x / d; sy += y / d; sz += z / d; if (d < rmin) rmin = d; if (d > rmax) rmax = d; }
@@ -983,7 +983,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
   };
   R.render = (wall, exposure) => {
     const lc = R.lens.on && !R.lens.inside && mFinal.uniforms.uCubeOn.value > 0.5;
-    if (lc && R.lens.dirty && (lensTick++ % 8 === 0)) { lensCam3.position.copy(camPos); lensCam3.update(renderer, scene); R.lens.dirty = false; }      /* vue tout autour (sources hors de l’image) : six rendus en plus, seulement quand elle a changé */
+    if (lc && R.lens.dirty && (!R.lens.cubeReady || (lensTick++ % 8 === 0))) { lensCam3.position.copy(camPos); lensCam3.update(renderer, scene); R.lens.dirty = false; R.lens.cubeReady = true; }      /* vue tout autour (sources hors de l’image) : six rendus en plus, dès la première image puis seulement quand elle a changé */
     mFinal.uniforms.uLens.value = !R.lens.on ? 0 : R.lens.inside ? 2 : 1;
     renderer.setRenderTarget(rtMain); renderer.clear(); renderer.render(scene, camera);
     if (R.bloom) {
