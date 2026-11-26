@@ -27,7 +27,7 @@ constexpr size_t kAlign = 64;
 inline bool gWindowMode = false;
 
 [[noreturn]] inline void fail(const std::string& what, VkResult r = VK_SUCCESS) {
-    const std::string msg = "ECHEC : " + what + " (code " + std::to_string(static_cast<int>(r)) + ")";
+    const std::string msg = "ECHEC : " + what + (r == VK_SUCCESS ? std::string() : " (code " + std::to_string(static_cast<int>(r)) + ")");
     std::fprintf(stderr, "%s\n", msg.c_str());
     if (gWindowMode) {
         char path[MAX_PATH];

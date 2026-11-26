@@ -66,7 +66,9 @@ public:
         ranges_ = std::move(ranges);
         ranges_.push_back({static_cast<uint32_t>(n), static_cast<uint32_t>(extraPos_.size() + 1)});
         step_.assign(ranges_.size(), 0);
-        state = createBuffer(g, static_cast<VkDeviceSize>(count) * 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        /* TRANSFER_SRC : readBack copie ce tampon vers le processeur (VUID-vkCmdCopyBuffer-srcBuffer-00118, vu par --validation) */
+        state = createBuffer(g, static_cast<VkDeviceSize>(count) * 32,
+                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         worker_ = std::thread([this, stars, vel, n] { computeInitial(stars, vel, n); });
         createPipeline(g);
