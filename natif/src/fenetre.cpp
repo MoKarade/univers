@@ -1561,7 +1561,7 @@ int runWindow(const WindowOptions& opt) {
     vkDestroySurfaceKHR(g.instance, surface, nullptr);
     vkDestroyCommandPool(g.dev, g.pool, nullptr);
     vkDestroyDevice(g.dev, nullptr);
-    vkDestroyInstance(g.instance, nullptr);
+    destroyInstance(g);      // et les messages de validation (--validation)
     DestroyWindow(hwnd);
     return 0;
 }

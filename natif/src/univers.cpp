@@ -11,6 +11,8 @@
 //   --verifie ... : contrôle que chaque étoile citée éclaire l'endroit calculé, avec l'éclat attendu
 //   --images n    : dessine n fois l'image et mesure la cadence
 //   --taille LxH, --champ degres
+// Dans tous les modes : --validation (couche de validation Vulkan, code de sortie 3 sur erreur), --validation-gpu (en plus,
+// bornes de chaque accès des shaders contrôlées sur la carte ; lent). À utiliser pour tout essai de nouveau code carte.
 #include "commun.h"
 
 #include "fenetre.h"
@@ -58,6 +60,8 @@ int main(int argc, char** argv) {
         const std::string k = argv[i];
         const char* v = i + 1 < argc ? argv[i + 1] : "";
         if (k == "--fenetre") window = true;
+        else if (k == "--validation") gValidation = std::max(gValidation, 1);      // validation Vulkan (commun.h)
+        else if (k == "--validation-gpu") gValidation = 2;      // et bornes des shaders, contrôlées sur la carte (lent)
         else if (k == "--fenetre-test") { window = true; testFrames = std::max(1, std::atoi(v)); ++i; }
         else if (k == "--capture") { wopt.capture = v; ++i; }
         else if (k == "--cible") { wopt.target = v; ++i; }
@@ -83,7 +87,7 @@ int main(int argc, char** argv) {
     if (window) {
         wopt.starsPath = argv[1];
         wopt.testFrames = testFrames;
-        return runWindow(wopt);
+        return validationVerdict(runWindow(wopt));
     }
     if (!imagePath) fail("il manque le nom de l'image a ecrire");
 
@@ -191,7 +195,7 @@ int main(int argc, char** argv) {
     target.release(g);
     vkDestroyCommandPool(g.dev, g.pool, nullptr);
     vkDestroyDevice(g.dev, nullptr);
-    vkDestroyInstance(g.instance, nullptr);
+    destroyInstance(g);      // et les messages de validation (--validation)
     std::printf(ok ? "PASSE\n" : "ECHEC\n");
-    return ok ? 0 : 1;
+    return validationVerdict(ok ? 0 : 1);
 }

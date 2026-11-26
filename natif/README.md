@@ -16,6 +16,25 @@ Dossier `C:\dev\outils-natif`, archives officielles décompressées, rien d'inst
 Les en-têtes Vulkan (Khronos) et volk sont récupérés par CMake à la première fabrication. `vulkan-1.dll` vient du
 pilote NVIDIA déjà installé.
 
+## Validation Vulkan : obligatoire pour tout essai de nouveau code carte (26 novembre 2026)
+
+Le 26/11/2026 à 6 h 00, un contrôle de fin d'essai (`--controle-film`, PR 151) a relu un tampon de la carte déjà libéré.
+La carte a fait une faute mémoire (nvlddmkm ID 13, « MMU Fault »), et le pilote est resté bloqué jusqu'au redémarrage,
+8 heures plus tard. La couche de validation de Khronos signale ce genre d'erreur avant que la carte ne la subisse. [Probable]
+
+- `univers <etoiles.bin> --fenetre-test n ... --validation` : couche `VK_LAYER_KHRONOS_validation` allumée. Chaque
+  message va dans la console et dans `univers-validation.log` à côté du programme. À la sortie, le bilan
+  « validation Vulkan : N erreur(s) ... -> PASSE/ECHEC » s'affiche, et le code de sortie vaut 3 s'il y a eu une erreur.
+- `--validation-gpu` : en plus, la carte contrôle les bornes de chaque accès des shaders (validation assistée par la carte).
+  C'est bien plus lent : à réserver aux essais courts d'un shader nouveau ou modifié.
+- Autres programmes (essais, précalculs) : variable `UNIVERS_VALIDATION=1` (ou `gpu`).
+- Sans la couche, l'essai échoue tout de suite. Il n'y a jamais d'essai « validé » sans elle. Elle vient du SDK Vulkan de
+  LunarG. Hors installation, on peut aussi pointer `VK_ADD_LAYER_PATH` vers le dossier `Bin` qui contient
+  `VkLayer_khronos_validation.json`.
+- Règle : un essai de code qui touche la carte (shader, tampon, libération, relecture) passe d'abord une fois en
+  `--validation`, et en `--validation-gpu` si un shader change. Il est fait seul sur la carte.
+- Les contrôles qui relisent la carte (`readBack`) se font AVANT toute libération (`release`).
+
 ## Essai N0
 
 `src/essai_vulkan.cpp` : dessine un triangle hors écran (aucune fenêtre), relit l'image, vérifie deux pixels et
