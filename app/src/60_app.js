@@ -77,7 +77,7 @@
   })();
   const FUS_URL = DATA_URLS.fusc, FUS_M33 = 2;
   const FUSI_URL = DATA_URLS.fusi;
-  let fusiP = null; const fusiStart = () => { if (fusiP || !FUSI_URL) return; fusiP = fetch(FUSI_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(fusImagesInit).catch(e => { console.warn('Images du calcul de la fusion non chargées :', e.message); fusiP = null; }); };
+  let fusiP = null, fusiFailed = false; const fusiStart = () => { if (fusiP || fusiFailed || !FUSI_URL) return; fusiP = fetch(FUSI_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(fusImagesInit).catch(e => { console.warn('Images du calcul de la fusion non chargées :', e.message); fusiFailed = true; fusiP = null; }); };
   const fusFetch = pk => fetch(pk.url || pk.fichier).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
   /* R10 : nuage de points des étoiles du calcul complet (couleurs et éclats empruntés aux modèles de la page, galaxie par galaxie) */
   function repInit() { const NS = FUSI.NS, c = FUSI.cnt, D = { n: NS, out: new Float32Array(NS * 3), col: new Float32Array(NS * 3), look: new Float32Array(NS * 2), boost: clamp(Math.sqrt(Q.gal / c.mw), 1, 2.4), rep: true }; let k = 0;
@@ -226,7 +226,7 @@
     ML('portée de l’interaction faible', 'weak', -18.35, -16.95, { center: true }); ML('aucune structure observée en dessous', 'lim', -19.15, -17.7, { center: true }); ML('détail le plus fin sondé (ordre de grandeur)', 'lhc', -20.5, -19.0, { center: true });
     }
   for (const tag of ['AST', 'TNO']) { const B = Rr[tag], ast = tag === 'AST';
-    for (const l of DATA[tag + '_LABELS']) if (l.i < B.count) addLabel(l.n, '', l.p + 0.4, ast ? 11.05 : 12.35, ast ? 12.75 : 14.5, () => [B.pos[l.i * 3] * AU, B.pos[l.i * 3 + 1] * AU, B.pos[l.i * 3 + 2] * AU], { gate: () => (ast ? Rr.beltVis : Rr.kuiperVis) }); }
+    for (const l of DATA[tag + '_LABELS']) if (l.i < B.count) addLabel(l.n, '', l.p + 0.4, ast ? 11.05 : 12.35, ast ? 12.75 : 14.5, () => [B.pos[l.i * 3] * AU * F.orb, B.pos[l.i * 3 + 1] * AU * F.orb, B.pos[l.i * 3 + 2] * AU * F.orb], { gate: () => (ast ? Rr.beltVis : Rr.kuiperVis) }); }
   addLabel('Soleil', 'here', 0, 14.75, 21.6, () => [0, 0, 0]);
   { const want = { '1P/Halley': 'Comète de Halley', '2P/Encke': 'Comète Encke', '67P/Churyumov-Gerasimenko': 'Comète Tchouri (67P)', '109P/Swift-Tuttle': 'Comète Swift-Tuttle', 'C/1995 O1 (Hale-Bopp)': 'Comète Hale-Bopp' }, B = Rr.COM;
     DATA.COM_NAMES.split('|').forEach((n, i) => { if (want[n]) addLabel(want[n], '', 3.4, 11.4, 14.6, () => [B.pos[i * 3] * AU * F.orb, B.pos[i * 3 + 1] * AU * F.orb, B.pos[i * 3 + 2] * AU * F.orb], { gate: () => Rr.comVis }); }); }
@@ -283,10 +283,10 @@
   let mojPos = null, mojOn = false;
   function updateMoons() { F.moonC = F.moonC || {}; const yr = yearOf(F.jd);
     mojPos = MOJ && !S.moonOff ? MOJ.at(F.jdM + deltaT((F.jdM - JD_J2000) / 36525) / DAY_S, 10) : null; mojOn = !!mojPos;
-    for (const t of kSets) { const c = cenOf(t.cen); F.moonC[t.key] = c; if (!c) continue; t.idx.forEach((k, j) => { const m = KO[k]; m.off = m.kind === 'probe' ? (m.tab ? F.jd < m.tab.jd0 : yr < m.from) : m.kind === 'exo' ? !m.on : m.kind === 'moon' && (!!F.eng[m.p] || (m.n === 'Phobos' && S.ty > FATE.phobos * 1e9) || (m.n === 'Triton' && S.ty > FATE.triton * 1e9) || S.ty < -4.5e9); let xy = m.off ? [0, 0] : solveKO(m, m.kind === 'probe' ? F.jd : m.kind === 'sstar' ? F.jdS : F.jdM); if (m.prec) { const f = m.prec * (yr - m.tp), cf = Math.cos(f), sf = Math.sin(f); xy = [xy[0] * cf - xy[1] * sf, xy[0] * sf + xy[1] * cf]; }      // précession relativiste : l'ellipse tourne lentement dans son plan
-        let rx = m.P[0] * xy[0] + m.Q[0] * xy[1], ry = m.P[1] * xy[0] + m.Q[1] * xy[1], rz = m.P[2] * xy[0] + m.Q[2] * xy[1]; if (m.tab && !m.off && F.jd < m.tab.jd1) { const pt = probeTab(m, F.jd, rx, ry, rz); rx = pt[0]; ry = pt[1]; rz = pt[2]; }      // avant le dernier survol : trajectoire réelle
+    for (const t of kSets) { const c = cenOf(t.cen); F.moonC[t.key] = c; if (!c) continue; let lookDirty = false; t.idx.forEach((k, j) => { const m = KO[k]; m.off = m.kind === 'probe' ? (m.tab ? F.jd < m.tab.jd0 : yr < m.from) : m.kind === 'exo' ? !m.on : m.kind === 'moon' && (!!F.eng[m.p] || (m.n === 'Phobos' && S.ty > FATE.phobos * 1e9) || (m.n === 'Triton' && S.ty > FATE.triton * 1e9) || S.ty < -4.5e9); let xy = m.off ? [0, 0] : solveKO(m, m.kind === 'probe' ? F.jd : m.kind === 'sstar' ? F.jdS : F.jdM); if (m.prec) { const f = m.prec * (yr - m.tp), cf = Math.cos(f), sf = Math.sin(f); xy = [xy[0] * cf - xy[1] * sf, xy[0] * sf + xy[1] * cf]; }      /* précession relativiste : l'ellipse tourne lentement dans son plan */
+        let rx = m.P[0] * xy[0] + m.Q[0] * xy[1], ry = m.P[1] * xy[0] + m.Q[1] * xy[1], rz = m.P[2] * xy[0] + m.Q[2] * xy[1]; if (m.tab && !m.off && F.jd < m.tab.jd1) { const pt = probeTab(m, F.jd, rx, ry, rz); rx = pt[0]; ry = pt[1]; rz = pt[2]; }      /* avant le dernier survol : trajectoire réelle */
         if (mojPos && m.kind === 'moon' && m.p === 'jupiter' && MOJN[m.n] !== undefined && !m.off) { const q = MOJN[m.n] * 6, f = 1e3 / AU; rx = mojPos[q] * f; ry = mojPos[q + 1] * f; rz = mojPos[q + 2] * f; }      /* position calculée en gravité mutuelle */
-        if (m.off && m.kind === 'moon') rx = ry = rz = NaN; t.rel[j * 3] = rx; t.rel[j * 3 + 1] = ry; t.rel[j * 3 + 2] = rz; kPos[k * 3] = c[0] + rx * AU; kPos[k * 3 + 1] = c[1] + ry * AU; kPos[k * 3 + 2] = c[2] + rz * AU; }); } }
+        const vis = m.off ? 0 : 1; if (t.look[j * 2 + 1] !== vis) { t.look[j * 2 + 1] = vis; lookDirty = true; } if (m.off && m.kind === 'moon') rx = ry = rz = 0; t.rel[j * 3] = rx; t.rel[j * 3 + 1] = ry; t.rel[j * 3 + 2] = rz; kPos[k * 3] = c[0] + rx * AU; kPos[k * 3 + 1] = c[1] + ry * AU; kPos[k * 3 + 2] = c[2] + rz * AU; }); if (lookDirty) Rr.moonLookDirty(t.key); } }
   { const SL = ['S1', 'S2', 'S4', 'S8', 'S9', 'S12', 'S13', 'S14', 'S38', 'S55'];
     KO.forEach((m, k) => { const t = KSETS[m.kind + ':' + m.p], l = Math.log10(m.aAU * AU), get = () => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]];
       if (m.kind === 'moon') addLabel(m.n, '', m.small ? 4 : 3.2, l - 0.8, l + (m.small ? 0.7 : 0.95), get, { gate: () => (m.off ? 0 : t.vis) });
@@ -561,10 +561,11 @@
   const FLAME_URL = DATA_URLS.flame;
   if (FLAME_URL) fetch(FLAME_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(t => { flameLoad(t); Rr.relife(); if (S.sel) renderCard(); }).catch(e => console.warn('Âges Gaia non chargés :', e.message));
   function selStar(i) {
-    const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i], L = [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]], fate = st.fate[i];
+    const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i];
+    const life = () => [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]];
     const get = () => [sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY]; if (!Rr.keyStars.includes(i)) Rr.keyStars.push(i);
-    return { exoI: STAREXO[i] >= 0 ? STAREXO[i] : undefined, exoC: true, lr: STAREXO[i] >= 0 ? exoLr(STAREXO[i]) : undefined, name: DATA.STAR_NAMES[i] || (hip ? 'HIP ' + hip : 'Étoile sans nom'), exist: () => starState(L, fate), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
-      const d = vlen(get()), t = F.tMyr, sn = fate === 1 || fate === 3, lum = Math.pow(10, 0.4 * (4.83 - MV));
+    return { exoI: STAREXO[i] >= 0 ? STAREXO[i] : undefined, exoC: true, lr: STAREXO[i] >= 0 ? exoLr(STAREXO[i]) : undefined, name: DATA.STAR_NAMES[i] || (hip ? 'HIP ' + hip : 'Étoile sans nom'), exist: () => starState(life(), st.fate[i]), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
+      const L = life(), fate = st.fate[i], d = vlen(get()), t = F.tMyr, sn = fate === 1 || fate === 3, lum = Math.pow(10, 0.4 * (4.83 - MV));
       const fut = fate === 4 || (!sn && t >= L[2]) ? 'naine blanche qui refroidit' : sn && t >= L[2] ? 'a explosé en supernova' : sn ? 'supernova ' + inTime((L[2] - t) * 1e6) : t < L[1] ? 'géante rouge ' + inTime((L[1] - t) * 1e6) + ', puis naine blanche' : 'naine blanche ' + inTime((L[2] - t) * 1e6);
       return starTag([['Distance', fmtDist(d)], ['Éclat', fmtTimes(lum) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(st.mass[i], 2) + NBSP + 'fois le Soleil'], ['Vitesse', Rr.K.vkms[i] > 0 ? (noRV(get(), kvOf(Rr.K, i)) ? 'au moins ' : '') + sig(Rr.K.vkms[i], 3) + NBSP + 'km/s par rapport au Soleil' + (noRV(get(), kvOf(Rr.K, i)) ? ' (vitesse radiale non mesurée)' : '') : 'non mesurée'], ['Mouvement', orbMotionText(Rr.K, i, F.tEff, false)], ['Poussière devant elle', dustRow(Rr.starPos, i)], ['Avenir estimé', fut]].concat(hip ? [['Catalogue', 'HIP ' + hip]] : [], lifeRows(st, i, L, t), passRows(i), starExtra(get(), kvOf(Rr.K, i), MV, bv), STAREXO[i] >= 0 ? [['Planètes connues', EXOP[STAREXO[i]] + ' : « Y aller » pour les voir tourner autour de l’étoile']].concat(exoRows(STAREXO[i]).map(r => [r[0], r[1], 'm'])) : [])); }, get src() { const o = (Rr.passers || []).find(q => q.idx === i); return STAR_SRC(i >= DATA.STARS_N ? 'Gaia DR3, d’après Bailer-Jones 2022' : 'catalogue HYG (Hipparcos, Yale, Gliese)', { exo: STAREXO[i] >= 0, pass: o ? o.src || 'Bailer-Jones 2022 (Gaia DR3)' : '' }); } };
   }
@@ -680,8 +681,7 @@
   }
   const COMN = DATA.COM_NAMES.split('|'), COMC = b64ToBytes(DATA.COM_CLS), EXON = DATA.EXO_NAMES.split('|'), EXOP = b64ToBytes(DATA.EXO_NP), PSRN = DATA.PSR_NAMES.split('|'), PSRP = new Float32Array(b64ToBytes(DATA.PSR_P0).buffer);
   const COM_FR = { JFC: 'Comète de la famille de Jupiter', JFc: 'Comète de la famille de Jupiter', HTC: 'Comète de type Halley', ETc: 'Comète de type Encke', CTc: 'Comète de type Chiron' };
-  const MOIS_C = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-  const jdDate = jd => { const z = Math.floor(jd + 0.5), al = Math.floor((z - 1867216.25) / 36524.25), A = z + 1 + al - Math.floor(al / 4), B = A + 1524, C = Math.floor((B - 122.1) / 365.25), Dd = Math.floor(365.25 * C), E = Math.floor((B - Dd) / 30.6001), d = B - Dd - Math.floor(30.6001 * E), m = E < 14 ? E - 1 : E - 13, y = m > 2 ? C - 4716 : C - 4715; return 'le ' + d + (d === 1 ? 'er ' : ' ') + MOIS_C[m - 1] + ' ' + y; };
+  const jdDate = jd => 'le ' + fmtJd(jd, false);
   const CFIX = {}; { const fx = DATA.COM_FIX || {}; for (const k in fx) { const i = COMN.indexOf(k); if (i >= 0 && fx[k].next) CFIX[i] = fx[k].next; } }
   function selComet(i) {
     const B = Rr.COM, a = B.a[i], e = B.e[i], Pd = TAU / B.n[i], get = () => [B.pos[i * 3] * AU * F.orb, B.pos[i * 3 + 1] * AU * F.orb, B.pos[i * 3 + 2] * AU * F.orb];
@@ -1524,10 +1524,14 @@
     if (n < 2) setTimeout(() => { try { location.reload(); } catch (err) {} }, 700); }
   canvas.addEventListener('webglcontextlost', onLost, false);
   { let rs = null; try { rs = JSON.parse(sessionStorage.getItem(REPRISE) || 'null'); } catch (err) {}
-    if (rs && Date.now() - rs.t < 60000) { S.logR = clamp(rs.lr, LMIN, LMAX); S.az = rs.az; S.el = rs.el; S.anim = null; if (rs.focus && rs.focus !== 'sun' && BODY[rs.focus]) setFocus(rs.focus, 0.01); if (isFinite(rs.ty)) S.hit = setTime(rs.ty); S.resumed = true;
-      if (rs.center) setTimeout(() => { const back = () => { S.anim = null; S.logR = clamp(rs.lr, LMIN, LMAX); S.az = rs.az; S.el = rs.el; };      // on retrouve l'objet suivi par son nom
+    if (rs && rs.lr !== undefined && Date.now() - rs.t < 60000) {
+      try { sessionStorage.setItem(REPRISE, JSON.stringify({ t: rs.t, n: rs.n || 1 })); } catch (err) {}
+      const loR = rs.focus === 'earth' && !rs.center ? LMICRO : LMIN;
+      S.logR = clamp(rs.lr, loR, LMAX); S.az = rs.az; S.el = rs.el; S.anim = null; if (rs.focus && rs.focus !== 'sun' && BODY[rs.focus]) setFocus(rs.focus, 0.01); if (isFinite(rs.ty)) S.hit = setTime(rs.ty); S.resumed = true;
+      if (rs.center) setTimeout(() => { const back = () => { S.anim = null; S.logR = clamp(rs.lr, loR, LMAX); S.az = rs.az; S.el = rs.el; };      /* on retrouve l'objet suivi par son nom */
         try { const ok = goName(rs.center.replace(/^Trou noir central de /, '')); if (ok && S.center && S.center.name === rs.center) { back(); S.ck = 1; } else { select(null); back(); } } catch (err) { back(); } }, 0);
-      if (rs.tiles) { TL.on = false; TL.cut = true; TL.max = Math.max(1, Math.floor(rs.tiles / 2)); } } }
+      if (rs.tiles) { TL.on = false; TL.cut = true; TL.max = Math.max(1, Math.floor(rs.tiles / 2)); }
+    } else if (rs && Date.now() - rs.t >= 180000) { try { sessionStorage.removeItem(REPRISE); } catch (err) {} } }
   /* ---- taille, qualité adaptative ---- */
   let dprScale = 1, slow = 0, fast = 0;
   function resize() {
@@ -1638,7 +1642,7 @@
     const sun = sunGalAt(Rr.K, 0, [0, 0, 0]);
     return { m31: { pos: DATA.M31.pos, vel: M31_MEAS[0][1], vel_name: M31_MEAS[0][0], spin: DATA.M31.spin, meas: M31_MEAS }, lmc: DATA.LMC, lmc_spin: (LG_SPIN.find(q => /Grand Nuage/.test(q.key)) || {}).L, m33_spin: (LG_SPIN.find(q => /Triangle/.test(q.key)) || {}).L,
       dwarfs: dw, sun: { pos: sun, vel: SUN_UVW }, M_GAL2ECL: M, note: 'Axes LG_SPIN dans le repère équatorial (voir 30_gen.js) ; le reste dans le repère galactocentrique d’andromedaOrbit.' }; }
-  window.__U = { evToast, FPS, ZFAST, zFast, lgRadial, LGR, gcRelKpc0, selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
-  if (!reduced) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
+  window.__U = { evToast, FPS, ZFAST, zFast, lgRadial, LGR, gcRelKpc0, selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
+  if (!reduced && !S.resumed) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
   requestAnimationFrame(now => { last = now; step(now); requestAnimationFrame(() => { $('loader').classList.add('out'); setTimeout(() => $('loader').remove(), 1000); if (!reduced && !S.resumed) { S.anim = { t0: performance.now() / 1000 + 0.3, dur: 5.5, l0: S.logR, l1: STOPS[1].logR, a0: S.az, a1: S.az + 0.5, e0: S.el, e1: 0.6 }; } showRail(); }); });
 })();

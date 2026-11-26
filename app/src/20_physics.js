@@ -334,7 +334,7 @@ function cosmoAt(C, t, o) {
   o.a = a; o.v = v; o.D = D;
   o.H = v / a;                                   // Ga^-1
   o.Hkms = o.H / KMSMPC_GYR;                     // km/s/Mpc
-  o.q = -C.acc(a) * a / (v * v);                 // paramètre de décélération (négatif = accélère)
+  o.q = Math.abs(v) > 1e-12 ? -C.acc(a) * a / (v * v) : 0;   /* paramètre de décélération (négatif = accélère ; borné au rebond/retournement où v = 0) */
   o.chiPH = C.tBang !== null ? chi : null;       // horizon des particules, comobile (Mpc)
   o.chiEH = C.chiEnd !== null ? Math.max(C.chiEnd - chi, 0) : null;   // horizon des événements, comobile
   o.rHubble = Math.abs(o.H) > 1e-12 ? C_MPC_GYR / Math.abs(o.H) : Infinity;   // rayon de Hubble, physique (Mpc)
