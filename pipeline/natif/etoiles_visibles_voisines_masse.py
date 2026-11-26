@@ -66,6 +66,9 @@ def tirer(rng, pd, vd, n):
     return pd[k] + rng.normal(0.0, 1.0, (n, 3)) * (DECALAGE * d4[k])[:, None] * np.array([1.0, 1.0, 0.3]), vd[k]
 
 
+RAYON_BULBE_KPC = 10.0
+
+
 def main():
     contrats, auj, depart, sortie = sys.argv[1:5]
     t0 = time.time()
@@ -104,6 +107,11 @@ def main():
         epais = np.zeros(len(s), bool)
         for n_, a, b in B:
             if n_ == 'disque épais': epais |= dans((a, b))
+        # Le bulbe de départ d'Andromède suit une loi de Hernquist sans coupure : 10 % de ses particules sont à plus de
+        # 10 kpc du centre et quelques centaines à des mégaparsecs (film 3, 26/11/2026 : 2 684 étoiles visibles posées à
+        # plus de 50 kpc, deux hors de portée du format). Les étoiles du bulbe ne sont donc tirées que des particules à
+        # moins de RAYON_BULBE_KPC du centre. [Le modèle de départ est à tronquer au prochain tirage : modeles_v2.py.]
+        barre &= np.linalg.norm(pd, axis=1) < RAYON_BULBE_KPC
         if barre.sum() < 1000: barre = vieux
         if epais.sum() < 1000: epais = vieux
         ed = (pos - mes_p) @ Rm      # étoiles du contrat dans le repère du disque

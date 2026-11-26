@@ -131,7 +131,12 @@ def construire(nom, n_total, adoucissement=None, rsig_facteur=2.0, part_halo=Non
     b = g['bulbe']
     if b:
         if 'masse' in b:
-            pb = agama.Potential(type='Dehnen', gamma=1, mass=b['masse'], scaleRadius=b['a'])
+            # Loi de Hernquist COUPÉE à 10 kpc, masse totale gardée. Sans coupure, 10 % du bulbe est à plus de 10 kpc et
+            # quelques centaines de particules sont tirées à des mégaparsecs (constaté le 26/11/2026 dans le film 3).
+            coupure = b.get('coupure', 10.0)
+            brut = agama.Potential(type='Spheroid', densityNorm=1.0, gamma=1, beta=4, alpha=1, scaleRadius=b['a'], outerCutoffRadius=coupure, cutoffStrength=4)
+            pb = agama.Potential(type='Spheroid', densityNorm=b['masse'] / float(brut.totalMass()), gamma=1, beta=4, alpha=1, scaleRadius=b['a'],
+                                 outerCutoffRadius=coupure, cutoffStrength=4)
         else:   # loi de puissance tronquée de McMillan 2017 (éq. 1), aplatie
             pb = agama.Potential(type='Spheroid', densityNorm=b['rho0'], gamma=0, beta=b['puissance'], alpha=1, scaleRadius=b['r0'],
                                  outerCutoffRadius=b['coupure'], cutoffStrength=2, axisRatioZ=b['q'])
