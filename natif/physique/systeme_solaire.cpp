@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <new>
+#include <stdexcept>
 
 namespace phys {
 
@@ -142,6 +144,15 @@ bool SystemeSolaire::construire(const SourceDe440& de440, double ansDirects) {
             return failBuild();
         }
         const long n = static_cast<long>(stepsD);
+        /* Mémoire réservée d'un coup : un manque de mémoire rend false au lieu de lever une exception dans le fil de
+           calcul de fenetre.cpp (qui terminerait le programme). */
+        try {
+            cps.reserve(static_cast<size_t>(n) + 1);
+        } catch (const std::bad_alloc&) {
+            return failBuild();
+        } catch (const std::length_error&) {
+            return failBuild();
+        }
         nb::Integrator it(s);
         cps.push_back(it.state());
         for (long k = 1; k <= n; ++k) {

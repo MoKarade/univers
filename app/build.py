@@ -1,16 +1,45 @@
 #!/usr/bin/env python3
-import os, sys
-root = os.path.dirname(os.path.abspath(__file__))
-rd = lambda p: open(os.path.join(root, p), encoding='utf-8').read()
-html = rd('src/index.html')
-js = '\n'.join(rd('src/' + f) for f in ['20_physics.js', '21_nbody.js', '22_smallbody.js', '23_events.js', '24_moons.js', '25_future.js', '26_orbits.js', '27_lens.js', '28_dust.js', '29_cone.js', '30_gen.js', '40_render.js', '60_app.js'])
-import json
-_d2 = rd('gen/data2.js'); _o = json.loads(_d2[len('Object.assign(DATA, '):_d2.rindex(');')])
-for _k in ('STARS_GEO', 'STARS_AUX', 'STAR_LABELS', 'STARS_N', 'CMB'): _o.pop(_k, None)   # CMB : remplacée par la carte Planck de gen/data19.js
-_d2 = 'Object.assign(DATA, ' + json.dumps(_o, ensure_ascii=False, separators=(',', ':')) + ');\n'
-out = html.replace('/*__DATA__*/', rd('gen/data.js') + _d2 + rd('gen/ephem.js') + rd('gen/data3.js') + rd('gen/data4.js') + rd('gen/data5.js') + rd('gen/data6.js') + rd('gen/data7.js') + rd('gen/data8.js') + rd('gen/data9.js') + rd('gen/data10.js') + rd('gen/data11.js') + rd('gen/data12.js') + rd('gen/data13.js') + rd('gen/data14.js') + rd('gen/sun_rgb.js') + rd('gen/data15.js') + rd('gen/data16.js') + rd('gen/data17.js') + rd('gen/data18.js') + rd('gen/data19.js') + rd('gen/proton_pdf.js') + rd('gen/water_qm.js') + rd('gen/laniakea.js') + rd('gen/data20.js') + rd('gen/nbody.js') + rd('gen/transits.js') + rd('gen/mist_life.js') + rd('gen/lunes.js')).replace('/*__JS__*/', js)
-assert '/*__DATA__*/' not in out and '/*__JS__*/' not in out
-dst = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, '..', 'dist', 'index.html')
-os.makedirs(os.path.dirname(dst), exist_ok=True)
-open(dst, 'w', encoding='utf-8').write(out)
-print('écrit', dst, round(len(out.encode()) / 1024), 'ko')
+"""Assemble la page autonome dist/index.html à partir de app/src/ et app/gen/."""
+from __future__ import annotations
+
+import pathlib
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent
+
+SRC_ORDER = [
+    "20_physics.js", "21_nbody.js", "22_smallbody.js", "23_events.js",
+    "24_moons.js", "25_future.js", "26_orbits.js", "27_lens.js",
+    "28_dust.js", "29_cone.js", "30_gen.js", "40_render.js", "60_app.js",
+]
+
+GEN_ORDER = [
+    "data.js", "data2.js", "ephem.js", "data3.js", "data4.js", "data5.js",
+    "data6.js", "data7.js", "data8.js", "data9.js", "data10.js", "data11.js",
+    "data12.js", "data13.js", "data14.js", "sun_rgb.js", "data15.js",
+    "data16.js", "data17.js", "data18.js", "data19.js", "proton_pdf.js",
+    "water_qm.js", "laniakea.js", "data20.js", "nbody.js", "transits.js",
+    "mist_life.js", "lunes.js",
+]
+
+
+def read_text(rel: str) -> str:
+    return (ROOT / rel).read_text(encoding="utf-8")
+
+
+def main() -> int:
+    html = read_text("src/index.html")
+    data_js = "".join(read_text(f"gen/{name}") for name in GEN_ORDER)
+    app_js = "\n".join(read_text(f"src/{name}") for name in SRC_ORDER)
+    out = html.replace("/*__DATA__*/", data_js).replace("/*__JS__*/", app_js)
+    if "/*__DATA__*/" in out or "/*__JS__*/" in out:
+        raise AssertionError("Marqueur /*__DATA__*/ ou /*__JS__*/ non remplacé")
+    dst = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT.parent / "dist" / "index.html"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(out, encoding="utf-8")
+    print("écrit", dst, round(len(out.encode("utf-8")) / 1024), "ko")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

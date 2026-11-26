@@ -74,7 +74,8 @@ inline Stars openStars(const char* path) {
         fail("ce n'est pas un fichier d'étoiles (UNIVSTR1)");
     }
     std::memcpy(&s.n, s.file.data() + 8, 8);
-    if (s.n > (UINT64_MAX - kAlign) / 4) fail("fichier d'étoiles corrompu");
+    // StarRenderer dessine n + 1 points (le Soleil en plus) avec un compte uint32_t : n doit rester en dessous.
+    if (s.n >= UINT32_MAX) fail("fichier d'étoiles corrompu");
     const uint64_t colBytes = (s.n * 4 + kAlign - 1) / kAlign * kAlign;
     if (colBytes > (s.file.size() - kAlign) / 8) fail("fichier d'étoiles tronqué");
     s.column = static_cast<size_t>(colBytes);

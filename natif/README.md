@@ -4,7 +4,7 @@ Plan et jalons : `docs/plan-natif.md`.
 
 ## Compilation et tests portables (Linux et Windows, sans GPU)
 
-La bibliothèque physique (`natif/physique/`) et les 7 essais CPU portables ne dépendent ni de Vulkan ni de `windows.h`
+La bibliothèque physique (`natif/physique/`) et les 8 essais CPU portables ne dépendent ni de Vulkan ni de `windows.h`
 (la projection mémoire `src/fichier_mappe.h` s'adapte à Win32 et POSIX).
 
 - **Build autonome de la bibliothèque physique** :
@@ -13,8 +13,10 @@ La bibliothèque physique (`natif/physique/`) et les 7 essais CPU portables ne d
   cmake --build /tmp/univers-physique-build
   ctest --test-dir /tmp/univers-physique-build --output-on-failure
   ```
-  Exécute `essai_galaxie` (orbites Voie lactée + barre Dehnen) et `essai_systeme_solaire --noyau` (contrôle autonome
-  du noyau N-corps contre JPL Horizons 1650–2450 via `essais/nbody_ref.h`, sans `de440.bsp`). Les modes complets avec
+  Exécute `essai_galaxie` (orbites Voie lactée + barre Dehnen), `essai_systeme_solaire --noyau` (contrôle autonome
+  du noyau N-corps contre JPL Horizons 1650–2450 via `essais/nbody_ref.h`, sans `de440.bsp`) et `essai_robustesse`
+  (entrées hostiles ou limites sur des fichiers de synthèse : dates non finies, dossiers, noms d'images qui sortent du
+  dossier, tailles démesurées, coordonnées non finies, bornes à 1 ULP). Les modes complets avec
   données restent disponibles : `essai_systeme_solaire <de440.bsp> [orbites_planetes.bin]` et
   `essai_fusion <fusion_centres.bin> <dossier_images>`.
 
@@ -24,9 +26,10 @@ La bibliothèque physique (`natif/physique/`) et les 7 essais CPU portables ne d
   cmake --build /tmp/univers-natif-build
   ctest --test-dir /tmp/univers-natif-build --output-on-failure
   ```
-  Construit les 7 essais portables (`essai_cosmologie`, `essai_interface`, `essai_ephem`, `essai_orientation`,
-  `physique/essai_galaxie`, `physique/essai_fusion`, `physique/essai_systeme_solaire`) et lance les 4 suites autonomes
-  sans fichiers externes (`essai_cosmologie`, `essai_interface`, `essai_galaxie`, `essai_systeme_solaire_noyau`).
+  Construit les 8 essais portables (`essai_cosmologie`, `essai_interface`, `essai_ephem`, `essai_orientation`,
+  `physique/essai_galaxie`, `physique/essai_fusion`, `physique/essai_systeme_solaire`, `physique/essai_robustesse`) et
+  lance les 5 suites autonomes sans fichiers externes (`essai_cosmologie`, `essai_interface`, `essai_galaxie`,
+  `essai_systeme_solaire_noyau`, `essai_robustesse`).
 
 ## Outils Windows (sans droits d'administrateur)
 

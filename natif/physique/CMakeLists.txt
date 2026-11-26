@@ -40,13 +40,21 @@ set_target_properties(essai_fusion PROPERTIES CXX_EXTENSIONS OFF)
 target_link_libraries(essai_fusion PRIVATE univers_physique)
 target_compile_options(essai_fusion PRIVATE ${UNIVERS_PHYSIQUE_WARNINGS})
 
+# Essai autonome : entrées hostiles ou limites (dates non finies, fichiers de synthèse corrompus, bornes à 1 ULP).
+add_executable(essai_robustesse essais/essai_robustesse.cpp)
+set_target_properties(essai_robustesse PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(essai_robustesse PRIVATE univers_physique)
+target_compile_options(essai_robustesse PRIVATE ${UNIVERS_PHYSIQUE_WARNINGS})
+
 if(MINGW)
   target_link_options(essai_systeme_solaire PRIVATE -static)
   target_link_options(essai_galaxie PRIVATE -static)
   target_link_options(essai_fusion PRIVATE -static)
+  target_link_options(essai_robustesse PRIVATE -static)
 endif()
 
 if(BUILD_TESTING)
   add_test(NAME essai_galaxie COMMAND essai_galaxie)
   add_test(NAME essai_systeme_solaire_noyau COMMAND essai_systeme_solaire --noyau)
+  add_test(NAME essai_robustesse COMMAND essai_robustesse)
 endif()

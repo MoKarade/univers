@@ -105,15 +105,17 @@ function nbMoonRing(S, h) {
    a = GM/(c² r³) [ (4 GM/r − v²) r + 4 (r·v) v ], v vitesse héliocentrique (Anderson et al. 1975 ; c'est aussi
    le terme dominant de l'éphéméride DE440). Dépend de la vitesse : appliqué au milieu du coup, deux passes. */
 function nbGr(S, h) {
-  const { N, Q, V, gm } = S, c2 = NB_C_AU_DAY * NB_C_AU_DAY, mu = NB_GM_SUN;
+  const { N, Q, V, gm } = S, c2 = NB_C_AU_DAY * NB_C_AU_DAY, mu = NB_GM_SUN, h2 = h * 0.5;
   let px = 0, py = 0, pz = 0;
-  for (let i = 0; i < N; i++) { px += gm[i] * V[i * 3]; py += gm[i] * V[i * 3 + 1]; pz += gm[i] * V[i * 3 + 2]; }
+  for (let i = 0; i < N; i++) { const i3 = i * 3; px += gm[i] * V[i3]; py += gm[i] * V[i3 + 1]; pz += gm[i] * V[i3 + 2]; }
   const sx = -px / mu, sy = -py / mu, sz = -pz / mu;
   for (let i = 0; i < N; i++) {
-    const i3 = i * 3, x = Q[i3], y = Q[i3 + 1], z = Q[i3 + 2], r = Math.sqrt(x * x + y * y + z * z);
-    let vx = V[i3] - sx, vy = V[i3 + 1] - sy, vz = V[i3 + 2] - sz, ax = 0, ay = 0, az = 0;
+    const i3 = i * 3, x = Q[i3], y = Q[i3 + 1], z = Q[i3 + 2], r2 = x * x + y * y + z * z, r = Math.sqrt(r2);
+    const k = mu / (c2 * r2 * r), c4 = 4 * mu / r;
+    const vx = V[i3] - sx, vy = V[i3 + 1] - sy, vz = V[i3 + 2] - sz;
+    let ax = 0, ay = 0, az = 0;
     for (let it = 0; it < 3; it++) {
-      const ux = vx + ax * h / 2, uy = vy + ay * h / 2, uz = vz + az * h / 2, v2 = ux * ux + uy * uy + uz * uz, rv = x * ux + y * uy + z * uz, k = mu / (c2 * r * r * r), a1 = 4 * mu / r - v2;
+      const ux = vx + ax * h2, uy = vy + ay * h2, uz = vz + az * h2, v2 = ux * ux + uy * uy + uz * uz, rv = x * ux + y * uy + z * uz, a1 = c4 - v2;
       ax = k * (a1 * x + 4 * rv * ux); ay = k * (a1 * y + 4 * rv * uy); az = k * (a1 * z + 4 * rv * uz);
     }
     V[i3] += h * ax; V[i3 + 1] += h * ay; V[i3 + 2] += h * az;
@@ -122,17 +124,21 @@ function nbGr(S, h) {
 /* Saut : déplacement dû au mouvement du Soleil (quantité de mouvement totale des corps). */
 function nbJump(S, h) {
   const { N, Q, V, gm } = S; let px = 0, py = 0, pz = 0;
-  for (let i = 0; i < N; i++) { px += gm[i] * V[i * 3]; py += gm[i] * V[i * 3 + 1]; pz += gm[i] * V[i * 3 + 2]; }
-  const k = h / NB_GM_SUN;
-  for (let i = 0; i < N; i++) { Q[i * 3] += k * px; Q[i * 3 + 1] += k * py; Q[i * 3 + 2] += k * pz; }
+  for (let i = 0; i < N; i++) { const i3 = i * 3; px += gm[i] * V[i3]; py += gm[i] * V[i3 + 1]; pz += gm[i] * V[i3 + 2]; }
+  const k = h / NB_GM_SUN, dx = k * px, dy = k * py, dz = k * pz;
+  for (let i = 0; i < N; i++) { const i3 = i * 3; Q[i3] += dx; Q[i3 + 1] += dy; Q[i3 + 2] += dz; }
 }
 
 /** Avance de nSteps pas de dt jours (dt < 0 : vers le passé, le schéma est réversible). */
 function nbStep(S, dt, nSteps) {
+  if (nSteps <= 0) return S;
+  const h2 = dt * 0.5;
+  nbJump(S, h2);
   for (let s = 0; s < nSteps; s++) {
-    nbJump(S, dt / 2); nbKick(S, dt / 2);
+    nbKick(S, h2);
     for (let i = 0; i < S.N; i++) nbKepler(S.Q, S.V, i * 3, NB_GM_SUN, dt);
-    nbKick(S, dt / 2); nbJump(S, dt / 2);
+    nbKick(S, h2);
+    nbJump(S, s + 1 < nSteps ? dt : h2);
   }
   S.jd += dt * nSteps;
   return S;
@@ -158,7 +164,7 @@ function nbBary(S, out) {
 
 /** Énergie newtonienne totale (barycentrique), pour les contrôles. */
 function nbEnergy(S) {
-  const { N, Q, V, gm } = S, b = nbBary(S); let px = 0, py = 0, pz = 0, E = 0;
+  const { N, Q, V, gm } = S; let px = 0, py = 0, pz = 0, E = 0;
   for (let i = 0; i < N; i++) { px += gm[i] * V[i * 3]; py += gm[i] * V[i * 3 + 1]; pz += gm[i] * V[i * 3 + 2]; }
   E += (px * px + py * py + pz * pz) / (2 * NB_GM_SUN);
   for (let i = 0; i < N; i++) {

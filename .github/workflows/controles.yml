@@ -1,14 +1,13 @@
-# T1 (mission 1) : chaque proposition de changement construit la page et lance les tests de calcul.
-# Commande exigée par docs/mission-lot1.md, reprise telle quelle dans la dernière étape.
+# Contrôles automatiques : page web (build, lint, 26 tests JS en parallèle, garde-fous),
+# physique native C++20 portable sous Linux (CMake + CTest), et tests autonomes du pipeline Python.
 name: Contrôles
 
 on:
   push:
-    branches: [main]
+    branches: [main, appli-pc]
   pull_request:
   workflow_dispatch:
 
-# Une nouvelle poussée annule le contrôle en cours sur la même branche (minutes comptées).
 concurrency:
   group: controles-${{ github.ref }}
   cancel-in-progress: true
@@ -18,9 +17,8 @@ permissions:
 
 jobs:
   construire-et-tester:
-    name: Construire la page et tester les calculs
+    name: Web — Construire, vérifier et tester (26 tests JS)
     runs-on: ubuntu-latest
-    # Plafond : sans lui, un contrôle figé tourne six heures.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -31,10 +29,57 @@ jobs:
           python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - name: Construire puis tester
+          node-version: "22"
+      - name: Syntaxe JS et garde-fous scientifiques
         shell: bash
-        run: python3 app/build.py && for f in app/test/*.test.js; do echo "== $f"; node "$f" || exit 1; done
-      - name: Plus de fondu daté pour les planètes (R7)
+        run: |
+          for f in app/src/*.js; do node --check "$f" || exit 1; done
+          ! grep -rn FATE_P app/src
+      - name: Construire la page autonome
         shell: bash
-        run: "! grep -rn FATE_P app/src"
+        run: python3 app/build.py
+      - name: Lancer les 26 tests de calcul JS en parallèle
+        shell: bash
+        run: |
+          printf '%s\n' app/test/*.test.js | xargs -P 4 -I{} bash -c '
+            echo "== {}"
+            node "{}" || exit 255
+          '
+
+  physique-native-linux:
+    name: Natif C++20 — Compilation Linux et CTest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configurer, compiler et tester natif/ (essais portables)
+        shell: bash
+        run: |
+          cmake -S natif -B build-linux -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-linux -j
+          ctest --test-dir build-linux --output-on-failure
+      - name: Configurer, compiler et tester natif/physique/ en autonome
+        shell: bash
+        run: |
+          cmake -S natif/physique -B build-physique -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-physique -j
+          ctest --test-dir build-physique --output-on-failure
+
+  pipeline-stdlib:
+    name: Pipeline Python — Tests autonomes (stdlib)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Exécuter les tests autonomes du pipeline
+        shell: bash
+        run: |
+          python3 pipeline/test_pipeline_stdlib.py
+          python3 pipeline/sources/test_build_gw.py

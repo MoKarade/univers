@@ -1,18 +1,81 @@
-# Trame, non exécutée. À adapter aux contrôles du dépôt.
-name: deployer
-on: { push: { branches: [main] } }
+# Trame de déploiement Firebase (Mission 1, tâche T2). Non activée dans .github/workflows/.
+# Prérequis : dossier web/ (page d'entrée privée), secrets AUTHORIZED_EMAIL et FIREBASE_SERVICE_ACCOUNT,
+# variable de dépôt FIREBASE_PROJECT_ID. Formule Blaze sans plafond strict : garder privé tant que la
+# consommation n'est pas mesurée sous tuilage spatial (< 30 Mo à l'ouverture).
+name: Déployer (exemple)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploiement-firebase
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   deployer:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: python3 app/build.py
-      - run: for f in app/test/*.test.js; do node "$f" || exit 1; done
-      - run: sed "s/__AUTHORIZED_EMAIL__/${AUTHORIZED_EMAIL}/" infra/storage.rules.tpl > infra/storage.rules
-        env: { AUTHORIZED_EMAIL: "${{ secrets.AUTHORIZED_EMAIL }}" }
-      - run: echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/cle.json"
-        env: { FIREBASE_SERVICE_ACCOUNT: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" }
-      - run: npx --yes firebase-tools@13 deploy --only hosting,storage --project "${{ vars.FIREBASE_PROJECT_ID }}" --config infra/firebase.json
-        env: { GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/cle.json" }
+        with:
+          node-version: "22"
+      - name: Vérifier les prérequis de déploiement
+        shell: bash
+        env:
+          AUTHORIZED_EMAIL: "${{ secrets.AUTHORIZED_EMAIL }}"
+          FIREBASE_PROJECT_ID: "${{ vars.FIREBASE_PROJECT_ID }}"
+          FIREBASE_SERVICE_ACCOUNT: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+        run: |
+          test -d web || { echo "Dossier web/ absent (tâche T2 non prête)"; exit 1; }
+          test -n "$AUTHORIZED_EMAIL" || { echo "Secret AUTHORIZED_EMAIL vide"; exit 1; }
+          test -n "$FIREBASE_PROJECT_ID" || { echo "Variable FIREBASE_PROJECT_ID vide"; exit 1; }
+          test -n "$FIREBASE_SERVICE_ACCOUNT" || { echo "Secret FIREBASE_SERVICE_ACCOUNT vide"; exit 1; }
+      - name: Construire et tester la page
+        shell: bash
+        run: |
+          python3 app/build.py
+          printf '%s\n' app/test/*.test.js | xargs -P 4 -n 1 node
+      - name: Générer les règles Storage sans injection sed
+        shell: bash
+        env:
+          AUTHORIZED_EMAIL: "${{ secrets.AUTHORIZED_EMAIL }}"
+        run: |
+          python3 -c '
+          import os, pathlib
+          email = os.environ["AUTHORIZED_EMAIL"].strip()
+          assert "@" in email and "\n" not in email and "\x27" not in email
+          tpl = pathlib.Path("infra/storage.rules.tpl").read_text(encoding="utf-8")
+          pathlib.Path("infra/storage.rules").write_text(tpl.replace("__AUTHORIZED_EMAIL__", email), encoding="utf-8")
+          '
+      - name: Déployer Hosting et Storage
+        shell: bash
+        env:
+          FIREBASE_PROJECT_ID: "${{ vars.FIREBASE_PROJECT_ID }}"
+          FIREBASE_SERVICE_ACCOUNT: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/cle.json"
+          chmod 600 "$RUNNER_TEMP/cle.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/cle.json" \
+            npx --yes firebase-tools@13.35.1 deploy \
+              --only hosting,storage \
+              --project "$FIREBASE_PROJECT_ID" \
+              --config infra/firebase.json
+          rm -f "$RUNNER_TEMP/cle.json" infra/storage.rules
+      - name: Contrôle d'accès privé (Storage doit renvoyer HTTP 403 sans connexion)
+        shell: bash
+        env:
+          FIREBASE_PROJECT_ID: "${{ vars.FIREBASE_PROJECT_ID }}"
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://firebasestorage.googleapis.com/v0/b/${FIREBASE_PROJECT_ID}.appspot.com/o/app%2Findex.html?alt=media")
+          echo "Storage sans connexion -> HTTP $code"
+          test "$code" = "403"

@@ -78,24 +78,23 @@ inline bool eclipticToBody(int naif, double days, Mat3& out) {
 
 // Longitude (est positif) et latitude, en degrés, du point de l'astre situé sous une direction donnée (repère écliptique).
 inline void subPoint(const Mat3& m, double dx, double dy, double dz, double& lonDeg, double& latDeg) {
+    lonDeg = 0.0;
+    latDeg = 0.0;
+    if (!std::isfinite(dx) || !std::isfinite(dy) || !std::isfinite(dz)) return;
+    /* Mise à l'échelle AVANT la rotation : la plus grande composante vaut 1, donc ni débordement (1e308) ni
+       sous-dépassement (1e-300) dans le produit matrice-vecteur et la norme. */
+    const double scale = std::max({std::fabs(dx), std::fabs(dy), std::fabs(dz)});
+    if (!(scale > 0.0)) return;
+    dx /= scale;
+    dy /= scale;
+    dz /= scale;
     const double bx = m.m[0][0] * dx + m.m[0][1] * dy + m.m[0][2] * dz;
     const double by = m.m[1][0] * dx + m.m[1][1] * dy + m.m[1][2] * dz;
     const double bz = m.m[2][0] * dx + m.m[2][1] * dy + m.m[2][2] * dz;
-    if (!std::isfinite(bx) || !std::isfinite(by) || !std::isfinite(bz)) {
-        lonDeg = 0.0;
-        latDeg = 0.0;
-        return;
-    }
-    const double scale = std::max({std::fabs(bx), std::fabs(by), std::fabs(bz)});
-    if (!(scale > 0.0)) {
-        lonDeg = 0.0;
-        latDeg = 0.0;
-        return;
-    }
-    const double sx = bx / scale, sy = by / scale, sz = bz / scale;
-    const double n = std::sqrt(sx * sx + sy * sy + sz * sz);
-    lonDeg = std::atan2(sy, sx) / kDeg;
-    latDeg = std::asin(std::clamp(sz / n, -1.0, 1.0)) / kDeg;
+    const double n = std::sqrt(bx * bx + by * by + bz * bz);
+    if (!std::isfinite(n) || !(n > 0.0)) return;
+    lonDeg = std::atan2(by, bx) / kDeg;
+    latDeg = std::asin(std::clamp(bz / n, -1.0, 1.0)) / kDeg;
 }
 
 }  // namespace ori

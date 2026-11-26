@@ -61,11 +61,20 @@
   const M31_MEAS = [['Gaia, 2025', [28.4, -109.8, 41.4]], ['Hubble, 2012', [44.1, -118.0, 3.1]], ['Gaia, 2021', DATA.M31.vel]];
   const vtOf = V => { const P = DATA.M31.pos, d = Math.hypot(P[0], P[1], P[2]), vr = (V[0] * P[0] + V[1] * P[1] + V[2] * P[2]) / d; return Math.hypot(V[0] - vr * P[0] / d, V[1] - vr * P[1] / d, V[2] - vr * P[2] / d); };
   const DTAB = dynTables(); let LMCO = lmcOrbit(); andromedaAt(LMCO, 0, MAG.r0);
-  /* R10 : centres du calcul complet de la fusion, chargés à part ; valables pour la vitesse « Gaia, 2025 » et la cosmologie de Planck seulement. */
-  const FUS_URL = window.__FUSC !== undefined ? window.__FUSC : '/_blob/6973105923eaef7cf421a368d7c74833', FUS_M33 = 2;
-  const FUSI_URL = window.__FUSI !== undefined ? window.__FUSI : '/_blob/4d3b29d19c3f56f3030e0dd222c9d200';
-  let fusiP = null; const fusiStart = () => { if (fusiP || !FUSI_URL) return; fusiP = fetch(FUSI_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(fusImagesInit).catch(e => { console.warn('Images du calcul de la fusion non chargées :', e.message); fusiP = null; }); };
-  const fusFetch = pk => fetch(pk.url || pk.fichier).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
+  /* R10 / G2 / S : manifeste centralisé des ressources externes (surchargeable par window.__ASSETS ou variables héritées window.__*). */
+  const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const safeAssetUrl = u => { if (!u || typeof u !== 'string') return ''; const t = u.trim(); return /^(https?:|\/|\.\.?\/|[A-Za-z0-9_.-]+\/)/.test(t) ? t : ''; };
+  const ASSET_BASE = (window.__ASSETS && window.__ASSETS.base) || '/_blob/';
+  const assetUrl = (key, id, legacy) => {
+    if (legacy !== undefined) return legacy ? safeAssetUrl(String(legacy)) : '';
+    if (window.__ASSETS && window.__ASSETS[key] !== undefined) return window.__ASSETS[key] ? safeAssetUrl(String(window.__ASSETS[key])) : '';
+    return safeAssetUrl(ASSET_BASE + id);
+  };
+  const FUS_URL = assetUrl('fusc', '6973105923eaef7cf421a368d7c74833', window.__FUSC), FUS_M33 = 2;
+  const FUSI_URL = assetUrl('fusi', '4d3b29d19c3f56f3030e0dd222c9d200', window.__FUSI);
+  let fusiP = null, fusiFailed = false;
+  const fusiStart = () => { if (fusiP || fusiFailed || !FUSI_URL) return; fusiP = fetch(FUSI_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(fusImagesInit).catch(e => { console.warn('Images du calcul de la fusion non chargées :', e.message); fusiFailed = true; fusiP = null; }); };
+  const fusFetch = pk => { const u = safeAssetUrl(pk.url || pk.fichier); if (!u) return Promise.reject(new Error('URL invalide')); return fetch(u).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }); };
   /* R10 : nuage de points des étoiles du calcul complet (couleurs et éclats empruntés aux modèles de la page, galaxie par galaxie) */
   function repInit() { const NS = FUSI.NS, c = FUSI.cnt, D = { n: NS, out: new Float32Array(NS * 3), col: new Float32Array(NS * 3), look: new Float32Array(NS * 2), boost: clamp(Math.sqrt(Q.gal / c.mw), 1, 2.4), rep: true }; let k = 0;
     for (const [g, n] of [[G.gal, c.mw], [G.m31dyn, c.m31], [G.m31dyn, c.m33], [G.gal, c.lmc]]) { const gN = g.pos.length / 3; for (let i = 0; i < n; i++, k++) { const j = i % gN; D.col.set(g.col.subarray(j * 3, j * 3 + 3), k * 3); D.look.set(g.look.subarray(j * 2, j * 2 + 2), k * 2); } }
@@ -79,7 +88,7 @@
     return D; }
   const fusAuto = () => tier === 2 || TL.on;      /* 80 Mo d'images : automatique sur ordinateur, à la demande sur téléphone (panneau Affichage) */
   /* G2 : orbites des planètes sur des millions d'années (table de pipeline/gravite/build_long.js, fichier joint), chargées la première fois qu'on s'éloigne de plus de 2 500 ans */
-  const NBL = { url: window.__NBL !== undefined ? window.__NBL : '/_blob/725049663be0ece860394ad7524b349e', p: null };
+  const NBL = { url: assetUrl('nbl', '725049663be0ece860394ad7524b349e', window.__NBL), p: null };
   const nblStart = () => { if (NBL.p || !NBL.url || NB_LONG) return; NBL.p = fetch(NBL.url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(t => { const b = b64ToBytes(t.trim()); nbLongLoad(b.buffer.slice(b.byteOffset, b.byteOffset + b.length)); NBL.p = null; }).catch(e => { console.warn('Orbites à long terme non chargées :', e.message); NBL.p = null; NBL.url = null; }); };
   const fusOk = () => !!FUSC && S.m31V === M31_MEAS[0][1] && Math.abs(S.vt - vtOf(M31_MEAS[0][1])) < 0.5 && ['H0', 'Om', 'OL', 'w'].every(k => S.par[k] === PLANCK[k]);
   if (FUS_URL) fetch(FUS_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { fusLoad(j); orbitDirty = true; }).catch(e => console.warn('Calcul complet de la fusion non chargé :', e.message));      /* sans le fichier : la page garde ses propres orbites */
@@ -213,7 +222,7 @@
     ML('portée de l’interaction faible', 'weak', -18.35, -16.95, { center: true }); ML('aucune structure observée en dessous', 'lim', -19.15, -17.7, { center: true }); ML('détail le plus fin sondé (ordre de grandeur)', 'lhc', -20.5, -19.0, { center: true });
     }
   for (const tag of ['AST', 'TNO']) { const B = Rr[tag], ast = tag === 'AST';
-    for (const l of DATA[tag + '_LABELS']) if (l.i < B.count) addLabel(l.n, '', l.p + 0.4, ast ? 11.05 : 12.35, ast ? 12.75 : 14.5, () => [B.pos[l.i * 3] * AU, B.pos[l.i * 3 + 1] * AU, B.pos[l.i * 3 + 2] * AU], { gate: () => (ast ? Rr.beltVis : Rr.kuiperVis) }); }
+    for (const l of DATA[tag + '_LABELS']) if (l.i < B.count) addLabel(l.n, '', l.p + 0.4, ast ? 11.05 : 12.35, ast ? 12.75 : 14.5, () => [B.pos[l.i * 3] * AU * F.orb, B.pos[l.i * 3 + 1] * AU * F.orb, B.pos[l.i * 3 + 2] * AU * F.orb], { gate: () => (ast ? Rr.beltVis : Rr.kuiperVis) }); }
   addLabel('Soleil', 'here', 0, 14.75, 21.6, () => [0, 0, 0]);
   { const want = { '1P/Halley': 'Comète de Halley', '2P/Encke': 'Comète Encke', '67P/Churyumov-Gerasimenko': 'Comète Tchouri (67P)', '109P/Swift-Tuttle': 'Comète Swift-Tuttle', 'C/1995 O1 (Hale-Bopp)': 'Comète Hale-Bopp' }, B = Rr.COM;
     DATA.COM_NAMES.split('|').forEach((n, i) => { if (want[n]) addLabel(want[n], '', 3.4, 11.4, 14.6, () => [B.pos[i * 3] * AU * F.orb, B.pos[i * 3 + 1] * AU * F.orb, B.pos[i * 3 + 2] * AU * F.orb], { gate: () => Rr.comVis }); }); }
@@ -269,11 +278,11 @@
   const MOJ = DATA.LUNES_JUP ? moTrack(MO_JUP, DATA.LUNES_JUP.s, DATA.LUNES_JUP.jd, 3652.5) : null, MOJN = { Io: 0, Europe: 1, 'Ganymède': 2, Callisto: 3 };
   let mojPos = null, mojOn = false;
   function updateMoons() { F.moonC = F.moonC || {}; const yr = yearOf(F.jd);
-    mojPos = MOJ && !S.moonOff ? MOJ.at(F.jdM + deltaT((F.jdM - JD_J2000) / 36525) / DAY_S, 10) : null; mojOn = !!mojPos;
+    mojPos = MOJ && !S.moonOff && S.logR < 16.5 ? MOJ.at(F.jdM + deltaT((F.jdM - JD_J2000) / 36525) / DAY_S, 10) : null; mojOn = !!mojPos;
     for (const t of kSets) { const c = cenOf(t.cen); F.moonC[t.key] = c; if (!c) continue; t.idx.forEach((k, j) => { const m = KO[k]; m.off = m.kind === 'probe' ? (m.tab ? F.jd < m.tab.jd0 : yr < m.from) : m.kind === 'exo' ? !m.on : m.kind === 'moon' && (!!F.eng[m.p] || (m.n === 'Phobos' && S.ty > FATE.phobos * 1e9) || (m.n === 'Triton' && S.ty > FATE.triton * 1e9) || S.ty < -4.5e9); let xy = m.off ? [0, 0] : solveKO(m, m.kind === 'probe' ? F.jd : m.kind === 'sstar' ? F.jdS : F.jdM); if (m.prec) { const f = m.prec * (yr - m.tp), cf = Math.cos(f), sf = Math.sin(f); xy = [xy[0] * cf - xy[1] * sf, xy[0] * sf + xy[1] * cf]; }      // précession relativiste : l'ellipse tourne lentement dans son plan
         let rx = m.P[0] * xy[0] + m.Q[0] * xy[1], ry = m.P[1] * xy[0] + m.Q[1] * xy[1], rz = m.P[2] * xy[0] + m.Q[2] * xy[1]; if (m.tab && !m.off && F.jd < m.tab.jd1) { const pt = probeTab(m, F.jd, rx, ry, rz); rx = pt[0]; ry = pt[1]; rz = pt[2]; }      // avant le dernier survol : trajectoire réelle
         if (mojPos && m.kind === 'moon' && m.p === 'jupiter' && MOJN[m.n] !== undefined && !m.off) { const q = MOJN[m.n] * 6, f = 1e3 / AU; rx = mojPos[q] * f; ry = mojPos[q + 1] * f; rz = mojPos[q + 2] * f; }      /* position calculée en gravité mutuelle */
-        if (m.off && m.kind === 'moon') rx = ry = rz = NaN; t.rel[j * 3] = rx; t.rel[j * 3 + 1] = ry; t.rel[j * 3 + 2] = rz; kPos[k * 3] = c[0] + rx * AU; kPos[k * 3 + 1] = c[1] + ry * AU; kPos[k * 3 + 2] = c[2] + rz * AU; }); } }
+        t.look[j * 2 + 1] = m.off ? 0 : 1; if (m.off && m.kind === 'moon') rx = ry = rz = 0; t.rel[j * 3] = rx; t.rel[j * 3 + 1] = ry; t.rel[j * 3 + 2] = rz; kPos[k * 3] = c[0] + rx * AU; kPos[k * 3 + 1] = c[1] + ry * AU; kPos[k * 3 + 2] = c[2] + rz * AU; }); } }
   { const SL = ['S1', 'S2', 'S4', 'S8', 'S9', 'S12', 'S13', 'S14', 'S38', 'S55'];
     KO.forEach((m, k) => { const t = KSETS[m.kind + ':' + m.p], l = Math.log10(m.aAU * AU), get = () => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]];
       if (m.kind === 'moon') addLabel(m.n, '', m.small ? 4 : 3.2, l - 0.8, l + (m.small ? 0.7 : 0.95), get, { gate: () => (m.off ? 0 : t.vis) });
@@ -545,13 +554,14 @@
     if (st.cls[i] === 0 || st.src[i]) r.push(['Fin de la séquence principale', lo > 0 || hi > 0 ? 'entre ' + when(Math.min(lo, hi)) + ' et ' + when(Math.max(lo, hi)) + ' (modèles d’évolution MIST)' : 'déjà passée']);
     if (m >= SN_UNC && m < SN_MIN) r.push(['Fin de vie', 'naine blanche ou supernova : inconnu à cette masse (limite discutée, entre 7 et 9 fois le Soleil)']);
     return r; }
-  const FLAME_URL = window.__FLAME !== undefined ? window.__FLAME : '/_blob/fa99f6d36d21cec7344dae6d6b7fbae5';
+  const FLAME_URL = assetUrl('flame', 'fa99f6d36d21cec7344dae6d6b7fbae5', window.__FLAME);
   if (FLAME_URL) fetch(FLAME_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(t => { flameLoad(t); Rr.relife(); if (S.sel) renderCard(); }).catch(e => console.warn('Âges Gaia non chargés :', e.message));
   function selStar(i) {
-    const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i], L = [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]], fate = st.fate[i];
+    const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i];
+    const lifeOf = () => [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]];
     const get = () => [sp[i * 3] * LY, sp[i * 3 + 1] * LY, sp[i * 3 + 2] * LY]; if (!Rr.keyStars.includes(i)) Rr.keyStars.push(i);
-    return { exoI: STAREXO[i] >= 0 ? STAREXO[i] : undefined, exoC: true, lr: STAREXO[i] >= 0 ? exoLr(STAREXO[i]) : undefined, name: DATA.STAR_NAMES[i] || (hip ? 'HIP ' + hip : 'Étoile sans nom'), exist: () => starState(L, fate), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
-      const d = vlen(get()), t = F.tMyr, sn = fate === 1 || fate === 3, lum = Math.pow(10, 0.4 * (4.83 - MV));
+    return { exoI: STAREXO[i] >= 0 ? STAREXO[i] : undefined, exoC: true, lr: STAREXO[i] >= 0 ? exoLr(STAREXO[i]) : undefined, name: DATA.STAR_NAMES[i] || (hip ? 'HIP ' + hip : 'Étoile sans nom'), exist: () => starState(lifeOf(), st.fate[i]), sub: 'Étoile ' + STAR_CLASS[st.cls[i]] + ', type ' + bvSpectral(bv), get, rows: () => {
+      const L = lifeOf(), fate = st.fate[i], d = vlen(get()), t = F.tMyr, sn = fate === 1 || fate === 3, lum = Math.pow(10, 0.4 * (4.83 - MV));
       const fut = fate === 4 || (!sn && t >= L[2]) ? 'naine blanche qui refroidit' : sn && t >= L[2] ? 'a explosé en supernova' : sn ? 'supernova ' + inTime((L[2] - t) * 1e6) : t < L[1] ? 'géante rouge ' + inTime((L[1] - t) * 1e6) + ', puis naine blanche' : 'naine blanche ' + inTime((L[2] - t) * 1e6);
       return starTag([['Distance', fmtDist(d)], ['Éclat', fmtTimes(lum) + ' le Soleil'], ['Température', nf(Math.round(bvTemp(bv) / 50) * 50, 0) + NBSP + 'K'], ['Masse estimée', sig(st.mass[i], 2) + NBSP + 'fois le Soleil'], ['Vitesse', Rr.K.vkms[i] > 0 ? (noRV(get(), kvOf(Rr.K, i)) ? 'au moins ' : '') + sig(Rr.K.vkms[i], 3) + NBSP + 'km/s par rapport au Soleil' + (noRV(get(), kvOf(Rr.K, i)) ? ' (vitesse radiale non mesurée)' : '') : 'non mesurée'], ['Mouvement', orbMotionText(Rr.K, i, F.tEff, false)], ['Poussière devant elle', dustRow(Rr.starPos, i)], ['Avenir estimé', fut]].concat(hip ? [['Catalogue', 'HIP ' + hip]] : [], lifeRows(st, i, L, t), passRows(i), starExtra(get(), kvOf(Rr.K, i), MV, bv), STAREXO[i] >= 0 ? [['Planètes connues', EXOP[STAREXO[i]] + ' : « Y aller » pour les voir tourner autour de l’étoile']].concat(exoRows(STAREXO[i]).map(r => [r[0], r[1], 'm'])) : [])); }, get src() { const o = (Rr.passers || []).find(q => q.idx === i); return STAR_SRC(i >= DATA.STARS_N ? 'Gaia DR3, d’après Bailer-Jones 2022' : 'catalogue HYG (Hipparcos, Yale, Gliese)', { exo: STAREXO[i] >= 0, pass: o ? o.src || 'Bailer-Jones 2022 (Gaia DR3)' : '' }); } };
   }
@@ -648,7 +658,7 @@
   function selSgrA() { const M = Math.pow(10, DATA.SGRA_LOGM || 6.63), get = () => [F.gcRel[0], F.gcRel[1], F.gcRel[2]];
     return { name: 'Sagittarius A*', sub: 'Trou noir supermassif au centre de la Voie lactée', get, rows: () => [['Distance', fmtDist(vlen(get()))], ['Masse', bigMass(M)], ['Horizon', horizon(M)], ['Mesuré par', 'le mouvement des étoiles autour de lui'], ['Le Soleil en fait le tour en', fmtYears(TAU * GAL.R0 / (vCirc(GAL.R0, true) * KMS_KPC_GYR) * 1e9) + ' environ'], ['À voir de près', 'centre la vue ici puis zoome jusqu’à quelques jours-lumière : 39 étoiles tournent autour de lui sur leur orbite mesurée'], ['Lumière déviée', 'calculée à moins de ' + horizonX(M) + ' : ombre, anneau de photons, images doubles. Trou noir supposé sans rotation (non mesurée sûrement). Aucun disque de gaz dessiné : l’anneau de l’image EHT, qui en est la lumière, n’apparaît pas. Les noms restent à leur place non déviée. Les étoiles proches sont traitées comme si elles étaient très loin. À moins d’une fois et demie la taille de l’horizon : non calculé']].concat(bhExtra(M, get(), true)) }; }
   const horizonX = M => fmtDist(1e7 * GM_C2_SUN * M);      /* S6 : distance d'allumage de la lentille (LENS_RON dans 40_render.js) */
-  function loadAstNames() { if (!TL.astP) { const m = TL.list.find(m => m.kind === 'ast' && (m.names || m.namesUrl)); TL.astP = m ? fetch(m.namesUrl || ('/_blob/' + m.names)).then(r => r.text()).then(t => { TL.astN = t.split('\n'); FIDX = null; }).catch(() => {}) : Promise.resolve(); } return TL.astP; }
+  function loadAstNames() { if (!TL.astP) { const m = TL.list.find(m => m.kind === 'ast' && (m.names || m.namesUrl)); const u = m ? safeAssetUrl(m.namesUrl || (ASSET_BASE + m.names)) : ''; TL.astP = u ? fetch(u).then(r => r.text()).then(t => { TL.astN = t.split('\n'); FIDX = null; }).catch(() => {}) : Promise.resolve(); } return TL.astP; }
   function selAstT(T, i) { const j = i * 3, e = T.el[j], P = [T.pos[j], T.pos[j + 1], T.pos[j + 2]], Q = [T.q[j], T.q[j + 1], T.q[j + 2]], a = Math.hypot(P[0], P[1], P[2]), bq = Math.hypot(Q[0], Q[1], Q[2]), H = T.H[i], inc = Math.acos(clamp((P[0] * Q[1] - P[1] * Q[0]) / (a * bq), -1, 1)) / DEG;
     const get = () => { const E = keplerE(wrapPi(T.el[j + 1] + T.el[j + 2] * (F.jd - T.epoch)), e), x = Math.cos(E) - e, y = Math.sin(E), k = AU * (F.orb || 1); return [(P[0] * x + Q[0] * y) * k, (P[1] * x + Q[1] * y) * k, (P[2] * x + Q[2] * y) * k]; };
     const nm = () => { const t = TL.astN ? TL.astN[i] : null; if (!t) return 'Astéroïde'; const q = t.split('~'); return q[0] ? q[0] + ' (' + q[1] + ')' : 'Astéroïde ' + q[1]; };
@@ -672,7 +682,7 @@
   const CFIX = {}; { const fx = DATA.COM_FIX || {}; for (const k in fx) { const i = COMN.indexOf(k); if (i >= 0 && fx[k].next) CFIX[i] = fx[k].next; } }
   function selComet(i) {
     const B = Rr.COM, a = B.a[i], e = B.e[i], Pd = TAU / B.n[i], get = () => [B.pos[i * 3] * AU * F.orb, B.pos[i * 3 + 1] * AU * F.orb, B.pos[i * 3 + 2] * AU * F.orb];
-    return sbAdapt({ name: COMN[i] || 'Comète', sub: COM_FR[DATA.COM_CLSN[COMC[i]]] || 'Comète', get, orbit: { e, P: [a * B.P[i * 3], a * B.P[i * 3 + 1], a * B.P[i * 3 + 2]], Q: [a * Math.sqrt(1 - e * e) * B.Q[i * 3], a * Math.sqrt(1 - e * e) * B.Q[i * 3 + 1], a * Math.sqrt(1 - e * e) * B.Q[i * 3 + 2]] }, rows: () => { const nx = B.tp[i] + Math.ceil((F.days - B.tp[i]) / Pd) * Pd;
+    return sbAdapt({ name: COMN[i] || 'Comète', sub: COM_FR[DATA.COM_CLSN[COMC[i]]] || 'Comète', get, orbit: { e, P: [B.P[i * 3], B.P[i * 3 + 1], B.P[i * 3 + 2]], Q: [B.Q[i * 3], B.Q[i * 3 + 1], B.Q[i * 3 + 2]] }, rows: () => { const nx = B.tp[i] + Math.ceil((F.days - B.tp[i]) / Pd) * Pd;
       return [['Distance au Soleil', sig(vlen(get()) / AU, 4) + NBSP + 'UA'], ['Orbite', 'de ' + sig(a * (1 - e), 3) + ' à ' + sig(a * (1 + e), 3) + NBSP + 'UA'], ['Inclinaison', sig(B.inc[i] / DEG, 3) + '°'], ['Excentricité', sig(e, 4)], ['Un tour du Soleil', fmtYears(Math.pow(a, 1.5))], ['Vitesse actuelle', sig(orbSpeed(vlen(get()) / AU / (F.orb || 1), a), 3) + NBSP + 'km/s'],
         ['Prochain passage près du Soleil', CFIX[i] && Math.abs(S.ty) < 20 && F.jd < CFIX[i] ? jdDate(CFIX[i]) + ' (calcul du JPL, attraction des planètes comprise)' : Math.abs(S.ty) < 3000 ? 'vers ' + Math.round(2000 + nx / 365.25) + ' (sans l’attraction des planètes)' : 'non suivi aussi loin dans le temps']]; } }, sbComet(B, i));
   }
@@ -841,7 +851,10 @@
     else { const s = F.sun; $('card-sub').textContent = body.info; rows = body.key === 'sun' ? [['État à cette date', s.phase], ['Rayon', sig(s.R, 3) + NBSP + 'fois l’actuel'], ['Éclat', sig(s.L, 3) + NBSP + 'fois l’actuel'], ['Température', nf(Math.round(s.T / 10) * 10, 0) + NBSP + 'K'], ['Masse', sig(s.M, 3) + NBSP + 'fois l’actuelle']].concat(baryRow(), Math.abs(S.ty) < 1e6 ? sunFacts() : [])
       : body.key === 'moon' ? [['Distance à la Terre', nf(Math.round(vlen(sol.moonGeo) * AU / 1e5) * 100, 0) + NBSP + 'km'], ['Orbite', 'de 363 300 à 405 500 km en moyenne'], ['Excentricité', '0,055'], ['Un tour de la Terre', '27,3 jours'], ['Vitesse sur l’orbite', '1,02 km/s en moyenne']].concat(factRows('moon'), [['Retour de la même phase', 'tous les 29,5 jours'], ['S’éloigne de la Terre de', '3,8 cm par an']]) : planetRows(body.key).concat(factRows(body.key), F.eng[body.key] ? [['État à cette date', 'engloutie par le Soleil']] : []); }
     const keep = PHONE.matches ? 3 : 5, many = rows.length > keep + 1, shown = many && !S.more ? rows.slice(0, keep) : rows, dl = $('card-dl'), top = dl.scrollTop; $('card-more').hidden = !many; if (many) $('card-more').textContent = S.more ? 'Réduire' : 'Tout voir (' + (rows.length - keep) + ')';
-    $('card').classList.toggle('more', many && !!S.more); $('card-title').hidden = !sel && !(mic && mic.rows); const src = sel && sel.src; dl.innerHTML = src && S.more ? ['m', 'c', 's'].map(k => { const g = rows.filter(r => r[2] === k); return g.length ? '<dt class="grp">' + ST_H[k] + '</dt>' + g.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join('') + '<dd class="src">Source : ' + src[k] + '</dd>' : ''; }).join('') : shown.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join(''); dl.scrollTop = top;
+    const safeVal = v => { const s = String(v); return /^<svg[\s>]|<br><svg[\s>]|<sup>/.test(s) && !/<script|on\w+\s*=/i.test(s) ? s : escHtml(s); };
+    $('card').classList.toggle('more', many && !!S.more); $('card-title').hidden = !sel && !(mic && mic.rows); const src = sel && sel.src;
+    const html = src && S.more ? ['m', 'c', 's'].map(k => { const g = rows.filter(r => r[2] === k); return g.length ? '<dt class="grp">' + escHtml(ST_H[k]) + '</dt>' + g.map(r => '<dt>' + escHtml(r[0]) + '</dt><dd>' + safeVal(r[1]) + '</dd>').join('') + '<dd class="src">Source : ' + escHtml(src[k]) + '</dd>' : ''; }).join('') : shown.map(r => '<dt>' + escHtml(r[0]) + '</dt><dd>' + safeVal(r[1]) + '</dd>').join('');
+    if (html !== lastCard) { lastCard = html; dl.innerHTML = html; dl.scrollTop = top; }
     $('card-center').hidden = !sel; $('card-close').hidden = !sel; $('card-back').hidden = !!sel; $('card-center').textContent = sel && sel.isEvent ? 'Revoir' : 'Y aller';
     if (card.hidden) card.hidden = false;
   }
@@ -849,7 +862,7 @@
   /* ---- le temps : événements réels, frise, dates ----
      Chaque événement porte sa date (mesurée, datée ou calculée ici), sa source et son degré de certitude.
      Avant le 15 octobre 1582, les dates sont données dans le calendrier julien, celui des chroniques. */
-  const closest = (name, t0, t1, st) => { const l = DATA.STAR_LABELS.find(l => l.n === name), o = new Float32Array(Rr.star.N * 3); let b = [0, 1e9]; if (!l) return b; for (let t = t0; t <= t1; t += st) { starPositions(Rr.K, t, t / 1e9, o, l.i, l.i + 1); const d = Math.hypot(o[l.i * 3], o[l.i * 3 + 1], o[l.i * 3 + 2]); if (d < b[1]) b = [t, d]; } return b; };
+  const closest = (name, t0, t1, st) => { const l = DATA.STAR_LABELS.find(l => l.n === name), o = [0, 0, 0]; let b = [0, 1e9]; if (!l) return b; for (let t = t0; t <= t1; t += st) { starPosOne(Rr.K, l.i, t, t / 1e9, o); const d = Math.hypot(o[0], o[1], o[2]); if (d < b[1]) b = [t, d]; } return b; };
   const EV_AC = closest('Alpha du Centaure', 0, 6e4, 100), EV_GL = closest('Gliese 710', 1.0e6, 1.6e6, 500);
   const EVCAT = { U: 'Univers', G: 'Voie lactée et étoiles', S: 'Système solaire', T: 'Terre et vie', H: 'Ciel observé et exploration', O: 'Ondes gravitationnelles' }, EVCONF = { C: 'Certain', P: 'Probable', S: 'Supposition (modèle ou estimation)', V: 'Contesté, à vérifier' };
   const isoJd = s => { const jul = s[0] === 'J', m = (jul ? s.slice(1) : s).match(/^(-?\d+)-(\d\d)-(\d\d)(?:T(\d\d):(\d\d))?$/); return jdFromCal(+m[1], +m[2], +m[3], jul) + (m[4] ? (+m[4] + (+m[5]) / 60) / 24 : 0.5); };
@@ -1382,7 +1395,7 @@
   function photoInit(p) { const c = p.get(), d = vlen(c) || 1, r = [c[0] / d, c[1] / d, c[2] / d]; p.half = d * p.tanH; p.e = vnorm(vcross(p.pole, r)); p.n = vcross(r, p.e); p.l = r; }      // est et nord sur le ciel, vus du Soleil
   function photoNear(o) { if (!PH.length || !o || !o.get || !F.gcRel) return null; const q = o.get(); let best = null, bd = 1e99; for (const p of PH) { if (!p.half) photoInit(p); const c = p.get(), d = Math.hypot(c[0] - q[0], c[1] - q[1], c[2] - q[2]); if (d < Math.max(0.3 * p.half, 6e19) && d < bd) { bd = d; best = p; } } return best; }
   function updatePhotos() { F.photos = null; F.photoHide = null; F.m31Hide = 0; if (!PH.length || S.logR < 18.6 || Math.abs(S.ty) > 2e7) return;
-    if (!PHL.req) { PHL.req = true; Rr.loadPhotos((window.__PHOTOS || PHOTO_MANIFEST).map(u => (/[./]/.test(u) ? u : '/_blob/' + u))); }
+    if (!PHL.req) { PHL.req = true; Rr.loadPhotos((window.__PHOTOS || (window.__ASSETS && window.__ASSETS.photos) || PHOTO_MANIFEST).map(u => safeAssetUrl(/[./]/.test(u) ? u : ASSET_BASE + u)).filter(Boolean)); }
     const R = Math.pow(10, S.logR), tg = F.tg, L = [], age = fadeOut(Math.abs(S.ty), 5e6, 2e7);
     for (const p of PH) { if (p.c && p.c.gone) continue; if (!p.half) photoInit(p); const sz = p.half / R; if (sz < 0.03 || sz > 60) continue; const c = p.get(), d = Math.hypot(c[0] - tg[0], c[1] - tg[1], c[2] - tg[2]); if (d - p.half > 2.4 * R) continue;
       L.push({ c, e: p.e, n: p.n, l: p.l, id: p.id, g3: p.g3, gray: p.gray, tier: Q.gal > 150000 ? 2 : Q.gal > 80000 ? 1 : 0, half: p.half, atlas: p.atlas, uv: p.uv, floor: p.floor, sz, op: smoothstep(0.03, 0.1, sz) * fadeOut(sz, 25, 60) * age, src: p }); }
@@ -1398,7 +1411,7 @@
      déplacement. Une galaxie que la page a déjà (galaxies proches, Groupe local, hôtes de trous noirs supermassifs) renvoie à sa fiche de la page. */
   const NGC = { list: null, p: null }, NGC_ZMIN = 0.01, NGC_EPS = 23.4392911 * DEG;
   const NGCT = { G: 'galaxie', GPair: 'paire de galaxies', GTrpl: 'triplet de galaxies', GGroup: 'groupe de galaxies', OCl: 'amas ouvert', GCl: 'amas globulaire', 'Cl+N': 'amas et nébuleuse', PN: 'nébuleuse planétaire', HII: 'région HII', EmN: 'nébuleuse en émission', RfN: 'nébuleuse par réflexion', Neb: 'nébuleuse', SNR: 'reste de supernova', Nova: 'nova', '*': 'étoile', '**': 'étoile double', '*Ass': 'association d’étoiles', Other: 'autre objet' };
-  function loadNgc() { if (!NGC.p) { const src = window.__NGC !== undefined ? window.__NGC : '/_blob/d108b6f5ff5be725f09a03babd3a5205';
+  function loadNgc() { if (!NGC.p) { const src = assetUrl('ngc', 'd108b6f5ff5be725f09a03babd3a5205', window.__NGC);
       NGC.p = src ? fetch(src).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { NGC.list = j.o; if (FIDX) addNgc(FIDX); return true; }).catch(() => { NGC.p = null; return false; })      /* un échec sera retenté au prochain clic */ : Promise.resolve(false); }
     return NGC.p; }
   function addNgc(X) { NGC.list.forEach((o, i) => { const ns = o[0].split(' · '), kind = (NGCT[o[1]] || 'objet') + (o[8] ? ' · fiche de la page' : ' · catalogue NGC/IC'), go = () => ngcGo(i);
@@ -1420,7 +1433,7 @@
   function ngcGo(i) { const L = NGC.list[i][8];
     if (L && L[0] === 'n' && NM.near[L[1]] !== undefined) { jump(selNear(L[1]), 22.6); return; }
     if (L && L[0] === 'b' && DATA.BHM.names[L[1]] !== undefined) { jump(selBHM(L[1]), 23.3); return; }      /* hôte d'un trou noir supermassif : distance mesurée */
-    if (L && L[0] === 'l') { const c = G.lg.centers.find(c => c.g.n === DATA.LOCAL[L[1]].n); if (c) { jump(selLG(c), 21.6); return; } }
+    if (L && L[0] === 'l' && DATA.LOCAL[L[1]]) { const c = G.lg.centers.find(c => c.g.n === DATA.LOCAL[L[1]].n); if (c) { jump(selLG(c), 21.6); return; } }
     const o = selNgc(i); if (o.placed) jump(o, o.lr); else { pushHist(); select(o); openPanel(null); } }
   function findIndex() { if (FIDX) return FIDX; const X = [], add = (name, kind, go) => { if (name) X.push([fold(name), name, kind, go]); }, lrOf = o => clamp(Math.log10(Math.hypot(o.orbit.P[0], o.orbit.P[1], o.orbit.P[2]) * AU * 2.4), 11.2, 14.6);
     for (const k in BODY) add(BODY[k].name, k === 'sun' ? 'étoile' : k === 'moon' ? 'lune de la Terre' : 'planète', () => { select(null); focusBody(k); openPanel(null); });
@@ -1446,12 +1459,12 @@
       top.push([i, v, d]); top.sort((a, b) => a[1] - b[1]); if (top.length > N) top.pop(); }
     const nm = i => DATA.STAR_NAMES[i] || (st.hip[i] ? 'HIP ' + st.hip[i] : 'Étoile sans nom'), now = Math.abs(S.ty) < 50;
     $('find-res').innerHTML = '<button type="button" data-g="back">← Retour</button><h3>' + (kind === 'near' ? 'Les 10 étoiles les plus proches' : 'Les 10 plus brillantes vues de la Terre') + '</h3><p class="hint">' + (now ? 'Aujourd’hui, d’après les distances et éclats mesurés' : 'À la date affichée : positions calculées d’après les vitesses mesurées, vitesse radiale comptée nulle quand elle n’est pas mesurée ; étoiles nées ou explosées d’après un modèle statistique') + ' (catalogue principal, ' + nf(st.N, 0) + ' étoiles, Soleil exclu ; les étoiles Gaia plus faibles ne sont pas comptées).</p>'
-      + top.map(t => '<button type="button" data-r="' + t[0] + '">' + nm(t[0]).replace(/</g, '&lt;') + '<small>' + (kind === 'near' ? fmtDist(t[2] * LY) : 'magnitude ' + nf(Math.round(t[1] * 10) / 10 || 0, 1).replace('-', '−')) + '</small></button>').join(''); }
-  const quickHTML = () => QUICK.map(g => '<h3>' + g[0] + '</h3><div class="chips">' + g[1].map(c => '<button type="button" data-g="' + c[1] + '">' + (c[0] === '1P/Halley' ? 'Comète de Halley' : c[0]) + '</button>').join('') + '</div>').join('');
+      + top.map(t => '<button type="button" data-r="' + t[0] + '">' + escHtml(nm(t[0])) + '<small>' + escHtml(kind === 'near' ? fmtDist(t[2] * LY) : 'magnitude ' + nf(Math.round(t[1] * 10) / 10 || 0, 1).replace('-', '−')) + '</small></button>').join(''); }
+  const quickHTML = () => QUICK.map(g => '<h3>' + escHtml(g[0]) + '</h3><div class="chips">' + g[1].map(c => '<button type="button" data-g="' + escHtml(c[1]) + '">' + escHtml(c[0] === '1P/Halley' ? 'Comète de Halley' : c[0]) + '</button>').join('') + '</div>').join('');
   function goName(n) { const X = findIndex(), q = fold(n); let best = -1; for (let i = 0; i < X.length; i++) { const t = X[i][0]; if (t === q) { best = i; break; } if (t.indexOf(q) === 0 && (best < 0 || t.length < X[best][0].length)) best = i; } if (best >= 0) X[best][3](); return best >= 0; }
   function findRun(txt) { const q = fold(txt), box = $('find-res'); if (q.length < 2) { box.innerHTML = quickHTML(); return []; } const X = findIndex(), a = [], b = [];
     for (let i = 0; i < X.length && a.length < 12; i++) { const p = X[i][0].indexOf(q); if (p === 0 || (p > 0 && X[i][0][p - 1] === ' ')) a.push(i); else if (p > 0 && b.length < 12) b.push(i); }
-    a.sort((x, y) => X[x][0].length - X[y][0].length); const res = a.concat(b).slice(0, 12); box.innerHTML = res.length ? res.map(i => '<button type="button" data-i="' + i + '">' + X[i][1].replace(/</g, '&lt;') + '<small>' + X[i][2] + '</small></button>').join('') : '<p class="hint">Rien trouvé à ce nom.</p>'; return res; }
+    a.sort((x, y) => X[x][0].length - X[y][0].length); const res = a.concat(b).slice(0, 12); box.innerHTML = res.length ? res.map(i => '<button type="button" data-i="' + i + '">' + escHtml(X[i][1]) + '<small>' + escHtml(X[i][2]) + '</small></button>').join('') : '<p class="hint">Rien trouvé à ce nom.</p>'; return res; }
   $('find-q').addEventListener('input', e => findRun(e.target.value));
   $('find-res').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const g = b.dataset.g; if (b.dataset.r) jump(selStar(+b.dataset.r), 16.4); else if (g === 'back') findRun(''); else if (g && g.startsWith('r:')) rankRun(g.slice(2)); else if (g && /^s\d+$/.test(g)) { pushHist(); select(null); const st = STOPS[+g.slice(1)]; goTo(st.logR, { az: st.az, el: st.el, focus: st.focus || 'sun', speed: st.speed, noHist: true }); openPanel(null); } else if (g) goName(g); else FIDX[+b.dataset.i][3](); });
   $('b-find').addEventListener('click', () => { loadAstNames(); loadNgc().then(ok => { if (ok && !$('p-find').hidden) findRun($('find-q').value); }); findRun($('find-q').value); if (matchMedia('(pointer:fine)').matches) setTimeout(() => { if (!$('p-find').hidden) $('find-q').focus(); }, 60); });
@@ -1464,7 +1477,7 @@
   function starTotal() { let n = Rr.star.N + Rr.star2.N; for (const T of Rr.tiles) if (T.kind === 'star') n += T.n; return n; }
   const nextFrame = () => new Promise(r => requestAnimationFrame(r));
   async function loadTile(m) {
-    m.state = 'load'; const res = await fetch(m.url || ('/_blob/' + m.id)); if (!res.ok) throw new Error('HTTP ' + res.status);
+    m.state = 'load'; const u = safeAssetUrl(m.url || (ASSET_BASE + m.id)); if (!u) throw new Error('URL invalide'); const res = await fetch(u); if (!res.ok) throw new Error('HTTP ' + res.status);
     const T = m.kind === 'star' ? Rr.addStarTile(m.n) : m.kind === 'ast' ? Rr.addAstTile(m.n) : Rr.addGalTile(m.n), rd = res.body && res.body.getReader ? res.body.getReader() : null, td = new TextDecoder(), rec = T.rec; m.T = T; let txt = '', carry = new Uint8Array(0);
     const feed = async by => { let b = by; if (carry.length) { b = new Uint8Array(carry.length + by.length); b.set(carry); b.set(by, carry.length); }      // au plus 18 000 objets par image : jamais plus de quelques millisecondes d'affilée
       let off = 0; while (b.length - off >= rec && T.n < T.cap) { const nr = Math.min(Math.floor((b.length - off) / rec), 18000, T.cap - T.n); T.append(b, off, nr); off += nr * rec; m.got = T.n; await nextFrame(); }
@@ -1511,8 +1524,11 @@
     if (n < 2) setTimeout(() => { try { location.reload(); } catch (err) {} }, 700); }
   canvas.addEventListener('webglcontextlost', onLost, false);
   { let rs = null; try { rs = JSON.parse(sessionStorage.getItem(REPRISE) || 'null'); } catch (err) {}
-    if (rs && Date.now() - rs.t < 60000) { S.logR = clamp(rs.lr, LMIN, LMAX); S.az = rs.az; S.el = rs.el; S.anim = null; if (rs.focus && rs.focus !== 'sun' && BODY[rs.focus]) setFocus(rs.focus, 0.01); if (isFinite(rs.ty)) S.hit = setTime(rs.ty); S.resumed = true;
-      if (rs.center) setTimeout(() => { const back = () => { S.anim = null; S.logR = clamp(rs.lr, LMIN, LMAX); S.az = rs.az; S.el = rs.el; };      // on retrouve l'objet suivi par son nom
+    if (rs && Date.now() - rs.t < 60000) {
+      try { sessionStorage.removeItem(REPRISE); } catch (err) {}
+      const loR = rs.focus === 'earth' && !rs.center ? LMICRO : LMIN;
+      S.logR = clamp(rs.lr, loR, LMAX); S.az = rs.az; S.el = rs.el; S.anim = null; if (rs.focus && rs.focus !== 'sun' && BODY[rs.focus]) setFocus(rs.focus, 0.01); if (isFinite(rs.ty)) S.hit = setTime(rs.ty); S.resumed = true;
+      if (rs.center) setTimeout(() => { const back = () => { S.anim = null; S.logR = clamp(rs.lr, loR, LMAX); S.az = rs.az; S.el = rs.el; };      // on retrouve l'objet suivi par son nom
         try { const ok = goName(rs.center.replace(/^Trou noir central de /, '')); if (ok && S.center && S.center.name === rs.center) { back(); S.ck = 1; } else { select(null); back(); } } catch (err) { back(); } }, 0);
       if (rs.tiles) { TL.on = false; TL.cut = true; TL.max = Math.max(1, Math.floor(rs.tiles / 2)); } } }
   /* ---- taille, qualité adaptative ---- */
@@ -1522,8 +1538,9 @@
     Rr.bloom = Q.bloom && !S.lite && dprScale > 0.55;
     const ss = window.__SS || ((window.devicePixelRatio || 1) < 1.3 && Q.dpr >= 2 && !S.lite && !window.__NOADAPT ? 1.5 : 1);      // écran peu dense : on calcule l'image plus finement, pour lisser les bords
     Rr.resize(w, h, Math.max(0.6, base * ss * dprScale));
-    document.documentElement.style.setProperty('--bar-h', $('time').offsetHeight + 'px');
-    hudBox = { w: $('top').offsetWidth, h: $('top').offsetHeight + 6, bar: $('time').offsetHeight + 12 };
+    const tRect = $('top').getBoundingClientRect(), bRect = $('time').getBoundingClientRect();
+    document.documentElement.style.setProperty('--bar-h', Math.round(bRect.height || $('time').offsetHeight) + 'px');
+    hudBox = { w: tRect.width || $('top').offsetWidth, h: (tRect.height || $('top').offsetHeight) + 6, bar: (bRect.height || $('time').offsetHeight) + 12 };
   }
   addEventListener('resize', resize); resize();
 
@@ -1625,7 +1642,7 @@
     const sun = sunGalAt(Rr.K, 0, [0, 0, 0]);
     return { m31: { pos: DATA.M31.pos, vel: M31_MEAS[0][1], vel_name: M31_MEAS[0][0], spin: DATA.M31.spin, meas: M31_MEAS }, lmc: DATA.LMC, lmc_spin: (LG_SPIN.find(q => /Grand Nuage/.test(q.key)) || {}).L, m33_spin: (LG_SPIN.find(q => /Triangle/.test(q.key)) || {}).L,
       dwarfs: dw, sun: { pos: sun, vel: SUN_UVW }, M_GAL2ECL: M, note: 'Axes LG_SPIN dans le repère équatorial (voir 30_gen.js) ; le reste dans le repère galactocentrique d’andromedaOrbit.' }; }
-  window.__U = { evToast, FPS, ZFAST, zFast, lgRadial, LGR, gcRelKpc0, selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, G, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
+  window.__U = { evToast, FPS, ZFAST, zFast, lgRadial, LGR, gcRelKpc0, selLG, selSurv, fusionCI, zoomAt, zoffReset, centerOn, bodyPosM, selStar2, selNear, TL, onLost, OO, selStar, LGO, SYS_END, T_DIV, cenOf, moonPosOf: k => [kPos[k * 3], kPos[k * 3 + 1], kPos[k * 3 + 2]], evGo, evStep, parseWhen, eclipseScan, PTR, tapeW, get EVL() { return EVL; }, goName, goBack, goHome, stepZoom, goThere, NAVH, findRun, get FIDX() { return FIDX; }, get moonPos() { return kPos; }, get MOONL() { return KO; }, get G() { return G; }, S, F, STOPS, pickAt, select, goStop, goTo, setTime, setSpeed, rebuild, openPanel, focusBody, Rr, Q, tier, frame: () => frames };
   if (!reduced) { S.logR = Math.log10(3.4 * AU); S.el = 0.42; }
   requestAnimationFrame(now => { last = now; step(now); requestAnimationFrame(() => { $('loader').classList.add('out'); setTimeout(() => $('loader').remove(), 1000); if (!reduced && !S.resumed) { S.anim = { t0: performance.now() / 1000 + 0.3, dur: 5.5, l0: S.logR, l1: STOPS[1].logR, a0: S.az, a1: S.az + 0.5, e0: S.el, e1: 0.6 }; } showRail(); }); });
 })();

@@ -82,7 +82,10 @@ function sbPropagate(y, jd1, onStep, tol) { sbStepper(y, jd1, onStep, tol).run(I
 /* Distance à la Terre et vitesse d'approche (UA, UA/jour) d'un état s à la date t.
    Vitesse de la Terre par différence centrée sur ±0,01 jour (l'éphéméride de la page ne donne que des positions). */
 function sbRange(t, s, ctx) {
-  const T = jd => (jd - 2451545) / 36525, e = solarSystemAt(T(t), ctx.e, 0).earth.slice(), a = solarSystemAt(T(t + 0.01), ctx.e, 0).earth.slice(), b = solarSystemAt(T(t - 0.01), ctx.e, 0).earth;
+  const T = jd => (jd - 2451545) / 36525;
+  ctx.e = solarSystemAt(T(t), ctx.e, 0); const e = ctx.e.earth.slice();
+  ctx.e = solarSystemAt(T(t + 0.01), ctx.e, 0); const a = ctx.e.earth.slice();
+  ctx.e = solarSystemAt(T(t - 0.01), ctx.e, 0); const b = ctx.e.earth;
   const dx = s[0] - e[0], dy = s[1] - e[1], dz = s[2] - e[2], d = Math.hypot(dx, dy, dz);
   return [d, (dx * (s[3] - (a[0] - b[0]) / 0.02) + dy * (s[4] - (a[1] - b[1]) / 0.02) + dz * (s[5] - (a[2] - b[2]) / 0.02)) / d];
 }

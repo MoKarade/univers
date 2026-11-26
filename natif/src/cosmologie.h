@@ -9,6 +9,7 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 namespace cosmo {
@@ -33,10 +34,14 @@ struct Params {
     // E(z) = H(z) / H0
     double e(double z) const {
         const double x = std::max(1.0 + z, 1e-12), a = 1.0 / x;
-        const double de =
-            (ode == 0.0) ? 0.0 : ode * std::pow(a, -3.0 * (1.0 + w0 + wa)) * std::exp(-3.0 * wa * (1.0 - a));
+        /* Densité de l'énergie noire calculée en logarithme : pow(a, …) * exp(…) peut donner 0 * Inf = NaN quand un
+           facteur déborde et l'autre s'annule ; exp(somme) déborde proprement vers +Inf ou 0. */
+        const double logRho = -3.0 * (1.0 + w0 + wa) * std::log(a) - 3.0 * wa * (1.0 - a);
+        const double de = (ode == 0.0) ? 0.0 : ode * std::exp(logRho);
         const double s = omegaR() * x * x * x * x + om * x * x * x + omegaK() * x * x + de;
-        if (std::isinf(s) && s > 0.0) return 1e150;
+        /* Débordement vers +Inf (énergie noire fantôme, Big Rip) : on garde la plus grande valeur finie de E, qui
+           majore toutes les valeurs finies (E reste croissante) ; NaN ou valeur négative : plancher 1e-15. */
+        if (std::isinf(s) && s > 0.0) return std::sqrt(std::numeric_limits<double>::max());
         return std::sqrt((std::isfinite(s) && s > 1e-30) ? s : 1e-30);
     }
 };

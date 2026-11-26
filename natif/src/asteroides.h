@@ -30,7 +30,10 @@ public:
         double epoch = 0;
         std::memcpy(&n, base + 8, 8);
         std::memcpy(&epoch, base + 16, 8);
-        if (n == 0 || n > (fileSize - kAlign) / (static_cast<uint64_t>(kCols) * 4) || n > UINT32_MAX) return false;
+        if (!std::isfinite(epoch) || n == 0 || n > (fileSize - kAlign) / (static_cast<uint64_t>(kCols) * 4) ||
+            n > UINT32_MAX) {
+            return false;
+        }
         const uint64_t column = (n * 4 + kAlign - 1) / kAlign * kAlign;
         if (column > (fileSize - kAlign) / kCols) return false;
         count = n;

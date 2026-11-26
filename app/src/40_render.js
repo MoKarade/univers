@@ -286,14 +286,15 @@ function initMicro(THREE, scene, camera, R, Q) {
   const PPCOL = [[1.0, 0.2, 0.12], [0.2, 0.4, 1.0], [0.1, 1.0, 0.85], [1.0, 0.85, 0.1]]; let ppKey = '';
   function partonColors(m) { if (!m) { if (ppKey !== 'gris') { ppKey = 'gris'; for (let i = 0; i < NPP; i++) ppC.set([0.55, 0.55, 0.6], i * 3); partons.geometry.attributes.aC.needsUpdate = true; } return; } const key = [m.uv, m.dv, m.sea].map(x => x.toFixed(3)).join(); if (key === ppKey) return; ppKey = key; const tot = m.uv + m.dv + m.sea + m.g, c1 = m.uv / tot, c2 = c1 + m.dv / tot, c3 = c2 + m.sea / tot;
     for (let i = 0; i < NPP; i++) { const u = ppU[i], c = PPCOL[u < c1 ? 0 : u < c2 ? 1 : u < c3 ? 2 : 3]; ppC[i * 3] = c[0]; ppC[i * 3 + 1] = c[1]; ppC[i * 3 + 2] = c[2]; } partons.geometry.attributes.aC.needsUpdate = true; }
-  const QCOL = [[1.0, 0.25, 0.2], [0.25, 1.0, 0.3], [0.3, 0.45, 1.0]], qpos = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], hsh = x => { const s = Math.sin(x * 127.1) * 43758.5453; return s - Math.floor(s); };
+  const qpos = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (let i = 0; i < 3; i++) { const c = PPCOL[i < 2 ? 0 : 1]; qC[i * 3] = c[0]; qC[i * 3 + 1] = c[1]; qC[i * 3 + 2] = c[2]; }      /* repères : deux quarks u (rouge), un d (bleu), comme la légende */
+  quarks.geometry.attributes.aC.needsUpdate = true;
   function protonUpdate(t) {
     qpos[0][0] = QOFF[0]; qpos[0][1] = QOFF[1]; qpos[0][2] = QOFF[2];
     qpos[1][0] = 0.30 * Math.cos(t * 0.9 + 1) + 0.12; qpos[1][1] = 0.30 * Math.sin(t * 1.1 + 2) - 0.1; qpos[1][2] = 0.24 * Math.sin(t * 0.7);
     qpos[2][0] = -0.05 + 0.26 * Math.sin(t * 0.8 + 4); qpos[2][1] = -0.22 + 0.2 * Math.cos(t * 1.0); qpos[2][2] = 0.3 * Math.cos(t * 0.6 + 1);
-    const ph = t / 1.6, sh = Math.floor(ph), mix = smoothstep(0.75, 1, ph - sh), J = [(qpos[0][0] + qpos[1][0] + qpos[2][0]) / 3, (qpos[0][1] + qpos[1][1] + qpos[2][1]) / 3, (qpos[0][2] + qpos[1][2] + qpos[2][2]) / 3];
-    for (let i = 0; i < 3; i++) { const c = PPCOL[i < 2 ? 0 : 1]; qP.set(qpos[i], i * 3); qC[i * 3] = c[0]; qC[i * 3 + 1] = c[1]; qC[i * 3 + 2] = c[2]; }      /* repères : deux quarks u (rouge), un d (bleu), comme la légende */
-    quarks.geometry.attributes.position.needsUpdate = true; quarks.geometry.attributes.aC.needsUpdate = true; return J; }
+    for (let i = 0; i < 3; i++) qP.set(qpos[i], i * 3);
+    quarks.geometry.attributes.position.needsUpdate = true; }
   // le quark visé, seul, quand on descend plus bas : un point sans taille mesurable
   const q1Mat = ptMat([1.0, 0.5, 0.4], 14, 'a'), q1 = mkPts(new Float32Array(3), new Float32Array([1]), q1Mat, 56);
 
@@ -409,7 +410,7 @@ function createRenderer(canvas, Q, generated) {
   { const e = new THREE.Matrix4().makeRotationFromQuaternion(m31.quaternion).elements, Qm = [[e[0], e[4], e[8]], [e[1], e[5], e[9]], [e[2], e[6], e[10]]];
     R.m31Rot = [0, 1, 2].map(i => [0, 1, 2].map(j => M[0][i] * Qm[0][j] + M[1][i] * Qm[1][j] + M[2][i] * Qm[2][j])); }      // repère propre d'Andromède -> axes galactiques
   let dyn = null, dynU = null;
-  R.setDyn = D => { if (dyn) { scene.remove(dyn); dyn.geometry.dispose(); } dynU = galU(); dyn = pts({ position: [D.out, 3], aOm: [new Float32Array(D.n * 2), 2], aCol: [D.col, 3], aLook: [D.look, 2] }, mk(SH.galaxy, dynU), 6); dyn.quaternion.copy(qGal); };
+  R.setDyn = D => { if (dyn) { scene.remove(dyn); dyn.geometry.dispose(); dyn.material.dispose(); } dynU = galU(); dyn = pts({ position: [D.out, 3], aOm: [new Float32Array(D.n * 2), 2], aCol: [D.col, 3], aLook: [D.look, 2] }, mk(SH.galaxy, dynU), 6); dyn.quaternion.copy(qGal); };
   const mwU = galU();
   const galaxy = pts({ position: [G.gal.pos, 3], aOm: [G.gal.om, 2], aCol: [G.gal.col, 3], aLook: [G.gal.look, 2] }, mk(SH.galaxy, mwU), 6);
   galaxy.quaternion.copy(qGal);
@@ -521,7 +522,7 @@ void main(){ float e=aEl.x; float M=mod(aEl.y+aEl.z*uT,6.2831853); float E=M+e*s
     for (let k = 0; k < NCELL; k++) cnt[k + 1] += cnt[k];
     const idx = new Uint32Array(n), fill = cnt.slice(0, NCELL), leaves = []; for (let i = 0; i < n; i++) idx[fill[key[i]]++] = i;
     for (let k = 0; k < NCELL; k++) { const a = cnt[k], b = cnt[k + 1]; if (b <= a) continue;
-      idx.set(Array.from(idx.subarray(a, b)).sort((p, q) => mag[p] - mag[q]), a);        // dans chaque cellule : de la plus brillante à la plus faible
+      idx.subarray(a, b).sort((p, q) => mag[p] - mag[q]);        // dans chaque cellule : de la plus brillante à la plus faible
       let x0 = 1e30, x1 = -1e30, y0 = 1e30, y1 = -1e30, z0 = 1e30, z1 = -1e30;
       for (let q = a; q < b; q++) { const j = idx[q] * 3, x = pos[j], y = pos[j + 1], z = pos[j + 2]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z; }
       let sx = 0, sy = 0, sz = 0, rmin = 1e30, rmax = 0; for (let q = a; q < b; q++) { const j = idx[q] * 3, x = pos[j], y = pos[j + 1], z = pos[j + 2], d = Math.hypot(x, y, z) || 1e-9; sx += x / d; sy += y / d; sz += z / d; if (d < rmin) rmin = d; if (d > rmax) rmax = d; }
@@ -983,7 +984,7 @@ void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionM
   };
   R.render = (wall, exposure) => {
     const lc = R.lens.on && !R.lens.inside && mFinal.uniforms.uCubeOn.value > 0.5;
-    if (lc && R.lens.dirty && (lensTick++ % 8 === 0)) { lensCam3.position.copy(camPos); lensCam3.update(renderer, scene); R.lens.dirty = false; }      /* vue tout autour (sources hors de l’image) : six rendus en plus, seulement quand elle a changé */
+    if (lc && R.lens.dirty && (!R.lens.cubeReady || (lensTick++ % 8 === 0))) { lensCam3.position.copy(camPos); lensCam3.update(renderer, scene); R.lens.dirty = false; R.lens.cubeReady = true; }      /* vue tout autour (sources hors de l’image) : six rendus en plus, seulement quand elle a changé */
     mFinal.uniforms.uLens.value = !R.lens.on ? 0 : R.lens.inside ? 2 : 1;
     renderer.setRenderTarget(rtMain); renderer.clear(); renderer.render(scene, camera);
     if (R.bloom) {

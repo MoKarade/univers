@@ -7,7 +7,14 @@ from typing import List, Tuple
 from lib.harness import E2ESession, TestCase, check, run_cmd
 
 
-def _run_valgrind(binary_path: str, args: List[str] = (), timeout: float = 45.0):
+# Valgrind verifies memory correctness (0 errors / 0 leaks), NOT speed. Its wall-clock
+# cost is ~20-50x native and balloons on a contended host (measured: essai_systeme_solaire
+# --noyau = 25 s CPU but 128 s wall on a shared 2-vCPU box). The cap is therefore a pure
+# hang guard, never a performance SLA, so the result does not depend on machine load.
+VALGRIND_HANG_GUARD_S = 600.0
+
+
+def _run_valgrind(binary_path: str, args: List[str] = (), timeout: float = VALGRIND_HANG_GUARD_S):
     return run_cmd(
         ["valgrind", "--leak-check=full", "--errors-for-leak-kinds=all", "--error-exitcode=1", binary_path, *args],
         timeout=timeout,
@@ -63,7 +70,7 @@ def t1_f5_04_essai_cosmologie_valgrind(session: E2ESession) -> Tuple[str, dict]:
     check(len(passe_lines) >= 7 and "ECHEC" not in res.stdout, f"Unexpected essai_cosmologie output: {res.stdout[:300]}")
     check("13.79" in res.stdout or "13,79" in res.stdout, f"Missing age ~13.79 Ga in output: {res.stdout[:300]}")
 
-    vg = _run_valgrind(exe, timeout=30.0)
+    vg = _run_valgrind(exe)
     check(not vg.timed_out and vg.rc == 0, f"Valgrind failed on essai_cosmologie (rc={vg.rc}): {vg.stderr[-400:]}")
     return f"essai_cosmologie PASS ({res.duration_s:.3f}s, {len(passe_lines)} PASSE lines, Valgrind 0 errors)", {"duration_s": round(res.duration_s, 3)}
 
@@ -76,7 +83,7 @@ def t1_f5_05_essai_interface_valgrind(session: E2ESession) -> Tuple[str, dict]:
     check(not res.timed_out and res.rc == 0, f"essai_interface failed (rc={res.rc}): {res.stdout[:300]}")
     check("ECHEC" not in res.stdout and res.stdout.strip().endswith("PASSE"), f"Unexpected essai_interface output: {res.stdout[:300]}")
 
-    vg = _run_valgrind(exe, timeout=30.0)
+    vg = _run_valgrind(exe)
     check(not vg.timed_out and vg.rc == 0, f"Valgrind failed on essai_interface (rc={vg.rc}): {vg.stderr[-400:]}")
     return f"essai_interface PASS ({res.duration_s:.3f}s, Valgrind 0 errors)", {"duration_s": round(res.duration_s, 3)}
 
@@ -120,7 +127,7 @@ def t1_f5_07_essai_systeme_solaire_noyau(session: E2ESession) -> Tuple[str, dict
     check(not res_noarg.timed_out and res_noarg.rc == 0,
           f"essai_systeme_solaire (no args) should run --noyau and exit 0 (got rc={res_noarg.rc}): {res_noarg.stderr[:250]}")
 
-    vg = _run_valgrind(exe, ["--noyau"], timeout=60.0)
+    vg = _run_valgrind(exe, ["--noyau"])
     check(not vg.timed_out and vg.rc == 0, f"Valgrind failed on essai_systeme_solaire --noyau (rc={vg.rc}): {vg.stderr[-400:]}")
     return f"essai_systeme_solaire --noyau PASS ({res.duration_s:.2f}s, {passe_cnt} PASSE, Valgrind 0 errors)", {"passe": passe_cnt}
 

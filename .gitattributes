@@ -2,3 +2,8 @@
 * text=auto eol=lf
 *.jpg binary
 *.png binary
+*.bin binary
+*.fits binary
+*.fit binary
+*.ppm binary
+*.npz binary

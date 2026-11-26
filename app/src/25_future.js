@@ -31,7 +31,7 @@ function sunState(tGyr, o) {
   const a = T[i - 1], b = T[i], f = clamp((age - a[0]) / (b[0] - a[0]), 0, 1);
   o.age = age; o.L = Math.exp(lerp(Math.log(a[1]), Math.log(b[1]), f)); o.T = Math.exp(lerp(Math.log(a[2]), Math.log(b[2]), f)); o.R = Math.exp(lerp(Math.log(a[3]), Math.log(b[3]), f)); o.M = lerp(a[4], b[4], f);
   if (age > 12.40) { o.L = WD_L(age - 12.30); o.T = WD_T(o.L); o.R = 0.0125; o.M = 0.5405; }      /* naine blanche : loi de Mestel au-delà du raccord */
-  o.phase = SUN_PHASES.find(p => age < p[0])[1]; return o;
+  o.phase = (SUN_PHASES.find(p => age < p[0]) || SUN_PHASES[SUN_PHASES.length - 1])[1]; return o;
 }
 /** Instant (Ga depuis aujourd'hui) où le Soleil géant avale une planète d'orbite actuelle a0 (UA). Seuil calé sur le résultat publié : il faut partir d'au moins 1,15 UA pour survivre. */
 function engulfTime(a0) {
@@ -103,8 +103,10 @@ function flameLoad(txt) { const b = b64ToBytes(txt.trim()), dv = new DataView(b.
   for (let k = 0; k < n; k++) { const o = k * 16, u = q => dv.getUint16(o + 4 + q * 2, true); m.set(dv.getInt32(o, true), [u(0), u(1), u(2), u(3) / 1000, u(4) / 1000, u(5) / 1000]); }      /* âges en Ma, masses en M☉ */
   FLAME = m; return m; }
 /** Fin de la séquence principale et fin de vie (Ma) pour une masse (M☉), interpolées en log dans la grille MIST. */
+let MIST_ROWS_CACHE = null;
 function mistLife(m) {
-  const R = DATA.MIST_LIFE ? DATA.MIST_LIFE.rows.filter(r => r[1]) : null; if (!R) return [1e4 * Math.pow(m, -2.5), 1.12e4 * Math.pow(m, -2.5)];
+  if (!MIST_ROWS_CACHE && typeof DATA !== 'undefined' && DATA.MIST_LIFE) MIST_ROWS_CACHE = DATA.MIST_LIFE.rows.filter(r => r[1]);
+  const R = MIST_ROWS_CACHE; if (!R) return [1e4 * Math.pow(m, -2.5), 1.12e4 * Math.pow(m, -2.5)];
   const x = clamp(m, R[0][0], R[R.length - 1][0]); let k = 0; while (k < R.length - 2 && R[k + 1][0] < x) k++;
   const f = Math.log(x / R[k][0]) / Math.log(R[k + 1][0] / R[k][0]), L = (a, b) => Math.exp(Math.log(a) + (Math.log(b) - Math.log(a)) * f);
   return [L(R[k][1], R[k + 1][1]), L(R[k][2], R[k + 1][2])];
@@ -131,7 +133,7 @@ function starLife(MV, bv, i, hip) {
   const sn = cls !== 3 && mass >= SN_MIN;
   return [tB, tM, tD, cls === 3 ? 4 : (cls === 0 ? 0 : 2) + (sn ? 1 : 0), mass, cls, src, lo, hi];
 }
-const bvTemp = bv => 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62));
+const bvTemp = bv => { const b = Number.isFinite(bv) ? clamp(bv, -0.4, 2.0) : 0.65; return 4600 * (1 / (0.92 * b + 1.7) + 1 / (0.92 * b + 0.62)); };
 const bvSpectral = bv => bv < -0.30 ? 'O' : bv < -0.02 ? 'B' : bv < 0.30 ? 'A' : bv < 0.58 ? 'F' : bv < 0.81 ? 'G' : bv < 1.40 ? 'K' : 'M';
 
 /* --------------------------------------------------------------------------
@@ -157,15 +159,41 @@ function epicyclePos(e, o, t, out, j) {          // e : tableau de constantes, o
 function initStarKin(posEclLy, N, sunGal0, vqIn, vdiv, ecl) {      // ecl : vitesses fournies dans le repère écliptique (Gaia), sinon galactique (HYG)
   const M = DATA.M_GAL2ECL, vq = vqIn || new Int16Array(b64ToBytes(DATA.STARS_VEL).buffer), vd = vdiv || 20, K = { N, p0: posEclLy.slice(), ve: new (ecl ? Float32Array : Float64Array)(N * 3), epi: new (ecl ? Float32Array : Float64Array)(N * 10), sun: null, tmp: [0, 0, 0], ts: [0, 0, 0], vkms: new Float32Array(N), M };
   K.sun = Float64Array.from(epicycle(sunGal0[0], sunGal0[1], sunGal0[2], SUN_UVW[0], SUN_UVW[1], SUN_UVW[2]));
-  for (let i = 0; i < N; i++) {
-    let v = [vq[i * 3] / vd, vq[i * 3 + 1] / vd, vq[i * 3 + 2] / vd]; const ve = ecl ? v : mulM(M, v); if (ecl) v = [M[0][0] * ve[0] + M[1][0] * ve[1] + M[2][0] * ve[2], M[0][1] * ve[0] + M[1][1] * ve[1] + M[2][1] * ve[2], M[0][2] * ve[0] + M[1][2] * ve[1] + M[2][2] * ve[2]];
-    const p = [posEclLy[i * 3], posEclLy[i * 3 + 1], posEclLy[i * 3 + 2]];
-    K.ve.set([ve[0] * KMS_LY_YR, ve[1] * KMS_LY_YR, ve[2] * KMS_LY_YR], i * 3); K.vkms[i] = Math.hypot(v[0], v[1], v[2]);
-    const g = [(M[0][0] * p[0] + M[1][0] * p[1] + M[2][0] * p[2]) / KPC_LY, (M[0][1] * p[0] + M[1][1] * p[1] + M[2][1] * p[2]) / KPC_LY, (M[0][2] * p[0] + M[1][2] * p[1] + M[2][2] * p[2]) / KPC_LY];
-    K.epi.set(epicycle(sunGal0[0] + g[0], sunGal0[1] + g[1], sunGal0[2] + g[2], SUN_UVW[0] + v[0], SUN_UVW[1] + v[1], SUN_UVW[2] + v[2]), i * 10);
-    if (!ecl) { if (!K.gx0) { K.gx0 = new Float64Array(N * 3); K.gv0 = new Float64Array(N * 3); } for (let c = 0; c < 3; c++) { K.gx0[i * 3 + c] = sunGal0[c] + g[c]; K.gv0[i * 3 + c] = SUN_UVW[c] + v[c]; } }      /* S2 : état initial exact, pour le calcul des orbites (26_orbits.js) */
+  if (!ecl) { K.gx0 = new Float64Array(N * 3); K.gv0 = new Float64Array(N * 3); }
+  const m00 = M[0][0], m01 = M[0][1], m02 = M[0][2], m10 = M[1][0], m11 = M[1][1], m12 = M[1][2], m20 = M[2][0], m21 = M[2][1], m22 = M[2][2];
+  const s0 = sunGal0[0], s1 = sunGal0[1], s2 = sunGal0[2], u0 = SUN_UVW[0], u1 = SUN_UVW[1], u2 = SUN_UVW[2], invKpc = 1 / KPC_LY;
+  for (let i = 0, j = 0; i < N; i++, j += 3) {
+    const a0 = vq[j] / vd, a1 = vq[j + 1] / vd, a2 = vq[j + 2] / vd;
+    let vx, vy, vz, vex, vey, vez;
+    if (ecl) {
+      vex = a0; vey = a1; vez = a2;
+      vx = m00 * vex + m10 * vey + m20 * vez; vy = m01 * vex + m11 * vey + m21 * vez; vz = m02 * vex + m12 * vey + m22 * vez;
+    } else {
+      vx = a0; vy = a1; vz = a2;
+      vex = m00 * vx + m01 * vy + m02 * vz; vey = m10 * vx + m11 * vy + m12 * vz; vez = m20 * vx + m21 * vy + m22 * vz;
+    }
+    K.ve[j] = vex * KMS_LY_YR; K.ve[j + 1] = vey * KMS_LY_YR; K.ve[j + 2] = vez * KMS_LY_YR;
+    K.vkms[i] = Math.hypot(vx, vy, vz);
+    const px = posEclLy[j], py = posEclLy[j + 1], pz = posEclLy[j + 2];
+    const gx = (m00 * px + m10 * py + m20 * pz) * invKpc, gy = (m01 * px + m11 * py + m21 * pz) * invKpc, gz = (m02 * px + m12 * py + m22 * pz) * invKpc;
+    const X = s0 + gx, Y = s1 + gy, Z = s2 + gz, vX = u0 + vx, vY = u1 + vy, vZ = u2 + vz;
+    const ep = epicycle(X, Y, Z, vX, vY, vZ), eo = i * 10;
+    for (let c = 0; c < 10; c++) K.epi[eo + c] = ep[c];
+    if (!ecl) { K.gx0[j] = X; K.gx0[j + 1] = Y; K.gx0[j + 2] = Z; K.gv0[j] = vX; K.gv0[j + 1] = vY; K.gv0[j + 2] = vZ; }      /* S2 : état initial exact, pour le calcul des orbites (26_orbits.js) */
   }
   return K;
+}
+/** Position d'une seule étoile i (années-lumière, écliptique) sans allouer un tableau de N étoiles. */
+function starPosOne(K, i, tYears, tEff, out) {
+  const at = Math.abs(tYears), w = smoothstep(3e6, 1.5e7, at), M = K.M, j = i * 3;
+  let x = K.p0[j] + K.ve[j] * tYears, y = K.p0[j + 1] + K.ve[j + 1] * tYears, z = K.p0[j + 2] + K.ve[j + 2] * tYears;
+  if (w > 0 && !(K.lin && K.lin[i])) {
+    starOrbSun(K, tEff, K.ts); starOrbPos(K, i, tEff, K.tmp, 0);
+    const a = (K.tmp[0] - K.ts[0]) * KPC_LY, b = (K.tmp[1] - K.ts[1]) * KPC_LY, c = (K.tmp[2] - K.ts[2]) * KPC_LY;
+    const ex = M[0][0] * a + M[0][1] * b + M[0][2] * c, ey = M[1][0] * a + M[1][1] * b + M[1][2] * c, ez = M[2][0] * a + M[2][1] * b + M[2][2] * c;
+    if (w >= 1) { x = ex; y = ey; z = ez; } else { x = lerp(x, ex, w); y = lerp(y, ey, w); z = lerp(z, ez, w); }
+  }
+  out[0] = x; out[1] = y; out[2] = z; return out;
 }
 /** Position du Soleil dans la galaxie (kpc, repère galactique centré sur le centre galactique) au temps t (Ga). */
 function sunGalAt(K, t, out) { return sunOrbAt(K, t, out); }
@@ -230,8 +258,8 @@ function fusFrame(k) { const P = FUSI.packs[fusPackOf(k)]; if (!P || !P.data) re
 function fusWant(t, fetcher) {
   const k = clamp(Math.floor(t / FUSI.dt), 0, FUSI.n - 1), want = new Set([fusPackOf(k), fusPackOf(Math.min(k + 1, FUSI.n - 1)), fusPackOf(Math.min(k + FUSI.per, FUSI.n - 1))]);
   FUSI.packs.forEach((P, p) => { if (P && !want.has(p) && Math.abs(p - fusPackOf(k)) > 1) FUSI.packs[p] = null; });
-  for (const p of want) if (!FUSI.packs[p]) { const pk = FUSI.meta.paquets[p], P = FUSI.packs[p] = { first: pk.premiere, data: null };
-    fetcher(pk).then(txt => { const b = b64ToBytes(txt.trim()); P.data = new Int16Array(b.buffer, b.byteOffset, b.length / 2); }).catch(e => { console.warn('Image du calcul de la fusion non chargée :', e.message); if (FUSI.packs[p] === P) FUSI.packs[p] = null; }); }
+  for (const p of want) if (!FUSI.packs[p]) { const pk = FUSI.meta.paquets[p], P = FUSI.packs[p] = { first: pk.premiere, data: null, failed: false };
+    fetcher(pk).then(txt => { const b = b64ToBytes(txt.trim()); P.data = new Int16Array(b.buffer, b.byteOffset, b.length / 2); }).catch(e => { console.warn('Image du calcul de la fusion non chargée :', e.message); P.failed = true; }); }
 }
 /** Positions (kpc, centrées sur la Voie lactée) à la date t, interpolées entre deux images ; false si elles ne sont pas encore chargées. */
 function fusFill(out, t, off) {
@@ -248,14 +276,17 @@ function tailAdvance(D, tTarget, ms, T) {
   while (Math.abs(tTarget - D.t) > 1e-9 && performance.now() - t0p < ms) {
     const H = clamp(tTarget - D.t, -0.005, 0.005);      /* tranches de 5 Ma : l'heure est vérifiée souvent, l'image ne gèle pas */
     for (let j = 0; j < D.n * 3; j += 3) {
-      let left = H;
+      let left = H, rx = x[j], ry = x[j + 1], rz = x[j + 2], vx = v[j], vy = v[j + 1], vz = v[j + 2];
       while (Math.abs(left) > 1e-12) {
-        const r = Math.max(Math.hypot(x[j], x[j + 1], x[j + 2]), 0.3), vc = Math.sqrt(ga(r)) * r, h = Math.sign(left) * Math.min(Math.abs(left), Math.max(0.02 * r / Math.max(vc, 1), 0.0005));      /* au plus fin 0,5 Ma : le cœur à densité constante reste stable à ce pas */
-        let g = ga(Math.hypot(x[j], x[j + 1], x[j + 2])); v[j] -= g * x[j] * h / 2; v[j + 1] -= g * x[j + 1] * h / 2; v[j + 2] -= g * x[j + 2] * h / 2;
-        x[j] += v[j] * h; x[j + 1] += v[j + 1] * h; x[j + 2] += v[j + 2] * h;
-        g = ga(Math.hypot(x[j], x[j + 1], x[j + 2])); v[j] -= g * x[j] * h / 2; v[j + 1] -= g * x[j + 1] * h / 2; v[j + 2] -= g * x[j + 2] * h / 2;
+        const rRaw = Math.sqrt(rx * rx + ry * ry + rz * rz), r = rRaw > 0.3 ? rRaw : 0.3, g0 = ga(r);
+        const vc = Math.sqrt(g0) * r, h = Math.sign(left) * Math.min(Math.abs(left), Math.max(0.02 * r / (vc > 1 ? vc : 1), 0.0005)), h2 = h * 0.5;
+        vx -= g0 * rx * h2; vy -= g0 * ry * h2; vz -= g0 * rz * h2;
+        rx += vx * h; ry += vy * h; rz += vz * h;
+        const g1 = ga(Math.sqrt(rx * rx + ry * ry + rz * rz));
+        vx -= g1 * rx * h2; vy -= g1 * ry * h2; vz -= g1 * rz * h2;
         left -= h;
       }
+      x[j] = rx; x[j + 1] = ry; x[j + 2] = rz; v[j] = vx; v[j + 1] = vy; v[j + 2] = vz;
     }
     D.t += H;
   }

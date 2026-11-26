@@ -298,7 +298,7 @@ function buildCosmo(par) {
   C.age = tBang !== null ? -tBang : null;
 
   // horizon des événements : distance comobile que la lumière peut encore parcourir d'ici la fin
-  const aE = Aa[n - 1], vE = Vv[n - 1], qE = -acc(aE) * aE / (vE * vE);
+  const aE = Aa[n - 1], vE = Vv[n - 1], qE = Math.abs(vE) > 1e-12 ? -acc(aE) * aE / (vE * vE) : 0;
   let tail = null;
   if (endKind === 'crunch' || endKind === 'rip') tail = 0;
   else if (qE < -1e-3 && OL > 0 && w < -1 / 3) tail = C_MPC_GYR / vE * 2 / Math.abs(1 + 3 * w);
@@ -334,7 +334,7 @@ function cosmoAt(C, t, o) {
   o.a = a; o.v = v; o.D = D;
   o.H = v / a;                                   // Ga^-1
   o.Hkms = o.H / KMSMPC_GYR;                     // km/s/Mpc
-  o.q = -C.acc(a) * a / (v * v);                 // paramètre de décélération (négatif = accélère)
+  o.q = Math.abs(v) > 1e-12 ? -C.acc(a) * a / (v * v) : 0;   // paramètre de décélération (négatif = accélère)
   o.chiPH = C.tBang !== null ? chi : null;       // horizon des particules, comobile (Mpc)
   o.chiEH = C.chiEnd !== null ? Math.max(C.chiEnd - chi, 0) : null;   // horizon des événements, comobile
   o.rHubble = Math.abs(o.H) > 1e-12 ? C_MPC_GYR / Math.abs(o.H) : Infinity;   // rayon de Hubble, physique (Mpc)
@@ -374,13 +374,14 @@ function decodeComets() {
   for (let i = 0; i < N; i++) {
     const q = el[i * 6], e = el[i * 6 + 1], inc = el[i * 6 + 2] * DEG, om = el[i * 6 + 3] * DEG, w = el[i * 6 + 4] * DEG, a = q / (1 - e);
     C.e[i] = e; C.a[i] = a; C.inc[i] = inc; C.n[i] = 0.01720209895 / Math.pow(a, 1.5); C.tp[i] = el[i * 6 + 5];
-    const co = Math.cos(om), so = Math.sin(om), ci = Math.cos(inc), si = Math.sin(inc), cw = Math.cos(w), sw = Math.sin(w);
-    C.P.set([co * cw - so * sw * ci, so * cw + co * sw * ci, sw * si], i * 3); C.Q.set([-co * sw - so * cw * ci, -so * sw + co * cw * ci, cw * si], i * 3);
+    const co = Math.cos(om), so = Math.sin(om), ci = Math.cos(inc), si = Math.sin(inc), cw = Math.cos(w), sw = Math.sin(w), b = a * Math.sqrt(1 - e * e);
+    C.P.set([(co * cw - so * sw * ci) * a, (so * cw + co * sw * ci) * a, sw * si * a], i * 3);
+    C.Q.set([(-co * sw - so * cw * ci) * b, (-so * sw + co * cw * ci) * b, cw * si * b], i * 3);
     C.look[i * 2] = 1.5; C.look[i * 2 + 1] = 0.95;
   }
   return C;
 }
 function updateComets(C, days) {      // days : jours depuis J2000
-  for (let i = 0, j = 0; i < C.N; i++, j += 3) { const e = C.e[i], a = C.a[i], E = keplerHigh(C.n[i] * (days - C.tp[i]), e), x = a * (Math.cos(E) - e), y = a * Math.sqrt(1 - e * e) * Math.sin(E);
+  for (let i = 0, j = 0; i < C.N; i++, j += 3) { const e = C.e[i], E = keplerHigh(C.n[i] * (days - C.tp[i]), e), x = Math.cos(E) - e, y = Math.sin(E);
     C.pos[j] = C.P[j] * x + C.Q[j] * y; C.pos[j + 1] = C.P[j + 1] * x + C.Q[j + 1] * y; C.pos[j + 2] = C.P[j + 2] * x + C.Q[j + 2] * y; }
 }

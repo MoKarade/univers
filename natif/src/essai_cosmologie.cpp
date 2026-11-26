@@ -61,6 +61,14 @@ int main() {
     bigRip.wa = 1.0;
     const double aRip10 = cosmo::scaleFactorAt(bigRip, 10.0);
     const double aRip20 = cosmo::scaleFactorAt(bigRip, 20.0);
+    // E(a) doit rester finie, positive et croissante en traversant le débordement de exp() (a ~ 234 pour ce coin).
+    bool ripMonotone = true;
+    double ePrev = 0.0;
+    for (int ai = 150; ai <= 400; ++ai) {
+        const double eNow = bigRip.e(1.0 / ai - 1.0);
+        ripMonotone &= std::isfinite(eNow) && eNow > 0.0 && eNow >= ePrev;
+        ePrev = eNow;
+    }
 
     cosmo::Params badH0 = planck;
     badH0.h0 = 0.0;
@@ -69,7 +77,7 @@ int main() {
     cosmo::Params nanH0 = planck;
     nanH0.h0 = std::numeric_limits<double>::quiet_NaN();
     const double kNan = std::numeric_limits<double>::quiet_NaN();
-    const bool guardOk = (aRip10 == 1e30) && (aRip20 == 1e30) &&
+    const bool guardOk = (aRip10 == 1e30) && (aRip20 == 1e30) && ripMonotone &&
                          cosmo::distanceTable(badH0, zMax, 64).size() == 1 &&
                          cosmo::distanceTable(badH0, zMax, 64)[0] == 0.0 &&
                          cosmo::distanceTable(negH0, zMax, 64).size() == 1 &&

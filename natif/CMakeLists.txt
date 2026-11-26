@@ -1,6 +1,6 @@
 # Appli PC « Univers » (docs/plan-natif.md). Se construit sans droits d'administrateur avec les outils portables
 # de C:\dev\outils-natif (llvm-mingw, CMake, Ninja, glslang) : voir natif/README.md.
-# Sur Linux/macOS, configure et construit automatiquement la bibliothèque physique et les 7 essais CPU portables.
+# Sur Linux/macOS, configure et construit automatiquement la bibliothèque physique et les 8 essais CPU portables.
 cmake_minimum_required(VERSION 3.24)
 project(univers_natif LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
@@ -15,7 +15,7 @@ else()
   set(UNIVERS_WARNINGS -Wall -Wextra -Wpedantic -Wshadow)
 endif()
 
-# Bibliothèque physique portable et ses 3 essais (essai_systeme_solaire, essai_galaxie, essai_fusion).
+# Bibliothèque physique portable et ses 4 essais (essai_systeme_solaire, essai_galaxie, essai_fusion, essai_robustesse).
 add_subdirectory(physique)
 
 # Essais CPU portables (aucune carte graphique ni dépendance externe requise).

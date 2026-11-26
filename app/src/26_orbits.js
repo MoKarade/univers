@@ -24,18 +24,27 @@ const BAR_ALPHA = 0.01, BAR_RB = 5.0;      /* longueur : demi-longueur mesurée 
 /** Potentiel de la barre seule, (km/s)², pour les contrôles (intégrale de Jacobi). */
 function barPhi(P, x, y, t) { const R = Math.hypot(x, y), q = R / P.Rb, U = R < P.Rb ? q * q * q - 2 : -1 / (q * q * q); return P.Ab * Math.cos(2 * (Math.atan2(y, x) - (P.Pb - P.Ob * t))) * U; }
 /** Paramètres du potentiel, copiés de GAL pour le Worker (qui ne voit pas le reste de la page). */
-const orbParams = () => { const v0 = 230, Rb = BAR_RB; return { G: G_KPC, Mb: GAL.Mb, ab: GAL.ab, Md: GAL.Md, ad: GAL.ad, bd: GAL.bd, rs: GAL.rs, GMs: GAL.GMs,
-  Rb, Ab: BAR_ALPHA * v0 * v0 * Math.pow(GAL.R0 / Rb, 3) / 3, Ob: GAL.OMEGA_BAR * 1.0227121650456, Pb: Math.PI - GAL.BAR_ANGLE }; };
+let ORB_P_CACHE = null;
+const orbParams = () => {
+  if (ORB_P_CACHE) return ORB_P_CACHE;
+  const v0 = 230, Rb = BAR_RB;
+  ORB_P_CACHE = { G: G_KPC, Mb: GAL.Mb, ab: GAL.ab, Md: GAL.Md, ad: GAL.ad, bd: GAL.bd, rs: GAL.rs, GMs: GAL.GMs,
+    Rb, Ab: BAR_ALPHA * v0 * v0 * Math.pow(GAL.R0 / Rb, 3) / 3, Ob: GAL.OMEGA_BAR * 1.0227121650456, Pb: Math.PI - GAL.BAR_ANGLE };
+  return ORB_P_CACHE;
+};
 
 /** Accélération (km/s)²/kpc au point (x, y, z) kpc, écrite dans a[0..2]. */
 function orbAcc(P, x, y, z, a, t) {
   const R2 = x * x + y * y, r = Math.sqrt(R2 + z * z) || 1e-9, xs = r / P.rs;
   const ar = -P.G * P.Mb / ((r + P.ab) * (r + P.ab)) - P.GMs * (Math.log(1 + xs) - xs / (1 + xs)) / (r * r);
-  const B = Math.sqrt(z * z + P.bd * P.bd), D2 = R2 + (P.ad + B) * (P.ad + B), D3 = D2 * Math.sqrt(D2), gm = P.G * P.Md;
-  a[0] = ar * x / r - gm * x / D3; a[1] = ar * y / r - gm * y / D3; a[2] = ar * z / r - gm * z * (P.ad + B) / (B * D3);
-  if (P.Ab && t !== undefined && R2 > 1e-8) {      /* barre : a_R = −A cos2ψ U'(R), a_φ = 2A sin2ψ U(R) / R ; elle tourne dans le sens du disque (φ décroissant) */
-    const R = Math.sqrt(R2), c = x / R, s = y / R, psi = Math.atan2(y, x) - (P.Pb - P.Ob * t), c2 = Math.cos(2 * psi), s2 = Math.sin(2 * psi), q = R / P.Rb;
-    const U = R < P.Rb ? q * q * q - 2 : -1 / (q * q * q), dU = R < P.Rb ? 3 * q * q / P.Rb : 3 / (q * q * q * q * P.Rb);
+  const B = Math.sqrt(z * z + P.bd * P.bd), adB = P.ad + B, D2 = R2 + adB * adB, D3 = D2 * Math.sqrt(D2), gm = P.G * P.Md;
+  const ir = ar / r, ig = gm / D3;
+  a[0] = ir * x - ig * x; a[1] = ir * y - ig * y; a[2] = ir * z - ig * z * adB / B;
+  if (P.Ab && t !== undefined && R2 > 1e-8) {      /* barre : identités algébriques double-angle sans atan2 par étoile */
+    const R = Math.sqrt(R2), c = x / R, s = y / R, c2p = c * c - s * s, s2p = 2 * c * s;
+    const ang2 = 2 * (P.Pb - P.Ob * t), cb2 = Math.cos(ang2), sb2 = Math.sin(ang2);
+    const c2 = c2p * cb2 + s2p * sb2, s2 = s2p * cb2 - c2p * sb2, q = R / P.Rb, q2 = q * q, q3 = q2 * q;
+    const U = R < P.Rb ? q3 - 2 : -1 / q3, dU = R < P.Rb ? 3 * q2 / P.Rb : 3 / (q3 * q * P.Rb);
     const aR = -P.Ab * c2 * dU, aP = 2 * P.Ab * s2 * U / R;
     a[0] += aR * c - aP * s; a[1] += aR * s + aP * c;
   }
@@ -113,9 +122,9 @@ function orbInit(K, sunGal0) {
   X.set(K.gx0); V.set(K.gv0); X.set(sunGal0, K.N * 3); V.set(SUN_UVW, K.N * 3);
   const src = [orbAcc, orbEnergy, orbSub, orbSteps, 'const ORB_DT=' + ORB_DT + ', ORB_CP=' + ORB_CP + ', ORB_MAXCP=' + ORB_MAXCP + ';', '(' + orbWorkerMain.toString() + ')();'].map(String).join(String.fromCharCode(10));
   let w; try { const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })); w = new Worker(url); URL.revokeObjectURL(url); } catch (e) { return null; }
-  const O = K.orb = { w, n: K.N, P: orbParams(), res: null, acc: null, want: null, sent: null, sentAt: 0, on: true, far: false, exact: false };
-  w.onmessage = e => { O.res = e.data; O.acc = new Float32Array(n * 3).fill(NaN); O.sent = null; };
-  w.onerror = () => { K.orb = null; };
+  const O = K.orb = { w, n: K.N, P: orbParams(), res: null, acc: new Float32Array(n * 3).fill(NaN), want: null, sent: null, sentAt: 0, on: true, far: false, exact: false };
+  w.onmessage = e => { O.res = e.data; O.acc.fill(NaN); O.sent = null; };
+  w.onerror = e => { console.warn('Worker orbites :', e && e.message); try { w.terminate(); } catch (err) {} K.orb = null; };
   w.postMessage({ init: true, P: O.P, n, X, V }, [X.buffer, V.buffer]);
   return O;
 }
@@ -139,13 +148,14 @@ function orbRequest(K, tEff, on, far) {
 /** L'orbite calculée sert-elle à tEff ? (mode choisi pour l'image, et résultat assez proche pour le prolongement) */
 const orbFresh = (K, tEff) => { const O = K.orb; return !!(O && O.on && O.exact && O.res && Math.abs(O.res.t - tEff) <= ORB_EXTRA); };
 
+const ORB_TMP_A = [0, 0, 0];
 /** Position galactique (kpc) de l'étoile i à tEff : orbite calculée, prolongée au second ordre (x + v·d + a·d²/2) sur moins
  *  de 6 Ma (au-delà, écart de plus de 50 pc pour 1 % des étoiles) ; sinon épicycle. Écart du prolongement mesuré dans orbits.test.js. */
 function starOrbPos(K, i, tEff, out, j) {
   j = j || 0;
   if (!orbFresh(K, tEff)) { epicyclePos(K.epi, i * 10, tEff, out, j); return; }
   const O = K.orb, R = O.res, d = (tEff - R.t) * ORB_KV, q = i * 3, A = O.acc;
-  if (Number.isNaN(A[q])) { const a = [0, 0, 0]; orbAcc(O.P, R.pos[q], R.pos[q + 1], R.pos[q + 2], a, R.t); A[q] = a[0]; A[q + 1] = a[1]; A[q + 2] = a[2]; }
+  if (Number.isNaN(A[q])) { orbAcc(O.P, R.pos[q], R.pos[q + 1], R.pos[q + 2], ORB_TMP_A, R.t); A[q] = ORB_TMP_A[0]; A[q + 1] = ORB_TMP_A[1]; A[q + 2] = ORB_TMP_A[2]; }
   for (let c = 0; c < 3; c++) out[j + c] = R.pos[q + c] + R.vel[q + c] * d + 0.5 * A[q + c] * d * d;
 }
 
@@ -165,7 +175,7 @@ function sunOrbAt(K, tEff, out) {
   const goal = Math.round(tEff / ORB_DT) * ORB_DT;
   let best = null; for (const k of S.cps.keys()) if (best === null || Math.abs(k * ORB_CP - goal) < Math.abs(best * ORB_CP - goal)) best = k;
   if (Math.abs(best * ORB_CP - goal) < Math.abs(S.t - goal)) { const c = S.cps.get(best); S.X = c[0].slice(); S.V = c[1].slice(); S.t = best * ORB_CP; }
-  while (Math.abs(goal - S.t) > ORB_DT / 2) { const dir = Math.sign(goal - S.t); orbSteps(P, S.X, S.V, 1, dir * ORB_DT, 1, null, S.t); S.t = Math.round((S.t + dir * ORB_DT) / ORB_DT) * ORB_DT; const k = Math.round(S.t / ORB_CP); if (Math.abs(k * ORB_CP - S.t) < ORB_DT / 2 && !S.cps.has(k)) S.cps.set(k, [S.X.slice(), S.V.slice()]); }
+  while (Math.abs(goal - S.t) > ORB_DT / 2) { const dir = Math.sign(goal - S.t); orbSteps(P, S.X, S.V, 1, dir * ORB_DT, 1, null, S.t); S.t = Math.round((S.t + dir * ORB_DT) / ORB_DT) * ORB_DT; const k = Math.round(S.t / ORB_CP); if (Math.abs(k * ORB_CP - S.t) < ORB_DT / 2 && !S.cps.has(k)) { if (S.cps.size >= 64) { let far = null; for (const q of S.cps.keys()) if (q !== 0 && (far === null || Math.abs(q * ORB_CP - S.t) > Math.abs(far * ORB_CP - S.t))) far = q; if (far !== null) S.cps.delete(far); } S.cps.set(k, [S.X.slice(), S.V.slice()]); } }
   const d = (tEff - S.t) * ORB_KV; for (let c = 0; c < 3; c++) out[c] = S.X[c] + S.V[c] * d;
   return out;
 }

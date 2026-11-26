@@ -26,6 +26,15 @@ Une licence marquée [À vérifier] n'a pas été confirmée auprès de la sourc
 | SDSS (DR17, DR18) | requêtes des scripts `pipeline/` | Mention requise | Sloan Digital Sky Survey |
 | Cosmicflows-4 | `app/gen/data17.js` | Citation requise | Tully R. B. et al., 2023, ApJ 944, 94 |
 | NASA Exoplanet Archive | requêtes des scripts `pipeline/` | Mention requise | NASA Exoplanet Archive, Caltech/IPAC |
+| HYG Database 4.1 (58 967 étoiles brillantes) | `app/gen/data.js`, `app/gen/data2.js` | CC BY-SA 4.0 | David Nash, https://www.astronexus.com/hyg |
+| DESI DR1 (galaxies et quasars) | tuiles en flux `g1`–`g3` | Mention requise | DESI Collaboration, NOIRLab Astro Data Lab |
+| 2MRS, 6dFGS, 2dFGRS (relevés de galaxies) | `app/gen/data3.js`, `app/gen/data4.js`, tuiles | Citation requise | Huchra et al. 2012 (2MRS) ; Jones et al. 2009 (6dFGS) ; Colless et al. 2001 (2dFGRS) |
+| Galaxies proches (UNGC & Groupe local) | `app/gen/data.js`, `app/gen/data6.js` | Citation requise | Karachentsev et al. 2013 ; McConnachie 2012 |
+| Pulsars (ATNF) | `app/gen/data4.js` | Citation requise | Manchester et al. 2005, ATNF Pulsar Catalogue |
+| Amas globulaires et ouverts | `app/gen/data4.js` | Citation requise | Harris 1997 (2010) ; Cantat-Gaudin et al. 2020 |
+| Trous noirs (supermassifs et stellaires) | `app/gen/data4.js` | Citation requise | van den Bosch 2016 ; Corral-Santana et al. 2016 (BlackCAT) ; Event Horizon Telescope |
+| Étoiles du centre galactique (S-stars) | `app/gen/data.js` | Citation requise | Gillessen et al. 2017 |
+| Limites des constellations | `app/gen/data4.js` | Domaine public / citation | Roman N. G., 1987, PASP 99, 695 |
 
 ## Système solaire
 

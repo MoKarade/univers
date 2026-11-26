@@ -1,8 +1,43 @@
 # Page construite par app/build.py : régénérée à chaque construction
 dist/
+
+# Python
 __pycache__/
 *.pyc
-# Clé Firebase : jamais dans le dépôt
+*.pyo
+.venv/
+*.egg-info/
+
+# Node / outils locaux
+node_modules/
+
+# C++ / CMake / natif
+build/
+build-*/
+ci-physique/
+mingw.cmake
+*.exe
+*.o
+*.obj
+*.ppm
+*.log
+
+# Captures et brouillons
+captures/
+*.brouillon
+
+# Firebase et secrets : jamais dans le dépôt
 *service-account*.json
 cle.json
+infra/storage.rules
+
+# Sorties de calcul locales
 pipeline/fusion/sortie/
+
+# Fichiers OS et orchestrateur local
+.DS_Store
+Thumbs.db
+.agents/
+PROJECT.md
+TEST_INFRA.md
+TEST_READY.md

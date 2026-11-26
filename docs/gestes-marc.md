@@ -13,7 +13,7 @@ Uniquement des clics dans un navigateur. Les libellés peuvent avoir changé [À
    - le secret `AUTHORIZED_EMAIL` : l'adresse Google autorisée ;
    - la variable `FIREBASE_PROJECT_ID` : l'identifiant du projet.
    Cette clé donne la main sur le projet : jamais dans le dépôt, et à supprimer de l'ordinateur une fois collée.
-8. Déposer le contenu de `univers-depot.zip` dans un dépôt privé `univers` : « uploading an existing file », glisser les dossiers (86 fichiers, 27 Mo).
+8. *(Fait)* Dépôt `MoKarade/univers` créé (passé public le 20 novembre 2026 ; les clés et l'accès Firebase restent strictement privés via Secrets GitHub et règles Storage).
 9. Données de départ. Dans « Storage », créer le dossier `seed` et y glisser les 17 fichiers de `univers-donnees.zip`. Pas nécessaire avant la tâche T6.
 
 Si un déploiement répond « permission denied » : sur console.cloud.google.com, « IAM », compte `firebase-adminsdk-…`, ajouter les rôles « Administrateur Firebase Hosting », « Administrateur de règles Firebase » et « Administrateur Storage » [À vérifier : les droits par défaut suffisent peut-être].
@@ -21,6 +21,6 @@ Si un déploiement répond « permission denied » : sur console.cloud.google.co
 
 ## Pour démarrer la mission 2 (le réel seulement)
 
-Seul le geste 8 est nécessaire : déposer le contenu de `univers-depot.zip` dans le dépôt privé `univers`. Les lots C et A ne touchent pas à Firebase. Les gestes 1 à 7 ne deviennent nécessaires qu'avant les lots B et D.
+Le dépôt `univers` est déjà en place (geste 8 fait). Les lots C et A ne touchent pas à Firebase. Les gestes 1 à 7 restent nécessaires avant le déploiement Firebase (Mission 1 T2).
 
 Phrase à donner à Claude Code : « Lis CLAUDE.md, HANDOVER.md, docs/plan-reel.md et docs/mission-reel.md. Fais T1 de la mission 1, puis commence la mission 2 par R1. »
