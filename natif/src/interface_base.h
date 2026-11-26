@@ -14,10 +14,10 @@
 #include "simulation.h"
 #include "interface_theme.h"
 
-namespace {
+namespace univers {
 
 // Projection sans rejet des points hors de l'écran (pour les tracés) ; false si le point est derrière la caméra.
-bool projectLoose(const Camera& cam, Vec3 p, float w, float h, ImVec2& out) {
+inline bool projectLoose(const Camera& cam, Vec3 p, float w, float h, ImVec2& out) {
     const Vec3 d = p - cam.pos;
     const double z = dot(d, cam.fwd);
     if (z <= 0) return false;
@@ -27,13 +27,13 @@ bool projectLoose(const Camera& cam, Vec3 p, float w, float h, ImVec2& out) {
 }
 
 // Rayon apparent du disque d'un astre, en pixels (0 pour une étoile lointaine).
-double discRadiusPx(const Sim& sim, const Camera& cam, int i, float h) {
+inline double discRadiusPx(const Sim& sim, const Camera& cam, int i, float h) {
     const Vec3 d = sim.position(i) - cam.pos;
     const double dist = std::max(std::sqrt(dot(d, d)), 1e-30);
     return sim.drawnRadiusLy(i) / dist / (2.0 * cam.tanHalf / h);
 }
 
-double distBetween(Vec3 a, Vec3 b) {
+inline double distBetween(Vec3 a, Vec3 b) {
     const Vec3 d = a - b;
     return std::sqrt(dot(d, d));
 }
@@ -178,11 +178,11 @@ struct UiState {
     bool keepNotes = false;         // contrôle : la bulle « mesuré, calculé ou supposé à cette date » reste ouverte
 };
 
-float px(const UiState& ui, float v) { return v * ui.s; }
+inline float px(const UiState& ui, float v) { return v * ui.s; }
 
 // ---------------------------------------------------------------- échelle et départ
 
-void applyScale(UiState& ui, float h) {
+inline void applyScale(UiState& ui, float h) {
     const float s = std::clamp(h / 1000.0f, 1.0f, gFontMaxScale);
     ImGui::GetIO().FontGlobalScale = s / gFontMaxScale;
     if (std::fabs(s - ui.s) < 0.01f && ui.started) return;
@@ -193,14 +193,14 @@ void applyScale(UiState& ui, float h) {
     ImGui::GetStyle().ScaleAllSizes(s);
 }
 
-int bodyByName(const Sim& sim, const char* name) {
+inline int bodyByName(const Sim& sim, const char* name) {
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
         if (sim.bodies[static_cast<size_t>(i)].name == name) return i;
     return -1;
 }
 
 // Centre des échelles : le Soleil ; quand il n'a plus de position (temps profond), le centre de la Voie lactée.
-int scaleCenter(const Sim& sim) {
+inline int scaleCenter(const Sim& sim) {
     if (sim.visible(0)) return 0;
     const int c = bodyByName(sim, "Centre de la Voie lactée");
     return c >= 0 ? c : 0;
@@ -220,20 +220,20 @@ constexpr int kEclipseCount = static_cast<int>(sizeof(kEclipses) / sizeof(kEclip
 const char* const kEclipseStatus = "calculé d'après les éphémérides de la NASA ; contrôlé contre le catalogue des éclipses de la NASA";
 
 // La prochaine après la date affichée (-1 : aucune dans la liste).
-int nextEclipse(double years) {
+inline int nextEclipse(double years) {
     for (int k = 0; k < kEclipseCount; ++k)
         if (kEclipses[k].years > years + 1.0 / 365.25) return k;
     return -1;
 }
 // L'éclipse en cours à la date affichée (à 4 heures près du maximum), ou -1.
-int eclipseNow(double years) {
+inline int eclipseNow(double years) {
     for (int k = 0; k < kEclipseCount; ++k)
         if (std::fabs(kEclipses[k].years - years) < 4.0 / 24.0 / 365.25) return k;
     return -1;
 }
 
 // La caméra suit la Terre et regarde dans l'axe Soleil-Lune, pour voir l'ombre de la Lune ; le temps est arrêté au maximum.
-void showEclipse(Sim& sim, UiState& ui, int k) {
+inline void showEclipse(Sim& sim, UiState& ui, int k) {
     if (k < 0 || k >= kEclipseCount) return;
     const int earth = bodyByName(sim, "Terre");
     ui.tour = -1;
@@ -266,7 +266,7 @@ void showEclipse(Sim& sim, UiState& ui, int k) {
 }
 
 // Étape `step` de la visite `ui.tourSet` (étapes d'astres absents sautées, en avançant comme en reculant).
-void startTour(Sim& sim, UiState& ui, int step, int dir = +1) {
+inline void startTour(Sim& sim, UiState& ui, int step, int dir = +1) {
     ui.welcome = false;
     const TourDef& t = kTours[std::clamp(ui.tourSet, 0, kTourSetCount - 1)];
     for (; step >= 0 && step < t.count; step += dir) {
@@ -281,7 +281,7 @@ void startTour(Sim& sim, UiState& ui, int step, int dir = +1) {
     ui.tour = -1;      // plus d'étape possible : fin de la visite
 }
 
-void startTourSet(Sim& sim, UiState& ui, int set) {
+inline void startTourSet(Sim& sim, UiState& ui, int set) {
     ui.tourSet = std::clamp(set, 0, kTourSetCount - 1);
     startTour(sim, ui, 0);
 }
@@ -289,7 +289,7 @@ void startTourSet(Sim& sim, UiState& ui, int set) {
 void showVoyagerJupiter(Sim& sim, UiState& ui);
 
 // Au premier dessin : mot d'accueil, et réglages de contrôle (variable UNIVERS_ECRAN, pour les captures sans fenêtre).
-void firstFrame(Sim& sim, UiState& ui) {
+inline void firstFrame(Sim& sim, UiState& ui) {
     if (ui.started) return;
     ui.started = true;
     ui.welcome = !sim.touched;
@@ -345,7 +345,7 @@ void firstFrame(Sim& sim, UiState& ui) {
 
 // ---------------------------------------------------------------- orbites, noms, survol
 
-void drawOrbits(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
+inline void drawOrbits(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
     if (!sim.ephemValid) {      // au-delà de 10 millions d'années : seule l'orbite de la Terre est connue (chaos.h)
         double e = 0, peri = 0, spread = 0;
         const double after = sim.years - chaos::kStartYears;
@@ -392,7 +392,7 @@ void drawOrbits(Sim& sim, UiState& ui, const Camera& cam, float w, float h) {
 bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, float w, float h, double px0, double py0, double boostMag);
 
 // L'astre sous la souris : le point le plus proche à moins de 16 pixels (ou sur son disque), ou -1.
-int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, float h, ImVec2 mouse) {
+inline int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, float h, ImVec2 mouse) {
     int best = -1;
     double bestD = 1e30;
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
@@ -426,7 +426,7 @@ int pickBody(const Sim& sim, const UiState& ui, const Camera& cam, float w, floa
     return best;
 }
 
-bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, float w, float h, double px0, double py0, double boostMag) {
+inline bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, float w, float h, double px0, double py0, double boostMag) {
     const Body& b = sim.bodies[static_cast<size_t>(i)];
     if (i == sim.focus) return discRadiusPx(sim, cam, i, h) <= 14;      // vu de près : la fiche porte déjà son nom
     if (b.kind == Kind::Star && b.priority >= 9 && sim.apparentMag(i, cam.pos) - boostMag > 1.0) return false;      // hôtes de planètes : seulement les plus brillants
@@ -465,7 +465,7 @@ bool labelWanted(const Sim& sim, const UiState& ui, const Camera& cam, int i, fl
 }
 
 // Repère de l'astre suivi : quatre coins, comme un viseur (on voit l'astre au milieu, sans le cacher).
-void focusBrackets(ImDrawList* dl, ImVec2 c, float r, float s) {
+inline void focusBrackets(ImDrawList* dl, ImVec2 c, float r, float s) {
     const float k = std::max(5.0f * s, r * 0.38f), t = 1.8f * s;
     for (int sx = -1; sx <= 1; sx += 2)
         for (int sy = -1; sy <= 1; sy += 2) {
@@ -476,7 +476,7 @@ void focusBrackets(ImDrawList* dl, ImVec2 c, float r, float s) {
 }
 
 // Noms posés sur l'image (jamais l'un sur l'autre) et astre survolé mis en valeur.
-void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, float h, int hovered) {
+inline void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, float h, int hovered) {
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
     const int count = static_cast<int>(sim.bodies.size());
     const double boostMag = 2.5 * std::log10(sim.brightnessBoost());
@@ -527,9 +527,9 @@ void drawLabels(const Sim& sim, const UiState& ui, const Camera& cam, float w, f
     }
 }
 
-std::string natureOf(const Body& b) { return b.natureLabel(); }
+inline std::string natureOf(const Body& b) { return b.natureLabel(); }
 
-void hoverTooltip(const Sim& sim, const Camera& cam, int i) {
+inline void hoverTooltip(const Sim& sim, const Camera& cam, int i) {
     const Body& b = sim.bodies[static_cast<size_t>(i)];
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {12 * ImGui::GetIO().FontGlobalScale * gFontMaxScale, 10 * ImGui::GetIO().FontGlobalScale * gFontMaxScale});
     ImGui::BeginTooltip();
@@ -546,7 +546,7 @@ void hoverTooltip(const Sim& sim, const Camera& cam, int i) {
 
 // ---------------------------------------------------------------- clavier
 
-void openSearchWith(UiState& ui, const std::string& typed) {
+inline void openSearchWith(UiState& ui, const std::string& typed) {
     const size_t len = std::strlen(ui.search);
     if (len + typed.size() < sizeof(ui.search)) std::memcpy(ui.search + len, typed.c_str(), typed.size() + 1);
     ui.focusSearch = true;
@@ -554,7 +554,7 @@ void openSearchWith(UiState& ui, const std::string& typed) {
     ui.searchSel = 0;
 }
 
-void handleKeys(Sim& sim, UiState& ui) {
+inline void handleKeys(Sim& sim, UiState& ui) {
     ImGuiIO& io = ImGui::GetIO();
     if (ImGui::IsKeyPressed(ImGuiKey_F1, false)) ui.help = !ui.help;
     if (io.WantTextInput) return;      // on écrit dans un champ : les touches lui appartiennent
@@ -598,4 +598,4 @@ void handleKeys(Sim& sim, UiState& ui) {
     }
 }
 
-}  // namespace
+}  // namespace univers

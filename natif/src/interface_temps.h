@@ -3,12 +3,12 @@
 #include "interface_base.h"
 #include "interface_recherche.h"
 
-namespace {
+namespace univers {
 
 // ---------------------------------------------------------------- temps
 
 // Écart à aujourd'hui, en mots : « aujourd'hui », « dans 3 jours », « il y a 250 ans ».
-std::string relativeToToday(double years) {
+inline std::string relativeToToday(double years) {
     const double d = years - kStartYears, a = std::fabs(d);
     std::string span;
     if (a < 1.0 / 365.25) return "aujourd'hui";
@@ -20,7 +20,7 @@ std::string relativeToToday(double years) {
     return d > 0 ? "dans " + span : "il y a " + span;
 }
 
-void dateJumpPopup(Sim& sim, UiState& ui) {
+inline void dateJumpPopup(Sim& sim, UiState& ui) {
     if (!ImGui::BeginPopup("date")) return;
     ImGui::TextUnformatted("Aller à une date");
     ImGui::TextDisabled("Exemples : 1969   •   21/07/1969   •   -3000   •   250000   •   5000000000");
@@ -43,7 +43,7 @@ void dateJumpPopup(Sim& sim, UiState& ui) {
 }
 
 // (b) Scénarios du Groupe local (clones.h, fil physique) : part qui fusionne et date (16e, 50e, 84e centiles).
-void cloneNote(const Sim& sim) {
+inline void cloneNote(const Sim& sim) {
     if (!sim.cloneCount || sim.cloneMergeProbability <= 0) return;
     ImGui::TextDisabled("Sur %s scénarios tirés de l'incertitude des mesures : %s %% de chances que la Voie lactée et Andromède fusionnent, "
                         "entre %s et %s milliards d'années (valeur centrale %s) [calculé].",
@@ -54,7 +54,7 @@ void cloneNote(const Sim& sim) {
 // Loin d'aujourd'hui : ce qui est montré, et d'où cela vient (fil natif, 87c910e : orbites des étoiles jusqu'à 1 milliard
 // d'années, puis fondu vers le calcul de la fusion entre 800 millions et 1 milliard d'années, Sim::starShare).
 // Hors d'aujourd'hui, ce qui est supposé dans le mouvement des étoiles Gaia (texte du fil Gaia, PR #77).
-void gaiaMotionNote(const Sim& sim) {
+inline void gaiaMotionNote(const Sim& sim) {
     if (std::fabs(sim.years - kStartYears) < 1.0) return;
     if (sim.hasGaia && sim.gaiaCount > completude::kGaiaVitessesRadiales && sim.starShare() > 0)
         ImGui::TextDisabled("%s millions d'étoiles Gaia n'ont pas de vitesse mesurée le long de la ligne de visée : pour leur mouvement dans le temps, "
@@ -72,7 +72,7 @@ void gaiaMotionNote(const Sim& sim) {
 }
 
 // Au-delà de la table des orbites (10 millions d'années) : ce que le calcul du chaos du fil physique dit de la Terre.
-void chaosNote(const Sim& sim) {
+inline void chaosNote(const Sim& sim) {
     const double after = sim.years - chaos::kStartYears;
     if (!sim.chaosRun.ready() || after < 1.0e7) return;
     double e = 0, w = 0, spread = 0;
@@ -90,7 +90,7 @@ void chaosNote(const Sim& sim) {
     ImGui::TextDisabled("Orbite tracée dans le plan de l'écliptique : son inclinaison de quelques degrés n'est pas gardée par le calcul.");
 }
 
-void deepTimeNote(const Sim& sim) {
+inline void deepTimeNote(const Sim& sim) {
     gaiaMotionNote(sim);
     if (!sim.deepTime()) return;
     if (sim.starShare() > 0) {
@@ -120,14 +120,14 @@ void deepTimeNote(const Sim& sim) {
 }
 
 // Planètes : montrées seulement si au moins une a une position à la date affichée.
-bool anyPlanetShown(const Sim& sim) {
+inline bool anyPlanetShown(const Sim& sim) {
     for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i)
         if (sim.bodies[static_cast<size_t>(i)].kind == Kind::Planet && sim.bodies[static_cast<size_t>(i)].parent == 0 && sim.visible(i)) return true;
     return false;
 }
 
 // Vitesse du temps en mots : « 37 millions d'années par seconde », « 2,5 jours par seconde », « temps réel »…
-std::string rateText(double yearsPerSecond) {
+inline std::string rateText(double yearsPerSecond) {
     const double s = yearsPerSecond * kYearSeconds;      // secondes de temps simulé par seconde
     if (std::fabs(s - 1.0) < 0.05) return "Temps réel";
     struct Unit { double years; const char* one; const char* many; };
@@ -145,7 +145,7 @@ std::string rateText(double yearsPerSecond) {
 }
 
 // Ce qui ne vaut qu'à une autre date qu'aujourd'hui : mesuré, calculé ou supposé (ouvert par le bouton « i » du temps).
-void timeNotes(const Sim& sim) {
+inline void timeNotes(const Sim& sim) {
     if (!sim.ephemValid && sim.outer && !anyPlanetShown(sim)) {
         ImGui::TextDisabled("Planètes non montrées à cette date : leur calcul couvre 10 millions d'années avant et après aujourd'hui.");
         chaosNote(sim);
@@ -160,7 +160,7 @@ void timeNotes(const Sim& sim) {
 }
 
 // Bouton rond du lecteur de temps (icône), l'actif en ambre.
-bool dockButton(const UiState& ui, const char* id, const char* icon, const char* word, const char* tip, bool on, float size) {
+inline bool dockButton(const UiState& ui, const char* id, const char* icon, const char* word, const char* tip, bool on, float size) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, size * 0.5f);
     const bool hit = iconButton(id, icon, word, tip, on, size);
     ImGui::PopStyleVar();
@@ -171,7 +171,7 @@ bool dockButton(const UiState& ui, const char* id, const char* icon, const char*
 // En bas, au-dessus de la frise : le temps, comme un lecteur vidéo. Reculer / lecture-pause / avancer, la date en grand
 // avec son écart à aujourd'hui, puis la vitesse (curseur libre, du temps réel à 200 millions d'années par seconde).
 // `left`, `right` : place libre (le panneau de droite est exclu) ; `bottom` : haut de la frise.
-void drawTimeBar(Sim& sim, UiState& ui, float left, float right, float bottom, ImGuiWindowFlags fixed) {
+inline void drawTimeBar(Sim& sim, UiState& ui, float left, float right, float bottom, ImGuiWindowFlags fixed) {
     const float dockW = std::min(px(ui, 700), right - left - px(ui, 32));
     ImGui::SetNextWindowPos({(left + right) * 0.5f, bottom - px(ui, 10)}, 0, {0.5f, 1});
     ImGui::SetNextWindowSizeConstraints({dockW, 0}, {std::max(dockW, right - left - px(ui, 32)), FLT_MAX});
@@ -309,7 +309,7 @@ void drawTimeBar(Sim& sim, UiState& ui, float left, float right, float bottom, I
 // ---------------------------------------------------------------- fiche de l'astre suivi
 
 // Rayon : 0 dans les données veut dire « pas mesuré » (384 des 437 lunes du JPL) : ne jamais écrire « 0 km (mesuré) ».
-void radiusRow(const Body& b, float s) {
+inline void radiusRow(const Body& b, float s) {
     if (b.radiusKm <= 0) {
         row("Rayon", "non mesuré", "", s);
         return;
@@ -317,7 +317,7 @@ void radiusRow(const Body& b, float s) {
     row("Rayon", (b.radiusKm >= 100 ? frInt(b.radiusKm) : frNum(b.radiusKm)) + " km", "mesuré", s);
 }
 
-void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
+inline void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     const Body& fb = sim.bodies[static_cast<size_t>(f)];
     const Vec3 p = sim.position(f);
     const double dSun = std::sqrt(dot(p, p));
@@ -420,7 +420,7 @@ void cardRows(const Sim& sim, const UiState& ui, const Camera& cam, int f) {
     else ImGui::TextDisabled("Sources : catalogues Hipparcos (HYG) et Gaia DR3.");
 }
 
-void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlags fixed) {
+inline void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlags fixed) {
     const int f = sim.focus;
     if (ui.cardClosedFor == f) return;
     ui.cardClosedFor = -1;
@@ -454,4 +454,4 @@ void drawCard(Sim& sim, UiState& ui, const Camera& cam, float w, ImGuiWindowFlag
     ImGui::End();
 }
 
-}  // namespace
+}  // namespace univers

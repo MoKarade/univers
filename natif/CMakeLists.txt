@@ -6,6 +6,17 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Hors Windows (Linux, CI) : seulement la physique et les essais sans carte graphique ni windows.h, puis arrêt.
+# L'appli elle-même (Vulkan, fenêtre Win32, ImGui) ne se construit que pour Windows : la suite du fichier ne change pas.
+if(NOT WIN32)
+  foreach(E essai_cosmologie essai_orientation essai_interface essai_ephem essai_eclipse essai_fiches essai_cycle essai_sondes)
+    add_executable(${E} src/${E}.cpp)
+    target_compile_options(${E} PRIVATE -Wall -Wextra)
+  endforeach()
+  add_subdirectory(physique)
+  return()
+endif()
+
 include(FetchContent)
 # En-têtes Vulkan officiels (Khronos) et volk (chargeur de fonctions Vulkan, Arseny Kapoulkine, licence MIT).
 FetchContent_Declare(vulkan_headers GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git GIT_TAG v1.4.309 GIT_SHALLOW ON)
@@ -14,7 +25,8 @@ FetchContent_MakeAvailable(vulkan_headers)
 # Dear ImGui (Omar Cornut, licence MIT) : interface. Version figée ; pas de CMake fourni, les sources sont listées ici.
 FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.91.9b GIT_SHALLOW ON)
 # stb_image (Sean Barrett, domaine public) : lecture des cartes de surface en JPEG et PNG.
-FetchContent_Declare(stb GIT_REPOSITORY https://github.com/nothings/stb.git GIT_TAG master GIT_SHALLOW ON)
+# Commit figé (master du 26/11/2026) : un hash ne se clone pas en superficiel, d'où l'absence de GIT_SHALLOW.
+FetchContent_Declare(stb GIT_REPOSITORY https://github.com/nothings/stb.git GIT_TAG 6b5799bae8a1fe3792691ef4b72ae26434c3e799)
 FetchContent_GetProperties(stb)
 if(NOT stb_POPULATED)
   FetchContent_Populate(stb)
@@ -65,7 +77,7 @@ foreach(T univers UniversPC)
   add_executable(${T} src/univers.cpp src/fenetre.cpp src/stb_impl.cpp)
   target_include_directories(${T} PRIVATE ${stb_SOURCE_DIR})
   target_link_libraries(${T} PRIVATE volk imgui univers_physique msimg32)      # msimg32 : dégradé de l'écran de chargement
-  target_compile_options(${T} PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+  target_compile_options(${T} PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
   add_dependencies(${T} shaders)
 endforeach()
 target_link_options(univers PRIVATE -static)
@@ -113,23 +125,23 @@ target_link_options(essai_cycle PRIVATE -static)
 # Contrôle de la complétude par échelle (completude.h) sur le vrai fichier d'étoiles.
 add_executable(essai_selection src/essai_selection.cpp)
 target_link_libraries(essai_selection PRIVATE volk imgui univers_physique)
-target_compile_options(essai_selection PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_selection PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_selection PRIVATE -static)
 
 add_executable(essai_pose src/essai_pose.cpp)      # pose automatique (pose_auto.h), sans carte graphique
 target_link_libraries(essai_pose PRIVATE volk)
-target_compile_options(essai_pose PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_pose PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_pose PRIVATE -static)
 
 add_executable(essai_completude src/essai_completude.cpp)
 target_link_libraries(essai_completude PRIVATE volk imgui univers_physique)
-target_compile_options(essai_completude PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_completude PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_completude PRIVATE -static)
 
 # Contrôle des grandes structures (structures.bin) et du modèle du nuage d'Oort (structures.h).
 add_executable(essai_structures src/essai_structures.cpp)
 target_link_libraries(essai_structures PRIVATE volk)
-target_compile_options(essai_structures PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_structures PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_structures PRIVATE -static)
 
 add_subdirectory(physique)
@@ -142,26 +154,26 @@ target_link_options(essai_sondes PRIVATE -static)
 # Contrôle sans fenêtre des étoiles Gaia DR3 (gaia.h) : image hors écran, cadence, étoiles dessinées.
 add_executable(essai_gaia src/essai_gaia.cpp)
 target_link_libraries(essai_gaia PRIVATE volk univers_physique)
-target_compile_options(essai_gaia PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_gaia PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_gaia PRIVATE -static)
 add_dependencies(essai_gaia shaders)
 
 # Contrôle du mouvement des étoiles autour de la Galaxie (orbite_galactique.h, shaders/orbite_galactique.glsl).
 add_executable(essai_orbite src/essai_orbite.cpp)
 target_link_libraries(essai_orbite PRIVATE volk univers_physique)
-target_compile_options(essai_orbite PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_orbite PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_orbite PRIVATE -static)
 
 # Précision mesurée des épicycles contre l'intégration exacte, sur les étoiles d'etoiles.bin.
 add_executable(essai_epicycles src/essai_epicycles.cpp)
 target_link_libraries(essai_epicycles PRIVATE volk univers_physique)
-target_compile_options(essai_epicycles PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_epicycles PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_epicycles PRIVATE -static)
 
 # Contrôle sans fenêtre du ciel par bande (ciel_bandes.h) : carte mesurée d'une longueur d'onde, image hors écran.
 add_executable(essai_ciel src/essai_ciel.cpp)
 target_link_libraries(essai_ciel PRIVATE volk)
-target_compile_options(essai_ciel PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_ciel PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_ciel PRIVATE -static)
 add_dependencies(essai_ciel shaders)
 
@@ -169,7 +181,7 @@ add_dependencies(essai_ciel shaders)
 # contre la bibliothèque en double, et écart des clones d'incertitude de chaque étoile.
 add_executable(precalcul_clones src/precalcul_clones.cpp)
 target_link_libraries(precalcul_clones PRIVATE volk univers_physique)
-target_compile_options(precalcul_clones PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(precalcul_clones PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(precalcul_clones PRIVATE -static)
 add_dependencies(precalcul_clones shaders)
 
@@ -177,11 +189,11 @@ add_dependencies(precalcul_clones shaders)
 add_executable(essai_temps_rapide src/essai_temps_rapide.cpp src/stb_impl.cpp)
 target_include_directories(essai_temps_rapide PRIVATE ${stb_SOURCE_DIR})
 target_link_libraries(essai_temps_rapide PRIVATE volk imgui univers_physique)
-target_compile_options(essai_temps_rapide PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_temps_rapide PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 target_link_options(essai_temps_rapide PRIVATE -static)
 
 # Essai d'ensemble : continuité des astres nommés sur toute la plage de dates (sans fenêtre).
 add_executable(essai_continuite src/essai_continuite.cpp src/stb_impl.cpp)
 target_include_directories(essai_continuite PRIVATE ${stb_SOURCE_DIR})
 target_link_libraries(essai_continuite PRIVATE volk imgui univers_physique)
-target_compile_options(essai_continuite PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function)
+target_compile_options(essai_continuite PRIVATE -Wall -Wextra -Wno-missing-field-initializers)

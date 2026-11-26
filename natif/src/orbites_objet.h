@@ -21,7 +21,7 @@
 #include "groupe_local_scenario.h"
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 // Réglages du bac à sable qui changent le mouvement des étoiles (partagés par le panneau et les tracés).
 struct SandboxGalaxy {
@@ -298,4 +298,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

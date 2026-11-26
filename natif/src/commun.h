@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-namespace {
+namespace univers {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr size_t kAlign = 64;
@@ -26,7 +26,7 @@ constexpr size_t kAlign = 64;
 // programme, au lieu de disparaître avec une console que personne ne voit.
 inline bool gWindowMode = false;
 
-[[noreturn]] void fail(const std::string& what, VkResult r = VK_SUCCESS) {
+[[noreturn]] inline void fail(const std::string& what, VkResult r = VK_SUCCESS) {
     const std::string msg = "ECHEC : " + what + " (code " + std::to_string(static_cast<int>(r)) + ")";
     std::fprintf(stderr, "%s\n", msg.c_str());
     if (gWindowMode) {
@@ -43,7 +43,7 @@ inline bool gWindowMode = false;
     }
     std::exit(1);
 }
-void check(VkResult r, const char* what) {
+inline void check(VkResult r, const char* what) {
     if (r != VK_SUCCESS) fail(what, r);
 }
 
@@ -62,7 +62,7 @@ struct Stars {
     const float* vel(int axis) const { return col(5 + axis); }      // km/s
 };
 
-Stars openStars(const char* path) {
+inline Stars openStars(const char* path) {
     Stars s;
     s.file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (s.file == INVALID_HANDLE_VALUE) fail(std::string("fichier introuvable : ") + path);
@@ -83,11 +83,11 @@ Stars openStars(const char* path) {
 // Température d'après l'indice B-V : Ballesteros 2012 (EPL 97, 34008). Couleur : spectre de Planck intégré sur
 // l'observateur CIE 1931, par l'ajustement analytique de Wyman, Sloan et Shirley 2013 (JCGT 2(2), 1), puis
 // passage en sRGB linéaire. [Probable : coefficients recopiés ; la page utilise les tables CIE elles-mêmes (S1).]
-double lobe(double l, double mu, double s1, double s2) {
+inline double lobe(double l, double mu, double s1, double s2) {
     const double t = (l - mu) / (l < mu ? s1 : s2);
     return std::exp(-0.5 * t * t);
 }
-std::array<uint8_t, 4> colorOfTemperature(double T) {
+inline std::array<uint8_t, 4> colorOfTemperature(double T) {
     double X = 0, Y = 0, Z = 0;
     for (double l = 380; l <= 780; l += 5) {
         const double m = l * 1e-9;
@@ -102,14 +102,14 @@ std::array<uint8_t, 4> colorOfTemperature(double T) {
     auto q = [&](double v) { return static_cast<uint8_t>(std::lround(255.0 * v / mx)); };
     return {q(r), q(g), q(b), 255};
 }
-std::array<uint8_t, 4> colorOfBv(double bv) { return colorOfTemperature(4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62))); }
+inline std::array<uint8_t, 4> colorOfBv(double bv) { return colorOfTemperature(4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62))); }
 
 // ---------------------------------------------------------------- un peu d'algèbre (double précision côté processeur)
 struct Vec3 { double x, y, z; };
-Vec3 operator-(Vec3 a, Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
-double dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-Vec3 cross(Vec3 a, Vec3 b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
-Vec3 unit(Vec3 a) { const double l = std::sqrt(dot(a, a)); return {a.x / l, a.y / l, a.z / l}; }
+inline Vec3 operator-(Vec3 a, Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+inline double dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+inline Vec3 cross(Vec3 a, Vec3 b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
+inline Vec3 unit(Vec3 a) { const double l = std::sqrt(dot(a, a)); return {a.x / l, a.y / l, a.z / l}; }
 
 struct Camera {
     Vec3 pos, right, up, fwd;
@@ -147,7 +147,7 @@ struct Gpu {
     bool int64Atomics = false;      // additions atomiques sur 64 bits dans les tampons (gaia_points.comp) : allumées si la carte sait
 };
 
-uint32_t memoryType(const Gpu& g, uint32_t bits, VkMemoryPropertyFlags want) {
+inline uint32_t memoryType(const Gpu& g, uint32_t bits, VkMemoryPropertyFlags want) {
     VkPhysicalDeviceMemoryProperties mp;
     vkGetPhysicalDeviceMemoryProperties(g.pd, &mp);
     for (uint32_t i = 0; i < mp.memoryTypeCount; ++i)
@@ -156,7 +156,7 @@ uint32_t memoryType(const Gpu& g, uint32_t bits, VkMemoryPropertyFlags want) {
 }
 
 // window : ajoute ce qu'il faut pour dessiner dans une fenêtre Windows (surface, chaîne d'images).
-Gpu createGpu(bool window = false) {
+inline Gpu createGpu(bool window = false) {
     Gpu g;
     check(volkInitialize(), "chargement de Vulkan");
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
@@ -237,7 +237,7 @@ struct Buffer {
     VkDeviceMemory mem{};
 };
 
-Buffer createBuffer(const Gpu& g, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags props) {
+inline Buffer createBuffer(const Gpu& g, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags props) {
     Buffer b;
     VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bi.size = size;
@@ -252,12 +252,12 @@ Buffer createBuffer(const Gpu& g, VkDeviceSize size, VkBufferUsageFlags usage, V
     vkBindBufferMemory(g.dev, b.buf, b.mem, 0);
     return b;
 }
-void destroy(const Gpu& g, Buffer& b) {
+inline void destroy(const Gpu& g, Buffer& b) {
     vkDestroyBuffer(g.dev, b.buf, nullptr);
     vkFreeMemory(g.dev, b.mem, nullptr);
 }
 
-VkCommandBuffer beginOnce(const Gpu& g) {
+inline VkCommandBuffer beginOnce(const Gpu& g) {
     VkCommandBufferAllocateInfo cai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     cai.commandPool = g.pool;
     cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -268,7 +268,7 @@ VkCommandBuffer beginOnce(const Gpu& g) {
     vkBeginCommandBuffer(cmd, &begin);
     return cmd;
 }
-void endOnce(const Gpu& g, VkCommandBuffer cmd) {
+inline void endOnce(const Gpu& g, VkCommandBuffer cmd) {
     check(vkEndCommandBuffer(cmd), "fin des commandes");
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.commandBufferCount = 1;
@@ -279,7 +279,7 @@ void endOnce(const Gpu& g, VkCommandBuffer cmd) {
 }
 
 // Copie des octets vers un tampon de sommets en mémoire de la carte.
-Buffer uploadVertices(const Gpu& g, const void* data, VkDeviceSize size) {
+inline Buffer uploadVertices(const Gpu& g, const void* data, VkDeviceSize size) {
     Buffer staging = createBuffer(g, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     void* p = nullptr;
     check(vkMapMemory(g.dev, staging.mem, 0, size, 0, &p), "accès au tampon");
@@ -295,7 +295,7 @@ Buffer uploadVertices(const Gpu& g, const void* data, VkDeviceSize size) {
 }
 
 // Dossier du programme : les shaders compilés (spv/) et, par défaut, etoiles.bin sont rangés à côté de lui.
-std::string exeDir() {
+inline std::string exeDir() {
     char path[MAX_PATH];
     const DWORD n = GetModuleFileNameA(nullptr, path, MAX_PATH);
     std::string s(path, n);
@@ -303,7 +303,7 @@ std::string exeDir() {
     return cut == std::string::npos ? "." : s.substr(0, cut);
 }
 
-std::vector<uint32_t> readSpv(const std::string& name) {
+inline std::vector<uint32_t> readSpv(const std::string& name) {
     std::ifstream f(exeDir() + "/spv/" + name, std::ios::binary | std::ios::ate);
     if (!f) fail("shader introuvable : " + name);
     const auto size = static_cast<size_t>(f.tellg());
@@ -312,7 +312,7 @@ std::vector<uint32_t> readSpv(const std::string& name) {
     f.read(reinterpret_cast<char*>(code.data()), static_cast<std::streamsize>(size));
     return code;
 }
-VkShaderModule shader(const Gpu& g, const char* name) {
+inline VkShaderModule shader(const Gpu& g, const char* name) {
     const auto code = readSpv(name);
     VkShaderModuleCreateInfo si{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
     si.codeSize = code.size() * 4;
@@ -330,7 +330,7 @@ struct PushConstants {
 };
 
 // Demi-flottant IEEE 754 -> flottant.
-float halfToFloat(uint16_t h) {
+inline float halfToFloat(uint16_t h) {
     const uint32_t s = (h >> 15) & 1, e = (h >> 10) & 0x1f, m = h & 0x3ff;
     uint32_t bits;
     if (e == 0) {
@@ -559,7 +559,7 @@ struct HdrTarget {
 };
 
 // Changement d'état d'une image entre deux usages.
-void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to, VkAccessFlags sa, VkAccessFlags da, VkPipelineStageFlags ss,
+inline void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to, VkAccessFlags sa, VkAccessFlags da, VkPipelineStageFlags ss,
                 VkPipelineStageFlags ds) {
     VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
     b.oldLayout = from;
@@ -573,7 +573,7 @@ void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageL
 }
 
 // Caméra placée en pos, tournée vers la cible ; « haut » = pôle nord de l'écliptique.
-Camera lookAt(Vec3 pos, Vec3 target, double fovDeg, double aspect) {
+inline Camera lookAt(Vec3 pos, Vec3 target, double fovDeg, double aspect) {
     Camera cam;
     cam.pos = pos;
     cam.fwd = unit(target - pos);
@@ -585,7 +585,7 @@ Camera lookAt(Vec3 pos, Vec3 target, double fovDeg, double aspect) {
 }
 
 // years : années écoulées depuis l'époque du catalogue (les étoiles avancent en ligne droite à leur vitesse mesurée).
-PushConstants pushConstants(const Camera& cam, float exposure, uint32_t height, double years = 0.0) {
+inline PushConstants pushConstants(const Camera& cam, float exposure, uint32_t height, double years = 0.0) {
     PushConstants pc{};
     const auto m = cam.viewProj();
     std::memcpy(pc.viewProj, m.data(), sizeof(pc.viewProj));
@@ -602,4 +602,4 @@ PushConstants pushConstants(const Camera& cam, float exposure, uint32_t height, 
 
 constexpr float kExposure = 40.0f;      // une étoile de magnitude apparente 0 vaut 40 avant conversion pour l'écran
 
-}  // namespace
+}  // namespace univers

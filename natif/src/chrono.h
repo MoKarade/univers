@@ -14,6 +14,8 @@
 
 #include "commun.h"
 
+namespace univers {
+
 struct Chrono {
     static constexpr uint32_t kMaxMarks = 64;
     bool on = false;
@@ -126,3 +128,5 @@ private:
     std::vector<std::string> names_, submittedNames_;
     std::map<std::string, std::vector<double>> stats_;
 };
+
+}  // namespace univers

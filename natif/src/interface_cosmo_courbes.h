@@ -13,7 +13,7 @@
 
 #include "cosmologie.h"
 
-namespace {
+namespace univers {
 
 struct CosmoHistory {
     cosmo::Params p;
@@ -113,4 +113,4 @@ struct CosmoHistory {
     double q0() const { return p.omegaR() + 0.5 * p.om + 0.5 * p.ode * (1.0 + 3.0 * p.w0); }
 };
 
-}  // namespace
+}  // namespace univers

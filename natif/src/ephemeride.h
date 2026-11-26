@@ -9,7 +9,15 @@
 // Ici : aucun calcul d'orbite, seulement la lecture des polynômes de la NASA. Hors de la plage du fichier, la
 // fonction répond « inconnu » (false).
 #pragma once
+/* Projection du fichier en mémoire : API Win32 sous Windows, mmap POSIX ailleurs (Linux, CI). Même lecture des octets. */
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 #include <cmath>
 #include <cstdint>
@@ -33,17 +41,70 @@ struct Vec {
     double x = 0, y = 0, z = 0;
 };
 
+// Fichier projeté en lecture seule. Libéré à la destruction ; non copiable (Spk est gardé par pointeur dans Set).
+struct MappedFile {
+    const uint8_t* base = nullptr;
+    uint64_t size = 0;
+
+    MappedFile() = default;
+    MappedFile(const MappedFile&) = delete;
+    MappedFile& operator=(const MappedFile&) = delete;
+    ~MappedFile() { close(); }
+
+    bool open(const std::string& path, std::string& error) {
+        close();
+#ifdef _WIN32
+        file_ = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file_ == INVALID_HANDLE_VALUE) { error = "fichier introuvable : " + path; return false; }
+        LARGE_INTEGER sz;
+        GetFileSizeEx(file_, &sz);
+        size = static_cast<uint64_t>(sz.QuadPart);
+        mapping_ = CreateFileMappingA(file_, nullptr, PAGE_READONLY, 0, 0, nullptr);
+        base = mapping_ ? static_cast<const uint8_t*>(MapViewOfFile(mapping_, FILE_MAP_READ, 0, 0, 0)) : nullptr;
+#else
+        fd_ = ::open(path.c_str(), O_RDONLY);
+        if (fd_ < 0) { error = "fichier introuvable : " + path; return false; }
+        struct stat st {};
+        if (::fstat(fd_, &st) == 0 && st.st_size > 0) {
+            size = static_cast<uint64_t>(st.st_size);
+            void* p = ::mmap(nullptr, static_cast<size_t>(size), PROT_READ, MAP_PRIVATE, fd_, 0);
+            base = p == MAP_FAILED ? nullptr : static_cast<const uint8_t*>(p);
+        }
+#endif
+        if (!base) { error = "projection en mémoire impossible : " + path; return false; }
+        return true;
+    }
+
+    void close() {
+#ifdef _WIN32
+        if (base) UnmapViewOfFile(base);
+        if (mapping_) CloseHandle(mapping_);
+        if (file_ != INVALID_HANDLE_VALUE) CloseHandle(file_);
+        file_ = INVALID_HANDLE_VALUE;
+        mapping_ = nullptr;
+#else
+        if (base) ::munmap(const_cast<uint8_t*>(base), static_cast<size_t>(size));
+        if (fd_ >= 0) ::close(fd_);
+        fd_ = -1;
+#endif
+        base = nullptr;
+        size = 0;
+    }
+
+private:
+#ifdef _WIN32
+    HANDLE file_ = INVALID_HANDLE_VALUE, mapping_ = nullptr;
+#else
+    int fd_ = -1;
+#endif
+};
+
 class Spk {
 public:
     bool open(const std::string& path, std::string& error) {
-        file_ = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (file_ == INVALID_HANDLE_VALUE) { error = "fichier introuvable : " + path; return false; }
-        LARGE_INTEGER size;
-        GetFileSizeEx(file_, &size);
-        size_ = static_cast<uint64_t>(size.QuadPart);
-        mapping_ = CreateFileMappingA(file_, nullptr, PAGE_READONLY, 0, 0, nullptr);
-        base_ = mapping_ ? static_cast<const uint8_t*>(MapViewOfFile(mapping_, FILE_MAP_READ, 0, 0, 0)) : nullptr;
-        if (!base_) { error = "projection en mémoire impossible : " + path; return false; }
+        if (!map_.open(path, error)) return false;
+        base_ = map_.base;
+        size_ = map_.size;
         if (size_ < 1024 || std::memcmp(base_, "DAF/SPK", 7) != 0) { error = "ce n'est pas un fichier SPK du NAIF"; return false; }
         if (std::memcmp(base_ + 88, "LTL-IEEE", 8) != 0) { error = "fichier SPK non petit-boutiste"; return false; }
         int32_t nd, ni, fward;
@@ -115,11 +176,6 @@ public:
         return body == kSsb;
     }
 
-    ~Spk() {
-        if (base_) UnmapViewOfFile(base_);
-        if (mapping_) CloseHandle(mapping_);
-        if (file_ != INVALID_HANDLE_VALUE) CloseHandle(file_);
-    }
 
 private:
     struct Segment {
@@ -168,7 +224,7 @@ private:
         vel = {v[0], v[1], v[2]};
     }
 
-    HANDLE file_ = INVALID_HANDLE_VALUE, mapping_ = nullptr;
+    MappedFile map_;
     const uint8_t* base_ = nullptr;
     uint64_t size_ = 0;
     std::vector<Segment> segments_;

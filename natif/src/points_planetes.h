@@ -4,7 +4,7 @@
 #pragma once
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct PlanetPoints {
     static constexpr uint32_t kMax = 32;
@@ -88,4 +88,4 @@ struct PlanetPoints {
     }
 };
 
-}  // namespace
+}  // namespace univers

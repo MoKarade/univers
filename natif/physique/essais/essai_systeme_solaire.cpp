@@ -126,7 +126,9 @@ int main(int argc, char** argv) {
         const double jd = phys::kDe440Fin + 777.7 * 365.25; phys::Vec3 ref, rv; ss.etat(phys::kVenus, jd, ref, rv, st);
         std::vector<std::thread> th; std::vector<double> d(4, 1e30);
         for (int k = 0; k < 4; k++) th.emplace_back([&, k] { phys::Vec3 q, w; phys::Statut s2; for (int r = 0; r < 20; r++) if (ss.etat(phys::kVenus, jd, q, w, s2)) d[k] = std::hypot(q.x - ref.x, q.y - ref.y, q.z - ref.z); });
-        for (auto& t : th) t.join(); double m = 0; for (double x : d) m = std::fmax(m, x);
+        for (auto& t : th) t.join();
+        double m = 0;
+        for (double x : d) m = std::fmax(m, x);
         ok(m == 0, "quatre fils d'exécution : mêmes positions (écart %.3g km)", m);
     }
     std::printf(g_fail ? "ECHEC (%d)\n" : "PASSE\n", g_fail);

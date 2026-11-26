@@ -36,7 +36,7 @@
 #include <limits>
 #include <unordered_map>
 
-namespace {
+namespace univers {
 
 // HEALPix emboîté en double précision : face (0 à 11) et coordonnées (ix, iy) dans la face, pour Nside quelconque
 // (même calcul que ang2pixNest dans ciel_bandes.frag ; Górski et al. 2005).
@@ -443,4 +443,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

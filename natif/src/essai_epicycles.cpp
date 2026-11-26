@@ -18,6 +18,8 @@
 
 #include "orbite_galactique.h"
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 namespace {
 struct Etoiles {
     std::vector<float> x, y, z, vx, vy, vz;
@@ -66,7 +68,7 @@ int main(int argc, char** argv) {
     namespace g = phys::galaxie;
     const phys::Vec3 s = g::soleilPos(), sv = g::soleilVit();
     std::vector<phys::Vec3> P, V;
-    std::vector<char> chaud;
+    std::vector<unsigned char> chaud;      /* 0 : disque, 1 : chaud ; non signé pour servir d'indice */
     double dMax = 0;
     for (size_t k : avecVitesse) {
         const phys::Vec3 pg = orbite::versGalactique({e.x[k], e.y[k], e.z[k]}), vg = orbite::versGalactique({e.vx[k], e.vy[k], e.vz[k]});

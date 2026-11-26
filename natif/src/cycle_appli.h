@@ -9,7 +9,7 @@
 #include "parallele.h"
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 class CycleAppli {
 public:
@@ -195,4 +195,4 @@ public:
     }
 };
 
-}  // namespace
+}  // namespace univers

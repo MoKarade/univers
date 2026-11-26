@@ -119,9 +119,11 @@ public:
     size_t taille() const { return sub_.size(); }
     // Avance jusqu'à tGa (arrondi au pas de 1 Ma ; vers le passé si tGa < temps()).
     void avance(double tGa, unsigned fils = std::thread::hardware_concurrency()) {
-        const long n = std::lround((tGa - t_) / kDtGa); if (n == 0) return;
+        const long n = std::lround((tGa - t_) / kDtGa);
+        if (n == 0) return;
         const double dt = n > 0 ? kDtGa : -kDtGa; const long steps = n > 0 ? n : -n;
-        if (fils < 1) fils = 1; const size_t N = sub_.size(), part = (N + fils - 1) / fils;
+        if (fils < 1) fils = 1;
+        const size_t N = sub_.size(), part = (N + fils - 1) / fils;
         std::vector<std::thread> th;
         for (unsigned f = 0; f < fils; f++) { const size_t a = f * part, b = std::min(N, a + part); if (a >= b) break; th.emplace_back([=, this] { pas(a, b, dt, steps, t_); }); }
         for (auto& x : th) x.join();

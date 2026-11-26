@@ -16,6 +16,8 @@
 #include "fenetre.h"
 #include "chargement.h"
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 namespace {
 
 std::vector<uint64_t> parseList(const char* s) {

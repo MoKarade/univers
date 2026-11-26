@@ -13,7 +13,7 @@
 
 #include "interface_outils.h"
 
-namespace {
+namespace univers {
 
 // ---------------------------------------------------------------- jetons de couleur
 
@@ -86,15 +86,15 @@ constexpr const char* kZoomIn = "\xEE\xA2\xA3";      // U+E8A3
 // ---------------------------------------------------------------- polices
 
 // Échelle de l'interface : la police est chargée pour le plus grand écran du PC, puis réduite pour une fenêtre plus petite.
-float gFontMaxScale = 1.0f;
-bool gIcons = false;                 // police d'icônes trouvée et fusionnée
-ImFont* gFontSmall = nullptr;        // légendes, statuts, sources
-ImFont* gFontBold = nullptr;         // titres de section, valeurs mises en avant
+inline float gFontMaxScale = 1.0f;
+inline bool gIcons = false;                 // police d'icônes trouvée et fusionnée
+inline ImFont* gFontSmall = nullptr;        // légendes, statuts, sources
+inline ImFont* gFontBold = nullptr;         // titres de section, valeurs mises en avant
 
 // Police de Windows avec les accents et les signes utilisés ; à défaut, la police intégrée (sans accents).
 // Elle est chargée à la taille voulue pour la hauteur de l'écran principal (1 à 2,5 fois la taille de base de 1080 lignes).
 // Les icônes (Segoe Fluent Icons) sont fusionnées dans chaque taille : « \xEE\x9C\xA1 Chercher » s'écrit d'un seul texte.
-void loadFonts(ImFont*& normal, ImFont*& big) {
+inline void loadFonts(ImFont*& normal, ImFont*& big) {
     ImGuiIO& io = ImGui::GetIO();
     static const ImWchar ranges[] = {0x0020, 0x00FF, 0x0100, 0x017F, 0x0391, 0x03C9, 0x2000, 0x206F, 0x2190, 0x2193, 0x2212, 0x2212, 0x2318, 0x2318,
                                      0x2600, 0x2600, 0x25CF, 0x25CF, 0};
@@ -132,11 +132,11 @@ void loadFonts(ImFont*& normal, ImFont*& big) {
 }
 
 // Texte d'un bouton-icône : l'icône si la police est là, sinon le mot.
-std::string iconLabel(const char* icon, const char* word) { return gIcons ? std::string(icon) : std::string(word); }
+inline std::string iconLabel(const char* icon, const char* word) { return gIcons ? std::string(icon) : std::string(word); }
 
 // ---------------------------------------------------------------- style ImGui
 
-void applyStyle() {
+inline void applyStyle() {
     ImGuiStyle& st = ImGui::GetStyle();
     st.WindowRounding = 14;
     st.ChildRounding = 10;
@@ -206,7 +206,7 @@ void applyStyle() {
 // ---------------------------------------------------------------- petits éléments
 
 // Bouton carré à icône, avec bulle d'aide. `on` : état actif (fond ambre doux, icône ambre).
-bool iconButton(const char* id, const char* icon, const char* word, const char* tip, bool on = false, float size = 0) {
+inline bool iconButton(const char* id, const char* icon, const char* word, const char* tip, bool on = false, float size = 0) {
     const float sz = size > 0 ? size : ImGui::GetFrameHeight();
     ImGui::PushID(id);
     if (on) {
@@ -222,7 +222,7 @@ bool iconButton(const char* id, const char* icon, const char* word, const char* 
 }
 
 // Pastille de texte (statut, nature d'un astre) posée dans la ligne courante.
-void chip(const char* text, ImU32 col, bool filled = false) {
+inline void chip(const char* text, ImU32 col, bool filled = false) {
     ImFont* f = gFontSmall ? gFontSmall : ImGui::GetFont();
     ImGui::PushFont(f);
     const ImVec2 ts = ImGui::CalcTextSize(text);
@@ -238,7 +238,7 @@ void chip(const char* text, ImU32 col, bool filled = false) {
 }
 
 // Pastille de statut d'une valeur (mesuré, calculé, modèle, supposé…), alignée sur le milieu de la ligne de texte.
-void statusChip(ui_outils::Statut st) {
+inline void statusChip(ui_outils::Statut st) {
     if (st == ui_outils::Statut::Aucun) return;
     const float lift = (ImGui::GetTextLineHeight() - (gFontSmall ? gFontSmall->FontSize * ImGui::GetIO().FontGlobalScale : ImGui::GetTextLineHeight())) * 0.5f;
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(0.0f, lift - 1.0f));
@@ -246,7 +246,7 @@ void statusChip(ui_outils::Statut st) {
 }
 
 // Texte secondaire, petite police, qui revient à la ligne.
-void smallNote(const char* text, ImU32 col = theme::kMuted) {
+inline void smallNote(const char* text, ImU32 col = theme::kMuted) {
     ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
     ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(col));
     ImGui::TextWrapped("%s", text);
@@ -255,7 +255,7 @@ void smallNote(const char* text, ImU32 col = theme::kMuted) {
 }
 
 // Titre de petite section, en capitales espacées (« VALEURS », « ORBITE »).
-void sectionLabel(const char* text) {
+inline void sectionLabel(const char* text) {
     ImGui::PushFont(gFontSmall ? gFontSmall : ImGui::GetFont());
     ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(theme::kFaint));
     ImGui::TextUnformatted(ui_outils::majuscules(text).c_str());
@@ -265,7 +265,7 @@ void sectionLabel(const char* text) {
 
 // Ligne de valeur d'une fiche : libellé gris, valeur, pastille de statut ; le reste du statut (source, méthode) en petit
 // dessous. Aucun texte n'est retiré : seule la mise en page change. Signature d'origine gardée (appelée partout).
-void row(const char* label, const std::string& value, const char* status, float s) {
+inline void row(const char* label, const std::string& value, const char* status, float s) {
     const float avail = ImGui::GetContentRegionAvail().x;
     const float col = std::min(avail * 0.42f, std::max(150.0f * s, ImGui::CalcTextSize(label).x + 14.0f * s));
     const float x0 = ImGui::GetCursorPosX();
@@ -306,7 +306,7 @@ void row(const char* label, const std::string& value, const char* status, float 
 }
 
 // Fond d'une fenêtre « carte » : ombre douce sous le verre. À appeler juste après ImGui::Begin.
-void cardShadow() {
+inline void cardShadow() {
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
     const ImVec2 p = ImGui::GetWindowPos(), sz = ImGui::GetWindowSize();
     const float r = ImGui::GetStyle().WindowRounding;
@@ -316,4 +316,4 @@ void cardShadow() {
     }
 }
 
-}  // namespace
+}  // namespace univers

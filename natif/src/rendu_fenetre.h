@@ -3,7 +3,7 @@
 #pragma once
 #include "commun.h"
 
-namespace {
+namespace univers {
 
 constexpr VkFormat kFinalFormat = VK_FORMAT_B8G8R8A8_UNORM;      // l'interface écrit des couleurs déjà prêtes pour l'écran
 
@@ -13,13 +13,13 @@ struct Swapchain {
     std::vector<VkImage> images;
 };
 
-void destroySwapchain(const Gpu& g, Swapchain& s) {
+inline void destroySwapchain(const Gpu& g, Swapchain& s) {
     if (s.chain) vkDestroySwapchainKHR(g.dev, s.chain, nullptr);
     s.chain = VK_NULL_HANDLE;
 }
 
 // Rend false si la fenêtre n'a pas de surface à dessiner (réduite) : on ne dessine pas.
-bool createSwapchain(const Gpu& g, VkSurfaceKHR surface, bool fastest, Swapchain& s) {
+inline bool createSwapchain(const Gpu& g, VkSurfaceKHR surface, bool fastest, Swapchain& s) {
     VkSurfaceCapabilitiesKHR caps;
     check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g.pd, surface, &caps), "capacités de la surface");
     if (caps.currentExtent.width == 0 || caps.currentExtent.height == 0) return false;
@@ -221,7 +221,7 @@ struct ScreenPass {
     }
 };
 
-void beginPass(VkCommandBuffer cmd, VkImageView view, VkExtent2D extent) {
+inline void beginPass(VkCommandBuffer cmd, VkImageView view, VkExtent2D extent) {
     VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     color.imageView = view;
     color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -236,7 +236,7 @@ void beginPass(VkCommandBuffer cmd, VkImageView view, VkExtent2D extent) {
 }
 
 // Écrit l'image finale (BGRA 8 bits, déjà dans l'état « source de copie ») dans un fichier .ppm.
-void writeCapture(const Gpu& g, const Target& final, VkExtent2D extent, const std::string& path) {
+inline void writeCapture(const Gpu& g, const Target& final, VkExtent2D extent, const std::string& path) {
     const VkDeviceSize bytes = static_cast<VkDeviceSize>(extent.width) * extent.height * 4;
     Buffer rb = createBuffer(g, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     VkCommandBuffer cmd = beginOnce(g);
@@ -258,4 +258,4 @@ void writeCapture(const Gpu& g, const Target& final, VkExtent2D extent, const st
     destroy(g, rb);
 }
 
-}  // namespace
+}  // namespace univers

@@ -12,7 +12,7 @@
 #include "orbite_galactique.h"
 #include "gaia_orbites.h"
 
-namespace {
+namespace univers {
 
 struct GaiaLeaf {
     float mn[3];
@@ -59,7 +59,7 @@ inline double poidsLoin(double camDist, double starDist) { return std::clamp(cam
 inline size_t gaiaAlign(size_t v) { return (v + kAlign - 1) / kAlign * kAlign; }
 
 // Rend false si le fichier manque ou n'est pas complet.
-bool openGaia(const std::string& path, GaiaFile& out) {
+inline bool openGaia(const std::string& path, GaiaFile& out) {
     const HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
     LARGE_INTEGER size;
@@ -139,7 +139,7 @@ inline bool pickGaiaStar(const GaiaFile& f, const Camera& cam, double px, double
 }
 
 // Copie vers un tampon de stockage de la carte, par morceaux (pas de tampon intermédiaire de plusieurs gigaoctets).
-Buffer uploadStorage(const Gpu& g, const void* data, VkDeviceSize size) {
+inline Buffer uploadStorage(const Gpu& g, const void* data, VkDeviceSize size) {
     constexpr VkDeviceSize kChunk = 256ull << 20;
     Buffer dst = createBuffer(g, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     Buffer staging = createBuffer(g, std::min(size, kChunk), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -1120,4 +1120,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

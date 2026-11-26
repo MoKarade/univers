@@ -28,7 +28,7 @@
 #include "film_vue.h"
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct FilmStars {
     // Format 2 (film_v2.h) ou 3 (film_v3.h, lu si film_index.bin commence par « UNIVFLM3 ») ; un seul des deux sert.
@@ -265,4 +265,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers

@@ -13,6 +13,8 @@
 
 #include <algorithm>
 
+using namespace univers;      // en-têtes de l'appli (natif/src), autrefois en espace de noms anonyme
+
 namespace {
 Vec3 parseVec(const char* s) {
     Vec3 v{0, 0, 0};

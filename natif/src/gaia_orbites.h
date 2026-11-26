@@ -19,7 +19,7 @@
 #include "commun.h"
 #include "orbites_gpu.h"
 
-namespace {
+namespace univers {
 
 class GaiaOrbits {
 public:
@@ -315,4 +315,4 @@ private:
     }
 };
 
-}  // namespace
+}  // namespace univers
