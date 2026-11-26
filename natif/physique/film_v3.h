@@ -204,7 +204,9 @@ public:
     // États des traceurs P [premier, premier + nombre) à tGa : 6 flottants chacun (position kpc, vitesse km/s), relatifs à
     // la Voie lactée (centre de la galaxie d'origine ajouté, lui aussi par Hermite). out : au moins 6 × nombre valeurs.
     // false hors du film ou si une image manque.
-    bool etats(double tGa, uint64_t premier, uint64_t nombre, float* out) {
+    // relatif = true : positions et vitesses relatives au centre de la galaxie d'origine (sans l'ajouter), comme l'appli les
+    // donne à gaia.vert.
+    bool etats(double tGa, uint64_t premier, uint64_t nombre, float* out, bool relatif = false) {
         if (!couvre(tGa) || premier + nombre > nP_) return false;
         // Nœuds P qui encadrent la date, et pour chaque classe ses propres nœuds (dates P ou dates de la classe).
         Noeuds nP, nc[5];
@@ -234,7 +236,8 @@ public:
             const uint8_t* ra = xa->estP ? xa->rec(s) : xa->rec(rangClasse_[i]);
             const uint8_t* rb = xb->estP ? xb->rec(s) : xb->rec(rangClasse_[i]);
             double pa[3], va[3], pb[3], vb[3]; decoder(ra, pa, va); decoder(rb, pb, vb);
-            const double* c = &cen[(size_t)origineP_[i] * 6];
+            static const double zero[6] = {};
+            const double* c = relatif ? zero : &cen[(size_t)origineP_[i] * 6];
             float* o = out + s * 6;
             for (int a = 0; a < 3; ++a) {
                 double p, v; hermite(pa[a], va[a], pb[a], vb[a], n.h, n.u, p, v);
@@ -242,6 +245,31 @@ public:
             }
         }
         return true;
+    }
+
+    // Pour un lecteur qui lit lui-même les images (film_carte_v3.h, calcul sur la carte graphique).
+    // Nœuds : les deux dates qui encadrent tGa pour les traceurs de la famille f (P seuls : dates P ; classe C, M, L : dates
+    // P ou de la classe). h : écart en (km/s)⁻¹·kpc pour Hermite, u : fraction.
+    struct Noeuds { int a = -1, b = -1; double u = 0, h = 1; };
+    bool noeudsDe(Famille f, double tGa, Noeuds& n) const {
+        const uint32_t bits = f == P ? 1u : f == C ? 3u : f == M ? 9u : f == L ? 17u : 0u;
+        return bits && noeuds(tGa, bits, n);
+    }
+    bool estDateP(int k) const { return (fam_[(size_t)k] & 1u) != 0; }
+    uint32_t famillesA(int k) const { return fam_[(size_t)k]; }
+    const std::vector<uint8_t>& classes() const { return classe_; }        // famille de chaque traceur P (P, C, M ou L)
+    const std::vector<uint32_t>& rangsDansClasse() const { return rangClasse_; }
+    const std::string& dossier() const { return dossier_; }
+    // Lit les enregistrements [premier, premier + nombre) du fichier <lettre>_<k>.bin, qui doit contenir exactement total
+    // enregistrements (un fichier d'une autre taille est refusé). out : nombre × 18 octets.
+    static bool lireTranche(const std::string& dossier, char lettre, int k, uint64_t premier, uint64_t nombre, uint64_t total, std::vector<uint8_t>& out) {
+        char nom[32]; std::snprintf(nom, sizeof nom, "/%c_%05d.bin", lettre, k);
+        FILE* f = std::fopen((dossier + nom).c_str(), "rb"); if (!f) return false;
+        const long long taille = film3_taille(f);
+        bool ok = taille >= 0 && (uint64_t)taille == total * kEnreg && premier + nombre <= total && film3_seek(f, (long long)(premier * kEnreg)) == 0;
+        if (ok) { out.resize(nombre * kEnreg); ok = nombre == 0 || std::fread(out.data(), 1, out.size(), f) == out.size(); }
+        std::fclose(f);
+        return ok;
     }
 
     // Famille G : étoiles Gaia suivies par le calcul (positions relatives à la Voie lactée), une image tous les 10 Ma
@@ -334,7 +362,6 @@ public:
     }
 
 private:
-    struct Noeuds { int a = -1, b = -1; double u = 0, h = 1; };
     struct Image {
         int date = -1; char lettre = 0; uint64_t premier = 0, nombre = 0; bool estP = false;
         std::vector<uint8_t> octets;

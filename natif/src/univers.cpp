@@ -63,6 +63,7 @@ int main(int argc, char** argv) {
         else if (k == "--date") { wopt.years = std::atof(v); wopt.hasYears = true; ++i; }
         else if (k == "--vue") { std::sscanf(v, "%lf,%lf", &wopt.yawDeg, &wopt.pitchDeg); wopt.hasView = true; ++i; }
         else if (k == "--controle-orbites") wopt.checkOrbits = true;
+        else if (k == "--controle-film") wopt.checkFilm = true;
         else if (k == "--trajet") { std::sscanf(v, "%lf,%d", &wopt.pathStart, &wopt.pathRate); wopt.hasPath = true; ++i; }
         else if (k == "--galaxie-entiere") wopt.wholeGalaxy = true;
         else if (k == "--vitesse") { wopt.pathSpeed = std::atof(v); ++i; }

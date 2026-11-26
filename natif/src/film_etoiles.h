@@ -5,6 +5,7 @@
 // film n'est pas là), l'appli garde ses orbites de référence (gaia_orbites.h). Il n'y a qu'une population d'étoiles : on
 // change la source de leur mouvement, jamais les étoiles montrées.
 //
+// Format 3 (film_v3.h) : même rôle, mêmes fichiers d'ordre ; le film est reconnu à son index (« UNIVFLM3 »).
 // Fichiers : <dossier du film>/film_index.bin et img_NNNNN.f16 ; vl_etoiles.ordre (pipeline/natif/ordre_film.py) : pour
 // chaque étoile de l'appli, son rang dans le film. Le dossier du film est lu dans film_dossier.txt (une ligne), à côté des données.
 //
@@ -14,18 +15,25 @@
 #pragma once
 #include <array>
 #include <climits>
+#include <cstdio>
+#include <cstring>
 #include <cmath>
 #include <fstream>
 #include <string>
 #include <vector>
 
 #include "film_v2.h"
+#include "film_v3.h"
+#include "film_vue.h"
 #include "simulation.h"
 
 namespace {
 
 struct FilmStars {
+    // Format 2 (film_v2.h) ou 3 (film_v3.h, lu si film_index.bin commence par « UNIVFLM3 ») ; un seul des deux sert.
     phys::film::FilmV2 film;
+    phys::film::FilmV3 film3;
+    bool v3 = false;
     std::vector<uint32_t> ordre;      // rang dans le film de chaque étoile de l'appli
     std::string dossier;
     std::string note;      // écarts connus de ce film, écrits par celui qui l'a calculé (<dossier>/ecarts.txt, une ligne) ; dits à l'écran
@@ -45,14 +53,37 @@ struct FilmStars {
         ordre.resize(starCount);
         o.seekg(0);
         o.read(reinterpret_cast<char*>(ordre.data()), static_cast<std::streamsize>(starCount * 4));
-        if (!film.charger(dossier) || film.galaxies() < firstGalaxy + galaxyCount) return false;
         first_ = firstGalaxy; galaxies_ = galaxyCount;
+        v3 = estV3(dossier);
+        if (v3) {
+            std::string err;
+            if (!film3.charger(dossier, err) || film3.galaxies() < firstGalaxy + galaxyCount) {
+                std::printf("film v3 non lu : %s\n", err.empty() ? "galaxies manquantes" : err.c_str());
+                return false;
+            }
+        } else if (!film.charger(dossier) || film.galaxies() < firstGalaxy + galaxyCount) return false;
         std::ifstream e(dossier + "/ecarts.txt");
         if (std::getline(e, note))
             while (!note.empty() && (note.back() == '\r' || note.back() == ' ')) note.pop_back();
-        if (inFilm(film) != starCount) return false;
-        base_ = 0;
-        for (int g = 0; g < firstGalaxy; ++g) base_ += film.etoiles(g);
+        if (v3) {
+            // Étoiles visibles de ces galaxies : blocs P de type 1, qui doivent se suivre (galaxie après galaxie).
+            const auto b0 = film3.bloc(phys::film::FilmV3::Visibles, firstGalaxy);
+            uint64_t fin = b0.premier;
+            for (int g = firstGalaxy; g < firstGalaxy + galaxyCount; ++g) {
+                const auto b = film3.bloc(phys::film::FilmV3::Visibles, g);
+                if (!b.nombre || b.premier != fin) return false;
+                fin += b.nombre;
+            }
+            if (fin - b0.premier != starCount) {
+                std::printf("film v3 : %llu etoiles visibles dans le film, %llu dans l'appli\n", (unsigned long long)(fin - b0.premier), (unsigned long long)starCount);
+                return false;
+            }
+            base_ = b0.premier;
+        } else {
+            if (inFilm(film) != starCount) return false;
+            base_ = 0;
+            for (int g = 0; g < firstGalaxy; ++g) base_ += film.etoiles(g);
+        }
         for (uint32_t k : ordre)
             if (k >= starCount) return false;
         ready = true;
@@ -63,6 +94,12 @@ struct FilmStars {
         reloadTimer += dt;
         if (!ready || reloadTimer < 5.0) return;
         reloadTimer = 0;
+        if (v3) {      // film v3 : relu s'il a gagné des dates P (même contenu, mêmes traceurs)
+            phys::film::FilmV3 neuf; std::string err;
+            if (neuf.charger(dossier, err) && neuf.finGa() > film3.finGa() && neuf.traceursP() == film3.traceursP() && neuf.galaxies() == film3.galaxies())
+                film3 = std::move(neuf);
+            return;
+        }
         phys::film::FilmV2 neuf;
         if (neuf.charger(dossier) && neuf.images() > film.images() && neuf.galaxies() == film.galaxies() && inFilm(neuf) == inFilm(film)) {
             film = std::move(neuf);
@@ -71,7 +108,11 @@ struct FilmStars {
     }
     // Le film couvre-t-il cette date (Ga depuis aujourd'hui) ? La dernière image listée peut être en cours d'écriture : on
     // s'arrête une image avant la fin.
-    bool covers(double tGa) const { return ready && film.images() >= 5 && tGa >= film.debutGa() && tGa <= film.date(film.images() - 2); }
+    bool covers(double tGa) const { return ready && vue().couvre(tGa); }
+    phys::film::FilmVue vue() const { return v3 ? phys::film::FilmVue{nullptr, &film3} : phys::film::FilmVue{&film, nullptr}; }
+    double startGa() const { return vue().debutGa(); }
+    double endGa() const { return vue().finSureGa(); }      // dernière date que le film couvre entièrement
+    int imageCount() const { return v3 ? film3.dates() : film.images(); }
 
     // Lumière entière des étoiles (revue F1). vl_etoiles.bin ne porte que la lumière que Gaia ne montre pas déjà ; <nom>.lum
     // (pipeline/natif/ordre_film.py) donne la lumière entière de chaque étoile, en L☉ (bande V), dans l'ordre de l'appli.
@@ -98,6 +139,7 @@ struct FilmStars {
     // lumière (gaia.vert ; 0 : sans objet). sun, sunVel : place et vitesse galactocentriques du
     // Soleil selon l'appli (kpc, km/s). false si une image manque : l'appelant garde alors l'état précédent.
     bool states(double tGa, phys::Vec3 sun, phys::Vec3 sunVel, std::vector<float>& out) {
+        if (v3) return states3(tGa, sun, sunVel, out);
         const int n = film.images();
         int i = 0;
         while (i + 2 < n && film.date(i + 1) <= tGa) ++i;      // image juste avant la date
@@ -134,6 +176,34 @@ struct FilmStars {
     uint64_t base() const { return base_; }      // rang, dans une image du film, de la première étoile suivie
 
 private:
+    // Format 3 : Hermite sur les deux images qui encadrent la date (film_v3.h), positions et vitesses relatives au centre
+    // de la galaxie d'origine, comme le format 2.
+    std::vector<float> brut3_;
+    bool states3(double tGa, phys::Vec3 sun, phys::Vec3 sunVel, std::vector<float>& out) {
+        const size_t stars = ordre.size();
+        brut3_.resize(stars * 6);
+        if (!film3.etats(tGa, base_, stars, brut3_.data(), true)) return false;
+        out.resize((stars + 1) * 8);
+        for (size_t s = 0; s < stars; ++s) {
+            const float* b = &brut3_[static_cast<size_t>(ordre[s]) * 6];
+            float* o = &out[s * 8];
+            o[0] = b[0]; o[1] = b[1]; o[2] = b[2]; o[3] = 1.0f;
+            o[4] = b[3]; o[5] = b[4]; o[6] = b[5];
+            o[7] = gain.empty() || gaiaOff <= 0 ? 0.0f : static_cast<float>(1.0 + gaiaOff * (gain[s] - 1.0));
+        }
+        float* o = &out[stars * 8];
+        o[0] = static_cast<float>(sun.x); o[1] = static_cast<float>(sun.y); o[2] = static_cast<float>(sun.z); o[3] = 1.0f;
+        o[4] = static_cast<float>(sunVel.x); o[5] = static_cast<float>(sunVel.y); o[6] = static_cast<float>(sunVel.z); o[7] = 0.0f;
+        return true;
+    }
+    static bool estV3(const std::string& dossier) {
+        char m[8] = {};
+        FILE* f = std::fopen((dossier + "/film_index.bin").c_str(), "rb");
+        if (!f) return false;
+        const bool lu = std::fread(m, 1, 8, f) == 8;
+        std::fclose(f);
+        return lu && std::memcmp(m, "UNIVFLM3", 8) == 0;
+    }
     int first_ = 0, galaxies_ = 1;
     uint64_t base_ = 0;      // rang, dans une image du film, de la première étoile suivie
     uint64_t inFilm(const phys::film::FilmV2& f) const {

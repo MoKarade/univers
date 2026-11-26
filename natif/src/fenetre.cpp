@@ -311,10 +311,11 @@ int runWindow(const WindowOptions& opt) {
     FilmStars filmStars;
     std::vector<float> filmStates;
     const bool filmStarsOk = milkyWayStarsOk && milkyWayStars.externalStatesFit() && filmStars.load(dataDir, milkyWayStars.starCount());
-    if (filmStarsOk) sim.film = &filmStars.film;
+    if (filmStarsOk) sim.film = filmStars.vue();
     // Ancres des voisines (pipeline/natif/ancres_film.py) : le point que suivent l'étiquette et la caméra quand une galaxie se déchire.
     static FilmAnchors filmAnchors;
-    if (filmStarsOk && filmAnchors.load(dataDir + "/film_ancres.bin", filmStars.film)) sim.anchors = &filmAnchors;
+    // Ancres : calculées sur un film au format 2 (ancres_film.py) ; pas pour un film v3 (le centre écrit sert alors).
+    if (filmStarsOk && !filmStars.v3 && filmAnchors.load(dataDir + "/film_ancres.bin", filmStars.film)) sim.anchors = &filmAnchors;
     std::printf("ancres des galaxies voisines dans le film : %s\n", sim.anchors ? "lues" : "absentes (centre ecrit par le calcul)");
     // Lumière entière des étoiles (vl_etoiles.lum) : sans elle, Gaia reste montré quand le film mène (revue F1).
     const bool filmLumOk = filmStarsOk && filmStars.loadLum(dataDir, "vl_etoiles.lum", [&](size_t i) { return milkyWayStars.starMagnitude(i); });
@@ -339,6 +340,7 @@ int runWindow(const WindowOptions& opt) {
     // Film relu sur la carte graphique à la date exacte de chaque image (film_carte.h) : fluide, et le même résultat quelle
     // que soit la vitesse du temps. Sans lui (échec de création), l'ancien chemin par le processeur reste.
     FilmGpu filmGpu, filmGpuNeighbours;
+    double filmGpuT = -1, filmGpuNeighboursT = -1;      // dernière date écrite sur la carte par le film (contrôle --controle-film)
     const bool filmGpuOk = filmStarsOk && filmGpu.create(g, filmStars, milkyWayStars.orbitsForFilm());
     const bool filmGpuNeighboursOk = filmNeighboursOk && filmGpuNeighbours.create(g, filmNeighbours, neighbourStars.orbitsForFilm());
     std::printf("film sur la carte graphique : %s\n", filmGpuOk ? "oui" : "non (relu par le processeur)");
@@ -784,8 +786,8 @@ int runWindow(const WindowOptions& opt) {
             // Au-delà de ce que le film du Groupe local a déjà calculé, la date s'arrête au bord du film (décision de Marc,
             // 18/11/2026) : rien n'est inventé, et le bord avance tout seul à mesure que le calcul tourne (FilmStars::reload).
             sim.filmEdgeYears = 0;
-            if (filmStarsOk && filmStars.film.images() >= 5 && wanted > kStartYears) {
-                const double edge = kStartYears + filmStars.film.date(filmStars.film.images() - 2) * 1.0e9;
+            if (filmStarsOk && sim.film.pret() && wanted > kStartYears) {
+                const double edge = kStartYears + filmStars.endGa() * 1.0e9;
                 if (wanted > edge) {
                     wanted = edge;
                     sim.filmEdgeYears = edge;
@@ -854,8 +856,10 @@ int runWindow(const WindowOptions& opt) {
                     const double y = shownYears, h = 1.0e3;
                     const phys::Vec3 s0 = sim.exact.position(0, y - h), s1 = sim.exact.position(0, y + h), s = sim.exact.position(0, y);
                     const double k = 3.0856775814913673e16 / (2.0 * h * kYearSeconds);      // kpc par an -> km/s
-                    if (filmGpu.update(g, filmStars, milkyWayStars.orbitsForFilm(), tExact, dir, gaPerSecond, s, {(s1.x - s0.x) * k, (s1.y - s0.y) * k, (s1.z - s0.z) * k}, gaiaOff, step))
+                    if (filmGpu.update(g, filmStars, milkyWayStars.orbitsForFilm(), tExact, dir, gaPerSecond, s, {(s1.x - s0.x) * k, (s1.y - s0.y) * k, (s1.z - s0.z) * k}, gaiaOff, step)) {
                         filmStars.lastStep = step;
+                        filmGpuT = tExact;
+                    }
                 } else if (byFilm) {
                     if (step != filmStars.lastStep || !milkyWayStars.externalStates()) {
                         sim.ensureExact();      // le Soleil : son orbite selon l'appli (il n'est pas dans le film)
@@ -883,8 +887,10 @@ int runWindow(const WindowOptions& opt) {
                 if (filmNeighboursOk) {
                     filmNeighbours.reload(dt);
                     if (byFilm && filmGpuNeighboursOk && filmNeighbours.covers(tExact)) {
-                        if (filmGpuNeighbours.update(g, filmNeighbours, neighbourStars.orbitsForFilm(), tExact, dir, gaPerSecond, {}, {}, gaiaOff, step))
+                        if (filmGpuNeighbours.update(g, filmNeighbours, neighbourStars.orbitsForFilm(), tExact, dir, gaPerSecond, {}, {}, gaiaOff, step)) {
                             filmNeighbours.lastStep = step;
+                            filmGpuNeighboursT = tExact;
+                        }
                     } else if (byFilm && filmNeighbours.covers(tStep)) {
                         if (step != filmNeighbours.lastStep || !neighbourStars.externalStates()) {
                             if (filmNeighbours.states(tStep, {}, {}, filmNeighbourStates)) {
@@ -1470,7 +1476,7 @@ int runWindow(const WindowOptions& opt) {
         if (milkyWayStarsOk)
         {
             std::printf("film du Groupe local a cette date : %s (film de %.3f a %.3f milliards d'annees, %d images)\n", sim.filmLeads ? "il mene les etoiles visibles" : "non",
-                        filmStarsOk ? filmStars.film.debutGa() : 0.0, filmStarsOk ? filmStars.film.finGa() : 0.0, filmStarsOk ? filmStars.film.images() : 0);
+                        filmStarsOk ? filmStars.startGa() : 0.0, filmStarsOk ? filmStars.endGa() : 0.0, filmStarsOk ? filmStars.imageCount() : 0);
             std::printf("etoiles du modele : orbites exactes au pas %ld, retard %ld pas, pretes %d ; feuilles en epicycles %u sur %u ; sous-nuages replies %llu\n", milkyWayStars.orbitStep(),
                         milkyWayStars.orbitLagSteps(), milkyWayStars.orbitReady() ? 1 : 0, milkyWayStars.epicycleLeaves(), milkyWayStars.leafCount(),
                         static_cast<unsigned long long>(milkyWayStars.collapsedLeaves));
@@ -1528,6 +1534,30 @@ int runWindow(const WindowOptions& opt) {
     structuresR.release(g);
     spheres.release(g);
     starMatter.release(g);
+    if (opt.checkFilm) {      // contrôle : états écrits sur la carte par le film, comparés au lecteur du processeur (même date)
+        vkDeviceWaitIdle(g.dev);
+        auto controle = [&](const char* nom, FilmStars& fs, GaiaRenderer& r, double t) {
+            if (t < 0 || !fs.ready) { std::printf("controle du film (%s) : le film n'a pas mene sur la carte -> SANS OBJET\n", nom); return; }
+            const uint32_t n = static_cast<uint32_t>(fs.ordre.size());
+            const std::vector<float> got = r.orbitsForFilm().readBack(g, n);
+            std::vector<float> ref;
+            if (!fs.states(t, {}, {}, ref)) { std::printf("controle du film (%s) : lecture du processeur impossible -> ECHEC\n", nom); return; }
+            std::vector<double> err(n), errV(n);
+            for (uint32_t k = 0; k < n; ++k) {
+                const float* a = &got[k * 8]; const float* b = &ref[k * 8];
+                err[k] = std::sqrt(double(a[0] - b[0]) * (a[0] - b[0]) + double(a[1] - b[1]) * (a[1] - b[1]) + double(a[2] - b[2]) * (a[2] - b[2])) * 1000.0;
+                errV[k] = std::sqrt(double(a[4] - b[4]) * (a[4] - b[4]) + double(a[5] - b[5]) * (a[5] - b[5]) + double(a[6] - b[6]) * (a[6] - b[6]));
+            }
+            std::sort(err.begin(), err.end());
+            std::sort(errV.begin(), errV.end());
+            const bool ok = err[n * 99 / 100] < 0.1 && errV[n * 99 / 100] < 0.5;
+            std::printf("controle du film (%s, format %d) a %.6f milliards d'annees, %u etoiles : ecart carte - processeur : position mediane %.5f pc, 99e centile %.4f pc, "
+                        "maximum %.3f pc ; vitesse 99e centile %.4f km/s, maximum %.3f km/s -> %s\n", nom, fs.v3 ? 3 : 2, t, n, err[n / 2], err[n * 99 / 100], err[n - 1],
+                        errV[n * 99 / 100], errV[n - 1], ok ? "PASSE" : "ECHEC");
+        };
+        if (filmStarsOk) controle("Voie lactee", filmStars, milkyWayStars, filmGpuT);
+        if (filmNeighboursOk) controle("voisines", filmNeighbours, neighbourStars, filmGpuNeighboursT);
+    }
     if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
         const uint32_t n = std::min<uint32_t>(20000, orbits.count);
         const std::vector<float> got = orbits.readBack(g, n);

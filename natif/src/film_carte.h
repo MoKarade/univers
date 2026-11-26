@@ -14,10 +14,8 @@
 //     le tampon d'états que gaia.vert lit, sans prolongement (fraction 0).
 // Résultat : l'état montré ne dépend que de la date, jamais de la vitesse du temps ni du chemin pris pour y arriver.
 //
-// Format v3 (traceurs à identifiant stable, positions entières à 0,01 pc, vitesses entières à 0,05 km/s, courbe de
-// Hermite sur deux images) : seul le décodage d'une image change. Le partage reste le même (cases d'images brutes sur la
-// carte, un calcul par image affichée qui écrit l'état à la date exacte) : il faudra une variante de film_etat.comp et
-// la taille d'une image dans brutMots().
+// Format 3 (film_v3.h : traceurs à identifiant stable, positions entières à 0,01 pc, vitesses entières à 0,05 km/s, Hermite
+// sur deux images, classes de cadence) : FilmGpuV3 (film_carte_v3.h, film_etat_v3.comp), choisi ici quand le film est v3.
 #pragma once
 #include <array>
 #include <climits>
@@ -31,6 +29,7 @@
 #include <mutex>
 #include <thread>
 
+#include "film_carte_v3.h"
 #include "film_etoiles.h"
 #include "gaia_orbites.h"
 
@@ -53,6 +52,7 @@ public:
 
     // fs : film déjà chargé (ordre, gain) ; orb : états que gaia.vert lit (étoiles puis le Soleil en dernier).
     bool create(const Gpu& g, FilmStars& fs, GaiaOrbits& orb) {
+        if (fs.v3) return ok = v3_.create(g, fs, orb);      // format 3 : film_carte_v3.h
         if (!fs.ready || orb.count != fs.ordre.size() + 1) return false;
         n_ = static_cast<uint32_t>(fs.ordre.size());
         base_ = fs.base();
@@ -82,6 +82,11 @@ public:
     // gaiaOff : comme FilmStars::gaiaOff. Rend false si une image manque : l'état d'avant reste alors.
     bool update(const Gpu& g, FilmStars& fs, GaiaOrbits& orb, double tGa, int dir, double gaPerSecond, phys::Vec3 sun, phys::Vec3 sunVel, double gaiaOff, long step) {
         if (!ok) return false;
+        if (v3_.ok) {
+            const bool r = v3_.update(g, fs, orb, tGa, dir, gaPerSecond, sun, sunVel, gaiaOff, step);
+            uploads = v3_.uploads;
+            return r;
+        }
         const phys::film::FilmV2& f = fs.film;
         const int n = f.images();
         int i = 0;
@@ -171,6 +176,7 @@ public:
     // (zone d'envoi -> cases), puis calcul des états à la date de l'image, avec les barrières envoi -> calcul -> sommets.
     void record(VkCommandBuffer cmd) {
         if (!ok) return;
+        if (v3_.ok) { v3_.record(cmd); return; }
         if (!copies_.empty()) {
             vkCmdCopyBuffer(cmd, staging_.buf, raw_.buf, static_cast<uint32_t>(copies_.size()), copies_.data());
             VkBufferMemoryBarrier b{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
@@ -205,6 +211,7 @@ public:
 
     void release(const Gpu& g) {
         if (!ok) return;
+        if (v3_.ok) { v3_.release(g); ok = false; return; }
         {
             std::lock_guard<std::mutex> l(m_);
             stop_ = true;
@@ -226,6 +233,7 @@ public:
     }
 
 private:
+    FilmGpuV3 v3_;
     struct Push {
         uint32_t slot[4];
         float w[4], d[4], sunP[4], sunV[4];

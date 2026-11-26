@@ -1,0 +1,51 @@
+#version 450
+/* État de chaque étoile à la date EXACTE, tiré du film du Groupe local au FORMAT 3 (film_carte_v3.h, film_v3.h).
+   Chaque traceur a ses deux images voisines : dates P pour tous, plus celles de sa classe de cadence (C, M ou L). Courbe
+   de Hermite sur ces deux images (positions ET vitesses écrites), sa dérivée pour la vitesse : la même que
+   FilmV3::etats. Enregistrements de 18 octets : position x, y, z en entiers 32 bits (0,01 pc), vitesse en entiers 16 bits
+   (0,05 km/s), relatives au centre de la galaxie d'origine.
+   rawP : tranches P (les étoiles de ces galaxies, dans l'ordre du film) ; rawK : tranches des classes. ordre[s] : rang de
+   l'étoile s de l'appli dans la tranche P ; info[s] : famille (2 bits hauts : 0 P, 1 C, 2 M, 3 L) et rang dans la tranche
+   de sa classe. Sortie : le tampon d'états lu par gaia.vert, le Soleil en dernier (rang n). */
+layout(local_size_x = 256) in;
+struct Etat { vec4 p; vec4 v; };
+layout(std430, set = 0, binding = 0) readonly buffer BrutP { uint motP[]; };
+layout(std430, set = 0, binding = 1) readonly buffer BrutK { uint motK[]; };
+layout(std430, set = 0, binding = 2) readonly buffer Ordre { uint ordre[]; };
+layout(std430, set = 0, binding = 3) readonly buffer Info { uint info[]; };
+layout(std430, set = 0, binding = 4) readonly buffer Gain { float gain[]; };
+layout(std430, set = 0, binding = 5) writeonly buffer Sortie { Etat e[]; };
+layout(push_constant) uniform Pc { uvec4 offA; uvec4 offB; vec4 h; vec4 u; vec4 sunP; vec4 sunV; uint flags; uint n; float gaiaOff; uint hasGain; } pc;
+
+uint mot16(bool p, uint off, uint j) {      /* j-ième nombre de 16 bits de la case qui commence au mot off */
+    uint w = p ? motP[off + (j >> 1)] : motK[off + (j >> 1)];
+    return (j & 1u) == 0u ? (w & 0xFFFFu) : (w >> 16);
+}
+void lire(bool p, uint off, uint i, out vec3 x, out vec3 v) {
+    uint j = i * 9u;
+    for (int a = 0; a < 3; ++a) {
+        int q = int(mot16(p, off, j + uint(2 * a)) | (mot16(p, off, j + uint(2 * a) + 1u) << 16));
+        x[a] = float(q) * 1.0e-5;
+        int w = int(mot16(p, off, j + 6u + uint(a)) << 16) >> 16;
+        v[a] = float(w) * 0.05;
+    }
+}
+
+void main() {
+    uint s = gl_GlobalInvocationID.x;
+    if (s > pc.n) return;
+    if (s == pc.n) {
+        e[s] = Etat(vec4(pc.sunP.xyz, 1.0), vec4(pc.sunV.xyz, 0.0));
+        return;
+    }
+    uint inf = info[s], k = inf >> 30, idx = inf & 0x3FFFFFFFu, r = ordre[s];
+    bool aP = ((pc.flags >> (2u * k)) & 1u) != 0u, bP = ((pc.flags >> (2u * k + 1u)) & 1u) != 0u;
+    vec3 pa, va, pb, vb;
+    lire(aP, pc.offA[k], aP ? r : idx, pa, va);
+    lire(bP, pc.offB[k], bP ? r : idx, pb, vb);
+    float u = pc.u[k], h = pc.h[k], u2 = u * u, u3 = u2 * u;
+    vec3 p = (2.0 * u3 - 3.0 * u2 + 1.0) * pa + (u3 - 2.0 * u2 + u) * h * va + (-2.0 * u3 + 3.0 * u2) * pb + (u3 - u2) * h * vb;
+    vec3 v = (6.0 * u2 - 6.0 * u) * (pa - pb) / h + (3.0 * u2 - 4.0 * u + 1.0) * va + (3.0 * u2 - 2.0 * u) * vb;
+    float lum = (pc.hasGain == 0u || pc.gaiaOff <= 0.0) ? 0.0 : 1.0 + pc.gaiaOff * (gain[s] - 1.0);
+    e[s] = Etat(vec4(p, 1.0), vec4(v, lum));
+}
