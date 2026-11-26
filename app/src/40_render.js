@@ -521,7 +521,7 @@ void main(){ float e=aEl.x; float M=mod(aEl.y+aEl.z*uT,6.2831853); float E=M+e*s
     for (let k = 0; k < NCELL; k++) cnt[k + 1] += cnt[k];
     const idx = new Uint32Array(n), fill = cnt.slice(0, NCELL), leaves = []; for (let i = 0; i < n; i++) idx[fill[key[i]]++] = i;
     for (let k = 0; k < NCELL; k++) { const a = cnt[k], b = cnt[k + 1]; if (b <= a) continue;
-      idx.set(Array.from(idx.subarray(a, b)).sort((p, q) => mag[p] - mag[q]), a);        // dans chaque cellule : de la plus brillante à la plus faible
+      idx.subarray(a, b).sort((p, q) => mag[p] - mag[q]);        /* dans chaque cellule : de la plus brillante à la plus faible */
       let x0 = 1e30, x1 = -1e30, y0 = 1e30, y1 = -1e30, z0 = 1e30, z1 = -1e30;
       for (let q = a; q < b; q++) { const j = idx[q] * 3, x = pos[j], y = pos[j + 1], z = pos[j + 2]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z; }
       let sx = 0, sy = 0, sz = 0, rmin = 1e30, rmax = 0; for (let q = a; q < b; q++) { const j = idx[q] * 3, x = pos[j], y = pos[j + 1], z = pos[j + 2], d = Math.hypot(x, y, z) || 1e-9; sx += x / d; sy += y / d; sz += z / d; if (d < rmin) rmin = d; if (d > rmax) rmax = d; }

@@ -167,6 +167,18 @@ function initStarKin(posEclLy, N, sunGal0, vqIn, vdiv, ecl) {      // ecl : vite
   }
   return K;
 }
+/** Position d'une seule étoile i (années-lumière, écliptique) sans allouer un tableau de N étoiles. */
+function starPosOne(K, i, tYears, tEff, out) {
+  const at = Math.abs(tYears), w = smoothstep(3e6, 1.5e7, at), M = K.M, j = i * 3;
+  let x = K.p0[j] + K.ve[j] * tYears, y = K.p0[j + 1] + K.ve[j + 1] * tYears, z = K.p0[j + 2] + K.ve[j + 2] * tYears;
+  if (w > 0 && !(K.lin && K.lin[i])) {
+    starOrbSun(K, tEff, K.ts); starOrbPos(K, i, tEff, K.tmp, 0);
+    const a = (K.tmp[0] - K.ts[0]) * KPC_LY, b = (K.tmp[1] - K.ts[1]) * KPC_LY, c = (K.tmp[2] - K.ts[2]) * KPC_LY;
+    const ex = M[0][0] * a + M[0][1] * b + M[0][2] * c, ey = M[1][0] * a + M[1][1] * b + M[1][2] * c, ez = M[2][0] * a + M[2][1] * b + M[2][2] * c;
+    if (w >= 1) { x = ex; y = ey; z = ez; } else { x = lerp(x, ex, w); y = lerp(y, ey, w); z = lerp(z, ez, w); }
+  }
+  out[0] = x; out[1] = y; out[2] = z; return out;
+}
 /** Position du Soleil dans la galaxie (kpc, repère galactique centré sur le centre galactique) au temps t (Ga). */
 function sunGalAt(K, t, out) { return sunOrbAt(K, t, out); }
 /** Positions des étoiles par rapport au Soleil (années-lumière, repère écliptique) à l'instant tYears ; tEff (Ga) pour les orbites galactiques. */

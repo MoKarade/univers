@@ -862,7 +862,7 @@
   /* ---- le temps : événements réels, frise, dates ----
      Chaque événement porte sa date (mesurée, datée ou calculée ici), sa source et son degré de certitude.
      Avant le 15 octobre 1582, les dates sont données dans le calendrier julien, celui des chroniques. */
-  const closest = (name, t0, t1, st) => { const l = DATA.STAR_LABELS.find(l => l.n === name), o = new Float32Array(Rr.star.N * 3); let b = [0, 1e9]; if (!l) return b; for (let t = t0; t <= t1; t += st) { starPositions(Rr.K, t, t / 1e9, o, l.i, l.i + 1); const d = Math.hypot(o[l.i * 3], o[l.i * 3 + 1], o[l.i * 3 + 2]); if (d < b[1]) b = [t, d]; } return b; };
+  const closest = (name, t0, t1, st) => { const l = DATA.STAR_LABELS.find(l => l.n === name), o = [0, 0, 0]; let b = [0, 1e9]; if (!l) return b; for (let t = t0; t <= t1; t += st) { starPosOne(Rr.K, l.i, t, t / 1e9, o); const d = Math.hypot(o[0], o[1], o[2]); if (d < b[1]) b = [t, d]; } return b; };
   const EV_AC = closest('Alpha du Centaure', 0, 6e4, 100), EV_GL = closest('Gliese 710', 1.0e6, 1.6e6, 500);
   const EVCAT = { U: 'Univers', G: 'Voie lactée et étoiles', S: 'Système solaire', T: 'Terre et vie', H: 'Ciel observé et exploration', O: 'Ondes gravitationnelles' }, EVCONF = { C: 'Certain', P: 'Probable', S: 'Supposition (modèle ou estimation)', V: 'Contesté, à vérifier' };
   const isoJd = s => { const jul = s[0] === 'J', m = (jul ? s.slice(1) : s).match(/^(-?\d+)-(\d\d)-(\d\d)(?:T(\d\d):(\d\d))?$/); return jdFromCal(+m[1], +m[2], +m[3], jul) + (m[4] ? (+m[4] + (+m[5]) / 60) / 24 : 0.5); };
