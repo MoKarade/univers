@@ -1,14 +1,15 @@
 # Univers — règles du dépôt
 
-Simulation 3D de l'univers dans le navigateur (three.js r128), du système solaire à l'horizon cosmique, avec des données réelles et sourcées.
+Simulation 3D de l'univers dans le navigateur (three.js 0.149.0), du système solaire à l'horizon cosmique, avec des données réelles et sourcées.
 
 ## À respecter
 - Français. Chaque affirmation non évidente porte [Certain] / [Probable] / [Supposition] / [À vérifier].
 - Aucune commande à faire lancer sur le PC de Marc. Tout passe par le dépôt et des tâches automatiques.
+- Appli PC (`natif/`, branche `appli-pc`) : le code se construit et se teste d'abord sans le PC (CI Linux : physique et essais sans carte graphique ; compilation croisée Windows). Ce qui demande Windows, la carte graphique ou les données du PC passe par une session sur le PC ouverte par Claude avec l'accord de Marc, jamais par une commande que Marc tape. Tant que ce n'est pas fait, c'est marqué [À vérifier].
 - Rien qui coûte sans accord. Firebase est en formule Blaze, alerte de budget à 10 $ par mois. Le site est privé : un seul compte Google, lu dans le secret `AUTHORIZED_EMAIL`.
 - Pas de faux contrôle. Ce qui n'a pas été vu ou mesuré est dit tel quel.
 - Toute donnée affichée garde sa source et son statut : mesuré, calculé ici, ou supposé. Ne jamais présenter une supposition comme une mesure.
-- `app/gen/` est généré. On ne l'édite pas à la main : on régénère avec `pipeline/`.
+- `app/gen/` est généré. On ne l'édite pas à la main : on régénère avec `pipeline/`. Seule exception, quand les sources brutes manquent : un script versionné qui applique au fichier la même modification qu'au générateur (ex. `pipeline/data2_sans_cles_mortes.py`).
 
 ## Construire et tester
 - Construire : `python3 app/build.py` écrit `dist/index.html` (page autonome).

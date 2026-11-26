@@ -210,6 +210,10 @@ g8 = np.clip((img / (4.0 * img.std()) * 0.5 + 0.5) * 255, 0, 255).astype(np.uint
 buf = io.BytesIO(); Image.fromarray(g8, 'L').save(buf, 'JPEG', quality=84, optimize=True); D['CMB'] = 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
 Image.fromarray(g8, 'L').save('/tmp/cmb_check.png')
 
+# Clés que la page ne lit plus ici : le catalogue d'étoiles (STARS_*, STAR_LABELS) vient de gen/data3.js, chargé après,
+# et la carte du fond cosmologique (CMB) de gen/data19.js (Planck). Calculées ci-dessus, elles ne sont plus écrites.
+DATA2_CLES_MORTES = ('STARS_GEO', 'STARS_AUX', 'STAR_LABELS', 'STARS_N', 'CMB')
+for _k in DATA2_CLES_MORTES: D.pop(_k, None)
 js = 'Object.assign(DATA, ' + json.dumps(D, ensure_ascii=False, separators=(',', ':')) + ');\n'
 open(os.path.join(OUT, 'data2.js'), 'w').write(js)
 for k, v in sorted(D.items(), key=lambda kv: -len(json.dumps(kv[1])))[:9]: print('   %-10s %6.0f ko' % (k, len(json.dumps(v)) / 1024))
