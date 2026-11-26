@@ -18,7 +18,7 @@ function evSep(key, jdUT, ctx) {
   for (let k = 0; k < 2; k++) { d = Math.hypot(p[0] - e[0], p[1] - e[1], p[2] - e[2]); p = solarSystemAt(T(tdb - d * EV_AU_DAY), ctx.b, 0).planets[key].pos; }
   const g = [p[0] - e[0], p[1] - e[1], p[2] - e[2]], ds = Math.hypot(e[0], e[1], e[2]), dp = Math.hypot(...g);
   const c = -(g[0] * e[0] + g[1] * e[1] + g[2] * e[2]) / (dp * ds);      /* le Soleil est en −e ; son déplacement pendant 8 min de lumière est celui de la Terre, déjà pris par l'aberration commune, négligé */
-  return { sep: Math.acos(Math.min(1, c)) * 206264.806, rSun: EV_SUN_R_AS / ds, rP: EV_PLANET_R_KM[key] / (dp * AU / 1e3) * 206264.806, front: dp < ds };
+  return { sep: Math.acos(Math.max(-1, Math.min(1, c))) * 206264.806, rSun: EV_SUN_R_AS / ds, rP: EV_PLANET_R_KM[key] / (dp * AU / 1e3) * 206264.806, front: dp < ds };
 }
 
 /* Période synodique (jours) : sert seulement à régler le pas de la recherche grossière des conjonctions inférieures. */

@@ -109,13 +109,14 @@ function orbWorkerMain() {
  *  Sans Worker (vieux navigateur, test), K.orb reste absent : les étoiles gardent les épicycles. */
 function orbInit(K, sunGal0) {
   if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || !K.gx0) return null;
+  if (K.orb && K.orb.w) { try { K.orb.w.terminate(); } catch (e) {} K.orb = null; }
   const n = K.N + 1, X = new Float64Array(n * 3), V = new Float64Array(n * 3);
   X.set(K.gx0); V.set(K.gv0); X.set(sunGal0, K.N * 3); V.set(SUN_UVW, K.N * 3);
   const src = [orbAcc, orbEnergy, orbSub, orbSteps, 'const ORB_DT=' + ORB_DT + ', ORB_CP=' + ORB_CP + ', ORB_MAXCP=' + ORB_MAXCP + ';', '(' + orbWorkerMain.toString() + ')();'].map(String).join(String.fromCharCode(10));
   let w; try { const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })); w = new Worker(url); URL.revokeObjectURL(url); } catch (e) { return null; }
   const O = K.orb = { w, n: K.N, P: orbParams(), res: null, acc: null, want: null, sent: null, sentAt: 0, on: true, far: false, exact: false };
   w.onmessage = e => { O.res = e.data; O.acc = new Float32Array(n * 3).fill(NaN); O.sent = null; };
-  w.onerror = () => { K.orb = null; };
+  w.onerror = () => { try { w.terminate(); } catch (e) {} if (K.orb === O) K.orb = null; };
   w.postMessage({ init: true, P: O.P, n, X, V }, [X.buffer, V.buffer]);
   return O;
 }
@@ -165,7 +166,7 @@ function sunOrbAt(K, tEff, out) {
   const goal = Math.round(tEff / ORB_DT) * ORB_DT;
   let best = null; for (const k of S.cps.keys()) if (best === null || Math.abs(k * ORB_CP - goal) < Math.abs(best * ORB_CP - goal)) best = k;
   if (Math.abs(best * ORB_CP - goal) < Math.abs(S.t - goal)) { const c = S.cps.get(best); S.X = c[0].slice(); S.V = c[1].slice(); S.t = best * ORB_CP; }
-  while (Math.abs(goal - S.t) > ORB_DT / 2) { const dir = Math.sign(goal - S.t); orbSteps(P, S.X, S.V, 1, dir * ORB_DT, 1, null, S.t); S.t = Math.round((S.t + dir * ORB_DT) / ORB_DT) * ORB_DT; const k = Math.round(S.t / ORB_CP); if (Math.abs(k * ORB_CP - S.t) < ORB_DT / 2 && !S.cps.has(k)) S.cps.set(k, [S.X.slice(), S.V.slice()]); }
+  while (Math.abs(goal - S.t) > ORB_DT / 2) { const dir = Math.sign(goal - S.t); orbSteps(P, S.X, S.V, 1, dir * ORB_DT, 1, null, S.t); S.t = Math.round((S.t + dir * ORB_DT) / ORB_DT) * ORB_DT; const k = Math.round(S.t / ORB_CP); if (Math.abs(k * ORB_CP - S.t) < ORB_DT / 2 && !S.cps.has(k)) { if (S.cps.size >= ORB_MAXCP) { let far = null, fd = -1; for (const q of S.cps.keys()) if (q !== 0) { const dq = Math.abs(q * ORB_CP - goal); if (dq > fd) { fd = dq; far = q; } } if (far !== null) S.cps.delete(far); } S.cps.set(k, [S.X.slice(), S.V.slice()]); } }
   const d = (tEff - S.t) * ORB_KV; for (let c = 0; c < 3; c++) out[c] = S.X[c] + S.V[c] * d;
   return out;
 }

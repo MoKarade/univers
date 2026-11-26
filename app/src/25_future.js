@@ -230,8 +230,14 @@ function fusFrame(k) { const P = FUSI.packs[fusPackOf(k)]; if (!P || !P.data) re
 function fusWant(t, fetcher) {
   const k = clamp(Math.floor(t / FUSI.dt), 0, FUSI.n - 1), want = new Set([fusPackOf(k), fusPackOf(Math.min(k + 1, FUSI.n - 1)), fusPackOf(Math.min(k + FUSI.per, FUSI.n - 1))]);
   FUSI.packs.forEach((P, p) => { if (P && !want.has(p) && Math.abs(p - fusPackOf(k)) > 1) FUSI.packs[p] = null; });
-  for (const p of want) if (!FUSI.packs[p]) { const pk = FUSI.meta.paquets[p], P = FUSI.packs[p] = { first: pk.premiere, data: null };
-    fetcher(pk).then(txt => { const b = b64ToBytes(txt.trim()); P.data = new Int16Array(b.buffer, b.byteOffset, b.length / 2); }).catch(e => { console.warn('Image du calcul de la fusion non chargée :', e.message); if (FUSI.packs[p] === P) FUSI.packs[p] = null; }); }
+  const now = Date.now();
+  for (const p of want) {
+    const cur = FUSI.packs[p];
+    if (cur && (cur.data || cur.loading || cur.tries >= 3 || now < cur.retryAt)) continue;
+    const pk = FUSI.meta.paquets[p], tries = cur ? cur.tries : 0;
+    const P = FUSI.packs[p] = { first: pk.premiere, data: null, loading: true, tries, retryAt: 0 };
+    fetcher(pk).then(txt => { const b = b64ToBytes(txt.trim()); P.data = new Int16Array(b.buffer, b.byteOffset, b.length / 2); P.loading = false; }).catch(e => { console.warn('Image du calcul de la fusion non chargée :', e.message); if (FUSI.packs[p] === P) { P.loading = false; P.tries = tries + 1; P.retryAt = Date.now() + 15000; } });
+  }
 }
 /** Positions (kpc, centrées sur la Voie lactée) à la date t, interpolées entre deux images ; false si elles ne sont pas encore chargées. */
 function fusFill(out, t, off) {
