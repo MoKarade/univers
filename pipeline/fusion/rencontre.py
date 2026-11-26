@@ -816,7 +816,9 @@ def futur(sortie, t_fin, opts, cible):
             ecr.date(t, lambda r: cp.asnumpy(S.pos[r]), lambda r: cp.asnumpy(S.vel[r]), centres, vitesses, journal['energie'][-1],
                      sortes_matiere=cp.asnumpy(S.kind_g[r_matiere]))
 
-        avancer(S, t0, t_fin, film, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=2.0, instantane_ga=0.05, journal=journal, a_chaque_releve=date_v3)
+        # --sauvegarde-ma : écart entre deux sauvegardes de reprise (50 Ma par défaut ; un multiple de 2 Ma)
+        avancer(S, t0, t_fin, film, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=2.0, instantane_ga=float(opts.get('sauvegarde-ma', 50.0)) / 1000.0,
+                journal=journal, a_chaque_releve=date_v3)
         ecr.sauver()
         print('film terminé (format 3) :', ecr.numero(), 'dates')
         return

@@ -25,6 +25,14 @@ VERROU="$S/lanceur.pid"
 if [ -f "$VERROU" ] && kill -0 "$(cat "$VERROU")" 2>/dev/null; then echo "déjà en cours (processus $(cat "$VERROU"))"; exit 0; fi
 echo $$ > "$VERROU"
 
+# Reprise d'un film déjà commencé : tout est dans film/ (reprise.npz, film.json, journal.json, evenements.bin, centraux.bin,
+# moyens.bin, lents.bin). Ni les galaxies de départ, ni aujourdhui*.npz, ni etoiles/, ni les traceurs ne sont relus : il
+# suffit du code, de la marée et du dossier film/. UNIVERS_SAUVEGARDE_MA : écart entre deux sauvegardes (50 Ma par défaut).
+if [ -f "$S/film/reprise.npz" ] && [ -f "$S/film/film.json" ] && [ "${UNIVERS_FILM:-2}" = "3" ]; then
+  echo "=== reprise du film ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
+  "$PY" -u rencontre.py futur "$S" "${UNIVERS_FIN_GA:-10.0}" $GAZ --releve-ma=10 --champ=2 --film=3 --centraux=${UNIVERS_CENTRAUX:-740000,870000,2100000} ${UNIVERS_SAUVEGARDE_MA:+--sauvegarde-ma=$UNIVERS_SAUVEGARDE_MA} >> "$S/journal.txt" 2>&1
+  code=$?; echo "=== fin ($(date '+%d/%m %H:%M')), code $code" >> "$S/journal.txt"; rm -f "$VERROU"; exit $code
+fi
 if [ ! -f "$S/aujourdhui.npz" ]; then
   echo "=== passe : d'il y a 1 Ga à aujourd'hui ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
   if [ ! -f "$S/angles.txt" ]; then
@@ -78,6 +86,7 @@ if [ "${UNIVERS_FILM:-2}" = "3" ]; then
   FILM="--film=3 --centraux=${UNIVERS_CENTRAUX:-740000,870000,2100000}"
   [ -n "${UNIVERS_GAIA:-}" ] && FILM="$FILM --gaia=$UNIVERS_GAIA"
   [ -n "${UNIVERS_NAINES:-}" ] && FILM="$FILM --naines=$UNIVERS_NAINES"
+  [ -n "${UNIVERS_SAUVEGARDE_MA:-}" ] && FILM="$FILM --sauvegarde-ma=$UNIVERS_SAUVEGARDE_MA"
 fi
 "$PY" -u rencontre.py futur "$S" "${UNIVERS_FIN_GA:-10.0}" $GAZ --traceurs="$TR" --releve-ma=10 --champ=2 $FILM >> "$S/journal.txt" 2>&1
 echo "=== fin ($(date '+%d/%m %H:%M')), code $?" >> "$S/journal.txt"
