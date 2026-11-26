@@ -32,43 +32,82 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Construire puis tester
+      - name: Construire
         shell: bash
-        run: python3 app/build.py && for f in app/test/*.test.js; do echo "== $f"; node "$f" || exit 1; done
+        run: python3 app/build.py
+      # Les tests de calcul tournent par 4 (4 processeurs sur les machines de GitHub). Chaque sortie est imprimée en bloc
+      # à la fin du test. Un échec renvoie 255 : xargs n'en lance plus d'autre et l'étape échoue.
+      - name: Tester les calculs (4 en parallèle)
+        shell: bash
+        run: |
+          ls app/test/*.test.js | xargs -P 4 -n 1 sh -c 'd=$(date +%s); out=$(node "$0" 2>&1); rc=$?; printf "== %s (code %s, %s s)\n%s\n" "$0" "$rc" "$(( $(date +%s) - d ))" "$out"; [ "$rc" -eq 0 ] || exit 255'
       - name: Plus de fondu daté pour les planètes (R7)
         shell: bash
         run: "! grep -rn FATE_P app/src"
 
-  # T1 (revue 18/11) : la physique native (sans Vulkan ni windows.h) compile et ses essais sans données tournent sous Linux.
-  # Les essais qui lisent un film ou DE440 sont seulement compilés : leurs fichiers restent sur le PC de Marc.
-  physique-native:
-    name: Physique native (compilation et essai des orbites)
+  # Lot 1-2 de l'assainissement (26/11) : sous Linux, natif/ ne construit que la physique et les essais sans carte graphique
+  # (natif/CMakeLists.txt s'arrête là hors Windows). Avertissements traités en erreurs. Les essais qui lisent un film ou
+  # les fichiers du PC de Marc sont seulement compilés.
+  linux-natif-pipeline:
+    name: Linux (physique native, essais sans carte graphique, pipeline)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Compiler
+      - name: Plus d'espace de noms anonyme dans les en-têtes de natif/src
+        shell: bash
+        run: "! grep -n '^namespace {' natif/src/*.h"
+      - name: Compiler natif/ (Linux, -Wall -Wextra, avertissement = erreur)
         shell: bash
         run: |
-          # natif/physique n'est pas un projet CMake autonome (natif/CMakeLists.txt l'inclut) : petite enveloppe.
-          mkdir -p ci-physique
-          printf '%s\n' 'cmake_minimum_required(VERSION 3.20)' 'project(physique CXX)' 'set(CMAKE_CXX_STANDARD 20)' \
-            'set(CMAKE_CXX_STANDARD_REQUIRED ON)' 'add_subdirectory(${CMAKE_SOURCE_DIR}/../natif/physique physique)' > ci-physique/CMakeLists.txt
-          cmake -S ci-physique -B build-physique -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-physique -j 4 --target essai_galaxie essai_fusion essai_champ_bfe essai_film essai_film_v3
+          cmake -S natif -B build-linux -DCMAKE_BUILD_TYPE=Release -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          cmake --build build-linux -j 4
+      - name: natif/physique se construit seul
+        shell: bash
+        run: |
+          cmake -S natif/physique -B build-physique -DCMAKE_BUILD_TYPE=Release -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          cmake --build build-physique -j 4
       - name: Shaders (GLSL -> SPIR-V, comme la construction Windows)
         shell: bash
         run: |
           sudo apt-get install -y -qq glslang-tools >/dev/null
           for f in natif/shaders/*.vert natif/shaders/*.frag natif/shaders/*.comp; do glslang -V --quiet -Inatif/shaders "$f" -o /dev/null || exit 1; done
-      - name: Orbites des étoiles (essai_galaxie)
+      - name: Essais sans données (orbites, film v3, cosmologie, interface, fiches)
         shell: bash
-        run: ./build-physique/physique/essai_galaxie
-      - name: Lecteur du film version 3 (essai_film_v3, contre film_v3.py)
+        run: |
+          set -e
+          ./build-linux/physique/essai_galaxie
+          ./build-linux/physique/essai_film_v3 natif/physique/essais/film_v3_essai
+          ./build-linux/essai_cosmologie
+          ./build-linux/essai_interface
+          ./build-linux/essai_fiches
+      # DE440 (114 Mo) reste sur le PC : ici DE421 (17 Mo, JPL), le fichier d'essai du dépôt jplephem, figé par commit et
+      # empreinte. Il exerce la lecture par mmap de ephemeride.h ; les seuils des deux essais tiennent avec DE421.
+      - name: Éphémérides d'essai DE421 (cache)
+        id: de421
+        uses: actions/cache@v4
+        with:
+          path: de421.bsp
+          key: de421-08b20db2ae22488650641c5a9033e5bfda4b1c4b440cfeaf20f621cfa18ecdb3
+      - name: Télécharger DE421
+        if: steps.de421.outputs.cache-hit != 'true'
         shell: bash
-        run: ./build-physique/physique/essai_film_v3 natif/physique/essais/film_v3_essai
+        run: curl -sSfL -o de421.bsp https://raw.githubusercontent.com/brandon-rhodes/python-jplephem/810ff57244f82bb55624aa201b4a9706419c4800/ci/de421.bsp
+      - name: Orientation de la Terre et de la Lune, éclipses 2028 (DE421)
+        shell: bash
+        run: |
+          set -e
+          echo "08b20db2ae22488650641c5a9033e5bfda4b1c4b440cfeaf20f621cfa18ecdb3  de421.bsp" | sha256sum -c -
+          ./build-linux/essai_orientation de421.bsp
+          ./build-linux/essai_eclipse de421.bsp
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pipeline (tests Python autonomes)
+        shell: bash
+        run: python3 pipeline/sources/test_build_gw.py
 
   # T1 (revue 18/11) : toute l'appli PC (Vulkan, interface, essais) se compile pour Windows depuis Linux avec MinGW-w64.
   # Ce n'est pas la chaîne de Marc (llvm-mingw) : une erreur de compilation ici en est une là-bas aussi, l'inverse n'est pas garanti.
