@@ -26,7 +26,7 @@ const float PI = 3.14159265358979;
 float ringAlpha(float r, out vec3 colour) {
     colour = vec3(0.0);
     if (pc.rot0.w <= 0.0 || r <= pc.rot0.w || r >= pc.rot1.w) return 0.0;
-    vec4 t = texture(anneau, vec2((r - pc.rot0.w) / (pc.rot1.w - pc.rot0.w), 0.5));
+    vec4 t = textureLod(anneau, vec2((r - pc.rot0.w) / (pc.rot1.w - pc.rot0.w), 0.5), 0.0);
     colour = t.rgb;
     return t.a;
 }
@@ -53,21 +53,24 @@ void main() {
     float cover = b > 0.0 ? clamp((rho - miss) / pc.avant.w + 0.5, 0.0, 1.0) : 0.0;   /* bord adouci sur un pixel */
     vec4 res = vec4(0.0);
     float tSphere = 1e30;
+    float s = sqrt(max(rho * rho - miss * miss, 0.0));
+    vec3 hp = -p - d * s;                       /* point touché, compté depuis le centre (limbe hors disque : |hp| = max(rho, miss) > 0) */
+    vec3 n = normalize(hp);
+    vec3 nb = vec3(dot(pc.rot0.xyz, n), dot(pc.rot1.xyz, n), dot(pc.rot2.xyz, n));
+    float lon = (abs(nb.x) + abs(nb.y) > 0.0) ? atan(nb.y, nb.x) : 0.0;
+    float lat = asin(clamp(nb.z, -1.0, 1.0));
+    /* longitude 0 au milieu de la carte, est vers la droite. La longitude saute de +180° à -180° au méridien
+       opposé : pour choisir le bon niveau de détail, on prend la variation de la longitude comptée de 0 à 360°
+       là où elle est la plus douce (sinon une couture apparaît). Dérivées calculées hors branche (contrôle uniforme). */
+    float u1 = lon / (2.0 * PI) + 0.5, u2 = fract(u1 + 0.5);
+    vec2 tc = vec2(u1, 0.5 - lat / PI);
+    float du1x = dFdx(u1), du2x = dFdx(u2);
+    float du1y = dFdy(u1), du2y = dFdy(u2);
+    vec2 ddx = vec2(abs(du1x) <= abs(du2x) ? du1x : du2x, dFdx(tc.y));
+    vec2 ddy = vec2(abs(du1y) <= abs(du2y) ? du1y : du2y, dFdy(tc.y));
     if (cover > 0.0) {
-        float s = sqrt(max(rho * rho - miss * miss, 0.0));
         tSphere = b - s;
-        vec3 hp = -p - d * s;                       /* point touché, compté depuis le centre */
-        vec3 n = normalize(hp);
-        vec3 nb = vec3(dot(pc.rot0.xyz, n), dot(pc.rot1.xyz, n), dot(pc.rot2.xyz, n));
-        float lon = atan(nb.y, nb.x), lat = asin(clamp(nb.z, -1.0, 1.0));
-        /* longitude 0 au milieu de la carte, est vers la droite. La longitude saute de +180° à -180° au méridien
-           opposé : pour choisir le bon niveau de détail, on prend la variation de la longitude comptée de 0 à 360°
-           là où elle est la plus douce (sinon une couture apparaît). La carte lue est la même dans les deux cas. */
-        float u1 = lon / (2.0 * PI) + 0.5, u2 = fract(u1 + 0.5);
-        vec2 tc = vec2(u1, 0.5 - lat / PI);
-        float dux = abs(dFdx(u1)) <= abs(dFdx(u2)) ? dFdx(u1) : dFdx(u2);
-        float duy = abs(dFdy(u1)) <= abs(dFdy(u2)) ? dFdy(u1) : dFdy(u2);
-        vec3 albedo = textureGrad(carte, tc, vec2(dux, dFdx(tc.y)), vec2(duy, dFdy(tc.y))).rgb;
+        vec3 albedo = textureGrad(carte, tc, ddx, ddy).rgb;
         if (pc.ombre.w < -1.5) albedo *= pc.ombre.xyz;     /* Soleil à une autre date : sa carte, teintée par sa température (spheres.h) */
         else if (pc.ombre.w < 0.0) albedo = pc.ombre.xyz;  /* étoile sans carte mesurée : sa couleur, uniforme (spheres.h) */
         vec3 c;
@@ -95,7 +98,7 @@ void main() {
             }
             c = albedo * pc.soleil.w * light;
             if (pc.rot2.w > 0.5) {                                        /* lumières de nuit : visibles là où le Soleil est couché */
-                vec3 night = textureGrad(anneau, tc, vec2(dux, dFdx(tc.y)), vec2(duy, dFdy(tc.y))).rgb;
+                vec3 night = textureGrad(anneau, tc, ddx, ddy).rgb;
                 c += night * pc.ombre2.y * smoothstep(0.05, -0.12, dot(n, S));
             }
         }

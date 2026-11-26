@@ -6,11 +6,12 @@ layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 o;
 layout(push_constant) uniform Pc { vec4 p; } pc;      /* p.x : 1 = photo (asinh), 0 = œil nu ; p.y : pose automatique contre la saturation (pose_auto.h, 1 = aucune) */
 vec3 srgb(vec3 c) {
-    return mix(12.92 * c, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0031308)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(12.92 * max(c, vec3(0.0)), hi, step(0.0031308, c));
 }
 void main() {
     /* borne avant tout calcul : une somme de points qui déborde les 16 bits (inf) donnait des pixels noirs (NaN) (audit A2) */
-    vec3 c = min(texture(hdr, uv).rgb, vec3(6.0e4)) * (pc.p.y > 0.0 ? pc.p.y : 1.0);
+    vec3 c = clamp(texture(hdr, uv).rgb, vec3(0.0), vec3(6.0e4)) * (pc.p.y > 0.0 ? pc.p.y : 1.0);
     /* œil nu : compression de Reinhard (Reinhard et al. 2002), couleur par couleur */
     vec3 nu = c / (1.0 + c);
     /* photo : étirement asinh de la luminance, comme les images astronomiques (Lupton et al. 2004) : la teinte est gardée,
