@@ -1438,6 +1438,30 @@ int runWindow(const WindowOptions& opt) {
     }
     presentPending();
     vkDeviceWaitIdle(g.dev);
+    if (opt.checkFilm) {      // contrôle : états écrits sur la carte par le film, comparés au lecteur du processeur (même date) ; AVANT toute libération : le tampon relu appartient à milkyWayStars / neighbourStars
+        vkDeviceWaitIdle(g.dev);
+        auto controle = [&](const char* nom, FilmStars& fs, GaiaRenderer& r, double t) {
+            if (t < 0 || !fs.ready || fs.ordre.empty()) { std::printf("controle du film (%s) : le film n'a pas mene sur la carte -> SANS OBJET\n", nom); return; }
+            const uint32_t n = static_cast<uint32_t>(fs.ordre.size());
+            const std::vector<float> got = r.orbitsForFilm().readBack(g, n);
+            std::vector<float> ref;
+            if (!fs.states(t, {}, {}, ref)) { std::printf("controle du film (%s) : lecture du processeur impossible -> ECHEC\n", nom); return; }
+            std::vector<double> err(n), errV(n);
+            for (uint32_t k = 0; k < n; ++k) {
+                const float* a = &got[k * 8]; const float* b = &ref[k * 8];
+                err[k] = std::sqrt(double(a[0] - b[0]) * (a[0] - b[0]) + double(a[1] - b[1]) * (a[1] - b[1]) + double(a[2] - b[2]) * (a[2] - b[2])) * 1000.0;
+                errV[k] = std::sqrt(double(a[4] - b[4]) * (a[4] - b[4]) + double(a[5] - b[5]) * (a[5] - b[5]) + double(a[6] - b[6]) * (a[6] - b[6]));
+            }
+            std::sort(err.begin(), err.end());
+            std::sort(errV.begin(), errV.end());
+            const bool ok = err[n * 99 / 100] < 0.1 && errV[n * 99 / 100] < 0.5;
+            std::printf("controle du film (%s, format %d) a %.6f milliards d'annees, %u etoiles : ecart carte - processeur : position mediane %.5f pc, 99e centile %.4f pc, "
+                        "maximum %.3f pc ; vitesse 99e centile %.4f km/s, maximum %.3f km/s -> %s\n", nom, fs.v3 ? 3 : 2, t, n, err[n / 2], err[n * 99 / 100], err[n - 1],
+                        errV[n * 99 / 100], errV[n - 1], ok ? "PASSE" : "ECHEC");
+        };
+        if (filmStarsOk && milkyWayStarsOk) controle("Voie lactee", filmStars, milkyWayStars, filmGpuT);
+        if (filmNeighboursOk && neighbourStarsOk) controle("voisines", filmNeighbours, neighbourStars, filmGpuNeighboursT);
+    }
     if (geste.log) std::fclose(geste.log);
     if (outerThread.joinable()) outerThread.join();
     if (test) {
@@ -1536,30 +1560,6 @@ int runWindow(const WindowOptions& opt) {
     structuresR.release(g);
     spheres.release(g);
     starMatter.release(g);
-    if (opt.checkFilm) {      // contrôle : états écrits sur la carte par le film, comparés au lecteur du processeur (même date)
-        vkDeviceWaitIdle(g.dev);
-        auto controle = [&](const char* nom, FilmStars& fs, GaiaRenderer& r, double t) {
-            if (t < 0 || !fs.ready) { std::printf("controle du film (%s) : le film n'a pas mene sur la carte -> SANS OBJET\n", nom); return; }
-            const uint32_t n = static_cast<uint32_t>(fs.ordre.size());
-            const std::vector<float> got = r.orbitsForFilm().readBack(g, n);
-            std::vector<float> ref;
-            if (!fs.states(t, {}, {}, ref)) { std::printf("controle du film (%s) : lecture du processeur impossible -> ECHEC\n", nom); return; }
-            std::vector<double> err(n), errV(n);
-            for (uint32_t k = 0; k < n; ++k) {
-                const float* a = &got[k * 8]; const float* b = &ref[k * 8];
-                err[k] = std::sqrt(double(a[0] - b[0]) * (a[0] - b[0]) + double(a[1] - b[1]) * (a[1] - b[1]) + double(a[2] - b[2]) * (a[2] - b[2])) * 1000.0;
-                errV[k] = std::sqrt(double(a[4] - b[4]) * (a[4] - b[4]) + double(a[5] - b[5]) * (a[5] - b[5]) + double(a[6] - b[6]) * (a[6] - b[6]));
-            }
-            std::sort(err.begin(), err.end());
-            std::sort(errV.begin(), errV.end());
-            const bool ok = err[n * 99 / 100] < 0.1 && errV[n * 99 / 100] < 0.5;
-            std::printf("controle du film (%s, format %d) a %.6f milliards d'annees, %u etoiles : ecart carte - processeur : position mediane %.5f pc, 99e centile %.4f pc, "
-                        "maximum %.3f pc ; vitesse 99e centile %.4f km/s, maximum %.3f km/s -> %s\n", nom, fs.v3 ? 3 : 2, t, n, err[n / 2], err[n * 99 / 100], err[n - 1],
-                        errV[n * 99 / 100], errV[n - 1], ok ? "PASSE" : "ECHEC");
-        };
-        if (filmStarsOk) controle("Voie lactee", filmStars, milkyWayStars, filmGpuT);
-        if (filmNeighboursOk) controle("voisines", filmNeighbours, neighbourStars, filmGpuNeighboursT);
-    }
     if (opt.checkOrbits) {      // contrôle : états relus sur la carte, comparés au calcul en double précision (bibliothèque de physique)
         const uint32_t n = std::min<uint32_t>(20000, orbits.count);
         const std::vector<float> got = orbits.readBack(g, n);
