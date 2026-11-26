@@ -238,13 +238,17 @@ int main() {
         phys::fusion::Rejeu r;
         for (const char* nom : {"../secret.bin", ".", "..", "a/b.bin", "a\\b.bin", "c:x.bin"}) {
             const fs::path p = dir / "images" / "centres.bin";
-            ok(writeFile(p, fusionCentres(2, 0.02, 1, nGal, {{nom, 2.0}})) &&
+            const std::vector<KfName> desc = {{nom, 2.0}};
+            const auto buf = fusionCentres(2, 0.02, 1, nGal, desc);
+            ok(writeFile(p, buf) &&
                    !r.charger(p.string(), (dir / "images").string()),
                "C4 Rejeu::charger : nom d'image « %s » refusé", nom);
         }
         const fs::path p = dir / "images" / "centres.bin";
         std::vector<phys::Vec3> e(2);
-        ok(writeFile(p, fusionCentres(2, 0.02, 1, nGal, {{"kf_000.bin", 2.0}})) &&
+        const std::vector<KfName> descOk = {{"kf_000.bin", 2.0}};
+        const auto bufOk = fusionCentres(2, 0.02, 1, nGal, descOk);
+        ok(writeFile(p, bufOk) &&
                r.charger(p.string(), (dir / "images").string()) && r.etoilesA(0.0, e),
            "C4 témoin : nom valide « kf_000.bin » accepté et images lues");
     }
@@ -257,7 +261,8 @@ int main() {
         int failures = 0;
         for (long n = 2; n <= 400; ++n) {
             phys::Vec3 c;
-            if (!writeFile(p, fusionCentres(n, 0.02, 1, nGal, {})) || !r.charger(p.string(), "") ||
+            const auto buf = fusionCentres(n, 0.02, 1, nGal, {});
+            if (!writeFile(p, buf) || !r.charger(p.string(), "") ||
                 !r.centre(phys::fusion::kAndromede, r.finGa(), c) || !r.centre(phys::fusion::kAndromede, 0.0, c) ||
                 r.centre(phys::fusion::kAndromede, std::nextafter(r.finGa(), kInf) + 0.02, c)) {
                 ++failures;
@@ -269,8 +274,10 @@ int main() {
         const std::vector<uint8_t> image(static_cast<size_t>(n) * 2 * 3 * sizeof(int16_t), 3);
         std::vector<phys::Vec3> e(2);
         const fs::path pc = dir / "images" / "c7.bin";
+        const std::vector<KfName> descC7 = {{"kf_c7.bin", static_cast<double>(n)}};
+        const auto bufC7 = fusionCentres(n, 0.02, 1, nGal, descC7);
         ok(writeFile(dir / "images" / "kf_c7.bin", image) &&
-               writeFile(pc, fusionCentres(n, 0.02, 1, nGal, {{"kf_c7.bin", static_cast<double>(n)}})) &&
+               writeFile(pc, bufC7) &&
                r.charger(pc.string(), (dir / "images").string()) && r.etoilesA(r.finGa(), e) && std::isfinite(e[0].x),
            "C7 Rejeu::etoilesA(finGa()) avec n = 8 images : accepté");
     }
