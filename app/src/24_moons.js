@@ -27,18 +27,51 @@ function moField(P, k, x, y, z, out) {
   const A = c2 * d2 + c4 * d4, B = -P.gm / r2 + c2 * (u * d2 + 3 * P2) + c4 * (u * d4 + 5 * P4);      /* −∇T = −c[Pn'(k − u r̂) − (n+1)Pn r̂] */
   out[0] = B * ux - A * k[0]; out[1] = B * uy - A * k[1]; out[2] = B * uz - A * k[2]; return out;
 }
+const MO_GS = 1.32712440041e11 * MO_D2;
 function moAccel(P, jd, s, out, ctx) {
-  const n = P.names.length, k = ctx.k || (ctx.k = moPole(jd)), f3 = ctx.f3 || (ctx.f3 = [0, 0, 0]);
-  if (!ctx.sun || Math.abs(jd - ctx.sunJd) > 0.5) { const sol = ctx.st = solarSystemAt((jd - JD_J2000) / 36525, ctx.st, 0), J = sol.planets.jupiter.pos, AUK = AU / 1e3; ctx.sun = [-J[0] * AUK, -J[1] * AUK, -J[2] * AUK]; ctx.sunJd = jd; }      /* le Soleil vu de Jupiter bouge de 0,08° par jour : position mise à jour toutes les 12 heures */
-  const sx = ctx.sun[0], sy = ctx.sun[1], sz = ctx.sun[2], s3 = Math.pow(sx * sx + sy * sy + sz * sz, 1.5), gS = 1.32712440041e11 * MO_D2;
+  const n = P.names.length, k = ctx.k || (ctx.k = moPole(jd)), f3 = ctx.f3 || (ctx.f3 = [0, 0, 0]), r3 = ctx.r3 || (ctx.r3 = new Float64Array(n));
+  if (!ctx.sun || Math.abs(jd - ctx.sunJd) > 0.5) {
+    const T = (jd - JD_J2000) / 36525, AUK = AU / 1e3;
+    let J;
+    if (Math.abs(T) < 30 && DATA.VSOP) {
+      const M = ctx.M || (ctx.M = new Array(9));
+      dateToJ2000(T, M);
+      J = vsopHelio('jupiter', T, M, ctx.j || (ctx.j = [0, 0, 0]));
+    } else {
+      ctx.st = solarSystemAt(T, ctx.st, 0);
+      J = ctx.st.planets.jupiter.pos;
+    }
+    const sun = ctx.sun || (ctx.sun = [0, 0, 0]);
+    sun[0] = -J[0] * AUK; sun[1] = -J[1] * AUK; sun[2] = -J[2] * AUK;
+    const s2 = sun[0] * sun[0] + sun[1] * sun[1] + sun[2] * sun[2];
+    ctx.s3 = s2 * Math.sqrt(s2); ctx.sunJd = jd;
+  }      /* le Soleil vu de Jupiter bouge de 0,08° par jour : position mise à jour toutes les 12 heures */
+  const sx = ctx.sun[0], sy = ctx.sun[1], sz = ctx.sun[2], s3 = ctx.s3, gS = MO_GS, gmM = P.gmM;
+  let ix = 0, iy = 0, iz = 0;      /* accélération indirecte totale des lunes sur Jupiter */
   for (let i = 0; i < n; i++) {
-    const o = i * 6, x = s[o], y = s[o + 1], z = s[o + 2];
-    moField(P, k, x, y, z, f3); const f = 1 + P.gmM[i] / P.gm; let ax = f3[0] * f, ay = f3[1] * f, az = f3[2] * f;      /* masse de la lune comprise dans le problème à deux corps */
-    for (let j = 0; j < n; j++) { if (j === i) continue; const p = j * 6, dx = s[p] - x, dy = s[p + 1] - y, dz = s[p + 2] - z, d3 = Math.pow(dx * dx + dy * dy + dz * dz, 1.5), r3 = Math.pow(s[p] * s[p] + s[p + 1] * s[p + 1] + s[p + 2] * s[p + 2], 1.5), g = P.gmM[j];
-      ax += g * (dx / d3 - s[p] / r3); ay += g * (dy / d3 - s[p + 1] / r3); az += g * (dz / d3 - s[p + 2] / r3); }      /* attraction directe − celle qu'elle exerce sur Jupiter */
-    const dx = sx - x, dy = sy - y, dz = sz - z, d3 = Math.pow(dx * dx + dy * dy + dz * dz, 1.5);
-    ax += gS * (dx / d3 - sx / s3); ay += gS * (dy / d3 - sy / s3); az += gS * (dz / d3 - sz / s3);      /* marée du Soleil */
-    out[o] = s[o + 3]; out[o + 1] = s[o + 4]; out[o + 2] = s[o + 5]; out[o + 3] = ax; out[o + 4] = ay; out[o + 5] = az;
+    const o = i * 6, x = s[o], y = s[o + 1], z = s[o + 2], d2 = x * x + y * y + z * z, ir3 = 1 / (d2 * Math.sqrt(d2));
+    r3[i] = ir3;
+    const g = gmM[i] * ir3;
+    ix += g * x; iy += g * y; iz += g * z;
+    moField(P, k, x, y, z, f3);
+    const f = 1 + gmM[i] / P.gm;
+    const dx = sx - x, dy = sy - y, dz = sz - z, sd2 = dx * dx + dy * dy + dz * dz, sd3 = sd2 * Math.sqrt(sd2);
+    out[o] = s[o + 3]; out[o + 1] = s[o + 4]; out[o + 2] = s[o + 5];
+    out[o + 3] = f3[0] * f + gS * (dx / sd3 - sx / s3);
+    out[o + 4] = f3[1] * f + gS * (dy / sd3 - sy / s3);
+    out[o + 5] = f3[2] * f + gS * (dz / sd3 - sz / s3);
+  }
+  for (let i = 0; i < n; i++) {
+    const o = i * 6, x = s[o], y = s[o + 1], z = s[o + 2], gi = gmM[i];
+    out[o + 3] -= ix - gi * r3[i] * x;
+    out[o + 4] -= iy - gi * r3[i] * y;
+    out[o + 5] -= iz - gi * r3[i] * z;
+    for (let j = i + 1; j < n; j++) {
+      const p = j * 6, dx = s[p] - x, dy = s[p + 1] - y, dz = s[p + 2] - z, d2 = dx * dx + dy * dy + dz * dz, id3 = 1 / (d2 * Math.sqrt(d2));
+      const gj = gmM[j] * id3, gii = gi * id3;
+      out[o + 3] += gj * dx; out[o + 4] += gj * dy; out[o + 5] += gj * dz;
+      out[p + 3] -= gii * dx; out[p + 4] -= gii * dy; out[p + 5] -= gii * dz;
+    }
   }
   return out;
 }
