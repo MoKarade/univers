@@ -56,6 +56,17 @@ int main(int argc, char** argv) {
         for (uint64_t s = 0; same && s < n * 6; ++s) same = part[s] == etats[a * 6 + s];
         ok(same, "plage partielle = lecture complète");
     }
+    {   // relatif : positions sans le centre de la galaxie d'origine (ce que l'appli donne à gaia.vert) ; + centre = absolu
+        std::vector<float> rel(f.traceursP() * 6);
+        bool same = f.etats(tm, 0, f.traceursP(), rel.data(), true);
+        double pire = 0;
+        for (uint64_t i = 0; same && i < f.traceursP(); ++i) {
+            phys::Vec3 c, cv; f.centre(f.origine(i), tm, c, &cv);
+            const double cc[6] = {c.x, c.y, c.z, cv.x, cv.y, cv.z};
+            for (int a = 0; a < 6; ++a) pire = std::fmax(pire, std::fabs(rel[i * 6 + a] + cc[a] - etats[i * 6 + a]) / (1e-4 + 1e-6 * std::fabs(etats[i * 6 + a])));
+        }
+        ok(same && pire <= 1.0, "états relatifs + centre = états absolus");
+    }
     if (FILE* nt = std::fopen((dossier + "/nature.txt").c_str(), "r")) {      // naissances et retours au gaz, contre film_v3.py
         std::string e2; bool lu = f.chargerMatiere(e2), pareil = lu; double tt; int lignes = 0;
         std::vector<uint8_t> nat;
