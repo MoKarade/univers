@@ -4,6 +4,7 @@
    de Hermite sur ces deux images (positions ET vitesses écrites), sa dérivée pour la vitesse : la même que
    FilmV3::etats. Enregistrements de 18 octets : position x, y, z en entiers 32 bits (0,01 pc), vitesse en entiers 16 bits
    (0,05 km/s), relatives au centre de la galaxie d'origine.
+   gain[s] < 0 : étoile écartée par le fil du calcul (ignorer.bin), lumière nulle.
    rawP : tranches P (les étoiles de ces galaxies, dans l'ordre du film) ; rawK : tranches des classes. ordre[s] : rang de
    l'étoile s de l'appli dans la tranche P ; info[s] : famille (2 bits hauts : 0 P, 1 C, 2 M, 3 L) et rang dans la tranche
    de sa classe. Sortie : le tampon d'états lu par gaia.vert, le Soleil en dernier (rang n). */
@@ -46,6 +47,7 @@ void main() {
     float u = pc.u[k], h = pc.h[k], u2 = u * u, u3 = u2 * u;
     vec3 p = (2.0 * u3 - 3.0 * u2 + 1.0) * pa + (u3 - 2.0 * u2 + u) * h * va + (-2.0 * u3 + 3.0 * u2) * pb + (u3 - u2) * h * vb;
     vec3 v = (6.0 * u2 - 6.0 * u) * (pa - pb) / h + (3.0 * u2 - 4.0 * u + 1.0) * va + (3.0 * u2 - 2.0 * u) * vb;
-    float lum = (pc.hasGain == 0u || pc.gaiaOff <= 0.0) ? 0.0 : 1.0 + pc.gaiaOff * (gain[s] - 1.0);
+    float g = gain[s];
+    float lum = g < 0.0 ? 1.0e-30 : (pc.hasGain == 0u || pc.gaiaOff <= 0.0) ? 0.0 : 1.0 + pc.gaiaOff * (g - 1.0);      /* g < 0 : étoile écartée (ignorer.bin) */
     e[s] = Etat(vec4(p, 1.0), vec4(v, lum));
 }

@@ -79,9 +79,13 @@ public:
         rawK_ = createBuffer(g, std::max<VkDeviceSize>(offK, 256), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         ordre_ = uploadStorage(g, fs.ordre.data(), static_cast<VkDeviceSize>(n_) * 4);
         info_ = uploadStorage(g, info.data(), static_cast<VkDeviceSize>(n_) * 4);
+        // Gain de lumière (revue F1) ; une valeur négative marque une étoile écartée (ignorer.bin) : lumière nulle.
         hasGain_ = fs.gain.size() == n_;
-        const float one = 1.0f;
-        gain_ = hasGain_ ? uploadStorage(g, fs.gain.data(), static_cast<VkDeviceSize>(n_) * 4) : uploadStorage(g, &one, 4);
+        std::vector<float> gain(n_, 1.0f);
+        if (hasGain_) gain = fs.gain;
+        if (fs.hidden.size() == n_)
+            for (uint32_t s = 0; s < n_; ++s) if (fs.hidden[s]) gain[s] = -1.0f;
+        gain_ = uploadStorage(g, gain.data(), static_cast<VkDeviceSize>(n_) * 4);
         // Zone d'envoi : deux jeux (la carte peut encore lire celui de l'image précédente), chacun assez grand pour une image P
         // et deux images de chaque classe ; au-delà, envoi immédiat avec attente (cas rare).
         stagingHalf_ = half;

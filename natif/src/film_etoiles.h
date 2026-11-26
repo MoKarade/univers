@@ -13,6 +13,7 @@
 // vitesse est la pente de cette courbe ; l'état est donné à la carte graphique au pas d'un million d'années de la date
 // montrée, et gaia.vert le prolonge dans le pas, comme pour les orbites calculées.
 #pragma once
+#include <algorithm>
 #include <array>
 #include <climits>
 #include <cstdio>
@@ -79,6 +80,7 @@ struct FilmStars {
                 return false;
             }
             base_ = b0.premier;
+            loadIgnore();
         } else {
             if (inFilm(film) != starCount) return false;
             base_ = 0;
@@ -108,6 +110,25 @@ struct FilmStars {
     }
     // Le film couvre-t-il cette date (Ga depuis aujourd'hui) ? La dernière image listée peut être en cours d'écriture : on
     // s'arrête une image avant la fin.
+    // Étoiles à ne pas dessiner (film v3) : <film>/ignorer.bin, rangs dans P (u32, triés), donnés par le fil du calcul pour un
+    // défaut connu (film 3 : 4 258 étoiles du bulbe d'Andromède nées à plus de 10 kpc de son centre, bulbe sans coupure). Leur
+    // lumière est mise à zéro quand le film mène (gaia.vert : facteur de lumière). hidden[s] : 1 pour l'étoile s de l'appli.
+    std::vector<uint8_t> hidden;
+    size_t hiddenCount = 0;
+    void loadIgnore() {
+        hidden.assign(ordre.size(), 0); hiddenCount = 0;
+        std::vector<uint32_t> r;
+        if (FILE* f = std::fopen((dossier + "/ignorer.bin").c_str(), "rb")) {
+            uint32_t x;
+            while (std::fread(&x, 4, 1, f) == 1) r.push_back(x);
+            std::fclose(f);
+        }
+        if (r.empty()) return;
+        std::sort(r.begin(), r.end());
+        for (size_t s = 0; s < ordre.size(); ++s)
+            if (std::binary_search(r.begin(), r.end(), static_cast<uint32_t>(base_ + ordre[s]))) { hidden[s] = 1; ++hiddenCount; }
+        std::printf("film v3 : %zu etoiles de ces galaxies ecartees (ignorer.bin)\n", hiddenCount);
+    }
     bool covers(double tGa) const { return ready && vue().couvre(tGa); }
     phys::film::FilmVue vue() const { return v3 ? phys::film::FilmVue{nullptr, &film3} : phys::film::FilmVue{&film, nullptr}; }
     double startGa() const { return vue().debutGa(); }
@@ -190,12 +211,16 @@ private:
             o[0] = b[0]; o[1] = b[1]; o[2] = b[2]; o[3] = 1.0f;
             o[4] = b[3]; o[5] = b[4]; o[6] = b[5];
             o[7] = gain.empty() || gaiaOff <= 0 ? 0.0f : static_cast<float>(1.0 + gaiaOff * (gain[s] - 1.0));
+            if (!hidden.empty() && hidden[s]) o[7] = kHiddenLight;
         }
         float* o = &out[stars * 8];
         o[0] = static_cast<float>(sun.x); o[1] = static_cast<float>(sun.y); o[2] = static_cast<float>(sun.z); o[3] = 1.0f;
         o[4] = static_cast<float>(sunVel.x); o[5] = static_cast<float>(sunVel.y); o[6] = static_cast<float>(sunVel.z); o[7] = 0.0f;
         return true;
     }
+public:
+    static constexpr float kHiddenLight = 1.0e-30f;      // facteur de lumière d'une étoile écartée (> 0 : gaia.vert le prend)
+private:
     static bool estV3(const std::string& dossier) {
         char m[8] = {};
         FILE* f = std::fopen((dossier + "/film_index.bin").c_str(), "rb");
