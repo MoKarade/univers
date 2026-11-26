@@ -1,0 +1,5 @@
+# Dépendances Python minimales pour le job CI de pipeline/ (tests stdlib uniquement).
+# Aucun paquet tiers requis : les tests CI (pipeline/sources/test_build_gw.py,
+# pipeline/test_pipeline_stdlib.py et la vérification AST) reposent uniquement sur
+# la bibliothèque standard Python (>= 3.10).
+# Pour les profils optionnels (core, astro, quantum, fusion-cpu, fusion-gpu), voir pipeline/pyproject.toml.

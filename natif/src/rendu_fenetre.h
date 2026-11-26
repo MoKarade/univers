@@ -3,9 +3,9 @@
 #pragma once
 #include "commun.h"
 
-namespace {
+namespace univers {
 
-constexpr VkFormat kFinalFormat = VK_FORMAT_B8G8R8A8_UNORM;      // l'interface écrit des couleurs déjà prêtes pour l'écran
+inline constexpr VkFormat kFinalFormat = VK_FORMAT_B8G8R8A8_UNORM;  // l'interface écrit des couleurs déjà prêtes pour l'écran
 
 struct Swapchain {
     VkSwapchainKHR chain{};
@@ -13,31 +13,36 @@ struct Swapchain {
     std::vector<VkImage> images;
 };
 
-void destroySwapchain(const Gpu& g, Swapchain& s) {
+inline void destroySwapchain(const Gpu& g, Swapchain& s) {
     if (s.chain) vkDestroySwapchainKHR(g.dev, s.chain, nullptr);
     s.chain = VK_NULL_HANDLE;
+    s.images.clear();
 }
 
 // Rend false si la fenêtre n'a pas de surface à dessiner (réduite) : on ne dessine pas.
-bool createSwapchain(const Gpu& g, VkSurfaceKHR surface, bool fastest, Swapchain& s) {
+inline bool createSwapchain(const Gpu& g, VkSurfaceKHR surface, bool fastest, Swapchain& s) {
     VkSurfaceCapabilitiesKHR caps;
     check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g.pd, surface, &caps), "capacités de la surface");
     if (caps.currentExtent.width == 0 || caps.currentExtent.height == 0) return false;
     uint32_t n = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(g.pd, surface, &n, nullptr);
+    if (n == 0) return false;
     std::vector<VkSurfaceFormatKHR> formats(n);
     vkGetPhysicalDeviceSurfaceFormatsKHR(g.pd, surface, &n, formats.data());
     VkSurfaceFormatKHR chosen = formats[0];
-    for (const auto& f : formats)
+    for (const auto& f : formats) {
         if (f.format == kFinalFormat && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) chosen = f;
+    }
     vkGetPhysicalDeviceSurfacePresentModesKHR(g.pd, surface, &n, nullptr);
     std::vector<VkPresentModeKHR> modes(n);
     vkGetPhysicalDeviceSurfacePresentModesKHR(g.pd, surface, &n, modes.data());
     // Par défaut : au rythme de l'écran (pas de carte qui chauffe pour rien). Pour la mesure : au plus vite.
     VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
-    if (fastest)
-        for (auto m : modes)
+    if (fastest) {
+        for (auto m : modes) {
             if (m == VK_PRESENT_MODE_IMMEDIATE_KHR) mode = m;
+        }
+    }
     VkSwapchainCreateInfoKHR ci{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
     ci.surface = surface;
     ci.minImageCount = std::max(caps.minImageCount + 1, 3u);
@@ -113,7 +118,8 @@ struct ScreenPass {
         sci.magFilter = sci.minFilter = VK_FILTER_NEAREST;
         sci.addressModeU = sci.addressModeV = sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         check(vkCreateSampler(g.dev, &sci, nullptr, &sampler), "échantillonneur");
-        const VkDescriptorSetLayoutBinding bind{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+        const VkDescriptorSetLayoutBinding bind{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
+                                                VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
         dl.bindingCount = 1;
         dl.pBindings = &bind;
@@ -135,7 +141,8 @@ struct ScreenPass {
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout), "agencement de l'écran");
         vs = shader(g, "ecran.vert.spv");
         fs = shader(g, "ecran.frag.spv");
-        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
+        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
+                                                     {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         stages[0].module = vs;
         stages[0].pName = "main";
@@ -213,7 +220,7 @@ struct ScreenPass {
     }
 };
 
-void beginPass(VkCommandBuffer cmd, VkImageView view, VkExtent2D extent) {
+inline void beginPass(VkCommandBuffer cmd, VkImageView view, VkExtent2D extent) {
     VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     color.imageView = view;
     color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -228,9 +235,11 @@ void beginPass(VkCommandBuffer cmd, VkImageView view, VkExtent2D extent) {
 }
 
 // Écrit l'image finale (BGRA 8 bits, déjà dans l'état « source de copie ») dans un fichier .ppm.
-void writeCapture(const Gpu& g, const Target& final, VkExtent2D extent, const std::string& path) {
-    const VkDeviceSize bytes = static_cast<VkDeviceSize>(extent.width) * extent.height * 4;
-    Buffer rb = createBuffer(g, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+inline void writeCapture(const Gpu& g, const Target& final, VkExtent2D extent, const std::string& path) {
+    const size_t pixels = static_cast<size_t>(extent.width) * extent.height;
+    const VkDeviceSize bytes = static_cast<VkDeviceSize>(pixels) * 4;
+    Buffer rb = createBuffer(g, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     VkCommandBuffer cmd = beginOnce(g);
     VkBufferImageCopy region{};
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -239,15 +248,19 @@ void writeCapture(const Gpu& g, const Target& final, VkExtent2D extent, const st
     endOnce(g, cmd);
     void* p = nullptr;
     check(vkMapMemory(g.dev, rb.mem, 0, bytes, 0, &p), "lecture de l'image finale");
-    const auto* px = static_cast<const uint8_t*>(p);
-    std::ofstream out(path, std::ios::binary);
-    out << "P6\n" << extent.width << " " << extent.height << "\n255\n";
-    for (size_t i = 0; i < static_cast<size_t>(extent.width) * extent.height; ++i) {
-        const char rgb[3] = {static_cast<char>(px[i * 4 + 2]), static_cast<char>(px[i * 4 + 1]), static_cast<char>(px[i * 4])};
-        out.write(rgb, 3);
+    const auto* srcPx = static_cast<const uint8_t*>(p);
+    std::vector<uint8_t> rgb(pixels * 3);
+    for (size_t i = 0; i < pixels; ++i) {
+        rgb[i * 3] = srcPx[i * 4 + 2];
+        rgb[i * 3 + 1] = srcPx[i * 4 + 1];
+        rgb[i * 3 + 2] = srcPx[i * 4];
     }
     vkUnmapMemory(g.dev, rb.mem);
     destroy(g, rb);
+    std::ofstream out(path, std::ios::binary);
+    out << "P6\n" << extent.width << " " << extent.height << "\n255\n";
+    out.write(reinterpret_cast<const char*>(rgb.data()), static_cast<std::streamsize>(rgb.size()));
+    if (!out) fail("écriture de la capture impossible : " + path);
 }
 
-}  // namespace
+}  // namespace univers

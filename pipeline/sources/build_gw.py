@@ -16,7 +16,15 @@ Usage : python pipeline/sources/build_gw.py <dossier_raw>
 import datetime
 import json
 import os
+from pathlib import Path
 import sys
+
+_HERE = Path(__file__).resolve().parent
+_PIPELINE_DIR = _HERE.parent
+for _d in (_PIPELINE_DIR, _HERE):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
+from _paths import APP_GEN, raw_dir  # noqa: E402
 
 CATALOGUES = ['GWTC-1-confident', 'GWTC-2.1-confident', 'GWTC-3-confident', 'GWTC-4.0', 'GWTC-4.1', 'GWTC-5.0']
 P_ASTRO_MIN = 0.5
@@ -80,7 +88,8 @@ def record(e):
 
 
 def main(raw):
-    events = json.load(open(os.path.join(raw, 'gwosc_allevents.json'), encoding='utf-8'))['events']
+    with open(os.path.join(raw, 'gwosc_allevents.json'), encoding='utf-8') as f:
+        events = json.load(f)['events']
     sel = [record(e) for e in select(events)]
     with_d = sum(1 for r in sel if r['dl'])
     with_m = sum(1 for r in sel if r['m1'])
@@ -89,11 +98,11 @@ def main(raw):
     for cat in CATALOGUES:
         print('  %-20s %d' % (cat, sum(1 for r in sel if r['cat'] == cat)))
     payload = {'GW': sel, 'GW_SRC': 'GWOSC, catalogues GWTC (LIGO, Virgo, KAGRA), https://gwosc.org'}
-    out = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data18.js')
+    out = APP_GEN / 'data18.js'
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('Object.assign(DATA, ' + json.dumps(payload, ensure_ascii=False, separators=(',', ':')) + ');\n')
-    print('écrit', os.path.normpath(out), os.path.getsize(out), 'octets')
+    print('écrit', out, out.stat().st_size, 'octets')
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'univers-raw'))
+    main(raw_dir(sys.argv[1] if len(sys.argv) > 1 else None))

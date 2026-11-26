@@ -9,6 +9,7 @@
 // 3. Lune : le point tourné vers la Terre reste près du centre de la face visible (librations : ± 8,5°), sur
 //    60 dates réparties sur 2 ans.
 // Usage : essai_orientation <de440.bsp>
+#include <algorithm>
 #include <cstdio>
 
 #include "orientation.h"

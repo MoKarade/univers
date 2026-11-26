@@ -4,16 +4,23 @@
 Repère de travail de l'application : écliptique J2000 héliocentrique
 (x vers le point vernal, z vers le pôle nord écliptique).
 """
-import base64, csv, io, json, math, os, struct, sys
+import base64, csv, io, json, math, os, sys
+from pathlib import Path
 import numpy as np
 from PIL import Image
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.cosmology import Planck18
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, '..', 'gen')
-os.makedirs(OUT, exist_ok=True)
+_PIPE_DIR = str(Path(__file__).resolve().parent)
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import APP_GEN, PIPELINE_DIR, PIPELINE_RAW  # noqa: E402
+
+HERE = PIPELINE_DIR
+RAW = PIPELINE_RAW
+OUT = APP_GEN
+OUT.mkdir(parents=True, exist_ok=True)
 
 EPS = math.radians(84381.448 / 3600.0)  # obliquité moyenne J2000 (IAU 1976), celle du repère JPL
 PC_LY = 3.2615637769
@@ -63,7 +70,8 @@ def f(x):
     except Exception:
         return float('nan')
 
-rows = list(csv.DictReader(open(os.path.join(HERE, 'hygdata_v41.csv'))))
+with open(HERE / 'hygdata_v41.csv', encoding='utf-8') as fh:
+    rows = list(csv.DictReader(fh))
 MAG_LIM = 7.0
 sel = []
 for r in rows:
@@ -127,7 +135,8 @@ DEEP = [  # nom, RA, Dec (SIMBAD), distance en années-lumière, priorité
 ]
 
 # ---------------------------------------------------------------- galaxies du Groupe local (positions actuelles, Mpc)
-simbad = {' '.join(r['id'].split()): r for r in json.load(open(os.path.join(HERE, 'simbad_gal.json')))}
+with open(HERE / 'simbad_gal.json', encoding='utf-8') as fh:
+    simbad = {' '.join(r['id'].split()): r for r in json.load(fh)}
 def sb(name):
     r = simbad[name]
     return float(r['ra']), float(r['dec'])
@@ -230,7 +239,8 @@ for k, v in TEX.items():
 
 # ---------------------------------------------------------------- éléments orbitaux JPL (lus dans la page officielle, pas retapés)
 import re as _re, html as _html
-_page = open(os.path.join(HERE, 'approx_pos.html')).read()
+with open(HERE / 'approx_pos.html', encoding='utf-8') as fh:
+    _page = fh.read()
 _pres = [_html.unescape(_re.sub(r'<[^>]+>', '', p)) for p in _re.findall(r'<pre[^>]*>(.*?)</pre>', _page, flags=_re.S)]
 def _parse_el(txt):
     out, cur = {}, None
@@ -266,5 +276,6 @@ data = {
     'STAR_LABELS': labels, 'DEEP': DEEP, 'LOCAL': LOCAL, 'FAR': FAR, 'TEX': TEX,
 }
 js = 'const DATA = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n'
-open(os.path.join(OUT, 'data.js'), 'w').write(js)
-print('gen/data.js : %.0f ko' % (len(js.encode()) / 1024))
+with open(OUT / 'data.js', 'w', encoding='utf-8', newline='\n') as fh:
+    fh.write(js)
+print('app/gen/data.js : %.0f ko' % (len(js.encode()) / 1024))

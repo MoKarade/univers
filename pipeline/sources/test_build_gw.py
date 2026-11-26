@@ -8,8 +8,13 @@ Lancer : python pipeline/sources/test_build_gw.py
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import build_gw  # noqa: E402
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+try:
+    from . import build_gw  # noqa: E402
+except ImportError:
+    import build_gw  # noqa: E402
 
 
 def ev(name, cat, version=1, gps=1e9, pa=None, m1=None):

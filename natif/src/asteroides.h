@@ -2,8 +2,9 @@
 // par la carte graphique à chaque image (équation de Kepler), d'après les éléments mesurés du JPL.
 #pragma once
 #include "commun.h"
+#include "fichier_mappe.h"
 
-namespace {
+namespace univers {
 
 struct AsteroidPush {
     float viewProj[16];
@@ -16,25 +17,29 @@ class AsteroidRenderer {
 public:
     bool ready = false;
     uint64_t count = 0;
-    double epochJd = 0;      // date des éléments (jour julien)
+    double epochJd = 0;  // date des éléments (jour julien)
 
-    // Rend false si le fichier manque (le simulateur continue sans astéroïdes).
+    // Rend false si le fichier manque ou est invalide (le simulateur continue sans astéroïdes).
     bool create(const Gpu& g, const std::string& path, VkFormat hdrFormat) {
-        const HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (file == INVALID_HANDLE_VALUE) return false;
-        LARGE_INTEGER size;
-        GetFileSizeEx(file, &size);
-        const HANDLE mapping = CreateFileMappingA(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
-        const auto* base = mapping ? static_cast<const uint8_t*>(MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0)) : nullptr;
-        if (!base || std::memcmp(base, "UNIVAST1", 8) != 0) return false;
-        std::memcpy(&count, base + 8, 8);
-        std::memcpy(&epochJd, base + 16, 8);
-        const size_t column = (count * 4 + kAlign - 1) / kAlign * kAlign;
-        if (static_cast<uint64_t>(size.QuadPart) < kAlign + kCols * column) return false;
-        for (int i = 0; i < kCols; ++i) vb_[i] = uploadVertices(g, base + kAlign + i * column, count * 4);
-        UnmapViewOfFile(base);
-        CloseHandle(mapping);
-        CloseHandle(file);
+        MappedFile mf;
+        if (!mf.open(path.c_str())) return false;
+        const uint8_t* base = mf.data();
+        const uint64_t fileSize = mf.size();
+        if (fileSize < kAlign || std::memcmp(base, "UNIVAST1", 8) != 0) return false;
+        uint64_t n = 0;
+        double epoch = 0;
+        std::memcpy(&n, base + 8, 8);
+        std::memcpy(&epoch, base + 16, 8);
+        if (n == 0 || n > (fileSize - kAlign) / (static_cast<uint64_t>(kCols) * 4) || n > UINT32_MAX) return false;
+        const uint64_t column = (n * 4 + kAlign - 1) / kAlign * kAlign;
+        if (column > (fileSize - kAlign) / kCols) return false;
+        count = n;
+        epochJd = epoch;
+        for (int i = 0; i < kCols; ++i) {
+            vb_[i] = uploadVertices(g, base + kAlign + static_cast<size_t>(i) * static_cast<size_t>(column),
+                                    static_cast<VkDeviceSize>(count) * 4);
+        }
+        mf.close();
 
         const VkPushConstantRange pcr{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(AsteroidPush)};
         VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
@@ -43,7 +48,8 @@ public:
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout_), "agencement des astéroïdes");
         vs_ = shader(g, "asteroides.vert.spv");
         fs_ = shader(g, "etoiles.frag.spv");
-        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
+        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
+                                                     {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         stages[0].module = vs_;
         stages[0].pName = "main";
@@ -76,7 +82,7 @@ public:
         rs.lineWidth = 1.0f;
         VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        VkPipelineColorBlendAttachmentState att{};      // les lumières s'additionnent
+        VkPipelineColorBlendAttachmentState att{};  // les lumières s'additionnent
         att.blendEnable = VK_TRUE;
         att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
         att.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -108,7 +114,8 @@ public:
     }
 
     // camAu : position de la caméra en UA (écliptique, centre : Soleil) ; days : jours écoulés depuis l'époque des éléments.
-    void draw(VkCommandBuffer cmd, const Camera& cam, Vec3 camAu, double days, uint32_t width, uint32_t height, float gain) const {
+    void draw(VkCommandBuffer cmd, const Camera& cam, Vec3 camAu, double days, uint32_t width, uint32_t height,
+              float gain) const {
         if (!ready || gain <= 0) return;
         AsteroidPush pc{};
         const auto m = cam.viewProj();
@@ -144,14 +151,15 @@ public:
         vkDestroyPipelineLayout(g.dev, layout_, nullptr);
         vkDestroyShaderModule(g.dev, vs_, nullptr);
         vkDestroyShaderModule(g.dev, fs_, nullptr);
+        ready = false;
     }
 
 private:
     static constexpr int kCols = 10;
-    Buffer vb_[kCols];
+    Buffer vb_[kCols]{};
     VkPipelineLayout layout_{};
     VkPipeline pipeline_{};
     VkShaderModule vs_{}, fs_{};
 };
 
-}  // namespace
+}  // namespace univers

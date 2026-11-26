@@ -16,6 +16,7 @@ import base64
 import io
 import json
 import os
+from pathlib import Path
 import sys
 
 import astropy.units as u
@@ -23,6 +24,13 @@ import numpy as np
 from astropy.io import fits
 from astropy_healpix import HEALPix
 from PIL import Image
+
+_HERE = Path(__file__).resolve().parent
+_PIPELINE_DIR = _HERE.parent
+for _d in (_PIPELINE_DIR, _HERE):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
+from _paths import APP_GEN, raw_dir  # noqa: E402
 
 FICHIER = 'planck_smica_2048_R3.fits'
 LARGEUR, HAUTEUR = 2048, 1024      # 0,18 degré par pixel, proche de la résolution de SMICA (5 minutes d'arc)
@@ -109,12 +117,12 @@ def main(raw):
         'CMB_SRC': 'Planck 2018 (PR3), carte SMICA, ESA et collaboration Planck (A&A 641, A4)',
         'CMB_CHK': {'largeur': LARGEUR, 'hauteur': HAUTEUR, 'correl_wmap': correl},
     }
-    out = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data19.js')
+    out = APP_GEN / 'data19.js'
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('Object.assign(DATA, ' + json.dumps(payload, ensure_ascii=False, separators=(',', ':')) + ');\n')
-    print('écrit', os.path.normpath(out), os.path.getsize(out), 'octets')
+    print('écrit', out, out.stat().st_size, 'octets')
     Image.fromarray(g8, 'L').resize((1024, 512)).save(os.path.join(raw, 'cmb_planck_controle.png'))
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'univers-raw'))
+    main(raw_dir(sys.argv[1] if len(sys.argv) > 1 else None))

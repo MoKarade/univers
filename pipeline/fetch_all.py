@@ -1,6 +1,28 @@
-import requests, json, os, sys, time, threading, subprocess, urllib.parse
-RAW = 'raw'; UA = {'User-Agent': 'UniversArtifactBuilder/1.1 (educational visualization)'}
-T0 = time.time(); status = {}
+import importlib.util, json, os, sys, threading, time, urllib.parse
+from pathlib import Path
+
+_PIPE_DIR = str(Path(__file__).resolve().parent)
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import PIPELINE_RAW  # noqa: E402
+
+RAW = PIPELINE_RAW
+UA = {'User-Agent': 'UniversArtifactBuilder/1.1 (educational visualization)'}
+ASTRO_DEPS = ('jplephem', 'astropy_healpix', 'pymeeus')
+T0 = time.time()
+status = {}
+requests = None
+
+
+def check_deps():
+    missing = [m for m in ('requests', *ASTRO_DEPS) if importlib.util.find_spec(m) is None]
+    if missing:
+        raise ImportError(
+            f"Dépendances manquantes ({', '.join(missing)}). "
+            "Installez les profils 'core' et 'astro' déclarés dans pipeline/pyproject.toml."
+        )
+
+
 def save(name, url, method='get', timeout=200, **kw):
     path = os.path.join(RAW, name)
     if os.path.exists(path) and os.path.getsize(path) > 2000:
@@ -17,14 +39,22 @@ def save(name, url, method='get', timeout=200, **kw):
         os.replace(path + '.part', path); status[name] = ('ok', n); return True
     except Exception as e:
         status[name] = ('ERR', str(e)[:160]); return False
+
+
 def vizier(name, source, extra=''):
     for host in ('vizier.cds.unistra.fr', 'vizier.cfa.harvard.edu'):
         url = f'https://{host}/viz-bin/asu-tsv?-source={urllib.parse.quote(source, safe="/")}&-out.max=unlimited&-out.all&-out.add=_RAJ,_DEJ{extra}'
         if save(name, url, timeout=150): return
+
+
 def sbdb(name, params):
     save(name, 'https://ssd-api.jpl.nasa.gov/sbdb_query.api?' + urllib.parse.urlencode(params), timeout=150)
+
+
 def sky(name, sql):
     save(name, 'https://skyserver.sdss.org/dr17/SkyServerWS/SearchTools/SqlSearch?' + urllib.parse.urlencode({'cmd': sql, 'format': 'csv'}), timeout=200)
+
+
 def desi():
     tap = 'https://datalab.noirlab.edu/tap/sync'
     try:
@@ -42,46 +72,66 @@ def desi():
         save('desi.csv', tap, method='post', timeout=200, data={'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': 'csv', 'QUERY': q})
     except Exception as e:
         status['desi'] = ('ERR', str(e)[:200])
-jobs = [
- (save, ('de440s.bsp', 'https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp')),
- (save, ('wmap_ilc.fits', 'https://lambda.gsfc.nasa.gov/data/map/dr5/dfp/ilc/wmap_ilc_9yr_v5.fits')),
- (sbdb, ('sbdb_ast.json', {'fields': 'pdes,name,a,e,i,om,w,ma,epoch,H,class', 'sb-kind': 'a', 'sb-cdata': json.dumps({'AND': ['H|LT|12.6', 'a|LT|6.6', 'e|LT|0.9']})})),
- (sbdb, ('sbdb_tno.json', {'fields': 'pdes,name,a,e,i,om,w,ma,epoch,H,class,data_arc,condition_code', 'sb-kind': 'a', 'sb-class': 'TNO,CEN'})),
- (vizier, ('2mrs.tsv', 'J/ApJS/199/26/table3')),
- (vizier, ('ungc.tsv', 'J/AJ/145/101')),
- (vizier, ('mcconnachie.tsv', 'J/AJ/144/4')),
- (vizier, ('harris.tsv', 'VII/202')),
- (vizier, ('openclusters.tsv', 'J/A+A/640/A1/table1')),
- (sky, ('sdss_gal.csv', "SELECT ra,dec,z FROM SpecObj WHERE class='GALAXY' AND zWarning=0 AND z>0.003 AND z<1.3 AND fiberID%8=0")),
- (sky, ('sdss_qso.csv', "SELECT ra,dec,z FROM SpecObj WHERE class='QSO' AND zWarning=0 AND z>0.2 AND z<6 AND fiberID%16=0")),
- (desi, ()),
-]
-pip = subprocess.Popen('timeout 150 pip install pymeeus jplephem astropy-healpix --break-system-packages --only-binary=:all: -q 2>&1 | tail -3; echo PIP_DONE', shell=True, stdout=subprocess.PIPE, text=True)
-th = [threading.Thread(target=f, args=a, daemon=True) for f, a in jobs]
-for t in th: t.start()
-for t in th: t.join(max(1, 262 - (time.time() - T0)))
-print('pip:', pip.stdout.read().strip() if pip.poll() is not None else 'encore en cours')
-for k, v in status.items(): print('%-18s %s' % (k, v))
+
+
 def head(name, n=3, skip='#'):
     p = os.path.join(RAW, name)
     if not os.path.exists(p): return
-    with open(p, errors='replace') as f:
+    with open(p, encoding='utf-8', errors='replace') as f:
         lines = [l.rstrip('\n') for l in f if not l.startswith(skip) and l.strip()]
     print('---', name, len(lines), 'lignes'); [print('   ', l[:420]) for l in lines[:n]]
-for nme in ('2mrs.tsv', 'openclusters.tsv', 'sdss_gal.csv', 'sdss_qso.csv', 'desi.csv'): head(nme)
-for nme in ('ungc.tsv', 'mcconnachie.tsv', 'harris.tsv'):
-    p = os.path.join(RAW, nme)
-    if os.path.exists(p):
-        txt = open(p, errors='replace').read().split('\n'); print('---', nme, len(txt), 'lignes')
-        for i, l in enumerate(txt):
-            if l.startswith('#Name:') or l.startswith('#Title') : print('   ', l[:150])
-            if l.startswith('#Name:'):
-                j = i
-                while j < len(txt) and (txt[j].startswith('#') or not txt[j].strip()): j += 1
-                print('    COLS', txt[j][:520]); print('    ROW ', txt[j + 3][:300] if j + 3 < len(txt) else '')
-for nme in ('sbdb_ast.json', 'sbdb_tno.json'):
-    p = os.path.join(RAW, nme)
-    if os.path.exists(p):
-        try:
-            d = json.load(open(p)); print('---', nme, d.get('count'), d.get('fields'), d['data'][0] if d.get('data') else d)
-        except Exception as e: print(nme, 'ERR', e, open(p).read()[:300])
+
+
+def main():
+    global requests, T0
+    check_deps()
+    import requests as _requests
+    requests = _requests
+    T0 = time.time()
+    RAW.mkdir(parents=True, exist_ok=True)
+    jobs = [
+        (save, ('de440s.bsp', 'https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp')),
+        (save, ('wmap_ilc.fits', 'https://lambda.gsfc.nasa.gov/data/map/dr5/dfp/ilc/wmap_ilc_9yr_v5.fits')),
+        (sbdb, ('sbdb_ast.json', {'fields': 'pdes,name,a,e,i,om,w,ma,epoch,H,class', 'sb-kind': 'a', 'sb-cdata': json.dumps({'AND': ['H|LT|12.6', 'a|LT|6.6', 'e|LT|0.9']})})),
+        (sbdb, ('sbdb_tno.json', {'fields': 'pdes,name,a,e,i,om,w,ma,epoch,H,class,data_arc,condition_code', 'sb-kind': 'a', 'sb-class': 'TNO,CEN'})),
+        (vizier, ('2mrs.tsv', 'J/ApJS/199/26/table3')),
+        (vizier, ('ungc.tsv', 'J/AJ/145/101')),
+        (vizier, ('mcconnachie.tsv', 'J/AJ/144/4')),
+        (vizier, ('harris.tsv', 'VII/202')),
+        (vizier, ('openclusters.tsv', 'J/A+A/640/A1/table1')),
+        (sky, ('sdss_gal.csv', "SELECT ra,dec,z FROM SpecObj WHERE class='GALAXY' AND zWarning=0 AND z>0.003 AND z<1.3 AND fiberID%8=0")),
+        (sky, ('sdss_qso.csv', "SELECT ra,dec,z FROM SpecObj WHERE class='QSO' AND zWarning=0 AND z>0.2 AND z<6 AND fiberID%16=0")),
+        (desi, ()),
+    ]
+    th = [threading.Thread(target=f, args=a, daemon=True) for f, a in jobs]
+    for t in th: t.start()
+    for t in th: t.join(max(1, 262 - (time.time() - T0)))
+    for k, v in status.items(): print('%-18s %s' % (k, v))
+    for nme in ('2mrs.tsv', 'openclusters.tsv', 'sdss_gal.csv', 'sdss_qso.csv', 'desi.csv'): head(nme)
+    for nme in ('ungc.tsv', 'mcconnachie.tsv', 'harris.tsv'):
+        p = os.path.join(RAW, nme)
+        if os.path.exists(p):
+            with open(p, encoding='utf-8', errors='replace') as fh:
+                txt = fh.read().split('\n')
+            print('---', nme, len(txt), 'lignes')
+            for i, l in enumerate(txt):
+                if l.startswith('#Name:') or l.startswith('#Title'): print('   ', l[:150])
+                if l.startswith('#Name:'):
+                    j = i
+                    while j < len(txt) and (txt[j].startswith('#') or not txt[j].strip()): j += 1
+                    print('    COLS', txt[j][:520]); print('    ROW ', txt[j + 3][:300] if j + 3 < len(txt) else '')
+    for nme in ('sbdb_ast.json', 'sbdb_tno.json'):
+        p = os.path.join(RAW, nme)
+        if os.path.exists(p):
+            try:
+                with open(p, encoding='utf-8') as fh:
+                    d = json.load(fh)
+                print('---', nme, d.get('count'), d.get('fields'), d['data'][0] if d.get('data') else d)
+            except Exception as e:
+                with open(p, encoding='utf-8', errors='replace') as fh:
+                    snippet = fh.read()[:300]
+                print(nme, 'ERR', e, snippet)
+
+
+if __name__ == '__main__':
+    main()

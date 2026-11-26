@@ -17,11 +17,17 @@ Sorties :
 - galaxies_noms.tsv : nom, x, y, z (années-lumière, écliptique, centre : Soleil), genre.
 Usage : python galaxies.py <dossier des fichiers en flux> <dossier de sortie>
 """
-import base64, json, math, os, re, sys
+import base64, math, os, sys
+from pathlib import Path
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from etoiles import ROOT, ALIGN, data_keys      # noqa: E402
+_HERE = Path(__file__).resolve().parent
+_PIPE_DIR = _HERE.parent
+for _d in (_PIPE_DIR, _HERE):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
+from _paths import read_tile_manifest  # noqa: E402
+from etoiles import ALIGN, ROOT, data_keys  # noqa: E402, F401
 
 MAGIC = b'UNIVGAL1'
 MPC_LY = 3.0856775814913673e22 / 9.4607304725808e15
@@ -41,12 +47,13 @@ def embarques(D):
 
 
 def flux(D, dossier):
-    src = open(os.path.join(ROOT, 'app', 'src', '60_app.js'), encoding='utf-8').read()
-    man = re.search(r'TILE_MANIFEST = /\*__TILES__\*/(\[.*?\]);', src).group(1)
-    tiles = [(m.group(1), int(m.group(2))) for m in re.finditer(r"kind: 'gal', id: '([0-9a-f]{32})', n: (\d+)", man)]
+    tiles = [(t['id'], int(t['n'])) for t in read_tile_manifest() if t.get('kind') == 'gal']
+    if not tiles:
+        raise SystemExit('aucune tuile galaxie dans TILE_MANIFEST')
     parts = []
     for tid, n in tiles:
-        r = np.frombuffer(base64.b64decode(open(os.path.join(dossier, tid + '.txt'), 'rb').read()), '<u2').reshape(-1, 3)
+        with open(os.path.join(dossier, tid + '.txt'), 'rb') as fh:
+            r = np.frombuffer(base64.b64decode(fh.read()), '<u2').reshape(-1, 3)
         if len(r) != n: raise SystemExit(f'fichier {tid} : {len(r)} objets, {n} attendus')
         parts.append(r)
     r = np.concatenate(parts).astype(np.int64)

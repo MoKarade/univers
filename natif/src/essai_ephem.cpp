@@ -7,6 +7,7 @@
 // Lunes : pipeline/natif/ref_lunes.txt (Horizons, demandé par lunes.py --reference), lignes « code NAIF ... » ; jugées à
 // 5 km (Horizons peut s'appuyer sur une solution d'orbite plus récente que le fichier téléchargé).
 // Usage : essai_ephem <fichier.bsp> [autres.bsp ...] <reference.txt>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>

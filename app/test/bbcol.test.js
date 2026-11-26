@@ -1,21 +1,26 @@
-// S1 — couleur des étoiles : corps noir de Planck vu par l'observateur standard CIE 1931 (2°).
-// Références indépendantes du code testé :
-//  - l'illuminant A de la CIE est, par définition, un corps noir à 2856 K : x = 0,44757 ; y = 0,40745 ;
-//  - l'approximation publiée du lieu de Planck de Kim et al. 2002, valable de 1667 à 25 000 K.
-const fs = require('fs'), vm = require('vm'), path = require('path'), root = path.join(__dirname, '..');
-const rd = f => fs.readFileSync(path.join(root, f), 'utf8'); global.atob = s => Buffer.from(s, 'base64').toString('binary');
-vm.runInThisContext((rd('gen/data.js') + rd('gen/data15.js') + rd('src/20_physics.js') + rd('src/30_gen.js')).replace(/^const /gm, 'var '));
+/* S1 — couleur des étoiles : corps noir de Planck vu par l'observateur standard CIE 1931 (2°).
+   Références indépendantes du code testé :
+    - l'illuminant A de la CIE est, par définition, un corps noir à 2856 K : x = 0,44757 ; y = 0,40745 ;
+    - l'approximation publiée du lieu de Planck de Kim et al. 2002, valable de 1667 à 25 000 K. */
+const fs = require('fs');
+const path = require('path');
+const { loadUnivers, REPO_ROOT } = require('./_load');
+
+const { DATA, bbRgb, bvToTeff, bvToRgb } = loadUnivers({
+  gen: ['data.js', 'data15.js'],
+  src: ['20_physics.js', '30_gen.js'],
+});
 
 let fails = 0;
 const check = (ok, msg) => { console.log((ok ? 'OK    ' : 'ÉCHEC ') + msg); if (!ok) fails++; };
 
 /* ---- intégration directe, à partir de la table CIE versée dans le dépôt ---- */
-const CMF = fs.readFileSync(path.join(root, '..', 'pipeline', 'ref', 'ciexyz31_1.csv'), 'utf8').trim().split(/\r?\n/).map(l => l.split(',').map(Number));
+const CMF = fs.readFileSync(path.join(REPO_ROOT, 'pipeline', 'ref', 'ciexyz31_1.csv'), 'utf8').trim().split(/\r?\n/).map(l => l.split(',').map(Number));
 const h = 6.62607015e-34, c = 299792458, kB = 1.380649e-23;
 const planck = (lnm, T) => { const l = lnm * 1e-9; return 1 / (Math.pow(l, 5) * (Math.exp(h * c / (l * kB * T)) - 1)); };
 function xyzOf(T) { let X = 0, Y = 0, Z = 0; for (const [l, x, y, z] of CMF) { const b = planck(l, T); X += b * x; Y += b * y; Z += b * z; } return [X, Y, Z]; }
 const xyOf = T => { const [X, Y, Z] = xyzOf(T), s = X + Y + Z; return [X / s, Y / s]; };
-// XYZ -> sRGB linéaire (IEC 61966-2-1)
+/* XYZ -> sRGB linéaire (IEC 61966-2-1) */
 const toRgb = ([X, Y, Z]) => [3.2406 * X - 1.5372 * Y - 0.4986 * Z, -0.9689 * X + 1.8758 * Y + 0.0415 * Z, 0.0557 * X - 0.2040 * Y + 1.0570 * Z];
 const refRgb = T => { const v = toRgb(xyzOf(T)).map(u => Math.max(u, 0)), m = Math.max(...v); return v.map(u => u / m); };
 

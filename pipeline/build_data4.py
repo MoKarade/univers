@@ -1,7 +1,14 @@
 # Quatrième lot de données réelles : étoiles Gaia DR3, comètes, étoiles à planètes, pulsars, Nuages de Magellan.
-import numpy as np, pandas as pd, json, base64, math, os, warnings
+import numpy as np, pandas as pd, json, base64, math, os, sys, warnings
+from pathlib import Path
 warnings.filterwarnings('ignore')
-RAW = 'raw'; OUT = '../gen'; D = {}; rng = np.random.default_rng(11)
+
+_PIPE_DIR = str(Path(__file__).resolve().parent)
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import APP_GEN, PIPELINE_RAW  # noqa: E402
+
+RAW = PIPELINE_RAW; OUT = APP_GEN; D = {}; rng = np.random.default_rng(11)
 def b64(a): return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode()
 EPS = math.radians(23.4392911); RX = np.array([[1, 0, 0], [0, math.cos(EPS), math.sin(EPS)], [0, -math.sin(EPS), math.cos(EPS)]])
 PC_LY = 3.2615638
@@ -20,7 +27,9 @@ D['GAIA_N'] = NG; D['GAIA_GEO'] = b64(geo); D['GAIA_AUX'] = b64(aux); D['GAIA_VE
 print('Gaia DR3 : %d étoiles retenues sur %d (magnitude G de 8,40 à %.2f) | distance médiane %.0f al, 90 %% à moins de %.0f al | avec vitesse radiale mesurée : %.0f %% | vitesse médiane %.0f km/s, > 254 km/s : %d'
       % (NG, tot, glim, np.median(dly), np.percentile(dly, 90), 100 * g.radial_velocity.notna().mean(), np.median(np.linalg.norm(ve, axis=1)), (np.abs(ve).max(1) > 254).sum()))
 # ------------------------------------------------------------------ comètes (JPL SBDB)
-d = json.load(open(os.path.join(RAW, 'sbdb_com.json'))); F = {k: i for i, k in enumerate(d['fields'])}; rows = []
+with open(os.path.join(RAW, 'sbdb_com.json'), encoding='utf-8') as fh:
+    d = json.load(fh)
+F = {k: i for i, k in enumerate(d['fields'])}; rows = []
 for r in d['data']:
     try:
         e, q, i, om, w, tp = (float(r[F[k]]) for k in ('e', 'q', 'i', 'om', 'w', 'tp'))
@@ -40,11 +49,12 @@ D['EXO_N'] = len(h); D['EXO_POS'] = b64(pe.astype('<f4')); D['EXO_NP'] = b64(np.
 print('étoiles à planètes : %d étoiles, %d planètes confirmées | distance médiane %.0f al | les plus riches : %s' % (len(h), h.n.sum(), np.median(h.d) * PC_LY, h.sort_values('n').tail(4)[['star_name', 'n']].values.tolist()))
 # ------------------------------------------------------------------ pulsars (catalogue ATNF, via VizieR)
 P = []
-for line in open(os.path.join(RAW, 'psr.tsv'), errors='replace'):
-    p = line.rstrip('\n').split('\t')
-    if len(p) < 5 or line.startswith('#'): continue
-    try: P.append((float(p[0]), float(p[1]), p[2].strip(), float(p[3]), float(p[4]) if p[4].strip() else float('nan')))
-    except Exception: pass
+with open(os.path.join(RAW, 'psr.tsv'), encoding='utf-8', errors='replace') as fh:
+    for line in fh:
+        p = line.rstrip('\n').split('\t')
+        if len(p) < 5 or line.startswith('#'): continue
+        try: P.append((float(p[0]), float(p[1]), p[2].strip(), float(p[3]), float(p[4]) if p[4].strip() else float('nan')))
+        except Exception: pass
 P = [p for p in P if 0 < p[3] < 70]; pp = eq_unit(np.array([p[0] for p in P]), np.array([p[1] for p in P])) @ RX.T * (np.array([p[3] for p in P]) * 3261.5638)[:, None]
 D['PSR_N'] = len(P); D['PSR_POS'] = b64(pp.astype('<f4')); D['PSR_P0'] = b64(np.array([p[4] for p in P], '<f4')); D['PSR_NAMES'] = '|'.join(p[2] for p in P)
 per = np.array([p[4] for p in P]); print('pulsars : %d avec distance | distance médiane %.0f al | période médiane %.2f s, la plus courte %.4f s' % (len(P), np.median([p[3] for p in P]) * 3261.56, np.nanmedian(per), np.nanmin(per)))
@@ -58,14 +68,18 @@ def gc(ra, de, dk, pma, pmd, rv):
 for k, a in (('LMC', (78.76, -69.19, 50.1, 1.910, 0.229, 262.2)), ('SMC', (13.18, -72.83, 62.8, 0.772, -1.117, 145.6))):
     p, v = gc(*a); D[k] = {'pos': p, 'vel': v}; pn = np.linalg.norm(p); vr = np.dot(p, v) / pn
     print('%s : position %s kpc (%.1f kpc du centre) | vitesse %s km/s, totale %.0f, radiale %.0f, tangentielle %.0f' % (k, p, pn, v, np.linalg.norm(v), vr, math.sqrt(np.dot(v, v) - vr * vr)))
-js = 'Object.assign(DATA, ' + json.dumps(D, ensure_ascii=False, separators=(',', ':')) + ');\n'; open(os.path.join(OUT, 'data4.js'), 'w').write(js)
+js = 'Object.assign(DATA, ' + json.dumps(D, ensure_ascii=False, separators=(',', ':')) + ');\n'
+with open(OUT / 'data4.js', 'w', encoding='utf-8', newline='\n') as fh:
+    fh.write(js)
 print('écrit data4.js : %.0f ko' % (len(js) / 1024)); [print('   %-10s %6.0f ko' % (k, len(json.dumps(v)) / 1024)) for k, v in sorted(D.items(), key=lambda kv: -len(json.dumps(kv[1])))[:6]]
 # ------------------------------------------------------------------ étoiles à planètes : Open Exoplanet Catalogue (planètes confirmées seulement), préféré s'il est assez complet
 import gzip, xml.etree.ElementTree as ET
 def sexa(s, hours):
     p = s.replace(':', ' ').split(); sg = -1 if p[0].startswith('-') else 1; v = abs(float(p[0])) + float(p[1]) / 60 + (float(p[2]) if len(p) > 2 else 0) / 3600; return sg * v * (15 if hours else 1)
 rows = []
-for sy in ET.parse(gzip.open(os.path.join(RAW, 'oec.xml.gz'))).getroot().iter('system'):
+with gzip.open(os.path.join(RAW, 'oec.xml.gz')) as gz_fh:
+    oec_root = ET.parse(gz_fh).getroot()
+for sy in oec_root.iter('system'):
     try:
         n = sum(1 for p in sy.iter('planet') if any((l.text or '').strip() == 'Confirmed planets' for l in p.findall('list')))
         d = float(sy.findtext('distance')); ra = sexa(sy.findtext('rightascension'), True); de = sexa(sy.findtext('declination'), False)
@@ -78,4 +92,6 @@ if len(rows) >= 3500:
     D['EXO_N'] = len(rows); D['EXO_POS'] = b64(pe.astype('<f4')); D['EXO_NP'] = b64(np.clip([r[4] for r in rows], 0, 255).astype('u1')); D['EXO_NAMES'] = '|'.join(r[0].replace('|', ' ') for r in rows); D['EXO_SRC'] = 'Open Exoplanet Catalogue'
     print('-> source retenue : Open Exoplanet Catalogue (%d étoiles, distance médiane %.0f al)' % (len(rows), np.median([r[3] for r in rows]) * PC_LY))
 else: D['EXO_SRC'] = 'exoplanet.eu'
-js = 'Object.assign(DATA, ' + json.dumps(D, ensure_ascii=False, separators=(',', ':')) + ');\n'; open(os.path.join(OUT, 'data4.js'), 'w').write(js)
+js = 'Object.assign(DATA, ' + json.dumps(D, ensure_ascii=False, separators=(',', ':')) + ');\n'
+with open(OUT / 'data4.js', 'w', encoding='utf-8', newline='\n') as fh:
+    fh.write(js)

@@ -27,10 +27,14 @@ void check(VkResult r, const char* what) {
 std::vector<uint32_t> readSpv(const std::string& name) {
     std::ifstream f(std::string(SPV_DIR) + "/" + name, std::ios::binary | std::ios::ate);
     if (!f) fail(("shader introuvable : " + name).c_str());
-    const auto size = static_cast<size_t>(f.tellg());
+    const std::streamoff rawSize = static_cast<std::streamoff>(f.tellg());
+    if (rawSize <= 0 || rawSize % 4 != 0) fail(("shader invalide : " + name).c_str());
+    const auto size = static_cast<size_t>(rawSize);
     std::vector<uint32_t> code(size / 4);
-    f.seekg(0);
-    f.read(reinterpret_cast<char*>(code.data()), static_cast<std::streamsize>(size));
+    f.seekg(0, std::ios::beg);
+    if (!f.read(reinterpret_cast<char*>(code.data()), static_cast<std::streamsize>(size))) {
+        fail(("lecture du shader impossible : " + name).c_str());
+    }
     return code;
 }
 
@@ -272,9 +276,16 @@ int main() {
                 corner[0], corner[1], corner[2]);
     const bool ok = mid[0] == 255 && mid[1] >= 127 && mid[1] <= 128 && mid[2] == 0 && corner[0] == 0 && corner[1] == 0 && corner[2] == 51;
     {
+        const size_t pixels = static_cast<size_t>(kWidth) * kHeight;
+        std::vector<uint8_t> rgb(pixels * 3);
+        for (size_t i = 0; i < pixels; ++i) {
+            rgb[i * 3] = px[i * 4];
+            rgb[i * 3 + 1] = px[i * 4 + 1];
+            rgb[i * 3 + 2] = px[i * 4 + 2];
+        }
         std::ofstream out("essai.ppm", std::ios::binary);
         out << "P6\n" << kWidth << " " << kHeight << "\n255\n";
-        for (size_t i = 0; i < static_cast<size_t>(kWidth) * kHeight; ++i) out.write(reinterpret_cast<const char*>(px + 4 * i), 3);
+        out.write(reinterpret_cast<const char*>(rgb.data()), static_cast<std::streamsize>(rgb.size()));
     }
     vkUnmapMemory(dev, bufMem);
 

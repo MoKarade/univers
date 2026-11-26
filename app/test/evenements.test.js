@@ -1,10 +1,17 @@
 /* Lot G : passages de Mercure et de Vénus devant le Soleil calculés par la page (VSOP87), contre le catalogue de la NASA
    (F. Espenak, 2026 à 2200). Même nombre de passages, milieu à 3 minutes près, distance minimale des centres à 5″ près.
    Le temps universel futur dépend de ΔT, extrapolé différemment ici et par la NASA : écart attendu d'environ une minute après 2100. */
-const fs = require('fs'), vm = require('vm'), path = require('path'), root = path.join(__dirname, '..');
-const rd = f => fs.readFileSync(path.join(root, f), 'utf8'); global.atob = s => Buffer.from(s, 'base64').toString('binary');
-vm.runInThisContext((rd('gen/data.js') + rd('gen/data2.js') + rd('gen/ephem.js') + rd('src/20_physics.js') + rd('src/23_events.js') + "function b64ToBytes(s) { const bin = atob(s), out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }").replace(/^const /gm, 'var '));
-const R = JSON.parse(rd('test/transits_ref.json')); let fail = 0;
+const fs = require('fs');
+const path = require('path');
+const { loadUnivers } = require('./_load');
+
+const { evTransits } = loadUnivers({
+  gen: ['data.js', 'data2.js', 'ephem.js'],
+  src: ['20_physics.js', '23_events.js'],
+});
+
+const R = JSON.parse(fs.readFileSync(path.join(__dirname, 'transits_ref.json'), 'utf8'));
+let fail = 0;
 const ok = (c, m) => { console.log((c ? 'ok   ' : 'ÉCHEC') + ' ' + m); if (!c) fail++; };
 const jdOf = (d, hm) => { const [y, m, dd] = d.split('-').map(Number), [h, mi] = hm.split(':').map(Number); return Date.UTC(y, m - 1, dd, h, mi) / 864e5 + 2440587.5; };
 for (const key of ['mercury', 'venus']) {

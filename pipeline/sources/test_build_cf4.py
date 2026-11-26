@@ -9,10 +9,19 @@ Lancer : python pipeline/sources/test_build_cf4.py [dossier_raw]
 import collections
 import json
 import os
+from pathlib import Path
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import build_cf4 as b  # noqa: E402
+_HERE = Path(__file__).resolve().parent
+_PIPELINE_DIR = _HERE.parent
+for _d in (_PIPELINE_DIR, _HERE):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
+from _paths import APP_GEN, raw_dir  # noqa: E402
+try:
+    from . import build_cf4 as b  # noqa: E402
+except ImportError:
+    import build_cf4 as b  # noqa: E402
 
 
 def main(raw):
@@ -23,11 +32,15 @@ def main(raw):
         print(('OK    ' if ok else 'ÉCHEC ') + msg)
         bad += 0 if ok else 1
 
-    gal = json.load(open(os.path.join(raw, 'cf4_complet.json'), encoding='utf-8'))
+    with open(os.path.join(raw, 'cf4_complet.json'), encoding='utf-8') as f:
+        gal = json.load(f)
     check(len(gal) == b.NB_ATTENDU, 'table complète : %d galaxies' % len(gal))
     near, dnear, local, dlocal = b.galaxies_de_la_page()
-    racine = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen')
-    lire = lambda f: json.loads(open(os.path.join(racine, f), encoding='utf-8').read()[len('Object.assign(DATA, '):-3])
+
+    def lire(nom):
+        with open(APP_GEN / nom, encoding='utf-8') as f:
+            return b.parse_data_js(f.read())
+
     noms_near = lire('data3.js')['NEAR_NAMES'].split('|')
     noms_local = [o['n'] for o in lire('data2.js')['LOCAL']]
     an, _ = b.coherent(gal, b.associer(near, gal), dnear)
@@ -49,4 +62,4 @@ def main(raw):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'univers-raw'))
+    main(raw_dir(sys.argv[1] if len(sys.argv) > 1 else None))

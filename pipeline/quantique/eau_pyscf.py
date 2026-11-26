@@ -10,13 +10,18 @@ Logiciel : PySCF (Sun et al. 2018, WIREs Comput. Mol. Sci. 8, e1340 ; 2020, J. C
    - énergies des orbitales occupées (théorème de Koopmans : énergie d'ionisation ≈ −ε), à comparer aux mesures.
 Écrit app/gen/water_qm.js. Usage : python eau_pyscf.py
 """
-import os, json, math, base64
+import base64, json, math, sys
+from pathlib import Path
 import numpy as np
 from pyscf import gto, scf
 from pyscf.dft import numint
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-DST = os.path.join(HERE, '..', '..', 'app', 'gen', 'water_qm.js')
+_PIPE_DIR = str(Path(__file__).resolve().parents[1])
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import APP_GEN  # noqa: E402
+
+DST = APP_GEN / 'water_qm.js'
 HA_TO_EV = 27.211386245988            # CODATA 2022
 NPTS, Q = 16000, 0.001                # points tirés ; pas des entiers 16 bits : 0,001 Å
 
@@ -69,7 +74,8 @@ def main():
     print(f"Hydrogène : forme P(r) à {100 * H['ecart_forme']:.3f} % de la formule exacte ; E = {H['E']:.6f} hartree (exact −0,5 : écart {100 * (H['E'] / -0.5 - 1):+.3f} %) ; ⟨r²⟩ = {H['r2']:.4f} a₀² (exact 3 : écart {100 * (H['r2'] / 3 - 1):+.3f} %)")
     print(f"Eau : E = {W['E']:.6f} hartree ; électrons sur la grille : {W['electrons_grille']} (10 attendus) ; −ε (eV) : {[-e for e in W['eps_eV']]}")
     out = dict(H=H, eau={k: v for k, v in W.items()}, methode='Hartree-Fock (PySCF)', src='PySCF : Sun et al. 2018, 2020 ; bases de Dunning (aug-cc-pVTZ, aug-cc-pV5Z)')
-    open(DST, 'w', encoding='utf-8', newline='\n').write('/* généré par pipeline/quantique/eau_pyscf.py */\nObject.assign(DATA, ' + json.dumps({'WATER_QM': out}, ensure_ascii=False, separators=(',', ':')) + ');\n')
+    with open(DST, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('/* généré par pipeline/quantique/eau_pyscf.py */\nObject.assign(DATA, ' + json.dumps({'WATER_QM': out}, ensure_ascii=False, separators=(',', ':')) + ');\n')
 
 
 if __name__ == '__main__':

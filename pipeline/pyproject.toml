@@ -1,0 +1,49 @@
+# Manifeste de dépendances des scripts de préparation de données (pipeline/).
+# Les scripts de base (sans dépendance tierce) et tous les tests CI de pipeline/ utilisent uniquement la bibliothèque standard Python.
+# Note : pour fusion-cpu / fusion-gpu, `agama` et `pyfalcon` sont compilés depuis leurs dépôts GitHub
+# (GalacticDynamics-Oxford/Agama et GalacticDynamics-Oxford/pyfalcon — voir .github/workflows/fusion-*.yml).
+
+[project]
+name = "univers-pipeline"
+version = "0.1.0"
+description = "Scripts de préparation, conversion et contrôle des données astronomiques et physiques d'Univers"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+core = [
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "requests>=2.31",
+    "pandas>=2.0",
+]
+astro = [
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "pandas>=2.0",
+    "astropy>=6.0",
+    "astropy-healpix>=1.0",
+    "scipy>=1.11",
+    "scikit-image>=0.22",
+    "pymeeus>=0.5.12",
+    "jplephem>=2.21",
+]
+quantum = [
+    "numpy>=1.26",
+    "pyscf>=2.4",
+]
+fusion-cpu = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "agama",
+    "pyfalcon",
+    "playwright>=1.40",
+]
+fusion-gpu = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "agama",
+    "cupy-cuda12x[ctk]>=13.0",
+    "playwright>=1.40",
+]

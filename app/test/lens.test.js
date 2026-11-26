@@ -1,13 +1,18 @@
-// S6 — lumière déviée par un trou noir sans rotation (Schwarzschild), app/src/27_lens.js.
-// Références indépendantes du code :
-//  - champ faible : α = 4M/b + 15πM²/(4b²) + 128M³/(3b³) (développement publié, Keeton et Petters 2005) ;
-//  - champ fort : α = −ln(b/bc − 1) + ln(216(7 − 4√3)) − π (Bozza 2002, Schwarzschild), bc = √27 M ;
-//  - M87* : masse par la dynamique des étoiles, 6,6 milliards de masses solaires (Gebhardt et al. 2011, indépendante de l'image EHT),
-//    distance 16,8 Mpc ; anneau mesuré par l'EHT : 42 ± 3 microsecondes d'arc (EHT 2019, papier I).
-const fs = require('fs'), vm = require('vm'), path = require('path'), root = path.join(__dirname, '..');
-vm.runInThisContext(fs.readFileSync(path.join(root, 'src/27_lens.js'), 'utf8').replace(/^const /gm, 'var '));
-let fails = 0; const check = (ok, msg) => { console.log((ok ? 'OK    ' : 'ÉCHEC ') + msg); if (!ok) fails++; };
-const psiOfB = (r, b) => Math.asin(b * Math.sqrt(1 - 2 / r) / r);      /* angle de vue local pour un paramètre d'impact b */
+/* S6 — lumière déviée par un trou noir sans rotation (Schwarzschild), app/src/27_lens.js.
+   Références indépendantes du code :
+    - champ faible : α = 4M/b + 15πM²/(4b²) + 128M³/(3b³) (développement publié, Keeton et Petters 2005) ;
+    - champ fort : α = −ln(b/bc − 1) + ln(216(7 − 4√3)) − π (Bozza 2002, Schwarzschild), bc = √27 M ;
+    - M87* : masse par la dynamique des étoiles, 6,6 milliards de masses solaires (Gebhardt et al. 2011, indépendante de l'image EHT),
+      distance 16,8 Mpc ; anneau mesuré par l'EHT : 42 ± 3 microsecondes d'arc (EHT 2019, papier I). */
+const { loadUnivers } = require('./_load');
+
+const { GM_C2_SUN, lensDphi, lensPsiC, lensLut, lensLookup, lensSource } = loadUnivers({
+  src: ['27_lens.js'],
+});
+
+let fails = 0;
+const check = (ok, msg) => { console.log((ok ? 'OK    ' : 'ÉCHEC ') + msg); if (!ok) fails++; };
+const psiOfB = (r, b) => Math.asin(b * Math.sqrt(1 - 2 / r) / r); /* angle de vue local pour un paramètre d'impact b */
 
 /* 1. sans masse, la lumière va droit : Δφ = π − ψ */
 { let worst = 0; for (const psi of [0.3, 1.0, 1.5707, 2.0, 3.0]) worst = Math.max(worst, Math.abs(lensDphi(1e12, psi) - (Math.PI - psi)));
@@ -40,7 +45,7 @@ for (const r of [60, 3000, 1e6]) { const T = lensLut(r, 512); let worst = 0, wps
 { const T = lensLut(1e9, 512), c = [0, 0, -1], v = [Math.sin(0.3), 0, -Math.cos(0.3)], s = lensSource(T, v, c);
   check(Math.hypot(s[0] - v[0], s[1] - v[1], s[2] - v[2]) < 1e-6, 'trou noir lointain : la source est dans la direction de vue');
   const T2 = lensLut(60, 512), ang = u => Math.acos(-u[2]);
-  for (const psi of [1.0, 0.2]) { const v2 = [Math.sin(psi), 0, -Math.cos(psi)], s2 = lensSource(T2, v2, c), a = lensDphi(60, psi) - (Math.PI - psi), side = psi - a;      /* angle de la source : ψ − α (négatif : de l'autre côté) */
+  for (const psi of [1.0, 0.2]) { const v2 = [Math.sin(psi), 0, -Math.cos(psi)], s2 = lensSource(T2, v2, c), a = lensDphi(60, psi) - (Math.PI - psi), side = psi - a; /* angle de la source : ψ − α (négatif : de l'autre côté) */
     check(s2 && Math.abs(ang(s2) - Math.abs(side)) < 2e-3 && Math.sign(s2[0]) === Math.sign(side) && Math.abs(s2[1]) < 1e-12, `vue de 60 M à ${psi} rad du trou noir (déviation ${a.toFixed(3)} rad) : source à ${ang(s2).toFixed(4)} rad, ${side > 0 ? 'du même côté, plus près du trou noir' : 'de l’autre côté du trou noir'}`); }
   check(lensSource(T2, [0, 0, -1], c) === null, 'regard droit sur le trou noir : ombre'); }
 

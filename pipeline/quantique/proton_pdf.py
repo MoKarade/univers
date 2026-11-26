@@ -8,16 +8,29 @@ Pour chaque finesse λ (longueur sondée), Q = ħc/λ ; on intègre :
 - le compte net ∫ (u − ū) dx et ∫ (d − d̄) dx, qui doit valoir 2 et 1.
 Écrit app/gen/proton_pdf.js. Usage : python proton_pdf.py <chemin de CT18NNLO_0000.dat>
 """
-import sys, os, json, math
+import json, math, sys
+from pathlib import Path
 import numpy as np
 
+_PIPE_DIR = str(Path(__file__).resolve().parents[1])
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import APP_GEN  # noqa: E402
+
 HBARC = 1.97326980e-16          # GeV·m (CODATA)
-HERE = os.path.dirname(os.path.abspath(__file__))
-DST = os.path.join(HERE, '..', '..', 'app', 'gen', 'proton_pdf.js')
+DST = APP_GEN / 'proton_pdf.js'
+
+
+def _trapezoid(y, x):
+    fn = getattr(np, 'trapezoid', None) or getattr(np, 'trapz', None)
+    if fn is None:
+        raise RuntimeError('NumPy ne fournit ni trapezoid ni trapz')
+    return fn(y, x)
 
 
 def lire(path):
-    txt = open(path).read().split('---')
+    with open(path, encoding='utf-8') as f:
+        txt = f.read().split('---')
     blocks = []
     for b in txt[1:]:
         lines = [l for l in b.strip().split('\n') if l.strip()]
@@ -41,8 +54,8 @@ def xf_at(blocks, Q):
 def integrales(xs, xf):
     lx = np.log(xs); fine = np.linspace(lx[0], lx[-1], 40000); x = np.exp(fine)
     F = {k: np.interp(fine, lx, v) for k, v in xf.items()}      # x·f, interpolé en log x
-    g = lambda arr: float(np.trapz(arr * x, fine))               # ∫ x·f dx = ∫ (x·f)·x d(ln x)
-    n = lambda arr: float(np.trapz(arr, fine))                    # ∫ f dx = ∫ (x·f) d(ln x)
+    g = lambda arr: float(_trapezoid(arr * x, fine))               # ∫ x·f dx = ∫ (x·f)·x d(ln x)
+    n = lambda arr: float(_trapezoid(arr, fine))                    # ∫ f dx = ∫ (x·f) d(ln x)
     uv, dv = F[2] - F[-2], F[1] - F[-1]
     sea = 2 * F[-2] + 2 * F[-1] + sum(F.get(k, 0) + F.get(-k, 0) for k in (3, 4, 5))
     return dict(uv=g(uv), dv=g(dv), sea=g(sea), g=g(F[21])), dict(u=n(uv), d=n(dv))
@@ -59,7 +72,8 @@ def main():
         rows.append(dict(Q=round(float(Q), 4), lam=float('%.4g' % (HBARC / Q)), mom={k: round(v, 5) for k, v in m.items()}, n={k: round(v, 4) for k, v in n.items()}))
         print(f"Q = {Q:9.2f} GeV  λ = {HBARC / Q:.2e} m  valence u {m['uv']:.3f}  d {m['dv']:.3f}  mer {m['sea']:.3f}  gluons {m['g']:.3f}  somme {sum(m.values()):.4f}  |  u {n['u']:.3f}  d {n['d']:.3f}")
     out = dict(rows=rows, src='CT18NNLO, membre central (Hou et al. 2021, Phys. Rev. D 103, 014013), via LHAPDF', licence='aucune licence écrite pour les grilles (LHAPDF et CT18) ; l’article CT18 est sous CC BY 4.0 ; usage libre avec citation de Hou et al. 2021 et de LHAPDF6 (Buckley et al. 2015)')
-    open(DST, 'w', encoding='utf-8', newline='\n').write('/* généré par pipeline/quantique/proton_pdf.py */\nObject.assign(DATA, ' + json.dumps({'PROTON_PDF': out}, ensure_ascii=False, separators=(',', ':')) + ');\n')
+    with open(DST, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('/* généré par pipeline/quantique/proton_pdf.py */\nObject.assign(DATA, ' + json.dumps({'PROTON_PDF': out}, ensure_ascii=False, separators=(',', ':')) + ');\n')
 
 
 if __name__ == '__main__':

@@ -24,12 +24,20 @@ import itertools
 import json
 import math
 import os
+from pathlib import Path
 import sys
 
 import astropy.units as u
 import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
+
+_HERE = Path(__file__).resolve().parent
+_PIPELINE_DIR = _HERE.parent
+for _d in (_PIPELINE_DIR, _HERE):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
+from _paths import APP_GEN, raw_dir  # noqa: E402
 
 COTE = 1000.0                        # Mpc/h
 N = 128
@@ -68,7 +76,8 @@ def orientation_unique(brut):
 
 def controle_conversion():
     """La conversion supergalactique -> page doit retrouver la direction des amas que la page place déjà (DATA.FAR)."""
-    s = open(os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data.js'), encoding='utf-8').read()
+    with open(APP_GEN / 'data.js', encoding='utf-8') as f:
+        s = f.read()
     far, _ = json.JSONDecoder().raw_decode(s[s.index('"FAR":') + 6:])
     page = {f['n']: np.array(f['pos']) for f in far}
     # positions supergalactiques approchées, de mémoire [À vérifier] : elles ne servent qu'à ce contrôle à 4° près,
@@ -76,7 +85,8 @@ def controle_conversion():
     for nom, sg in (('Amas de Coma', (-2.6, 70.0, 10.7)), ('Amas de Persée', (50.0, -10.0, -12.0)), ('Amas de la Vierge', (-3.0, 15.0, -1.0))):
         a = sg_vers_page(np.array([sg]))[0]
         g = page[nom]
-        ang = math.degrees(math.acos(float(a @ g / np.linalg.norm(a) / np.linalg.norm(g))))
+        cos_a = max(-1.0, min(1.0, float(a @ g / np.linalg.norm(a) / np.linalg.norm(g))))
+        ang = math.degrees(math.acos(cos_a))
         print('  %-18s écart de direction %.1f°' % (nom, ang))
         if ang > 4.0:
             raise SystemExit('conversion vers la page non confirmée : rien écrit')
@@ -171,11 +181,11 @@ def main(raw):
         'cellule_mpc_h': pas,
         'src': 'Dupuy et Courtois 2023 (A&A 678, A176), bassins d’attraction du champ de vitesses Cosmicflows-4',
     }}
-    out = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'laniakea.js')
+    out = APP_GEN / 'laniakea.js'
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('Object.assign(DATA, ' + json.dumps(payload, ensure_ascii=False, separators=(',', ':')) + ');\n')
-    print('écrit', os.path.normpath(out), os.path.getsize(out), 'octets')
+    print('écrit', out, out.stat().st_size, 'octets')
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'univers-raw'))
+    main(raw_dir(sys.argv[1] if len(sys.argv) > 1 else None))

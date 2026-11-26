@@ -14,15 +14,24 @@ fiche dans la page : les galaxies proches (DATA.NEAR, catalogue de Karachentsev)
 (DATA.LOCAL), associées par position sur le ciel à moins de ASSOC_ARCMIN minutes d'arc. La table complète est
 écrite hors dépôt (<dossier_raw>/cf4_complet.json) pour un chargement à part plus tard.
 
-Usage : python pipeline/sources/build_cf4.py <dossier_raw>   (télécharge la table si absente)
+Usage : python pipeline/sources/build_cf4.py [dossier_raw]   (défaut : $UNIVERS_RAW ou <racine>/univers-raw ; télécharge la table si absente)
 """
 import base64
 import json
 import math
 import os
+from pathlib import Path
+import re
 import struct
 import sys
 import urllib.request
+
+_HERE = Path(__file__).resolve().parent
+_PIPELINE_DIR = _HERE.parent
+for _d in (_PIPELINE_DIR, _HERE):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
+from _paths import APP_GEN, raw_dir  # noqa: E402
 
 SERVEURS = ['https://vizier.cds.unistra.fr', 'https://vizier.cfa.harvard.edu']
 REQUETE = ('/viz-bin/asu-tsv?-source=J/ApJ/944/94/table2&-out.max=unlimited&-out.all'
@@ -32,6 +41,24 @@ ASSOC_ARCMIN = 1.5    # rayon d'association ; les positions des catalogues conco
 RAPPORT_MAX = 3.0      # au-delà, la galaxie CF4 voisine sur le ciel est sans doute une autre galaxie (avant- ou arrière-plan)
 EPS = math.radians(84381.448 / 3600.0)   # obliquité J2000, comme pipeline/build_data2.py
 NB_ATTENDU = 55877   # lignes de la table VizieR (l'EDD en annonce 55 874 : édition du 02/05/2023 légèrement différente)
+_ASSIGN_PREFIX_RE = re.compile(r'^Object\.assign\(\s*DATA\s*,\s*')
+
+
+def parse_data_js(text):
+    """Extrait l'objet JSON d'un module app/gen/*.js (« Object.assign(DATA, {...}); »).
+
+    Tolère BOM UTF-8, LF, CRLF, absence de saut de ligne final et espaces ; rejette préfixe/suffixe invalides.
+    """
+    s = text.lstrip('\ufeff').strip()
+    m = _ASSIGN_PREFIX_RE.match(s)
+    if not m:
+        raise ValueError('préfixe Object.assign(DATA, ...) attendu')
+    s = s[m.end():]
+    if s.endswith(';'):
+        s = s[:-1].rstrip()
+    if not s.endswith(')'):
+        raise ValueError('suffixe « ) » attendu dans le module DATA')
+    return json.loads(s[:-1].rstrip())
 
 
 def telecharger(chemin):
@@ -46,6 +73,7 @@ def telecharger(chemin):
         if 'QUERY_STATUS=ERROR' in txt or lignes_donnees < NB_ATTENDU:
             print('réponse incomplète depuis %s (%d lignes)' % (s, lignes_donnees))
             continue
+        os.makedirs(os.path.dirname(os.path.abspath(chemin)), exist_ok=True)
         with open(chemin, 'w', encoding='utf-8', newline='\n') as f:
             f.write(txt)
         print('téléchargé depuis', s)
@@ -55,7 +83,8 @@ def telecharger(chemin):
 
 def lire(chemin):
     """Table TSV de VizieR : en-tête, ligne d'unités, ligne de tirets, puis les données."""
-    lignes = [l for l in open(chemin, encoding='utf-8').read().split('\n') if l and not l.startswith('#')]
+    with open(chemin, encoding='utf-8') as f:
+        lignes = [l for l in f.read().splitlines() if l and not l.startswith('#')]
     entete = [c.strip() for c in lignes[0].split('\t')]
     donnees = [l.split('\t') for l in lignes[3:]]
     return entete, donnees
@@ -67,11 +96,14 @@ def nombre(x):
 
 
 def ecl_vers_eq(x, y, z):
-    """Inverse de RX de pipeline/build_data2.py : écliptique J2000 -> équatorial J2000, puis (ra, dec) en degrés."""
+    """Inverse de RX de pipeline/build_data2.py : écliptique J2000 -> équatorial J2000, puis (ra, dec) en degrés (None si vecteur nul ou non fini)."""
     c, s = math.cos(EPS), math.sin(EPS)
     xe, ye, ze = x, c * y - s * z, s * y + c * z
-    r = math.sqrt(xe * xe + ye * ye + ze * ze)
-    return math.degrees(math.atan2(ye, xe)) % 360.0, math.degrees(math.asin(ze / r))
+    r = math.hypot(xe, ye, ze)
+    if not (r > 0.0 and math.isfinite(r)):
+        return None
+    sin_dec = max(-1.0, min(1.0, ze / r))
+    return math.degrees(math.atan2(ye, xe)) % 360.0, math.degrees(math.asin(sin_dec))
 
 
 def sep_arcmin(a, b):
@@ -82,8 +114,8 @@ def sep_arcmin(a, b):
 
 def galaxies_de_la_page():
     """Directions (ra, dec) des galaxies proches et du Groupe local, lues dans app/gen/data2.js."""
-    s = open(os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data2.js'), encoding='utf-8').read()
-    d = json.loads(s[len('Object.assign(DATA, '):s.rindex(');')])
+    with open(APP_GEN / 'data2.js', encoding='utf-8') as f:
+        d = parse_data_js(f.read())
     brut = base64.b64decode(d['NEAR'])
     xyz = [struct.unpack_from('<3f', brut, i * 20) for i in range(d['NEAR_N'])]
     near = [ecl_vers_eq(*v) for v in xyz]
@@ -124,8 +156,13 @@ def associer(dirs, gal):
 
 
 def main(raw):
+    os.makedirs(raw, exist_ok=True)
     chemin = os.path.join(raw, FICHIER)
-    if not os.path.exists(chemin) or 'QUERY_STATUS=ERROR' in open(chemin, encoding='utf-8').read():
+    need_dl = not os.path.exists(chemin)
+    if not need_dl:
+        with open(chemin, encoding='utf-8') as f:
+            need_dl = 'QUERY_STATUS=ERROR' in f.read()
+    if need_dl:
         telecharger(chemin)
     entete, donnees = lire(chemin)
     print('colonnes :', entete)
@@ -163,11 +200,11 @@ def main(raw):
         'CF4_LOCAL': [garde(k) for k in al],     # même ordre que DATA.LOCAL
         'CF4_SRC': 'Cosmicflows-4, Tully et al. 2023 (ApJ 944, 94), VizieR J/ApJ/944/94',
     }
-    out = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen', 'data17.js')
+    out = APP_GEN / 'data17.js'
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('Object.assign(DATA, ' + json.dumps(payload, ensure_ascii=False, separators=(',', ':')) + ');\n')
-    print('écrit', os.path.normpath(out), os.path.getsize(out), 'octets')
+    print('écrit', out, out.stat().st_size, 'octets')
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'univers-raw'))
+    main(raw_dir(sys.argv[1] if len(sys.argv) > 1 else None))

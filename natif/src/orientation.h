@@ -8,6 +8,7 @@
 // pipeline/natif/controle_orientation.py : les onze astres sont conformes. Contrôle de bout en bout par
 // essai_orientation : Terre (point où le Soleil est au zénith) et Lune (face tournée vers la Terre).
 #pragma once
+#include <algorithm>
 #include <cmath>
 
 #include "ephemeride.h"
@@ -18,9 +19,9 @@ constexpr double kDeg = 3.14159265358979323846 / 180.0;
 
 struct Elements {
     int naif;
-    double a0, a0Rate;      // degrés, degrés par siècle julien
+    double a0, a0Rate;  // degrés, degrés par siècle julien
     double d0, d0Rate;
-    double w0, wRate;       // degrés, degrés par jour
+    double w0, wRate;   // degrés, degrés par jour
 };
 
 constexpr Elements kElements[] = {
@@ -47,14 +48,17 @@ inline bool eclipticToBody(int naif, double days, Mat3& out) {
     for (const auto& e : kElements) {
         if (e.naif != naif) continue;
         const double T = days / 36525.0;
-        const double a = (e.a0 + e.a0Rate * T) * kDeg, d = (e.d0 + e.d0Rate * T) * kDeg, w = std::fmod(e.w0 + e.wRate * days, 360.0) * kDeg;
+        const double a = (e.a0 + e.a0Rate * T) * kDeg;
+        const double d = (e.d0 + e.d0Rate * T) * kDeg;
+        const double w = std::fmod(e.w0 + e.wRate * days, 360.0) * kDeg;
         // Axes de l'astre exprimés dans le repère ICRF : pôle, puis nœud de l'équateur de l'astre sur l'équateur ICRF.
         const double pole[3] = {std::cos(d) * std::cos(a), std::cos(d) * std::sin(a), std::sin(d)};
-        const double node[3] = {-std::sin(a), std::cos(a), 0};                                          // direction a0 + 90°
-        const double third[3] = {pole[1] * node[2] - pole[2] * node[1], pole[2] * node[0] - pole[0] * node[2], pole[0] * node[1] - pole[1] * node[0]};
+        const double node[3] = {-std::sin(a), std::cos(a), 0.0};  // direction a0 + 90°
+        const double third[3] = {pole[1] * node[2] - pole[2] * node[1], pole[2] * node[0] - pole[0] * node[2],
+                                 pole[0] * node[1] - pole[1] * node[0]};
         double x[3], y[3];
         for (int k = 0; k < 3; ++k) {
-            x[k] = std::cos(w) * node[k] + std::sin(w) * third[k];      // méridien d'origine : W compté depuis le nœud, vers l'est
+            x[k] = std::cos(w) * node[k] + std::sin(w) * third[k];  // méridien d'origine : W depuis le nœud, vers l'est
             y[k] = -std::sin(w) * node[k] + std::cos(w) * third[k];
         }
         // ICRF -> écliptique pour chaque axe, puis lignes de la matrice = axes de l'astre.
@@ -74,11 +78,24 @@ inline bool eclipticToBody(int naif, double days, Mat3& out) {
 
 // Longitude (est positif) et latitude, en degrés, du point de l'astre situé sous une direction donnée (repère écliptique).
 inline void subPoint(const Mat3& m, double dx, double dy, double dz, double& lonDeg, double& latDeg) {
-    const double bx = m.m[0][0] * dx + m.m[0][1] * dy + m.m[0][2] * dz, by = m.m[1][0] * dx + m.m[1][1] * dy + m.m[1][2] * dz,
-                 bz = m.m[2][0] * dx + m.m[2][1] * dy + m.m[2][2] * dz;
-    const double n = std::sqrt(bx * bx + by * by + bz * bz);
-    lonDeg = std::atan2(by, bx) / kDeg;
-    latDeg = std::asin(bz / n) / kDeg;
+    const double bx = m.m[0][0] * dx + m.m[0][1] * dy + m.m[0][2] * dz;
+    const double by = m.m[1][0] * dx + m.m[1][1] * dy + m.m[1][2] * dz;
+    const double bz = m.m[2][0] * dx + m.m[2][1] * dy + m.m[2][2] * dz;
+    if (!std::isfinite(bx) || !std::isfinite(by) || !std::isfinite(bz)) {
+        lonDeg = 0.0;
+        latDeg = 0.0;
+        return;
+    }
+    const double scale = std::max({std::fabs(bx), std::fabs(by), std::fabs(bz)});
+    if (!(scale > 0.0)) {
+        lonDeg = 0.0;
+        latDeg = 0.0;
+        return;
+    }
+    const double sx = bx / scale, sy = by / scale, sz = bz / scale;
+    const double n = std::sqrt(sx * sx + sy * sy + sz * sz);
+    lonDeg = std::atan2(sy, sx) / kDeg;
+    latDeg = std::asin(std::clamp(sz / n, -1.0, 1.0)) / kDeg;
 }
 
 }  // namespace ori

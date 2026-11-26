@@ -34,7 +34,8 @@ EQ2GAL = np.array([[-0.0548755604, -0.8734370902, -0.4838350155],      # équato
 
 def construire(n_total):
     import modeles as M      # AGAMA : seulement pour tirer les conditions de départ
-    ci = json.load(open(os.path.join(HERE, 'conditions.json'), encoding='utf-8'))
+    with open(os.path.join(HERE, 'conditions.json'), encoding='utf-8') as f:
+        ci = json.load(f)
     f = n_total / 300000
     mw = M.galaxie('Voie lactée', int(80000 * f), int(36000 * f), int(4000 * f))
     m31 = M.galaxie('Andromède', int(100000 * f), int(45000 * f), int(5000 * f), k_mass=1.5, k_r=1.15)
@@ -167,7 +168,9 @@ def main():
     else:
         with np.load(spath) as z:      # fermé tout de suite : sous Windows, un fichier ouvert ne peut pas être remplacé
             p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind')}; gid, show = z['gid'], z['show']; t = float(z['t'])
-        meta = json.load(open(jpath, encoding='utf-8')); debut = False
+        with open(jpath, encoding='utf-8') as f:
+            meta = json.load(f)
+        debut = False
         if not reprise: assert abs(t - float(args[0])) < 1e-6, (t, args[0])
     S = Carte(p) if gpu else Processeur(p)
     meta['gravite'] = S.nom; meta['particules'] = int((p['kind'] < 9).sum())
@@ -197,7 +200,9 @@ def main():
             np.concatenate(frames).tofile(os.path.join(OUT, name)); meta['fichiers'].append([name, len(frames)]); frames.clear()
         meta['derive_max'] = max(abs(x) for x in meta['energie'])
         np.savez(spath + '.tmp.npz', t=t, gid=gid, show=show, **S.etat()); os.replace(spath + '.tmp.npz', spath)
-        json.dump(meta, open(jpath + '.tmp', 'w', encoding='utf-8'), ensure_ascii=False); os.replace(jpath + '.tmp', jpath)
+        with open(jpath + '.tmp', 'w', encoding='utf-8') as f:
+            json.dump(meta, f, ensure_ascii=False)
+        os.replace(jpath + '.tmp', jpath)
 
     if debut: image()
     P = S.p

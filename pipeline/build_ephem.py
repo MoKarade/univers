@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Tronque les séries VSOP87 (source : PyMeeus, séries complètes) et valide planètes + Lune contre l'éphéméride JPL DE440."""
-import json, math, os, importlib, numpy as np, warnings
+import json, math, sys, importlib, numpy as np, warnings
+from pathlib import Path
 warnings.filterwarnings('ignore')
 from astropy.time import Time
 from astropy.coordinates import get_body_barycentric, solar_system_ephemeris
 import astropy.units as u
-HERE = os.path.dirname(os.path.abspath(__file__)); OUT = os.path.join(HERE, '..', 'gen')
+
+_PIPE_DIR = str(Path(__file__).resolve().parent)
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import APP_GEN, APP_TEST, PIPELINE_DIR, PIPELINE_RAW  # noqa: E402
+
+HERE = PIPELINE_DIR; RAW = PIPELINE_RAW; OUT = APP_GEN
 AS = math.pi / 648000; EPS0 = 84381.448 * AS; AU_KM = 149597870.7
 PL = [('mercury', 'Mercury', 0.387), ('venus', 'Venus', 0.723), ('earth', 'Earth', 1.0), ('mars', 'Mars', 1.524), ('jupiter', 'Jupiter', 5.203), ('saturn', 'Saturn', 9.537), ('uranus', 'Uranus', 19.19), ('neptune', 'Neptune', 30.07)]
 FULL = {k: {c: [np.array(s, dtype=float).reshape(-1, 3) for s in getattr(importlib.import_module('pymeeus.' + m), 'VSOP87_' + c)] for c in 'LBR'} for k, m, a in PL}
@@ -57,7 +64,7 @@ def moon(T):                 # Meeus, chap. 47 : géocentrique, écliptique de l
     lam, bet, r = d(Lp + sl / 1e6), d(sb / 1e6), (385000.56 + sr / 1000.0) / AU_KM
     return m_date_to_j2000(T) @ np.array([r * math.cos(bet) * math.cos(lam), r * math.cos(bet) * math.sin(lam), r * math.sin(bet)])
 # --- référence DE440
-solar_system_ephemeris.set(os.path.join(HERE, 'raw', 'de440s.bsp'))
+solar_system_ephemeris.set(str(RAW / 'de440s.bsp'))
 rng = np.random.default_rng(7); years = np.sort(rng.uniform(1851, 2149, 70))
 tt = Time(years, format='jyear', scale='tdb'); Tc = (tt.jd - 2451545.0) / 36525.0
 q2e = np.array([[1, 0, 0], [0, math.cos(EPS0), math.sin(EPS0)], [0, -math.sin(EPS0), math.cos(EPS0)]])
@@ -84,10 +91,16 @@ for y in (-1000, 0, 1000, 3000, 4000):
 rnd = lambda x: float('%.12g' % x)
 E = {'VSOP': {k: {c: [[rnd(x) for x in s.ravel()] for s in V[k][c]] for c in 'LBR'} for k, m, a in PL}, 'MOON_LR': [x for row in Mo.PERIODIC_TERMS_LR_TABLE for x in row], 'MOON_B': [x for row in Mo.PERIODIC_TERMS_B_TABLE for x in row],
      'EPHEM_ERR': {k: round(v, 1) for k, v in e.items()}, 'MOON_ERR': round(max(me), 1)}
-open(os.path.join(OUT, 'ephem.js'), 'w').write('Object.assign(DATA, ' + json.dumps(E, separators=(',', ':')) + ');\n')
-json.dump({'T': Tc.tolist(), 'ref': {k: v.tolist() for k, v in REF.items()}}, open(os.path.join(HERE, '..', 'test', 'ref_de440.json'), 'w'))
+with open(OUT / 'ephem.js', 'w', encoding='utf-8', newline='\n') as fh:
+    fh.write('Object.assign(DATA, ' + json.dumps(E, separators=(',', ':')) + ');\n')
+with open(APP_TEST / 'ref_de440.json', 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump({'T': Tc.tolist(), 'ref': {k: v.tolist() for k, v in REF.items()}}, fh)
 # data2.js sans les séries complètes
-p = os.path.join(OUT, 'data2.js'); s = open(p).read(); d = json.loads(s[len('Object.assign(DATA, '):s.rindex(');')])
+p = OUT / 'data2.js'
+with open(p, encoding='utf-8') as fh:
+    s = fh.read()
+d = json.loads(s[len('Object.assign(DATA, '):s.rindex(');')])
 for k in ('VSOP', 'MOON_LR', 'MOON_B'): d.pop(k, None)
-open(p, 'w').write('Object.assign(DATA, ' + json.dumps(d, ensure_ascii=False, separators=(',', ':')) + ');\n')
-print('ephem.js %.0f ko | data2.js %.0f ko' % (os.path.getsize(os.path.join(OUT, 'ephem.js')) / 1024, os.path.getsize(p) / 1024))
+with open(p, 'w', encoding='utf-8', newline='\n') as fh:
+    fh.write('Object.assign(DATA, ' + json.dumps(d, ensure_ascii=False, separators=(',', ':')) + ');\n')
+print('ephem.js %.0f ko | data2.js %.0f ko' % ((OUT / 'ephem.js').stat().st_size / 1024, p.stat().st_size / 1024))

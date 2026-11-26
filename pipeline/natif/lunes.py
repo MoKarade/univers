@@ -25,7 +25,9 @@ def main():
     sortie = sys.argv[1]
     path = os.path.join(tempfile.gettempdir(), 'pck00011.tpc')
     if not os.path.exists(path): urllib.request.urlretrieve(PCK, path)
-    pck = open(path, encoding='latin-1').read()
+    with open(path, encoding='latin-1') as fh:
+        pck = fh.read()
+    os.makedirs(sortie, exist_ok=True)
     with open(os.path.join(sortie, 'lunes.tsv'), 'w', encoding='utf-8', newline='\n') as f:
         for code, nom, planete in LUNES:
             m = re.search(r'BODY%d_RADII\s*=\s*\(([^)]*)\)' % code, pck)
@@ -39,7 +41,8 @@ def main():
             for code, nom, _ in LUNES:
                 q = {'format': 'text', 'COMMAND': f"'{code}'", 'OBJ_DATA': 'NO', 'MAKE_EPHEM': 'YES', 'EPHEM_TYPE': 'VECTORS', 'CENTER': "'500@0'",
                      'REF_PLANE': 'ECLIPTIC', 'REF_SYSTEM': 'ICRF', 'OUT_UNITS': 'AU-D', 'VEC_TABLE': '2', 'TLIST': f"'{JD}'"}
-                txt = urllib.request.urlopen('https://ssd.jpl.nasa.gov/api/horizons.api?' + urllib.parse.urlencode(q), timeout=60).read().decode('utf-8', 'replace')
+                with urllib.request.urlopen('https://ssd.jpl.nasa.gov/api/horizons.api?' + urllib.parse.urlencode(q), timeout=60) as resp:
+                    txt = resp.read().decode('utf-8', 'replace')
                 m = re.search(r'\$\$SOE(.*?)\$\$EOE', txt, re.S)
                 v = re.findall(r'[XYZ]\s*=\s*(\S+)', m.group(1)) if m else []
                 if len(v) < 6: print(nom, ': pas de réponse exploitable de Horizons'); continue

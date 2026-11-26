@@ -1,32 +1,40 @@
 // Appli PC « Univers » : les galaxies et quasars des relevés (galaxies.bin, pipeline/natif/galaxies.py).
 // Direction et décalage vers le rouge mesurés ; distance calculée en direct d'après la cosmologie (cosmologie.h).
 #pragma once
+#include <utility>
+
 #include "commun.h"
 #include "cosmologie.h"
+#include "fichier_mappe.h"
 
-namespace {
+namespace univers {
 
-constexpr double kGalaxyZMax = 7.0;      // borne de la table des distances (DATA.SURV_ZMAX de la page)
+inline constexpr double kGalaxyZMax = 7.0;  // borne de la table des distances (DATA.SURV_ZMAX de la page)
 
 struct GalaxyFile {
-    const uint8_t* base = nullptr;
+    MappedFile file;
     uint64_t n = 0;
     size_t column = 0;
-    const void* col(int k) const { return base + kAlign + k * column; }
+    const void* col(int k) const { return file.data() + kAlign + static_cast<size_t>(k) * column; }
 };
 
-// Rend false si le fichier manque (le simulateur le dit et continue sans galaxies).
-bool openGalaxies(const std::string& path, GalaxyFile& out) {
-    const HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return false;
-    LARGE_INTEGER size;
-    GetFileSizeEx(file, &size);
-    const HANDLE mapping = CreateFileMappingA(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
-    out.base = mapping ? static_cast<const uint8_t*>(MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0)) : nullptr;
-    if (!out.base || std::memcmp(out.base, "UNIVGAL1", 8) != 0) return false;
-    std::memcpy(&out.n, out.base + 8, 8);
-    out.column = (out.n * 4 + kAlign - 1) / kAlign * kAlign;
-    return static_cast<uint64_t>(size.QuadPart) >= kAlign + 5 * out.column;
+// Rend false si le fichier manque ou est invalide (le simulateur le dit et continue sans galaxies).
+inline bool openGalaxies(const std::string& path, GalaxyFile& out) {
+    out = GalaxyFile{};
+    MappedFile mf;
+    if (!mf.open(path.c_str())) return false;
+    const uint8_t* base = mf.data();
+    const uint64_t fileSize = mf.size();
+    if (fileSize < kAlign || std::memcmp(base, "UNIVGAL1", 8) != 0) return false;
+    uint64_t n = 0;
+    std::memcpy(&n, base + 8, 8);
+    if (n == 0 || n > (fileSize - kAlign) / 20 || n > UINT32_MAX) return false;
+    const uint64_t colBytes = (n * 4 + kAlign - 1) / kAlign * kAlign;
+    if (colBytes > (fileSize - kAlign) / 5) return false;
+    out.file = std::move(mf);
+    out.n = n;
+    out.column = static_cast<size_t>(colBytes);
+    return true;
 }
 
 struct GalaxyPush {
@@ -42,12 +50,14 @@ public:
 
     void create(const Gpu& g, const GalaxyFile& file, VkFormat hdrFormat) {
         count = file.n;
-        for (int i = 0; i < 5; ++i) vb_[i] = uploadVertices(g, file.col(i), file.n * 4);
-        table_ = createBuffer(g, 65 * 16, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        for (int i = 0; i < 5; ++i) vb_[i] = uploadVertices(g, file.col(i), static_cast<VkDeviceSize>(file.n) * 4);
+        table_ = createBuffer(g, 65 * 16, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         void* p = nullptr;
         check(vkMapMemory(g.dev, table_.mem, 0, 65 * 16, 0, &p), "table des distances");
         mapped_ = static_cast<float*>(p);
-        const VkDescriptorSetLayoutBinding bind{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+        const VkDescriptorSetLayoutBinding bind{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT,
+                                                nullptr};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
         dl.bindingCount = 1;
         dl.pBindings = &bind;
@@ -80,7 +90,8 @@ public:
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout_), "agencement des galaxies");
         vs_ = shader(g, "galaxies.vert.spv");
         fs_ = shader(g, "etoiles.frag.spv");
-        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
+        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
+                                                     {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         stages[0].module = vs_;
         stages[0].pName = "main";
@@ -113,7 +124,7 @@ public:
         rs.lineWidth = 1.0f;
         VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        VkPipelineColorBlendAttachmentState att{};      // les lumières s'additionnent
+        VkPipelineColorBlendAttachmentState att{};  // les lumières s'additionnent
         att.blendEnable = VK_TRUE;
         att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
         att.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -148,12 +159,15 @@ public:
     void setCosmology(const cosmo::Params& p, double scale = 1.0) {
         if (!ready) return;
         const auto t = cosmo::distanceTable(p, kGalaxyZMax, 256);
-        for (int k = 0; k < 260; ++k) mapped_[k] = static_cast<float>(t[static_cast<size_t>(std::min(k, 256))] * cosmo::kMpcInLy * scale);
+        for (int k = 0; k < 260; ++k) {
+            mapped_[k] = static_cast<float>(t[static_cast<size_t>(std::min(k, 256))] * cosmo::kMpcInLy * scale);
+        }
     }
 
     // À appeler dans la passe en grande dynamique. gain : éclat de chaque point (0 : rien n'est dessiné).
     // fullWithin : distance (années-lumière) en deçà de laquelle un point a son plein éclat.
-    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float gain, float fullWithin) const {
+    void draw(VkCommandBuffer cmd, const Camera& cam, uint32_t width, uint32_t height, float gain,
+              float fullWithin) const {
         if (!ready || gain <= 0) return;
         GalaxyPush pc{};
         const auto m = cam.viewProj();
@@ -164,7 +178,7 @@ public:
         pc.cam[3] = fullWithin;
         pc.par[0] = gain;
         pc.par[1] = static_cast<float>(height);
-        pc.par[2] = static_cast<float>(1.0 / std::log(1.0 + kGalaxyZMax));
+        pc.par[2] = static_cast<float>(1.0 / std::log1p(kGalaxyZMax));
         pc.par[3] = 2.0f;
         const VkViewport vp{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
         const VkRect2D sc{{0, 0}, {width, height}};
@@ -194,11 +208,13 @@ public:
         vkDestroyShaderModule(g.dev, fs_, nullptr);
         vkDestroyDescriptorPool(g.dev, pool_, nullptr);
         vkDestroyDescriptorSetLayout(g.dev, setLayout_, nullptr);
+        mapped_ = nullptr;
+        ready = false;
     }
 
 private:
-    Buffer vb_[5];
-    Buffer table_;
+    Buffer vb_[5]{};
+    Buffer table_{};
     float* mapped_ = nullptr;
     VkDescriptorSetLayout setLayout_{};
     VkDescriptorPool pool_{};
@@ -208,4 +224,4 @@ private:
     VkShaderModule vs_{}, fs_{};
 };
 
-}  // namespace
+}  // namespace univers

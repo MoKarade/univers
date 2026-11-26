@@ -22,14 +22,16 @@ ASTRES = [('mercury', 199, '8k_mercury.jpg'), ('venus', 299, '4k_venus_atmospher
 
 
 def magnitude(nom):
-    txt = urllib.request.urlopen(f'https://nssdc.gsfc.nasa.gov/planetary/factsheet/{nom}fact.html', timeout=60).read().decode('latin-1')
+    with urllib.request.urlopen(f'https://nssdc.gsfc.nasa.gov/planetary/factsheet/{nom}fact.html', timeout=60) as resp:
+        txt = resp.read().decode('latin-1')
     m = re.search(r'V-band magnitude V\(1,0\)(.*?)(-?\d+\.\d+)', txt, re.S)
     if not m: raise SystemExit(f'{nom} : magnitude V(1,0) introuvable dans la fiche de la NASA')
     return float(m.group(2))
 
 
 def teinte(path):
-    im = np.asarray(Image.open(path).convert('RGB').resize((1024, 512), Image.BOX), dtype=np.float64) / 255
+    with Image.open(path) as img:
+        im = np.asarray(img.convert('RGB').resize((1024, 512), Image.BOX), dtype=np.float64) / 255
     lin = np.where(im <= 0.04045, im / 12.92, ((im + 0.055) / 1.055) ** 2.4)
     w = np.cos((np.arange(512) + 0.5) / 512 * math.pi - math.pi / 2)[:, None, None]
     mean = (lin * w).sum(axis=(0, 1)) / (w.sum() * 1024)
@@ -40,6 +42,7 @@ def teinte(path):
 
 def main():
     cartes, sortie = sys.argv[1], sys.argv[2]
+    os.makedirs(sortie, exist_ok=True)
     with open(os.path.join(sortie, 'planetes.tsv'), 'w', encoding='ascii', newline='\n') as f:
         for nom, naif, carte in ASTRES:
             h = magnitude(nom); rgb = teinte(os.path.join(cartes, carte)) if carte else [-1, -1, -1]

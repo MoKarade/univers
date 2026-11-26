@@ -15,6 +15,8 @@
 
 #include "fenetre.h"
 
+using namespace univers;
+
 namespace {
 
 std::vector<uint64_t> parseList(const char* s) {
@@ -32,11 +34,14 @@ std::vector<uint64_t> parseList(const char* s) {
 
 int main(int argc, char** argv) {
     WindowOptions wopt;
-    if (argc == 1) {      // double-clic : le simulateur, avec les étoiles rangées à côté du programme
+    if (argc == 1) {  // double-clic : le simulateur, avec les étoiles rangées à côté du programme
         wopt.starsPath = exeDir() + "/etoiles.bin";
         return runWindow(wopt);
     }
-    if (argc < 3) fail("usage : univers <etoiles.bin> <image.ppm | --fenetre | --fenetre-test n> [--regarde i] [--verifie i,j] [--images n] [--taille LxH] [--champ degres]");
+    if (argc < 3) {
+        fail("usage : univers <etoiles.bin> <image.ppm | --fenetre | --fenetre-test n> [--regarde i] [--verifie i,j] "
+             "[--images n] [--taille LxH] [--champ degres]");
+    }
     uint64_t lookIndex = 0;
     std::vector<uint64_t> verify;
     int frames = 1, testFrames = 0;
@@ -44,22 +49,51 @@ int main(int argc, char** argv) {
     uint32_t width = 1920, height = 1080;
     double fovDeg = 60.0;
     const char* imagePath = nullptr;
+    auto needArg = [&](int& idx, const std::string& flag) -> const char* {
+        if (idx + 1 >= argc) fail("valeur manquante pour " + flag);
+        return argv[++idx];
+    };
     for (int i = 2; i < argc; ++i) {
         const std::string k = argv[i];
-        const char* v = i + 1 < argc ? argv[i + 1] : "";
-        if (k == "--fenetre") window = true;
-        else if (k == "--fenetre-test") { window = true; testFrames = std::max(1, std::atoi(v)); ++i; }
-        else if (k == "--capture") { wopt.capture = v; ++i; }
-        else if (k == "--cible") { wopt.target = v; ++i; }
-        else if (k == "--distance") { wopt.dist = std::atof(v); ++i; }
-        else if (k == "--date") { wopt.years = std::atof(v); wopt.hasYears = true; ++i; }
-        else if (k == "--regarde") { lookIndex = std::strtoull(v, nullptr, 10); ++i; }
-        else if (k == "--verifie") { verify = parseList(v); ++i; }
-        else if (k == "--images") { frames = std::max(1, std::atoi(v)); ++i; }
-        else if (k == "--taille") { std::sscanf(v, "%ux%u", &width, &height); ++i; }
-        else if (k == "--champ") { fovDeg = std::atof(v); ++i; }
-        else if (k.rfind("--", 0) == 0) fail("option inconnue : " + k);
-        else imagePath = argv[i];
+        if (k == "--fenetre") {
+            window = true;
+        } else if (k == "--fenetre-test") {
+            window = true;
+            testFrames = std::max(1, std::atoi(needArg(i, k)));
+        } else if (k == "--capture") {
+            wopt.capture = needArg(i, k);
+        } else if (k == "--cible") {
+            wopt.target = needArg(i, k);
+        } else if (k == "--distance") {
+            wopt.dist = std::atof(needArg(i, k));
+            if (!std::isfinite(wopt.dist) || wopt.dist < 0.0) fail("--distance invalide");
+        } else if (k == "--date") {
+            wopt.years = std::atof(needArg(i, k));
+            if (!std::isfinite(wopt.years)) fail("--date invalide");
+            wopt.hasYears = true;
+        } else if (k == "--regarde") {
+            lookIndex = std::strtoull(needArg(i, k), nullptr, 10);
+        } else if (k == "--verifie") {
+            verify = parseList(needArg(i, k));
+        } else if (k == "--images") {
+            frames = std::max(1, std::atoi(needArg(i, k)));
+        } else if (k == "--taille") {
+            const char* v = needArg(i, k);
+            char tail = 0;
+            if (std::sscanf(v, "%ux%u%c", &width, &height, &tail) != 2 || width < 1 || height < 1 || width > 16384 ||
+                height > 16384) {
+                fail("--taille invalide (attendu LxH entre 1 et 16384)");
+            }
+        } else if (k == "--champ") {
+            fovDeg = std::atof(needArg(i, k));
+            if (!std::isfinite(fovDeg) || fovDeg <= 0.0 || fovDeg >= 180.0) {
+                fail("--champ invalide (attendu entre 0 et 180)");
+            }
+        } else if (k.rfind("--", 0) == 0) {
+            fail("option inconnue : " + k);
+        } else {
+            imagePath = argv[i];
+        }
     }
     if (window) {
         wopt.starsPath = argv[1];
@@ -78,15 +112,18 @@ int main(int argc, char** argv) {
     HdrTarget target;
     target.create(g, width, height, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     const VkDeviceSize imgBytes = static_cast<VkDeviceSize>(width) * height * 8;
-    Buffer readback = createBuffer(g, imgBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    Buffer readback = createBuffer(g, imgBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    const Camera cam = lookAt({0, 0, 0}, {stars.x()[lookIndex], stars.y()[lookIndex], stars.z()[lookIndex]}, fovDeg, static_cast<double>(width) / height);
+    const Camera cam = lookAt({0, 0, 0}, {stars.x()[lookIndex], stars.y()[lookIndex], stars.z()[lookIndex]}, fovDeg,
+                              static_cast<double>(width) / height);
     const PushConstants pc = pushConstants(cam, kExposure, height);
 
     auto draw = [&](bool copy) {
         VkCommandBuffer cmd = beginOnce(g);
-        transition(cmd, target.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                   VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        transition(cmd, target.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
+                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
         color.imageView = target.view;
         color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -101,14 +138,15 @@ int main(int argc, char** argv) {
         sr.draw(cmd, pc, width, height);
         vkCmdEndRendering(cmd);
         if (copy) {
-            transition(cmd, target.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                       VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            transition(cmd, target.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
             VkBufferImageCopy region{};
             region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             region.imageExtent = {width, height, 1};
             vkCmdCopyImageToBuffer(cmd, target.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback.buf, 1, &region);
         }
-        endOnce(g, cmd);      // attend la fin du dessin sur la carte
+        endOnce(g, cmd);  // attend la fin du dessin sur la carte
     };
 
     if (frames > 1) {
@@ -116,8 +154,8 @@ int main(int argc, char** argv) {
         const auto t0 = std::chrono::steady_clock::now();
         for (int i = 0; i < frames; ++i) draw(false);
         const double dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-        std::printf("cadence : %d images de %ux%u en %.3f s, soit %.1f images par seconde (%.2f ms par image)\n", frames, width, height, dt,
-                    frames / dt, 1000.0 * dt / frames);
+        std::printf("cadence : %d images de %ux%u en %.3f s, soit %.1f images par seconde (%.2f ms par image)\n", frames,
+                    width, height, dt, frames / std::max(dt, 1e-9), 1000.0 * dt / frames);
     }
     draw(true);
 
@@ -128,10 +166,10 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> rgb(static_cast<size_t>(width) * height * 3);
     for (size_t i = 0; i < lum.size(); ++i) {
         float c[3];
-        for (int k = 0; k < 3; ++k) c[k] = halfToFloat(h16[i * 4 + k]);
+        for (int k = 0; k < 3; ++k) c[k] = std::max(halfToFloat(h16[i * 4 + k]), 0.0f);
         lum[i] = std::max({c[0], c[1], c[2]});
         for (int k = 0; k < 3; ++k) {
-            const float v = c[k] / (1.0f + c[k]);      // compression de Reinhard, puis courbe sRGB approchée (gamma 2,2)
+            const float v = c[k] / (1.0f + c[k]);  // compression de Reinhard, puis courbe sRGB approchée (gamma 2,2)
             rgb[i * 3 + k] = static_cast<uint8_t>(std::lround(255.0f * std::pow(std::clamp(v, 0.0f, 1.0f), 1.0f / 2.2f)));
         }
     }
@@ -140,6 +178,7 @@ int main(int argc, char** argv) {
         std::ofstream out(imagePath, std::ios::binary);
         out << "P6\n" << width << " " << height << "\n255\n";
         out.write(reinterpret_cast<const char*>(rgb.data()), static_cast<std::streamsize>(rgb.size()));
+        if (!out) fail(std::string("écriture de l'image impossible : ") + imagePath);
     }
 
     // Contrôle : chaque étoile citée doit éclairer l'endroit où le calcul en double précision la place.
@@ -155,12 +194,15 @@ int main(int argc, char** argv) {
         const double d = std::sqrt(dot(p - cam.pos, p - cam.pos));
         const double mApp = stars.mag()[i] + 5.0 * std::log10(d / 3.2615638) - 5.0;
         const double flux = pc.par[0] * std::pow(10.0, -0.4 * mApp);
-        double sum = 0;      // lumière dans un carré de 17 pixels autour de la position attendue
-        for (int dy = -8; dy <= 8; ++dy)
+        double sum = 0;  // lumière dans un carré de 17 pixels autour de la position attendue
+        for (int dy = -8; dy <= 8; ++dy) {
             for (int dx = -8; dx <= 8; ++dx) {
                 const int X = static_cast<int>(px) + dx, Y = static_cast<int>(py) + dy;
-                if (X >= 0 && Y >= 0 && X < static_cast<int>(width) && Y < static_cast<int>(height)) sum += lum[static_cast<size_t>(Y) * width + X];
+                if (X >= 0 && Y >= 0 && X < static_cast<int>(width) && Y < static_cast<int>(height)) {
+                    sum += lum[static_cast<size_t>(Y) * width + static_cast<size_t>(X)];
+                }
             }
+        }
         const bool good = sum > 0.5 * flux && sum < 3.0 * flux;
         ok &= good;
         std::printf("etoile %llu : pixel attendu (%.1f, %.1f), magnitude apparente %.2f, lumiere attendue %.2f, mesuree %.2f -> %s\n",

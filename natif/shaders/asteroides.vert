@@ -17,7 +17,7 @@ layout(location = 0) out vec3 vCol;
 void main() {
     float M = mod(inM0 + inN * pc.par.z, 6.2831853);
     float E = M + inE * sin(M) * (1.0 + inE * cos(M));
-    for (int k = 0; k < 8; k++) E -= (E - inE * sin(E) - M) / (1.0 - inE * cos(E));
+    for (int k = 0; k < 8; k++) E -= (E - inE * sin(E) - M) / max(1.0 - inE * cos(E), 1e-4);
     vec3 pos = vec3(inPx, inPy, inPz) * (cos(E) - inE) + vec3(inQx, inQy, inQz) * sin(E);
     vec3 p = (pos - pc.camHi.xyz) - pc.camLo.xyz;
     float look = clamp(2.1 - (inH - 11.0) * 0.28, 0.75, 2.1);      /* même règle de taille que la page */

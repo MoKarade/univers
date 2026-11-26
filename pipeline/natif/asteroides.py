@@ -16,11 +16,17 @@ Avec --controle : compare quelques astéroïdes à JPL Horizons (ref_asteroides.
 l'orbite simple (sans l'attraction des planètes) doit s'en écarter de moins de 0,002 UA.
 Usage : python asteroides.py <dossier des fichiers en flux> <dossier de sortie> [--controle]
 """
-import base64, json, math, os, re, shutil, sys
+import base64, json, math, os, shutil, sys
+from pathlib import Path
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from etoiles import ROOT, ALIGN, data_keys      # noqa: E402
+_HERE = Path(__file__).resolve().parent
+_PIPE_DIR = _HERE.parent
+for _d in (_PIPE_DIR, _HERE):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
+from _paths import read_tile_manifest  # noqa: E402
+from etoiles import ALIGN, ROOT, data_keys  # noqa: E402, F401
 
 MAGIC = b'UNIVAST1'
 K_GAUSS = 0.01720209895      # constante de Gauss : rad/jour pour a = 1 UA
@@ -39,11 +45,13 @@ def main():
     dossier, sortie = sys.argv[1], sys.argv[2]
     os.makedirs(sortie, exist_ok=True)
     epoch = float(data_keys(['AST_EPOCH'])['AST_EPOCH'])
-    src = open(os.path.join(ROOT, 'app', 'src', '60_app.js'), encoding='utf-8').read()
-    man = re.search(r'TILE_MANIFEST = /\*__TILES__\*/(\[.*?\]);', src).group(1)
-    m = re.search(r"kind: 'ast', id: '([0-9a-f]{32})', n: (\d+), mb: [\d.]+, names: '([0-9a-f]{32})'", man)
-    tid, n, names_id = m.group(1), int(m.group(2)), m.group(3)
-    f = np.frombuffer(base64.b64decode(open(os.path.join(dossier, tid + '.txt'), 'rb').read()), '<f4').reshape(-1, 7).astype(np.float64)
+    ast_tiles = [t for t in read_tile_manifest() if t.get('kind') == 'ast']
+    if not ast_tiles:
+        raise SystemExit('aucune tuile astéroïde dans TILE_MANIFEST')
+    t = ast_tiles[0]
+    tid, n, names_id = t['id'], int(t['n']), t['names']
+    with open(os.path.join(dossier, tid + '.txt'), 'rb') as fh:
+        f = np.frombuffer(base64.b64decode(fh.read()), '<f4').reshape(-1, 7).astype(np.float64)
     if len(f) != n: raise SystemExit(f'{len(f)} astéroïdes, {n} attendus')
     a, e, inc, om, w, m0, H = f.T
     b = a * np.sqrt(1 - e * e); co, so, ci, si, cw, sw = np.cos(om), np.sin(om), np.cos(inc), np.sin(inc), np.cos(w), np.sin(w)
@@ -56,11 +64,13 @@ def main():
         for c in cols:
             raw = c.astype('<f4').tobytes(); out.write(raw + b'\0' * (-len(raw) % ALIGN))
     shutil.copyfile(os.path.join(dossier, names_id + '.txt'), os.path.join(sortie, 'asteroides_noms.txt'))
-    names = open(os.path.join(sortie, 'asteroides_noms.txt'), encoding='utf-8').read().split('\n')
+    with open(os.path.join(sortie, 'asteroides_noms.txt'), encoding='utf-8') as fh:
+        names = fh.read().split('\n')
     print(f'{n} astéroïdes, époque JJ {epoch}, a de {a.min():.2f} à {a.max():.1f} UA, {os.path.getsize(path) / 1e6:.1f} Mo ; {len(names)} noms')
     if '--controle' in sys.argv:
         # Référence : ref_asteroides.json (JPL Horizons, demandé par ref_asteroides.py), héliocentrique, écliptique J2000.
-        ref = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ref_asteroides.json'), encoding='utf-8'))
+        with open(_HERE / 'ref_asteroides.json', encoding='utf-8') as fh:
+            ref = json.load(fh)
         number = {nm.split('~')[-1]: k for k, nm in enumerate(names)}
         ok, judged = True, 0
         for num, want in ref['corps'].items():

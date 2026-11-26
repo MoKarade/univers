@@ -20,7 +20,7 @@ void main() {
        apparent baisse comme l'inverse du carré de la distance, pour que le voisinage ne soit pas noyé par le lointain. */
     float d = max(length(p), 1.0);
     float fade = min(1.0, (pc.cam.w * pc.cam.w) / (d * d));
-    vCol = pow(inCol.rgb, vec3(2.2)) * pc.par.x * fade / (size * size);      /* couleurs de la page (valeurs d'écran) ramenées en lumière linéaire */
+    vCol = inCol.rgb * pc.par.x * fade / (size * size);      /* couleurs de ZCOL (build_zcol.py), déjà en sRGB linéaire */
     gl_Position = pc.viewProj * vec4(p, 1.0);
     gl_PointSize = size;
 }

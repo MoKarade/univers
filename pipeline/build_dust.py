@@ -11,7 +11,7 @@ Chaque case : moyenne de 27 points (3 × 3 × 3) de dA_V/ds en mag/pc, codée su
 0 = moins de 1e-5 mag/pc ou hors de la carte (au-delà de 1,25 kpc) ; k = 1..255 : 10^(-5 + (k - 1) / 254 × 4).
 
 Lancer (Python avec numpy, astropy, astropy-healpix) depuis la racine du dépôt :
-  python pipeline/build_dust.py C:/chemin/mean_and_std_healpix.fits
+  python pipeline/build_dust.py <chemin/mean_and_std_healpix.fits>
 """
 import base64
 import json
@@ -23,8 +23,12 @@ from astropy.io import fits
 from astropy_healpix import HEALPix
 import astropy.units as u
 
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / 'app' / 'gen' / 'data20.js'
+_PIPE_DIR = str(Path(__file__).resolve().parent)
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import APP_GEN  # noqa: E402
+
+OUT = APP_GEN / 'data20.js'
 NX, NY, NZ, CELL = 160, 160, 52, 15.625
 AV_PER_E = 2.8                      # Edenhofer et al. 2024, section 2 : A_V = 2,8 × E_ZGR23
 LOG_LO, LOG_SPAN = -5.0, 4.0        # 1e-5 à 1e-1 mag/pc

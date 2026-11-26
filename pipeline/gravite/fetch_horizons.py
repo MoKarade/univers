@@ -7,7 +7,13 @@
   - à l'époque de départ et à plusieurs dates de contrôle (1650 à 2450).
 Source : https://ssd.jpl.nasa.gov/api/horizons.api (Giorgini et al., JPL).
 """
-import json, re, sys, time, urllib.parse, urllib.request, os
+import json, re, sys, time, urllib.parse, urllib.request
+from pathlib import Path
+
+_PIPE_DIR = str(Path(__file__).resolve().parents[1])
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import APP_TEST  # noqa: E402
 
 API = 'https://ssd.jpl.nasa.gov/api/horizons.api'
 BODIES = [('sun', '10'), ('mercury', '1'), ('venus', '2'), ('emb', '3'), ('earth', '399'), ('moon', '301'), ('mars', '4'), ('jupiter', '5'),
@@ -23,7 +29,8 @@ def get(cmd, date):
          'REF_SYSTEM': "'ICRF'", 'VEC_TABLE': "'2'", 'OUT_UNITS': "'AU-D'", 'CSV_FORMAT': "'YES'"}
     for k in range(4):
         try:
-            t = urllib.request.urlopen(API + '?' + urllib.parse.urlencode(q), timeout=60).read().decode()
+            with urllib.request.urlopen(API + '?' + urllib.parse.urlencode(q), timeout=60) as r:
+                t = r.read().decode('utf-8')
             m = re.search(r'\$\$SOE\s*(.*?)\$\$EOE', t, re.S)
             if not m: raise RuntimeError(t[:300])
             r = [s.strip() for s in m.group(1).strip().split('\n')[0].split(',')]
@@ -33,12 +40,18 @@ def get(cmd, date):
     raise SystemExit(f'Horizons {cmd} {date} : {err}')
 
 
-out = {'source': 'JPL Horizons, barycentre du système solaire, écliptique J2000, TDB, UA et UA/jour', 'epoch': {}, 'checks': {}}
-for name, cmd in BODIES:
-    out['epoch'][name] = get(cmd, EPOCH)
-    for d in CHECKS:
-        out['checks'].setdefault(d, {})[name] = get(cmd, d)
-    print(name, 'ok', flush=True)
-dst = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'test', 'nbody_ref.json')
-json.dump(out, open(dst, 'w'), indent=0)
-print('écrit', dst)
+def main(dst=None):
+    out = {'source': 'JPL Horizons, barycentre du système solaire, écliptique J2000, TDB, UA et UA/jour', 'epoch': {}, 'checks': {}}
+    for name, cmd in BODIES:
+        out['epoch'][name] = get(cmd, EPOCH)
+        for d in CHECKS:
+            out['checks'].setdefault(d, {})[name] = get(cmd, d)
+        print(name, 'ok', flush=True)
+    target = Path(dst) if dst else APP_TEST / 'nbody_ref.json'
+    with open(target, 'w', encoding='utf-8', newline='\n') as f:
+        json.dump(out, f, indent=0)
+    print('écrit', target)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1] if len(sys.argv) > 1 else None)

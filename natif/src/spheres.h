@@ -14,24 +14,31 @@
 #include "orientation.h"
 #include "simulation.h"
 
-namespace {
+namespace univers {
 
 struct SphereMap {
     int naif;
     const char* file;
 };
-constexpr SphereMap kSphereMaps[] = {
-    {eph::kSun, "8k_sun.jpg"},         {eph::kMercury, "8k_mercury.jpg"},     {eph::kVenus, "4k_venus_atmosphere.jpg"}, {eph::kEarth, "8k_earth_daymap.jpg"},
-    {eph::kMoon, "8k_moon.jpg"},       {eph::kMarsBary, "8k_mars.jpg"},       {eph::kJupiterBary, "8k_jupiter.jpg"},    {eph::kSaturnBary, "8k_saturn.jpg"},
-    {eph::kUranusBary, "2k_uranus.jpg"}, {eph::kNeptuneBary, "2k_neptune.jpg"},
-    {-1, "8k_saturn_ring_alpha.png"},      // anneaux de Saturne (couleur et opacité selon la distance au centre) : aucun astre à lui seul
+inline constexpr SphereMap kSphereMaps[] = {
+    {eph::kSun, "8k_sun.jpg"},
+    {eph::kMercury, "8k_mercury.jpg"},
+    {eph::kVenus, "4k_venus_atmosphere.jpg"},
+    {eph::kEarth, "8k_earth_daymap.jpg"},
+    {eph::kMoon, "8k_moon.jpg"},
+    {eph::kMarsBary, "8k_mars.jpg"},
+    {eph::kJupiterBary, "8k_jupiter.jpg"},
+    {eph::kSaturnBary, "8k_saturn.jpg"},
+    {eph::kUranusBary, "2k_uranus.jpg"},
+    {eph::kNeptuneBary, "2k_neptune.jpg"},
+    {-1, "8k_saturn_ring_alpha.png"},  // anneaux de Saturne (couleur et opacité selon la distance au centre)
 };
-constexpr int kRingMap = 10;
+inline constexpr int kRingMap = 10;
 // Étendue de l'image des anneaux, en km du centre de Saturne : 72 650 à 140 150. [Calé ici sur deux repères lus dans
 // l'image : la division de Cassini (vers 119 900 km) et le bord extérieur de l'anneau A (136 775 km) ; la source ne
 // documente pas cette étendue : À vérifier.]
-constexpr double kRingInnerKm = 72650.0, kRingOuterKm = 140150.0;
-constexpr int kSphereMapCount = static_cast<int>(sizeof(kSphereMaps) / sizeof(kSphereMaps[0]));
+inline constexpr double kRingInnerKm = 72650.0, kRingOuterKm = 140150.0;
+inline constexpr int kSphereMapCount = static_cast<int>(sizeof(kSphereMaps) / sizeof(kSphereMaps[0]));
 
 struct SpherePush {
     float centre[4], droite[4], haut[4], avant[4], soleil[4], rot0[4], rot1[4], rot2[4];
@@ -39,6 +46,16 @@ struct SpherePush {
 
 class SphereRenderer {
 public:
+    SphereRenderer() = default;
+    SphereRenderer(const SphereRenderer&) = delete;
+    SphereRenderer& operator=(const SphereRenderer&) = delete;
+    ~SphereRenderer() {
+        stop_ = true;
+        if (loader_.joinable()) loader_.join();
+        for (auto& d : decoded_) stbi_image_free(d.pixels);
+        decoded_.clear();
+    }
+
     void create(const Gpu& g, VkFormat hdrFormat, const std::string& textureDir) {
         VkSamplerCreateInfo sci{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
         sci.magFilter = sci.minFilter = VK_FILTER_LINEAR;
@@ -49,8 +66,9 @@ public:
         sci.maxAnisotropy = 8.0f;
         sci.maxLod = VK_LOD_CLAMP_NONE;
         check(vkCreateSampler(g.dev, &sci, nullptr, &sampler_), "échantillonneur des cartes");
-        const VkDescriptorSetLayoutBinding bind[2] = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-                                                      {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+        const VkDescriptorSetLayoutBinding bind[2] = {
+            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
         dl.bindingCount = 2;
         dl.pBindings = bind;
@@ -70,7 +88,8 @@ public:
         check(vkCreatePipelineLayout(g.dev, &li, nullptr, &layout_), "agencement des sphères");
         vs_ = shader(g, "ecran.vert.spv");
         fs_ = shader(g, "sphere.frag.spv");
-        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
+        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
+                                                     {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         stages[0].module = vs_;
         stages[0].pName = "main";
@@ -93,7 +112,7 @@ public:
         rs.lineWidth = 1.0f;
         VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        VkPipelineColorBlendAttachmentState att{};      // la sphère cache ce qui est derrière ; son bord est adouci
+        VkPipelineColorBlendAttachmentState att{};  // la sphère cache ce qui est derrière ; son bord est adouci
         att.blendEnable = VK_TRUE;
         att.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
         att.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -125,10 +144,10 @@ public:
         loader_ = std::thread([this, textureDir]() {
             for (int i = 0; i < kSphereMapCount && !stop_; ++i) {
                 int w = 0, h = 0, comp = 0;
-                unsigned char* px = stbi_load((textureDir + "/" + kSphereMaps[i].file).c_str(), &w, &h, &comp, 4);
-                if (!px) continue;      // carte absente : l'astre reste un point
+                unsigned char* pixels = stbi_load((textureDir + "/" + kSphereMaps[i].file).c_str(), &w, &h, &comp, 4);
+                if (!pixels) continue;  // carte absente : l'astre reste un point
                 std::lock_guard<std::mutex> lock(mutex_);
-                decoded_.push_back({i, w, h, px});
+                decoded_.push_back({i, w, h, pixels});
             }
         });
     }
@@ -147,7 +166,7 @@ public:
         const uint32_t mips = 1 + static_cast<uint32_t>(std::floor(std::log2(static_cast<double>(std::max(w, h)))));
         VkImageCreateInfo ii{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         ii.imageType = VK_IMAGE_TYPE_2D;
-        ii.format = VK_FORMAT_R8G8B8A8_SRGB;      // la carte est une image pour écran : la carte graphique la ramène en lumière linéaire
+        ii.format = VK_FORMAT_R8G8B8A8_SRGB;  // la carte est une image pour écran : la carte graphique la ramène en lumière linéaire
         ii.extent = {w, h, 1};
         ii.mipLevels = mips;
         ii.arrayLayers = 1;
@@ -162,7 +181,8 @@ public:
         check(vkAllocateMemory(g.dev, &mai, nullptr, &t.mem), "mémoire de la carte");
         vkBindImageMemory(g.dev, t.image, t.mem, 0);
         const VkDeviceSize bytes = static_cast<VkDeviceSize>(w) * h * 4;
-        Buffer staging = createBuffer(g, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        Buffer staging = createBuffer(g, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         void* p = nullptr;
         check(vkMapMemory(g.dev, staging.mem, 0, bytes, 0, &p), "accès à la carte");
         std::memcpy(p, d.pixels, bytes);
@@ -170,7 +190,8 @@ public:
         stbi_image_free(d.pixels);
 
         VkCommandBuffer cmd = beginOnce(g);
-        auto barrier = [&](uint32_t level, VkImageLayout from, VkImageLayout to, VkAccessFlags sa, VkAccessFlags da, VkPipelineStageFlags ss, VkPipelineStageFlags ds2) {
+        auto barrier = [&](uint32_t level, VkImageLayout from, VkImageLayout to, VkAccessFlags sa, VkAccessFlags da,
+                           VkPipelineStageFlags ss, VkPipelineStageFlags ds2) {
             VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
             b.oldLayout = from;
             b.newLayout = to;
@@ -181,9 +202,10 @@ public:
             b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, level, 1, 0, 1};
             vkCmdPipelineBarrier(cmd, ss, ds2, 0, 0, nullptr, 0, nullptr, 1, &b);
         };
-        for (uint32_t l = 0; l < mips; ++l)
-            barrier(l, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT);
+        for (uint32_t l = 0; l < mips; ++l) {
+            barrier(l, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        }
         VkBufferImageCopy region{};
         region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         region.imageExtent = {w, h, 1};
@@ -191,8 +213,9 @@ public:
         // Niveaux réduits (pour les vues lointaines) : chaque niveau est la moitié du précédent.
         int32_t mw = static_cast<int32_t>(w), mh = static_cast<int32_t>(h);
         for (uint32_t l = 1; l < mips; ++l) {
-            barrier(l - 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            barrier(l - 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT);
             VkImageBlit blit{};
             blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, l - 1, 0, 1};
             blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, l, 0, 1};
@@ -200,12 +223,15 @@ public:
             mw = std::max(mw / 2, 1);
             mh = std::max(mh / 2, 1);
             blit.dstOffsets[1] = {mw, mh, 1};
-            vkCmdBlitImage(cmd, t.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, t.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-            barrier(l - 1, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            vkCmdBlitImage(cmd, t.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, t.image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+            barrier(l - 1, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
         }
-        barrier(mips - 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        barrier(mips - 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
         endOnce(g, cmd);
         destroy(g, staging);
 
@@ -227,9 +253,11 @@ public:
             const Texture& own = textures_[k];
             if (!own.ready) continue;
             const bool ringed = kSphereMaps[k].naif == eph::kSaturnBary && textures_[kRingMap].ready;
-            const VkDescriptorImageInfo info[2] = {{sampler_, own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                                                   {sampler_, ringed ? textures_[kRingMap].view : own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
-            VkWriteDescriptorSet wr[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+            const VkDescriptorImageInfo info[2] = {
+                {sampler_, own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                {sampler_, ringed ? textures_[kRingMap].view : own.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+            VkWriteDescriptorSet wr[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+                                          {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
             for (uint32_t j = 0; j < 2; ++j) {
                 wr[j].dstSet = own.set;
                 wr[j].dstBinding = j;
@@ -242,8 +270,9 @@ public:
     }
 
     bool allLoaded() const {
-        for (const auto& t : textures_)
+        for (const auto& t : textures_) {
             if (!t.ready) return false;
+        }
         return true;
     }
 
@@ -252,15 +281,16 @@ public:
     void prepare(const Sim& sim, const Camera& cam, uint32_t width, uint32_t height, std::vector<bool>& asSphere) {
         draws_.clear();
         asSphere.assign(sim.bodies.size(), false);
-        const double pixel = 2.0 * cam.tanHalf / height;      // taille angulaire d'un pixel
-        const double days = sim.years * 365.25 + kTdbMinusUtc / 86400.0;
+        const double pixel = 2.0 * cam.tanHalf / height;  // taille angulaire d'un pixel
+        const double days = sim.daysTdb();
         for (int i = 0; i < static_cast<int>(sim.bodies.size()); ++i) {
             const Body& b = sim.bodies[static_cast<size_t>(i)];
             if (b.kind == Kind::Star || !sim.visible(i)) continue;
             const int naif = b.kind == Kind::Sun ? static_cast<int>(eph::kSun) : b.naif;
             int map = -1;
-            for (int k = 0; k < kSphereMapCount; ++k)
+            for (int k = 0; k < kSphereMapCount; ++k) {
                 if (kSphereMaps[k].naif == naif && textures_[k].ready) map = k;
+            }
             if (map < 0) continue;
             const Vec3 p = sim.position(i), c = p - cam.pos;
             const double dist = std::sqrt(dot(c, c)), z = dot(c, cam.fwd);
@@ -274,27 +304,39 @@ public:
             d.dist = dist;
             const Vec3 u = unit(c);
             const float fx = static_cast<float>(u.x), fy = static_cast<float>(u.y), fz = static_cast<float>(u.z);
-            d.pc = SpherePush{{fx, fy, fz, static_cast<float>(rho)},
-                              {static_cast<float>(cam.right.x), static_cast<float>(cam.right.y), static_cast<float>(cam.right.z), static_cast<float>(cam.tanHalf * cam.aspect)},
-                              {static_cast<float>(cam.up.x), static_cast<float>(cam.up.y), static_cast<float>(cam.up.z), static_cast<float>(cam.tanHalf)},
-                              {static_cast<float>(cam.fwd.x), static_cast<float>(cam.fwd.y), static_cast<float>(cam.fwd.z), static_cast<float>(pixel)},
-                              {0, 0, 0, b.kind == Kind::Sun ? -kSunGain : kSurfaceGain},
-                              {static_cast<float>(m.m[0][0]), static_cast<float>(m.m[0][1]), static_cast<float>(m.m[0][2]), ringed ? static_cast<float>(kRingInnerKm / b.radiusKm) : 0.0f},
-                              {static_cast<float>(m.m[1][0]), static_cast<float>(m.m[1][1]), static_cast<float>(m.m[1][2]), ringed ? static_cast<float>(kRingOuterKm / b.radiusKm) : 0.0f},
-                              {static_cast<float>(m.m[2][0]), static_cast<float>(m.m[2][1]), static_cast<float>(m.m[2][2]), 0}};
+            d.pc = SpherePush{
+                {fx, fy, fz, static_cast<float>(rho)},
+                {static_cast<float>(cam.right.x), static_cast<float>(cam.right.y), static_cast<float>(cam.right.z),
+                 static_cast<float>(cam.tanHalf * cam.aspect)},
+                {static_cast<float>(cam.up.x), static_cast<float>(cam.up.y), static_cast<float>(cam.up.z),
+                 static_cast<float>(cam.tanHalf)},
+                {static_cast<float>(cam.fwd.x), static_cast<float>(cam.fwd.y), static_cast<float>(cam.fwd.z),
+                 static_cast<float>(pixel)},
+                {0, 0, 0, b.kind == Kind::Sun ? -kSunGain : kSurfaceGain},
+                {static_cast<float>(m.m[0][0]), static_cast<float>(m.m[0][1]), static_cast<float>(m.m[0][2]),
+                 ringed ? static_cast<float>(kRingInnerKm / b.radiusKm) : 0.0f},
+                {static_cast<float>(m.m[1][0]), static_cast<float>(m.m[1][1]), static_cast<float>(m.m[1][2]),
+                 ringed ? static_cast<float>(kRingOuterKm / b.radiusKm) : 0.0f},
+                {static_cast<float>(m.m[2][0]), static_cast<float>(m.m[2][1]), static_cast<float>(m.m[2][2]), 0}};
             if (b.kind != Kind::Sun) {
                 const Vec3 toSun = unit(Vec3{-p.x, -p.y, -p.z});
                 d.pc.soleil[0] = static_cast<float>(toSun.x);
                 d.pc.soleil[1] = static_cast<float>(toSun.y);
                 d.pc.soleil[2] = static_cast<float>(toSun.z);
             }
-            // Rectangle de l'écran qui contient le disque.
-            const double cx = (dot(c, cam.right) / (z * cam.tanHalf * cam.aspect) * 0.5 + 0.5) * width, cy = (-dot(c, cam.up) / (z * cam.tanHalf) * 0.5 + 0.5) * height;
-            const double rpx = rho / pixel * 1.6 * (ringed ? kRingOuterKm / b.radiusKm : 1.0) + 3;      // marge : la perspective agrandit le disque loin du centre de l'image
-            const double x0 = std::clamp(cx - rpx, 0.0, static_cast<double>(width)), x1 = std::clamp(cx + rpx, 0.0, static_cast<double>(width));
-            const double y0 = std::clamp(cy - rpx, 0.0, static_cast<double>(height)), y1 = std::clamp(cy + rpx, 0.0, static_cast<double>(height));
-            if (x1 - x0 < 1 || y1 - y0 < 1) continue;
-            d.scissor = {{static_cast<int32_t>(x0), static_cast<int32_t>(y0)}, {static_cast<uint32_t>(x1 - x0), static_cast<uint32_t>(y1 - y0)}};
+            // Rectangle de l'écran qui contient le disque (rayon tangent exact tan(asin(rho)) = rho / sqrt(1 - rho²)).
+            const double cx = (dot(c, cam.right) / (z * cam.tanHalf * cam.aspect) * 0.5 + 0.5) * width;
+            const double cy = (-dot(c, cam.up) / (z * cam.tanHalf) * 0.5 + 0.5) * height;
+            const double tanR = rho / std::sqrt(std::max(1.0 - rho * rho, 0.05));
+            const double rpx = tanR / pixel * 1.6 * (ringed ? kRingOuterKm / b.radiusKm : 1.0) + 3.0;
+            const double x0 = std::clamp(cx - rpx, 0.0, static_cast<double>(width));
+            const double x1 = std::clamp(cx + rpx, 0.0, static_cast<double>(width));
+            const double y0 = std::clamp(cy - rpx, 0.0, static_cast<double>(height));
+            const double y1 = std::clamp(cy + rpx, 0.0, static_cast<double>(height));
+            const int32_t ix0 = static_cast<int32_t>(std::floor(x0)), ix1 = static_cast<int32_t>(std::ceil(x1));
+            const int32_t iy0 = static_cast<int32_t>(std::floor(y0)), iy1 = static_cast<int32_t>(std::ceil(y1));
+            if (ix1 - ix0 < 1 || iy1 - iy0 < 1) continue;
+            d.scissor = {{ix0, iy0}, {static_cast<uint32_t>(ix1 - ix0), static_cast<uint32_t>(iy1 - iy0)}};
             draws_.push_back(d);
             asSphere[static_cast<size_t>(i)] = true;
         }
@@ -309,7 +351,8 @@ public:
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         for (const Draw& d : draws_) {
             vkCmdSetScissor(cmd, 0, 1, &d.scissor);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &textures_[d.map].set, 0, nullptr);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &textures_[d.map].set, 0,
+                                    nullptr);
             vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(SpherePush), &d.pc);
             vkCmdDraw(cmd, 3, 1, 0, 0);
         }
@@ -319,11 +362,13 @@ public:
         stop_ = true;
         if (loader_.joinable()) loader_.join();
         for (auto& d : decoded_) stbi_image_free(d.pixels);
+        decoded_.clear();
         for (auto& t : textures_) {
             if (!t.ready) continue;
             vkDestroyImageView(g.dev, t.view, nullptr);
             vkDestroyImage(g.dev, t.image, nullptr);
             vkFreeMemory(g.dev, t.mem, nullptr);
+            t.ready = false;
         }
         vkDestroyPipeline(g.dev, pipeline_, nullptr);
         vkDestroyPipelineLayout(g.dev, layout_, nullptr);
@@ -371,4 +416,4 @@ private:
     std::atomic<bool> stop_{false};
 };
 
-}  // namespace
+}  // namespace univers

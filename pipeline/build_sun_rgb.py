@@ -16,10 +16,16 @@ une masse négative. On les remplace par :
 Sortie : âge (Ga), L, T, R, M, aux pas du modèle MIST. Le script affiche la masse obtenue au sommet, à comparer
 aux 0,668 M☉ publiés.
 """
-import os, math, json
-HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, 'raw', 'mist_v1.2_feh0_00100M.track.eep')
-DST = os.path.join(HERE, '..', 'app', 'gen', 'sun_rgb.js')
+import json, math, sys
+from pathlib import Path
+
+_PIPE_DIR = str(Path(__file__).resolve().parent)
+if _PIPE_DIR not in sys.path:
+    sys.path.insert(0, _PIPE_DIR)
+from _paths import APP_GEN, PIPELINE_RAW  # noqa: E402
+
+SRC = PIPELINE_RAW / 'mist_v1.2_feh0_00100M.track.eep'
+DST = APP_GEN / 'sun_rgb.js'
 TIP_AGE, TIP_L, TIP_R = 12.167, 2730.0, 256.0          # Schröder et Smith 2008, table 1
 ETA = 8e-14                                           # leur éq. 1, M☉/an
 G_SUN = 27400.0                                       # gravité de surface du Soleil, cgs
@@ -47,7 +53,8 @@ def track(rows, ix, k):
 
 
 def main():
-    lines = open(SRC).read().split('\n')
+    with open(SRC, encoding='utf-8') as f:
+        lines = f.read().splitlines()
     cols = [l for l in lines if l.startswith('#')][-1][1:].split()
     ix = {c: i for i, c in enumerate(cols)}
     rows = [list(map(float, l.split())) for l in lines if l.strip() and not l.startswith('#')]
@@ -63,7 +70,8 @@ def main():
     # garder un point sur deux loin du sommet pour alléger
     print('points', len(out), '| âge de départ', out[0][0], '| masse au sommet', out[-1][4], '(publié : 0,668)')
     js = '/* généré par pipeline/build_sun_rgb.py : âge (Ga), L (L☉), T (K), R (R☉), M (M☉) */\nObject.assign(DATA, ' + json.dumps({'SUN_RGB': out}, separators=(',', ':')) + ');\n'
-    open(DST, 'w', encoding='utf-8', newline='\n').write(js)
+    with open(DST, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(js)
 
 
 if __name__ == '__main__':

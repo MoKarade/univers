@@ -17,16 +17,28 @@ Par objet : [noms affichés, type, AD (degrés), Déc (degrés), magnitude B, gr
 - Noms : « NGC 1300 », « IC 434 », « M 104 », puis les noms usuels du catalogue (en anglais).
 - Une valeur absente reste absente (null).
 
-Usage : python pipeline/sources/build_openngc.py <dossier_raw>
+Usage : python pipeline/sources/build_openngc.py [dossier_raw]
 """
+import base64
 import csv
 import json
 import math
 import os
+from pathlib import Path
 import re
+import struct
 import sys
 
-import build_cf4
+_HERE = Path(__file__).resolve().parent
+_PIPELINE_DIR = _HERE.parent
+for _d in (_PIPELINE_DIR, _HERE):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
+from _paths import APP_GEN, raw_dir  # noqa: E402
+try:
+    from . import build_cf4  # noqa: E402
+except ImportError:
+    import build_cf4  # noqa: E402
 
 CKMS = 299792.458
 # matrice équatorial -> galactique (même valeur que pipeline/build_data2.py, A_GAL)
@@ -68,7 +80,13 @@ def z_groupe_local(ra, dec, z):
 
 
 def lire(chemin):
-    return list(csv.DictReader(open(chemin, encoding='utf-8'), delimiter=';'))
+    with open(chemin, encoding='utf-8', newline='') as f:
+        return list(csv.DictReader(f, delimiter=';'))
+
+
+def _load_gen(nom):
+    with open(APP_GEN / nom, encoding='utf-8') as f:
+        return build_cf4.parse_data_js(f.read())
 
 
 def main(raw):
@@ -100,11 +118,10 @@ def main(raw):
         if o[1] in galaxies:
             for c in cle(o[0]):
                 index.setdefault(c, k)
-    gen = os.path.join(os.path.dirname(__file__), '..', '..', 'app', 'gen')
-    lit = lambda f, n: json.JSONDecoder().raw_decode((t := open(os.path.join(gen, f), encoding='utf-8').read())[t.index('"%s":' % n) + len(n) + 3:])[0]
-    noms_near = lit('data3.js', 'NEAR_NAMES').split('|')
-    noms_bhm = lit('data5.js', 'BHM')['names']
-    noms_local = [o['n'] for o in lit('data2.js', 'LOCAL')]
+    noms_near = _load_gen('data3.js')['NEAR_NAMES'].split('|')
+    bhm = _load_gen('data5.js')['BHM']
+    noms_bhm = bhm['names']
+    noms_local = [o['n'] for o in _load_gen('data2.js')['LOCAL']]
     pris = {'n': set(), 'l': set(), 'b': set()}
     for tag, noms in (('l', noms_local), ('n', noms_near), ('b', noms_bhm)):
         for i, n in enumerate(noms):
@@ -116,25 +133,24 @@ def main(raw):
                     break
     # contrôle de position des liens par nom : moins de ECART_MAX minutes d'arc, sinon le lien est retiré
     near_d, _, local_d, _ = build_cf4.galaxies_de_la_page()
-    import base64, struct
-    bd = base64.b64decode(lit('data5.js', 'BHM')['dir'])
+    bd = base64.b64decode(bhm['dir'])
     bhm_d = [build_cf4.ecl_vers_eq(*struct.unpack_from('<3f', bd, i * 12)) for i in range(len(noms_bhm))]
     dirs = {'n': near_d, 'l': local_d, 'b': bhm_d}
     retires = []
     for o in out:
         if o[8]:
             p = dirs[o[8][0]][o[8][1]]
-            if p is None or build_cf4.sep_arcmin((o[2], o[3]), p) > ECART_MAX:
-                retires.append((o[0].split(' · ')[0], o[8], None if p is None else round(build_cf4.sep_arcmin((o[2], o[3]), p), 1)))
+            sep = None if p is None else build_cf4.sep_arcmin((o[2], o[3]), p)
+            if sep is None or sep > ECART_MAX:
+                retires.append((o[0].split(' · ')[0], o[8], None if sep is None else round(sep, 1)))
                 pris[o[8][0]].discard(o[8][1])
                 o[8] = None
     print('liens par nom retirés (écart > %g minutes) : %s' % (ECART_MAX, retires))
     par_nom = sum(1 for o in out if o[8])
     # 2) par position (moins de 1,5'), pour les galaxies de la page pas encore reliées
-    near, _, local, _ = build_cf4.galaxies_de_la_page()
     gal = [[0, o[2], o[3]] for o in out]
-    for tag, dirs in (('n', near), ('l', local)):
-        for i, k in enumerate(build_cf4.associer(dirs, gal)):
+    for tag, cibles in (('n', near_d), ('l', local_d)):
+        for i, k in enumerate(build_cf4.associer(cibles, gal)):
             if k is not None and i not in pris[tag] and out[k][1] in galaxies and out[k][8] is None:
                 out[k][8] = [tag, i]
     print('liens vers la page : %d par nom, %d en tout (%d proches, %d Groupe local, %d hôtes de trous noirs)'
@@ -143,7 +159,7 @@ def main(raw):
           % (len(lignes), len(out), ecartes, sum(1 for o in out if o[6] is not None), sum(1 for o in out if ' · M ' in o[0] + ' ')))
     m = {o[0].split(' · ')[0]: o for o in out}
     for nom, attendu in (('NGC 5194', 'n'), ('NGC 4486', 'b'), ('NGC 4594', 'n'), ('NGC 224', 'l'), ('NGC 4258', 'n'), ('NGC 2903', 'n'), ('NGC 3521', 'n')):
-        o = m_lien = {x[0].split(' · ')[0]: x for x in out}.get(nom)
+        o = m.get(nom)
         print('  lien %-9s %s' % (nom, o[8] if o else 'absent'))
         if not o or not o[8] or o[8][0] != attendu:
             raise SystemExit('lien attendu manquant : rien écrit')
@@ -161,4 +177,4 @@ def main(raw):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'univers-raw'))
+    main(raw_dir(sys.argv[1] if len(sys.argv) > 1 else None))

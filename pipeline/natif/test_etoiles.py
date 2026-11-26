@@ -15,7 +15,10 @@ EPS = math.radians(23.4392911)
 
 
 def main():
-    d = sys.argv[1]; meta = json.load(open(os.path.join(d, 'etoiles.json'), encoding='utf-8')); n = meta['n']
+    d = sys.argv[1]
+    with open(os.path.join(d, 'etoiles.json'), encoding='utf-8') as fh:
+        meta = json.load(fh)
+    n = meta['n']
     raw = np.memmap(os.path.join(d, 'etoiles.bin'), dtype='u1', mode='r')
     assert bytes(raw[:8]) == b'UNIVSTR1' and int(np.frombuffer(raw[8:16], '<i8')[0]) == n
     col = -(-4 * n // 64) * 64
@@ -33,7 +36,7 @@ def main():
         e = np.array([math.cos(de) * math.cos(ra), math.cos(de) * math.sin(ra), math.sin(de)])
         ecl = np.array([e[0], math.cos(EPS) * e[1] + math.sin(EPS) * e[2], -math.sin(EPS) * e[1] + math.cos(EPS) * e[2]])
         p = np.array([x[i], y[i], z[i]], float); p /= np.linalg.norm(p)
-        ang = math.degrees(math.acos(min(1.0, float(p @ ecl)))); good = ang < 0.05; ok &= good
+        ang = math.degrees(math.acos(max(-1.0, min(1.0, float(p @ ecl))))); good = ang < 0.05; ok &= good
         print(f'{name:11s} : écart de direction {ang:.4f}° -> {"PASSE" if good else "ÉCHEC"}')
     if found < 3: ok = False; print('moins de 3 étoiles de référence trouvées : ÉCHEC')
     # Vitesse le long de la ligne de visée : valeurs publiées (SIMBAD) [Probable : recopiées de mémoire], tolérance 2 km/s.

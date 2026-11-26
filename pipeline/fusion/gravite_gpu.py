@@ -17,11 +17,15 @@ de eps² pondérée par la masse. [Différence avec falcON, qui utilise un autre
 Aucun outil à installer en administrateur : les noyaux CUDA sont compilés à la volée par CuPy (paquet pip
 `cupy-cuda12x[ctk]`). Simple précision pour les forces, comme falcON ; positions et vitesses restent en double.
 """
+import math
 import numpy as np
 import cupy as cp
 
+WALK_STACK_SIZE = 160
+
 _SRC = r'''
 typedef unsigned long long u64;
+#define WALK_STACK_SIZE 160
 
 __device__ __forceinline__ int delta(const u64* code, int n, int i, int j) {
     if (j < 0 || j >= n) return -1;
@@ -104,13 +108,13 @@ extern "C" __global__ void upward(int n, const float* pos, const float* mass, co
 /* Descente : accélération et potentiel de chaque particule (dans l'ordre trié). G n'est pas appliqué ici. */
 extern "C" __global__ void walk(int n, const float* pos, const float* eps2, const int* left, const int* right,
                                 const float* com, const float* aux, const float* quad, int use_quad,
-                                float* acc, float* phi) {
+                                float* acc, float* phi, unsigned int* overflow) {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     float px = pos[3*k], py = pos[3*k+1], pz = pos[3*k+2], e2 = eps2[k];
     float ax = 0.f, ay = 0.f, az = 0.f, ph = 0.f;
     int self = n - 1 + k;
-    int stack[160]; int sp = 0;
+    int stack[WALK_STACK_SIZE]; int sp = 0;
     stack[sp++] = 0;
     while (sp > 0) {
         int node = stack[--sp];
@@ -135,7 +139,13 @@ extern "C" __global__ void walk(int n, const float* pos, const float* eps2, cons
                 ax += c1 * dx - 3.f * inv5 * qx; ay += c1 * dy - 3.f * inv5 * qy; az += c1 * dz - 3.f * inv5 * qz;
             }
         } else {
-            if (sp < 158) { stack[sp++] = left[node]; stack[sp++] = right[node]; }
+            if (sp + 2 <= WALK_STACK_SIZE) {
+                stack[sp++] = left[node];
+                stack[sp++] = right[node];
+            } else {
+                atomicAdd(overflow, 1u);
+                break;
+            }
         }
     }
     acc[3*k] = ax; acc[3*k+1] = ay; acc[3*k+2] = az; phi[k] = ph;
@@ -192,6 +202,10 @@ def gravity(pos, m, eps, theta=0.5, quad=True):
     """pos (n,3) float64, m (n,), eps (n,) : tableaux CuPy. Rend (acc (n,3) float64, phi (n,) float64), sans G :
     multiplier m par G avant l'appel, comme pour pyfalcon.gravity."""
     n = int(pos.shape[0])
+    if isinstance(theta, bool) or not (math.isfinite(theta) and theta > 0):
+        raise ValueError(f'theta doit être un nombre fini strictement positif, reçu {theta}')
+    if n <= 1:
+        return cp.zeros((n, 3), dtype=cp.float64), cp.zeros(n, dtype=cp.float64)
     # Boîte des codes de Morton : centrée sur la médiane, large de 3 fois le rayon qui contient 99,5 % des
     # particules. Quelques particules de halo partent à des millions de kpc : une boîte qui les contiendrait
     # toutes écraserait les galaxies dans une poignée de cases (arbre dégénéré, mesuré 16 fois plus lent) et
@@ -214,7 +228,14 @@ def gravity(pos, m, eps, theta=0.5, quad=True):
     _build(_grid(n - 1), (BLOCK,), (code, np.int32(n), left, right, parent))
     _upward(_grid(n), (BLOCK,), (np.int32(n), p32, m32, e2, left, right, parent, flag, com, box, aux, qd, np.float32(1.0 / theta)))
     acc = cp.empty(3 * n, cp.float32); phi = cp.empty(n, cp.float32)
-    _walk(_grid(n), (BLOCK,), (np.int32(n), p32, e2, left, right, com, aux, qd, np.int32(1 if quad else 0), acc, phi))
+    overflow = cp.zeros(1, dtype=cp.uint32)
+    _walk(_grid(n), (BLOCK,), (np.int32(n), p32, e2, left, right, com, aux, qd, np.int32(1 if quad else 0), acc, phi, overflow))
+    n_overflow = int(overflow[0].item())
+    if n_overflow > 0:
+        raise RuntimeError(
+            f"Débordement de pile dans gravite_gpu.walk : {n_overflow} particule(s) tronquée(s) "
+            f"(pile = {WALK_STACK_SIZE}, n = {n}, theta = {theta})"
+        )
     out_a = cp.empty((n, 3), cp.float64); out_p = cp.empty(n, cp.float64)
     out_a[order] = acc.reshape(n, 3); out_p[order] = phi
     return out_a, out_p
