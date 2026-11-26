@@ -1,0 +1,30 @@
+# Dépendances Python de pipeline/ (et des tests d'écran de app/test/). Relevées le 26/11/2026 à partir des « import » du dépôt.
+# Versions non figées : aucune version de référence n'est notée ailleurs dans le dépôt. [À vérifier] sur le PC de Marc
+# avant de figer (pip freeze), pour reproduire exactement les calculs déjà faits.
+# Les tests autonomes (ex. pipeline/sources/test_build_gw.py) n'ont besoin que de Python 3.
+
+# ---- Base : téléchargement et préparation des données (catalogues, cartes, Gaia, poussière) ----
+numpy
+scipy
+astropy
+astropy-healpix
+requests
+Pillow
+pyarrow
+h5py
+scikit-image
+pymeeus
+# Captures d'écran sans carte graphique (app/test/*.py) et pipeline/fusion/exporter_conditions.py ;
+# puis « python -m playwright install chromium ».
+playwright
+
+# ---- Physique et arbitres (à installer à part, au besoin) ----
+# rebound      # pipeline/arbitres/rebound_systeme_solaire.py
+# agama        # pipeline/fusion/modeles*.py (potentiels et tirage des galaxies)
+# pyfalcon     # pipeline/fusion/essai.py, calcul.py (gravité N-corps sur processeur) ; pas sur PyPI : depuis ses sources
+
+# ---- Quantique (pipeline/quantique/) ----
+# pyscf
+
+# ---- Carte graphique NVIDIA (pipeline/fusion/gravite_gpu.py, stabilite_tir.py) ----
+# cupy-cuda12x   # paquet CuPy pour CUDA 12 ; le nom dépend de la version de CUDA installée

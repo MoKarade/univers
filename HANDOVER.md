@@ -23,7 +23,7 @@ Cette forme est au plafond : une page de 16 Mo au plus, des fichiers attachés d
 
 ## Construire et tester
 - `python3 app/build.py` écrit `dist/index.html`. Vérifié : ce fichier est identique, octet pour octet, à la page publiée le 11 novembre 2026.
-- `for f in app/test/*.test.js; do node "$f" || exit 1; done` : sept tests de calcul, tous verts à la remise.
+- `for f in app/test/*.test.js; do node "$f" || exit 1; done` : 26 tests de calcul (au 26/11/2026). La CI les lance par 4 en parallèle (`.github/workflows/controles.yml`).
 - `python3 app/test/shots.py desk '<spec JSON>'` : captures d'écran sans carte graphique (Playwright, rendu logiciel). La spec est une liste de pas `["js", "<code>", null]` ; le code dispose de `window.__U`.
 - Variables utiles : `U_URL` (adresse de la page), `U_INIT` (script lancé avant la page, par exemple `window.__TILES=[]; window.__PHOTOS=[];` pour tester sans fichiers en flux).
 
@@ -82,7 +82,7 @@ Les formats binaires des fichiers en flux sont définis par leur décodeur (`loa
 ## Ajouts du 11 novembre 2026 (suite) : tous les passages d'étoiles, infiniment petit, forme des galaxies
 
 - Passages d'étoiles : 42 simulés (41 sans réserve de Bailer-Jones 2022, plus l'étoile de Scholz d'après Dupuy et al. 2019), y compris 14 au-delà de 3 millions d'années. Ces étoiles restent en ligne droite à toute date (`K.lin`). Les 20 passages douteux sont des événements « Contesté », non simulés (`DATA.PASS_DUB`).
-- Infiniment petit : `initMicro` dans `40_render.js`. En plongeant vers la Terre (foyer `earth`), le zoom descend jusqu'à `LMICRO` (−35,3). Le point visé glisse du centre de la Terre à sa surface entre 10^7,2 et 10^6,4 m. Sous 150 m, le décor astronomique est figé derrière un fond opaque ; les objets minuscules utilisent l'échelle vraie `F.sT` et `F.lrT`. Paliers, textes et sources : table `MLEV` dans `60_app.js`.
+- Infiniment petit : `initMicro` dans `40_render.js`. En plongeant vers la Terre (foyer `earth`), le zoom descend jusqu'à `LMICRO` (−20,0 : 10⁻²⁰ m, R13). Le point visé glisse du centre de la Terre à sa surface entre 10^7,2 et 10^6,4 m. Sous 150 m, le décor astronomique est figé derrière un fond opaque ; les objets minuscules utilisent l'échelle vraie `F.sT` et `F.lrT`. Paliers, textes et sources : table `MLEV` dans `60_app.js`.
 - Forme des galaxies pendant la rencontre avec Andromède : chaque étoile simulée a une copie témoin qui ne sent que sa propre galaxie (`D.rx`, `D.rv`). À l'affichage, l'écart étoile-témoin est ajouté à la place que l'étoile aurait dans le modèle au repos. Les bras ne s'enroulent plus en anneaux ; une étoile arrachée reprend sa position calculée.
 - Erreur corrigée : un commentaire `//` placé en milieu de ligne coupait le code qui le suivait. Trois endroits touchés, dont le décodage des couleurs des tuiles d'étoiles Gaia, publié ainsi au tour précédent (ces étoiles s'affichaient en noir). Règle pour la suite : jamais de `//` ajouté dans une ligne qui continue ; utiliser `/* */`.
 - Pas vérifié : chargement réel des tuiles après correction (lecture du code seulement) ; fluidité sur téléphone ; page en ligne.

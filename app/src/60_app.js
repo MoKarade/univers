@@ -3,6 +3,9 @@
    ============================================================================ */
 (async function () {
   const $ = id => document.getElementById(id);
+  /* Texte -> HTML : tout texte (noms de catalogues, valeurs, sources) inséré par innerHTML passe par ici. */
+  const escHtml = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const cellHtml = v => v && v.html === true ? String(v) : escHtml(v);      /* case de fiche : HTML voulu (trustedHtml, 30_gen.js) ou texte échappé */
   const fail = msg => { $('loader').querySelector('h2').textContent = 'Affichage impossible'; $('lmsg').textContent = msg; $('lbar').hidden = true; };
   if (typeof THREE === 'undefined') return fail('La bibliothèque 3D n’a pas pu être chargée. Vérifiez la connexion, puis rechargez la page.');
   const canvas = $('gl'), reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -62,8 +65,18 @@
   const vtOf = V => { const P = DATA.M31.pos, d = Math.hypot(P[0], P[1], P[2]), vr = (V[0] * P[0] + V[1] * P[1] + V[2] * P[2]) / d; return Math.hypot(V[0] - vr * P[0] / d, V[1] - vr * P[1] / d, V[2] - vr * P[2] / d); };
   const DTAB = dynTables(); let LMCO = lmcOrbit(); andromedaAt(LMCO, 0, MAG.r0);
   /* R10 : centres du calcul complet de la fusion, chargés à part ; valables pour la vitesse « Gaia, 2025 » et la cosmologie de Planck seulement. */
-  const FUS_URL = window.__FUSC !== undefined ? window.__FUSC : '/_blob/6973105923eaef7cf421a368d7c74833', FUS_M33 = 2;
-  const FUSI_URL = window.__FUSI !== undefined ? window.__FUSI : '/_blob/4d3b29d19c3f56f3030e0dd222c9d200';
+  /* Adresses des fichiers joints à la page, en un seul endroit. Par défaut : les fichiers publiés avec la page (/_blob/<empreinte>).
+     window.__DATA_URLS = { fusc, fusi, nbl, flame, ngc, blob } en remplace tout ou partie (autre hébergement, ex. Firebase) ;
+     les anciens crochets un par un (window.__FUSC, __FUSI, __NBL, __FLAME, __NGC, utilisés par les tests) gardent la priorité.
+     Une adresse vide coupe le chargement, comme avant. blob : préfixe des fichiers nommés par leur empreinte (manifestes). */
+  const DATA_URLS = (() => {
+    const D = { blob: '/_blob/', fusc: '/_blob/6973105923eaef7cf421a368d7c74833', fusi: '/_blob/4d3b29d19c3f56f3030e0dd222c9d200', nbl: '/_blob/725049663be0ece860394ad7524b349e', flame: '/_blob/fa99f6d36d21cec7344dae6d6b7fbae5', ngc: '/_blob/d108b6f5ff5be725f09a03babd3a5205' };
+    const W = window.__DATA_URLS || {}, old = { fusc: window.__FUSC, fusi: window.__FUSI, nbl: window.__NBL, flame: window.__FLAME, ngc: window.__NGC };
+    for (const k of Object.keys(D)) { if (old[k] !== undefined) D[k] = old[k]; else if (W[k] !== undefined) D[k] = W[k]; }
+    return D;
+  })();
+  const FUS_URL = DATA_URLS.fusc, FUS_M33 = 2;
+  const FUSI_URL = DATA_URLS.fusi;
   let fusiP = null; const fusiStart = () => { if (fusiP || !FUSI_URL) return; fusiP = fetch(FUSI_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(fusImagesInit).catch(e => { console.warn('Images du calcul de la fusion non chargées :', e.message); fusiP = null; }); };
   const fusFetch = pk => fetch(pk.url || pk.fichier).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
   /* R10 : nuage de points des étoiles du calcul complet (couleurs et éclats empruntés aux modèles de la page, galaxie par galaxie) */
@@ -79,7 +92,7 @@
     return D; }
   const fusAuto = () => tier === 2 || TL.on;      /* 80 Mo d'images : automatique sur ordinateur, à la demande sur téléphone (panneau Affichage) */
   /* G2 : orbites des planètes sur des millions d'années (table de pipeline/gravite/build_long.js, fichier joint), chargées la première fois qu'on s'éloigne de plus de 2 500 ans */
-  const NBL = { url: window.__NBL !== undefined ? window.__NBL : '/_blob/725049663be0ece860394ad7524b349e', p: null };
+  const NBL = { url: DATA_URLS.nbl, p: null };
   const nblStart = () => { if (NBL.p || !NBL.url || NB_LONG) return; NBL.p = fetch(NBL.url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(t => { const b = b64ToBytes(t.trim()); nbLongLoad(b.buffer.slice(b.byteOffset, b.byteOffset + b.length)); NBL.p = null; }).catch(e => { console.warn('Orbites à long terme non chargées :', e.message); NBL.p = null; NBL.url = null; }); };
   const fusOk = () => !!FUSC && S.m31V === M31_MEAS[0][1] && Math.abs(S.vt - vtOf(M31_MEAS[0][1])) < 0.5 && ['H0', 'Om', 'OL', 'w'].every(k => S.par[k] === PLANCK[k]);
   if (FUS_URL) fetch(FUS_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { fusLoad(j); orbitDirty = true; }).catch(e => console.warn('Calcul complet de la fusion non chargé :', e.message));      /* sans le fichier : la page garde ses propres orbites */
@@ -520,7 +533,7 @@
       ['Univers observable, rayon', c.chiPH !== null ? sig(c.chiPH * c.a * GLY, 3) + NBSP + 'milliards d’al' : 'non défini'],
       ['Destin', C.endKind === 'crunch' ? 'Big Crunch dans ' + fmtYears(C.tEnd * 1e9) : C.endKind === 'rip' ? 'Big Rip dans ' + fmtYears(C.tEnd * 1e9) : C.accelEnd ? 'expansion sans fin, toujours plus rapide' : 'expansion sans fin, toujours plus lente'],
     ];
-    $('readout').innerHTML = rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join('');
+    $('readout').innerHTML = rows.map(r => '<dt>' + escHtml(r[0]) + '</dt><dd>' + cellHtml(r[1]) + '</dd>').join('');
     const parts = [['Rayonnement', c.fr, 'var(--amber)'], ['Matière ordinaire', c.fm * FB, 'var(--ice)'], ['Matière noire', c.fm * (1 - FB), 'var(--indigo)'], ['Énergie noire', c.fde, 'var(--orchid)']];
     $('compo').innerHTML = parts.map(p => '<i style="width:' + (p[1] * 100).toFixed(2) + '%;background:' + p[2] + '"></i>').join('');
     $('compo-leg').innerHTML = parts.map(p => '<li style="--c:' + p[2] + '">' + p[0] + ' ' + (p[1] < 0.001 && p[1] > 0 ? '<' + NNBSP + '0,1' : nf(p[1] * 100, 1)) + NBSP + '%</li>').join('');
@@ -545,7 +558,7 @@
     if (st.cls[i] === 0 || st.src[i]) r.push(['Fin de la séquence principale', lo > 0 || hi > 0 ? 'entre ' + when(Math.min(lo, hi)) + ' et ' + when(Math.max(lo, hi)) + ' (modèles d’évolution MIST)' : 'déjà passée']);
     if (m >= SN_UNC && m < SN_MIN) r.push(['Fin de vie', 'naine blanche ou supernova : inconnu à cette masse (limite discutée, entre 7 et 9 fois le Soleil)']);
     return r; }
-  const FLAME_URL = window.__FLAME !== undefined ? window.__FLAME : '/_blob/fa99f6d36d21cec7344dae6d6b7fbae5';
+  const FLAME_URL = DATA_URLS.flame;
   if (FLAME_URL) fetch(FLAME_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(t => { flameLoad(t); Rr.relife(); if (S.sel) renderCard(); }).catch(e => console.warn('Âges Gaia non chargés :', e.message));
   function selStar(i) {
     const st = Rr.star, sp = Rr.starPos, hip = st.hip[i], MV = st.mag[i], bv = st.bv[i], L = [st.life[i * 3], st.life[i * 3 + 1], st.life[i * 3 + 2]], fate = st.fate[i];
@@ -603,12 +616,12 @@
   // ---- fiches de référence de la NASA (planètes, Lune, Soleil)
   const FA = DATA.FACTS, hrs = h => { const a = Math.abs(h); return (a < 48 ? sig(a, 3) + NBSP + 'heures' : sig(a / 24, 3) + NBSP + 'jours') + (h < 0 ? ', dans le sens inverse des autres planètes' : ''); }, yn = v => v === 'Yes' ? 'oui' : v === 'No' ? 'non' : 'inconnu';
   const factRows = key => { const f = FA[key]; if (!f || f.mass === undefined) return [];
-    const r = [['Diamètre à l’équateur', nf(f.diam, 0) + NBSP + 'km'], ['Masse', key === 'earth' ? '5,97 × 10<sup>24</sup> kg' : sig(f.mass / FA.earth.mass, 3) + NBSP + 'fois la Terre'], ['Densité', sig(f.dens / 1000, 3) + NBSP + 'fois celle de l’eau'], ['Pesanteur', sig(f.grav, 3) + NBSP + 'm/s²' + (key === 'earth' ? '' : ', soit ' + sig(f.grav / FA.earth.grav, 2) + NBSP + 'fois celle de la Terre')], ['Vitesse de libération', sig(f.esc, 3) + NBSP + 'km/s'],
+    const r = [['Diamètre à l’équateur', nf(f.diam, 0) + NBSP + 'km'], ['Masse', key === 'earth' ? trustedHtml('5,97 × 10<sup>24</sup> kg') : sig(f.mass / FA.earth.mass, 3) + NBSP + 'fois la Terre'], ['Densité', sig(f.dens / 1000, 3) + NBSP + 'fois celle de l’eau'], ['Pesanteur', sig(f.grav, 3) + NBSP + 'm/s²' + (key === 'earth' ? '' : ', soit ' + sig(f.grav / FA.earth.grav, 2) + NBSP + 'fois celle de la Terre')], ['Vitesse de libération', sig(f.esc, 3) + NBSP + 'km/s'],
       ['Rotation sur elle-même', hrs(f.rot)], ['Durée du jour', hrs(Math.abs(f.day))], ['Inclinaison de l’axe', sig(f.obl, 3) + '°'], ['Température moyenne', String(f.temp).replace('-', '−') + NBSP + '°C'], ['Pression au sol', typeof f.pres === 'number' ? (f.pres === 0 ? 'presque nulle' : sig(f.pres, 2) + NBSP + 'bar') : 'pas de sol : planète gazeuse']];
     if (key !== 'moon') r.push(['Lunes connues', nf(f.moons, 0)], ['Anneaux', yn(f.rings)]); r.push(['Champ magnétique global', yn(f.mag)]);
     if (key !== 'earth' && key !== 'moon') { const e = bodyPosM('earth'), p = bodyPosM(key), d = Math.hypot(p[0] - e[0], p[1] - e[1], p[2] - e[2]); r.push(['Distance à la Terre', sig(d / AU, 3) + NBSP + 'UA'], ['Sa lumière nous parvient en', fmtLight(d)]); } return r; };
   const sunFacts = () => { const f = DATA.SUNFACT; return [['Diamètre aujourd’hui', nf(f.rad * 2, 0) + NBSP + 'km, soit ' + sig(f.rad * 2 / FA.earth.diam, 3) + NBSP + 'fois la Terre'], ['Masse aujourd’hui', nf(Math.round(f.mass / FA.earth.mass / 1000) * 1000, 0) + NBSP + 'fois la Terre'], ['Type', 'étoile naine jaune, ' + f.sp], ['Température au centre', sig(f.tc / 1e6, 3) + NBSP + 'millions de K'],
-    ['Puissance rayonnée', sig(f.lum / 100, 4) + ' × 10<sup>26</sup> W'], ['Pesanteur en surface', sig(f.grav / FA.earth.grav, 3) + NBSP + 'fois celle de la Terre'], ['Vitesse de libération', sig(f.esc, 4) + NBSP + 'km/s'], ['Rotation sur lui-même', sig(f.rot / 24, 3) + NBSP + 'jours à l’équateur'], ['Densité', sig(f.dens / 1000, 3) + NBSP + 'fois celle de l’eau'], ['Sa lumière atteint la Terre en', fmtLight(vlen(bodyPosM('earth')))]]; };
+    ['Puissance rayonnée', trustedHtml(sig(f.lum / 100, 4) + ' × 10<sup>26</sup> W')], ['Pesanteur en surface', sig(f.grav / FA.earth.grav, 3) + NBSP + 'fois celle de la Terre'], ['Vitesse de libération', sig(f.esc, 4) + NBSP + 'km/s'], ['Rotation sur lui-même', sig(f.rot / 24, 3) + NBSP + 'jours à l’équateur'], ['Densité', sig(f.dens / 1000, 3) + NBSP + 'fois celle de l’eau'], ['Sa lumière atteint la Terre en', fmtLight(vlen(bodyPosM('earth')))]]; };
   // ---- petits corps et comètes : compléments calculés à partir de l'orbite
   const orbPlus = o => { const ob = o.orbit; if (!ob) return o; const rows = o.rows, a = Math.hypot(ob.P[0], ob.P[1], ob.P[2]), e = ob.e, b2 = ob.Q[0] * ob.Q[0] + ob.Q[1] * ob.Q[1] + ob.Q[2] * ob.Q[2], comet = /^(\d+P|[CPD]\/)/.test(o.name || '');
     o.rows = () => { const p = o.get(), k = AU * (F.orb || 1), q = [p[0] / k, p[1] / k, p[2] / k], ea = bodyPosM('earth'), dE = Math.hypot(p[0] - ea[0], p[1] - ea[1], p[2] - ea[2]);
@@ -618,7 +631,7 @@
   // ---- trous noirs : grandeurs calculées à partir de la masse
   const bhExtra = (M, p, big) => { const d = vlen(p), r = [['Dernière orbite stable', 'un tour en ' + fmtSec(4.548e-4 * M) + ' (si le trou noir ne tourne pas)']];
     if (big) r.push(['Taille de son ombre vue d’ici', sig(15.345e3 * M / d * 206264.806e6, 2) + NBSP + 'millionièmes de seconde d’arc']);
-    r.push(['Température de Hawking', sci(6.169e-8 / M) + ' K (prédiction théorique)'], ['Évaporation complète', 'dans ' + sci(2.098e67 * M * M * M) + ' ans (prédiction théorique)']); return r.concat(skyRow(p)); };
+    r.push(['Température de Hawking', trustedHtml(sci(6.169e-8 / M) + ' K (prédiction théorique)')], ['Évaporation complète', trustedHtml('dans ' + sci(2.098e67 * M * M * M) + ' ans (prédiction théorique)')]); return r.concat(skyRow(p)); };
   // ---- amas, galaxies, pulsars : compléments des catalogues
   const velRow = v => ['Vitesse mesurée', (v < 0 ? 'se rapproche' : 's’éloigne') + ' à ' + nf(Math.abs(Math.round(v)), 0) + NBSP + 'km/s, z = ' + zStr(v / 299792.458)], metal = x => ['Éléments plus lourds que l’hélium', sig(Math.pow(10, x) * 100, 2) + NBSP + '% de la teneur du Soleil'];
   const cluExtra = i => { const x = DATA.CLU_X[i], r = []; if (!x) return r; if (x[1] !== null) r.push(velRow(x[1])); if (x[0] !== null) r.push(metal(x[0])); if (x[2]) r.push(['Moitié de sa lumière dans un rayon de', fmtDist(x[2] * LY)]); if (x[3]) r.push(['Distance au centre de la galaxie', fmtDist(x[3] * KPC)]); return r; };
@@ -648,7 +661,7 @@
   function selSgrA() { const M = Math.pow(10, DATA.SGRA_LOGM || 6.63), get = () => [F.gcRel[0], F.gcRel[1], F.gcRel[2]];
     return { name: 'Sagittarius A*', sub: 'Trou noir supermassif au centre de la Voie lactée', get, rows: () => [['Distance', fmtDist(vlen(get()))], ['Masse', bigMass(M)], ['Horizon', horizon(M)], ['Mesuré par', 'le mouvement des étoiles autour de lui'], ['Le Soleil en fait le tour en', fmtYears(TAU * GAL.R0 / (vCirc(GAL.R0, true) * KMS_KPC_GYR) * 1e9) + ' environ'], ['À voir de près', 'centre la vue ici puis zoome jusqu’à quelques jours-lumière : 39 étoiles tournent autour de lui sur leur orbite mesurée'], ['Lumière déviée', 'calculée à moins de ' + horizonX(M) + ' : ombre, anneau de photons, images doubles. Trou noir supposé sans rotation (non mesurée sûrement). Aucun disque de gaz dessiné : l’anneau de l’image EHT, qui en est la lumière, n’apparaît pas. Les noms restent à leur place non déviée. Les étoiles proches sont traitées comme si elles étaient très loin. À moins d’une fois et demie la taille de l’horizon : non calculé']].concat(bhExtra(M, get(), true)) }; }
   const horizonX = M => fmtDist(1e7 * GM_C2_SUN * M);      /* S6 : distance d'allumage de la lentille (LENS_RON dans 40_render.js) */
-  function loadAstNames() { if (!TL.astP) { const m = TL.list.find(m => m.kind === 'ast' && (m.names || m.namesUrl)); TL.astP = m ? fetch(m.namesUrl || ('/_blob/' + m.names)).then(r => r.text()).then(t => { TL.astN = t.split('\n'); FIDX = null; }).catch(() => {}) : Promise.resolve(); } return TL.astP; }
+  function loadAstNames() { if (!TL.astP) { const m = TL.list.find(m => m.kind === 'ast' && (m.names || m.namesUrl)); TL.astP = m ? fetch(m.namesUrl || (DATA_URLS.blob + m.names)).then(r => r.text()).then(t => { TL.astN = t.split('\n'); FIDX = null; }).catch(() => {}) : Promise.resolve(); } return TL.astP; }
   function selAstT(T, i) { const j = i * 3, e = T.el[j], P = [T.pos[j], T.pos[j + 1], T.pos[j + 2]], Q = [T.q[j], T.q[j + 1], T.q[j + 2]], a = Math.hypot(P[0], P[1], P[2]), bq = Math.hypot(Q[0], Q[1], Q[2]), H = T.H[i], inc = Math.acos(clamp((P[0] * Q[1] - P[1] * Q[0]) / (a * bq), -1, 1)) / DEG;
     const get = () => { const E = keplerE(wrapPi(T.el[j + 1] + T.el[j + 2] * (F.jd - T.epoch)), e), x = Math.cos(E) - e, y = Math.sin(E), k = AU * (F.orb || 1); return [(P[0] * x + Q[0] * y) * k, (P[1] * x + Q[1] * y) * k, (P[2] * x + Q[2] * y) * k]; };
     const nm = () => { const t = TL.astN ? TL.astN[i] : null; if (!t) return 'Astéroïde'; const q = t.split('~'); return q[0] ? q[0] + ' (' + q[1] + ')' : 'Astéroïde ' + q[1]; };
@@ -841,7 +854,7 @@
     else { const s = F.sun; $('card-sub').textContent = body.info; rows = body.key === 'sun' ? [['État à cette date', s.phase], ['Rayon', sig(s.R, 3) + NBSP + 'fois l’actuel'], ['Éclat', sig(s.L, 3) + NBSP + 'fois l’actuel'], ['Température', nf(Math.round(s.T / 10) * 10, 0) + NBSP + 'K'], ['Masse', sig(s.M, 3) + NBSP + 'fois l’actuelle']].concat(baryRow(), Math.abs(S.ty) < 1e6 ? sunFacts() : [])
       : body.key === 'moon' ? [['Distance à la Terre', nf(Math.round(vlen(sol.moonGeo) * AU / 1e5) * 100, 0) + NBSP + 'km'], ['Orbite', 'de 363 300 à 405 500 km en moyenne'], ['Excentricité', '0,055'], ['Un tour de la Terre', '27,3 jours'], ['Vitesse sur l’orbite', '1,02 km/s en moyenne']].concat(factRows('moon'), [['Retour de la même phase', 'tous les 29,5 jours'], ['S’éloigne de la Terre de', '3,8 cm par an']]) : planetRows(body.key).concat(factRows(body.key), F.eng[body.key] ? [['État à cette date', 'engloutie par le Soleil']] : []); }
     const keep = PHONE.matches ? 3 : 5, many = rows.length > keep + 1, shown = many && !S.more ? rows.slice(0, keep) : rows, dl = $('card-dl'), top = dl.scrollTop; $('card-more').hidden = !many; if (many) $('card-more').textContent = S.more ? 'Réduire' : 'Tout voir (' + (rows.length - keep) + ')';
-    $('card').classList.toggle('more', many && !!S.more); $('card-title').hidden = !sel && !(mic && mic.rows); const src = sel && sel.src; dl.innerHTML = src && S.more ? ['m', 'c', 's'].map(k => { const g = rows.filter(r => r[2] === k); return g.length ? '<dt class="grp">' + ST_H[k] + '</dt>' + g.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join('') + '<dd class="src">Source : ' + src[k] + '</dd>' : ''; }).join('') : shown.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join(''); dl.scrollTop = top;
+    $('card').classList.toggle('more', many && !!S.more); $('card-title').hidden = !sel && !(mic && mic.rows); const src = sel && sel.src; dl.innerHTML = src && S.more ? ['m', 'c', 's'].map(k => { const g = rows.filter(r => r[2] === k); return g.length ? '<dt class="grp">' + escHtml(ST_H[k]) + '</dt>' + g.map(r => '<dt>' + escHtml(r[0]) + '</dt><dd>' + cellHtml(r[1]) + '</dd>').join('') + '<dd class="src">Source : ' + escHtml(src[k]) + '</dd>' : ''; }).join('') : shown.map(r => '<dt>' + escHtml(r[0]) + '</dt><dd>' + cellHtml(r[1]) + '</dd>').join(''); dl.scrollTop = top;
     $('card-center').hidden = !sel; $('card-close').hidden = !sel; $('card-back').hidden = !!sel; $('card-center').textContent = sel && sel.isEvent ? 'Revoir' : 'Y aller';
     if (card.hidden) card.hidden = false;
   }
@@ -1382,7 +1395,7 @@
   function photoInit(p) { const c = p.get(), d = vlen(c) || 1, r = [c[0] / d, c[1] / d, c[2] / d]; p.half = d * p.tanH; p.e = vnorm(vcross(p.pole, r)); p.n = vcross(r, p.e); p.l = r; }      // est et nord sur le ciel, vus du Soleil
   function photoNear(o) { if (!PH.length || !o || !o.get || !F.gcRel) return null; const q = o.get(); let best = null, bd = 1e99; for (const p of PH) { if (!p.half) photoInit(p); const c = p.get(), d = Math.hypot(c[0] - q[0], c[1] - q[1], c[2] - q[2]); if (d < Math.max(0.3 * p.half, 6e19) && d < bd) { bd = d; best = p; } } return best; }
   function updatePhotos() { F.photos = null; F.photoHide = null; F.m31Hide = 0; if (!PH.length || S.logR < 18.6 || Math.abs(S.ty) > 2e7) return;
-    if (!PHL.req) { PHL.req = true; Rr.loadPhotos((window.__PHOTOS || PHOTO_MANIFEST).map(u => (/[./]/.test(u) ? u : '/_blob/' + u))); }
+    if (!PHL.req) { PHL.req = true; Rr.loadPhotos((window.__PHOTOS || PHOTO_MANIFEST).map(u => (/[./]/.test(u) ? u : DATA_URLS.blob + u))); }
     const R = Math.pow(10, S.logR), tg = F.tg, L = [], age = fadeOut(Math.abs(S.ty), 5e6, 2e7);
     for (const p of PH) { if (p.c && p.c.gone) continue; if (!p.half) photoInit(p); const sz = p.half / R; if (sz < 0.03 || sz > 60) continue; const c = p.get(), d = Math.hypot(c[0] - tg[0], c[1] - tg[1], c[2] - tg[2]); if (d - p.half > 2.4 * R) continue;
       L.push({ c, e: p.e, n: p.n, l: p.l, id: p.id, g3: p.g3, gray: p.gray, tier: Q.gal > 150000 ? 2 : Q.gal > 80000 ? 1 : 0, half: p.half, atlas: p.atlas, uv: p.uv, floor: p.floor, sz, op: smoothstep(0.03, 0.1, sz) * fadeOut(sz, 25, 60) * age, src: p }); }
@@ -1398,7 +1411,7 @@
      déplacement. Une galaxie que la page a déjà (galaxies proches, Groupe local, hôtes de trous noirs supermassifs) renvoie à sa fiche de la page. */
   const NGC = { list: null, p: null }, NGC_ZMIN = 0.01, NGC_EPS = 23.4392911 * DEG;
   const NGCT = { G: 'galaxie', GPair: 'paire de galaxies', GTrpl: 'triplet de galaxies', GGroup: 'groupe de galaxies', OCl: 'amas ouvert', GCl: 'amas globulaire', 'Cl+N': 'amas et nébuleuse', PN: 'nébuleuse planétaire', HII: 'région HII', EmN: 'nébuleuse en émission', RfN: 'nébuleuse par réflexion', Neb: 'nébuleuse', SNR: 'reste de supernova', Nova: 'nova', '*': 'étoile', '**': 'étoile double', '*Ass': 'association d’étoiles', Other: 'autre objet' };
-  function loadNgc() { if (!NGC.p) { const src = window.__NGC !== undefined ? window.__NGC : '/_blob/d108b6f5ff5be725f09a03babd3a5205';
+  function loadNgc() { if (!NGC.p) { const src = DATA_URLS.ngc;
       NGC.p = src ? fetch(src).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => { NGC.list = j.o; if (FIDX) addNgc(FIDX); return true; }).catch(() => { NGC.p = null; return false; })      /* un échec sera retenté au prochain clic */ : Promise.resolve(false); }
     return NGC.p; }
   function addNgc(X) { NGC.list.forEach((o, i) => { const ns = o[0].split(' · '), kind = (NGCT[o[1]] || 'objet') + (o[8] ? ' · fiche de la page' : ' · catalogue NGC/IC'), go = () => ngcGo(i);
@@ -1451,7 +1464,7 @@
   function goName(n) { const X = findIndex(), q = fold(n); let best = -1; for (let i = 0; i < X.length; i++) { const t = X[i][0]; if (t === q) { best = i; break; } if (t.indexOf(q) === 0 && (best < 0 || t.length < X[best][0].length)) best = i; } if (best >= 0) X[best][3](); return best >= 0; }
   function findRun(txt) { const q = fold(txt), box = $('find-res'); if (q.length < 2) { box.innerHTML = quickHTML(); return []; } const X = findIndex(), a = [], b = [];
     for (let i = 0; i < X.length && a.length < 12; i++) { const p = X[i][0].indexOf(q); if (p === 0 || (p > 0 && X[i][0][p - 1] === ' ')) a.push(i); else if (p > 0 && b.length < 12) b.push(i); }
-    a.sort((x, y) => X[x][0].length - X[y][0].length); const res = a.concat(b).slice(0, 12); box.innerHTML = res.length ? res.map(i => '<button type="button" data-i="' + i + '">' + X[i][1].replace(/</g, '&lt;') + '<small>' + X[i][2] + '</small></button>').join('') : '<p class="hint">Rien trouvé à ce nom.</p>'; return res; }
+    a.sort((x, y) => X[x][0].length - X[y][0].length); const res = a.concat(b).slice(0, 12); box.innerHTML = res.length ? res.map(i => '<button type="button" data-i="' + i + '">' + escHtml(X[i][1]) + '<small>' + escHtml(X[i][2]) + '</small></button>').join('') : '<p class="hint">Rien trouvé à ce nom.</p>'; return res; }
   $('find-q').addEventListener('input', e => findRun(e.target.value));
   $('find-res').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const g = b.dataset.g; if (b.dataset.r) jump(selStar(+b.dataset.r), 16.4); else if (g === 'back') findRun(''); else if (g && g.startsWith('r:')) rankRun(g.slice(2)); else if (g && /^s\d+$/.test(g)) { pushHist(); select(null); const st = STOPS[+g.slice(1)]; goTo(st.logR, { az: st.az, el: st.el, focus: st.focus || 'sun', speed: st.speed, noHist: true }); openPanel(null); } else if (g) goName(g); else FIDX[+b.dataset.i][3](); });
   $('b-find').addEventListener('click', () => { loadAstNames(); loadNgc().then(ok => { if (ok && !$('p-find').hidden) findRun($('find-q').value); }); findRun($('find-q').value); if (matchMedia('(pointer:fine)').matches) setTimeout(() => { if (!$('p-find').hidden) $('find-q').focus(); }, 60); });
@@ -1464,7 +1477,7 @@
   function starTotal() { let n = Rr.star.N + Rr.star2.N; for (const T of Rr.tiles) if (T.kind === 'star') n += T.n; return n; }
   const nextFrame = () => new Promise(r => requestAnimationFrame(r));
   async function loadTile(m) {
-    m.state = 'load'; const res = await fetch(m.url || ('/_blob/' + m.id)); if (!res.ok) throw new Error('HTTP ' + res.status);
+    m.state = 'load'; const res = await fetch(m.url || (DATA_URLS.blob + m.id)); if (!res.ok) throw new Error('HTTP ' + res.status);
     const T = m.kind === 'star' ? Rr.addStarTile(m.n) : m.kind === 'ast' ? Rr.addAstTile(m.n) : Rr.addGalTile(m.n), rd = res.body && res.body.getReader ? res.body.getReader() : null, td = new TextDecoder(), rec = T.rec; m.T = T; let txt = '', carry = new Uint8Array(0);
     const feed = async by => { let b = by; if (carry.length) { b = new Uint8Array(carry.length + by.length); b.set(carry); b.set(by, carry.length); }      // au plus 18 000 objets par image : jamais plus de quelques millisecondes d'affilée
       let off = 0; while (b.length - off >= rec && T.n < T.cap) { const nr = Math.min(Math.floor((b.length - off) / rec), 18000, T.cap - T.n); T.append(b, off, nr); off += nr * rec; m.got = T.n; await nextFrame(); }

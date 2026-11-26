@@ -358,6 +358,9 @@ function genDiskGalaxy(R, n, seed) {
    des autres électrons : écarts de quelques pour cent à une quinzaine de pour cent attendus.
    ============================================================================ */
 const IE_EXP = [539.83, 32.2, 18.51, 14.74, 12.62], IE_NOM = ['1a1, cœur de l’oxygène', '2a1', '1b2', '3a1', '1b1, la plus facile à arracher'];
+/* HTML voulu dans une case de fiche (exposant, schéma) : marqué pour être inséré tel quel. Tout autre texte de fiche est
+   échappé à l'affichage (escHtml, 60_app.js). Objet String : se lit et se concatène comme une chaîne. */
+function trustedHtml(s) { const o = new String(s); o.html = true; return o; }
 function hydrogenSvg(H) {      /* densité radiale de l'hydrogène : formule exacte (trait) et calcul (points) */
   const W = 170, Hh = 56, xm = 8, ym = 0.6, X = r => 4 + r / xm * (W - 8), Y = p => Hh - 4 - p / ym * (Hh - 10);
   let line = '', dots = ''; for (let r = 0; r <= xm; r += 0.1) line += (line ? ' L' : 'M') + X(r).toFixed(1) + ' ' + Y(4 * r * r * Math.exp(-2 * r)).toFixed(1);
@@ -368,7 +371,7 @@ function waterRows(W) {
   const e = W.eau.eps_eV, rows = [['Ce que montrent les points', 'les endroits où un électron a une chance d’être trouvé, d’après un calcul de chimie quantique'], ['Électrons', '8 venus de l’oxygène, 1 de chaque hydrogène : dans la molécule, ils sont partagés, les atomes ne sont plus isolés'],
     ['Arracher un électron', 'énergie de chaque orbitale de la molécule, du cœur vers l’extérieur, en électronvolts : calculée, puis mesurée']];
   e.forEach((x, k) => rows.push([IE_NOM[k], nf(-x, 1) + ' calculé, ' + nf(IE_EXP[k], 1) + ' mesuré (écart ' + (-x / IE_EXP[k] > 1 ? '+' : '') + nf(100 * (-x / IE_EXP[k] - 1), 0) + ' %)']));
-  rows.push(['Hydrogène seul, forme exacte', hydrogenSvg(W.H) + '<br>répartition de l’électron selon la distance au noyau : formule exacte (trait) et même calcul (points), écart ' + nf(100 * W.H.ecart_forme, 2) + ' % ; énergie à ' + nf(Math.abs(100 * (W.H.E / -0.5 - 1)), 3) + ' %, taille moyenne à ' + nf(Math.abs(100 * (W.H.r2 / 3 - 1)), 2) + ' %'],
+  rows.push(['Hydrogène seul, forme exacte', trustedHtml(hydrogenSvg(W.H) + '<br>répartition de l’électron selon la distance au noyau : formule exacte (trait) et même calcul (points), écart ' + nf(100 * W.H.ecart_forme, 2) + ' % ; énergie à ' + nf(Math.abs(100 * (W.H.E / -0.5 - 1)), 3) + ' %, taille moyenne à ' + nf(Math.abs(100 * (W.H.r2 / 3 - 1)), 2) + ' %')],
     ['Taille de l’atome d’hydrogène isolé', '53 pm de rayon (rayon de Bohr)'],
     ['Dans la simulation', 'Densité calculée (Hartree-Fock, base aug-cc-pVTZ), puis ' + nf(W.eau.n, 0) + ' points tirés selon elle. Les écarts sur les énergies viennent de la méthode, qui néglige la réorganisation des autres électrons.'],
     ['Sources', 'Calcul : PySCF (Sun et al. 2018, 2020, licence Apache 2.0) ; énergies mesurées : Banna et Shirley 1975 ; étalonnage 1s de l’oxygène, 2021 ; rayon de Bohr : CODATA 2022'], ['Certitude', 'Calculé pour la densité ; mesuré pour les énergies de comparaison']);
