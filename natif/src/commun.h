@@ -27,7 +27,7 @@ constexpr size_t kAlign = 64;
 inline bool gWindowMode = false;
 
 [[noreturn]] inline void fail(const std::string& what, VkResult r = VK_SUCCESS) {
-    const std::string msg = "ECHEC : " + what + " (code " + std::to_string(static_cast<int>(r)) + ")";
+    const std::string msg = "ECHEC : " + what + (r == VK_SUCCESS ? std::string() : " (code " + std::to_string(static_cast<int>(r)) + ")");
     std::fprintf(stderr, "%s\n", msg.c_str());
     if (gWindowMode) {
         char path[MAX_PATH];
@@ -145,7 +145,55 @@ struct Gpu {
     VkQueue queue{};
     VkCommandPool pool{};
     bool int64Atomics = false;      // additions atomiques sur 64 bits dans les tampons (gaia_points.comp) : allumées si la carte sait
+    VkDebugUtilsMessengerEXT messenger{};      // validation Vulkan (--validation) : nul sinon
 };
+
+// ---------------------------------------------------------------- validation Vulkan (essais de nouveau code)
+// Gel de la carte du 26/11/2026 : un contrôle relisait un tampon déjà libéré (faute MMU, pilote bloqué jusqu'au
+// redémarrage). La couche de validation de Khronos signale ce genre d'erreur avant qu'elle n'atteigne la carte.
+// Allumée par l'option --validation (ou --validation-gpu), ou par la variable UNIVERS_VALIDATION (1 ou gpu) pour les
+// autres programmes. « gpu » ajoute la validation assistée par la carte (contrôle des bornes de chaque accès des
+// shaders) : bien plus lent, pour un essai court. Couche absente : échec, jamais un essai « validé » sans elle.
+inline int gValidation = -1;      // -1 : selon UNIVERS_VALIDATION ; 0 : non ; 1 : validation ; 2 : avec la carte
+inline long gValidationErrors = 0, gValidationWarnings = 0;
+inline std::string gValidationLog;      // fichier des messages (à côté du programme)
+
+inline int validationLevel() {
+    if (gValidation >= 0) return gValidation;
+    const char* e = std::getenv("UNIVERS_VALIDATION");
+    if (!e || !*e || std::string(e) == "0") return 0;
+    return std::string(e) == "gpu" ? 2 : 1;
+}
+
+inline VKAPI_ATTR VkBool32 VKAPI_CALL validationMessage(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDebugUtilsMessageTypeFlagsEXT,
+                                                        const VkDebugUtilsMessengerCallbackDataEXT* d, void*) {
+    const bool err = (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0;
+    (err ? gValidationErrors : gValidationWarnings) += 1;
+    const char* what = d && d->pMessage ? d->pMessage : "";
+    std::fprintf(stderr, "VALIDATION %s : %s\n", err ? "ERREUR" : "avertissement", what);
+    std::fflush(stderr);
+    if (!gValidationLog.empty())
+        if (FILE* f = std::fopen(gValidationLog.c_str(), "a")) {
+            std::fprintf(f, "%s : %s\n", err ? "ERREUR" : "avertissement", what);
+            std::fclose(f);
+        }
+    return VK_FALSE;
+}
+
+// À la sortie d'un essai : le bilan, et un code de sortie non nul (3) s'il y a eu une erreur de validation.
+inline int validationVerdict(int rc) {
+    if (validationLevel() == 0) return rc;
+    std::printf("validation Vulkan : %ld erreur(s), %ld avertissement(s) -> %s\n", gValidationErrors, gValidationWarnings,
+                gValidationErrors ? "ECHEC" : "PASSE");
+    std::fflush(stdout);
+    return gValidationErrors && rc == 0 ? 3 : rc;
+}
+
+inline void destroyInstance(const Gpu& g) {
+    if (g.messenger) vkDestroyDebugUtilsMessengerEXT(g.instance, g.messenger, nullptr);
+    vkDestroyInstance(g.instance, nullptr);
+}
+inline std::string exeDir();      // plus bas : dossier du programme
 
 inline uint32_t memoryType(const Gpu& g, uint32_t bits, VkMemoryPropertyFlags want) {
     VkPhysicalDeviceMemoryProperties mp;
@@ -164,13 +212,48 @@ inline Gpu createGpu(bool window = false) {
     app.apiVersion = VK_API_VERSION_1_3;
     VkInstanceCreateInfo ici{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     ici.pApplicationInfo = &app;
-    const char* instExt[] = {"VK_KHR_surface", "VK_KHR_win32_surface"};
-    if (window) {
-        ici.enabledExtensionCount = 2;
-        ici.ppEnabledExtensionNames = instExt;
+    std::vector<const char*> instExt;
+    if (window) { instExt.push_back("VK_KHR_surface"); instExt.push_back("VK_KHR_win32_surface"); }
+    const int level = validationLevel();
+    const char* layer = "VK_LAYER_KHRONOS_validation";
+    VkDebugUtilsMessengerCreateInfoEXT dmi{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+    dmi.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    dmi.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+    dmi.pfnUserCallback = validationMessage;
+    const VkValidationFeatureEnableEXT gpuAv[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT, VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT};
+    VkValidationFeaturesEXT vf{VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT};
+    if (level > 0) {
+        uint32_t nl = 0;
+        vkEnumerateInstanceLayerProperties(&nl, nullptr);
+        std::vector<VkLayerProperties> lp(nl);
+        vkEnumerateInstanceLayerProperties(&nl, lp.data());
+        bool found = false;
+        for (const auto& l : lp) found = found || std::strcmp(l.layerName, layer) == 0;
+        if (!found) fail("validation Vulkan demandee, mais la couche VK_LAYER_KHRONOS_validation est introuvable (SDK Vulkan, ou VK_ADD_LAYER_PATH vers son dossier Bin)");
+        ici.enabledLayerCount = 1;
+        ici.ppEnabledLayerNames = &layer;
+        instExt.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        if (level > 1) {
+            vf.enabledValidationFeatureCount = 2;
+            vf.pEnabledValidationFeatures = gpuAv;
+            dmi.pNext = &vf;
+        }
+        ici.pNext = &dmi;      // messages de la création et de la destruction de l'instance aussi
+        gValidationLog = exeDir() + "/univers-validation.log";
+        if (FILE* f = std::fopen(gValidationLog.c_str(), "a")) {
+            std::fprintf(f, "---- validation Vulkan%s\n", level > 1 ? " (avec la carte : bornes des shaders)" : "");
+            std::fclose(f);
+        }
+        std::printf("validation Vulkan : allumee%s ; messages aussi dans %s\n", level > 1 ? " (avec la carte)" : "", gValidationLog.c_str());
     }
+    ici.enabledExtensionCount = static_cast<uint32_t>(instExt.size());
+    ici.ppEnabledExtensionNames = instExt.empty() ? nullptr : instExt.data();
     check(vkCreateInstance(&ici, nullptr, &g.instance), "instance");
     volkLoadInstance(g.instance);
+    if (level > 0) {
+        dmi.pNext = nullptr;
+        check(vkCreateDebugUtilsMessengerEXT(g.instance, &dmi, nullptr, &g.messenger), "messages de validation");
+    }
     uint32_t n = 0;
     vkEnumeratePhysicalDevices(g.instance, &n, nullptr);
     std::vector<VkPhysicalDevice> pds(n);
