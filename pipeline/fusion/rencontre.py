@@ -140,6 +140,7 @@ class Calcul:
             # dans cette convention.
             self.gaz.age0 = self.gaz.age0 - t_ga
             if 'age0' in p: self.gaz.age0 = cp.asarray(p['age0'], dtype=cp.float64)
+        self.travail_maree = 0.0      # M☉ (km/s)², cumulé : voir energie_corrigee dans avancer
         self.forces()
 
     def forces(self):
@@ -149,10 +150,12 @@ class Calcul:
         cm = cp.sum(self.pos * ml[:, None], axis=0) / cp.sum(ml)
         d = self.pos - cm
         self.acc = acc + self.K * d      # énergie noire : poussée H0² Ω_Λ (x − x_cm)
+        self.a_maree = None
         if self.maree is not None:
             tt, TT = self.maree
             Tm = cp.asarray(np.array([np.interp(self.t_ga, tt, TT[:, k]) for k in range(9)]).reshape(3, 3))
-            self.acc += d @ Tm.T
+            self.a_maree = d @ Tm.T
+            self.acc += self.a_maree
         self.phi, self.d2 = phi, cp.sum(d * d, axis=1)
 
     def energie(self):
@@ -163,6 +166,8 @@ class Calcul:
         cp = self.cp
         self.t_ga = t_ga
         self.vel += 0.5 * dt * self.acc
+        if self.a_maree is not None:      # travail de la marée extérieure (hors de l'indicateur d'énergie), demi-pas par demi-pas
+            self.travail_maree += 0.5 * dt * float(cp.sum(self.m * cp.sum(self.vel * self.a_maree, axis=1)))
         if self.gaz:
             est = self.kind_g == 3; qui = cp.where(est)[0]
             self.pos[~est] += dt * self.vel[~est]
@@ -170,6 +175,8 @@ class Calcul:
         else:
             self.pos += dt * self.vel
         self.forces()
+        if self.a_maree is not None:
+            self.travail_maree += 0.5 * dt * float(cp.sum(self.m * cp.sum(self.vel * self.a_maree, axis=1)))
         self.vel += 0.5 * dt * self.acc
         if self.gaz:
             n1 = self.gaz.naissances(self.kind_g, cp.where(self.kind_g == 3)[0], dt, t_ga, pos=self.pos, m=self.m)
@@ -235,9 +242,82 @@ def avancement(t0, t1, t):
 DEBUT = time.strftime('%Y-%m-%dT%H:%M:%S')
 
 
-def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, journal=None, a_chaque_releve=None, replacement=None):
-    """Avance de t0 à t1 (Ga). Écrit journal.json (centres relatifs à la Voie lactée, énergie) et des instantanés."""
+# Pas réduit pendant les rencontres (26/11/2026). Le pas unique de 0,25 Ma est trop long quand deux centres de galaxies se
+# traversent : dans le film 10 M fini, l'énergie a sauté de +0,21 % à +0,82 % au premier passage d'Andromède (+5,45 Ga), puis
+# jusqu'à +2,95 % à la fusion des centres, alors qu'elle dérivait de 0,05 % par Ga avant. Le critère des codes de référence,
+# dt = sqrt(2 eta eps / |a|) avec eta = 0,025 (Springel 2005, Gadget-2), donne ~0,2 Ma à 1 kpc du centre et ~0,08 Ma à 0,1 kpc
+# pour eps = 31 pc. Quand deux galaxies d'une paire listée sont plus proches que le seuil, chaque pas est coupé en sous-pas
+# saute-mouton égaux ; la cadence des relevés, des images et des sauvegardes ne change pas. La décision est prise à chaque
+# relevé (tous les 2 Ma en film 3 : une approche à 500 km/s y fait 1 kpc, bien moins que la marge du seuil).
+RENCONTRES_DEFAUT = 'voie_lactee-andromede:60,voie_lactee-triangle:60,andromede-triangle:60'
+
+
+def lire_rencontres(texte):
+    """« a-b:kpc,... » -> [(i, j, kpc)] dans l'ordre ORDRE."""
+    out = []
+    for morceau in (texte or '').split(','):
+        if not morceau.strip(): continue
+        paire, seuil = morceau.split(':'); a, b = paire.split('-')
+        out.append((ORDRE.index(a.strip()), ORDRE.index(b.strip()), float(seuil)))
+    return out
+
+
+def sous_pas_rencontre(centres, rencontres, dt_ma, pas_rencontre_ma):
+    """Nombre de sous-pas pour les pas à venir : 1 hors rencontre, dt_ma / pas_rencontre_ma (arrondi) pendant."""
+    if not rencontres or not pas_rencontre_ma or pas_rencontre_ma >= dt_ma: return 1
+    proche = any(float(np.linalg.norm(np.asarray(centres[i]) - np.asarray(centres[j]))) < seuil for i, j, seuil in rencontres)
+    return max(1, int(round(dt_ma / pas_rencontre_ma))) if proche else 1
+
+
+def options_rencontre(opts):
+    """--pas-rencontre-ma=0.0625 [--rencontres=a-b:kpc,...] : pas réduit pendant les rencontres. Absent : pas unique, comme avant."""
+    pr = opts.get('pas-rencontre-ma')
+    return dict(pas_rencontre_ma=float(pr) if pr else None, rencontres=lire_rencontres(opts.get('rencontres', RENCONTRES_DEFAUT)) if pr else None)
+
+
+def version_du_code():
+    """Commit du dépôt qui calcule (git rev-parse HEAD), ou « inconnu » hors dépôt git."""
+    try:
+        r = subprocess.run(['git', '-C', ICI, 'rev-parse', 'HEAD'], capture_output=True, text=True, timeout=30)
+        sale = subprocess.run(['git', '-C', ICI, 'status', '--porcelain', '--untracked-files=no', '--', '.'], capture_output=True, text=True, timeout=30)
+        c = r.stdout.strip() if r.returncode == 0 else 'inconnu'
+        return c + ('+modifié' if sale.returncode == 0 and sale.stdout.strip() else '')
+    except (OSError, subprocess.SubprocessError):
+        return 'inconnu'
+
+
+def verifier_version(film, t0, opts):
+    """Un film doit être calculé d'un bout à l'autre par le même code (26/11/2026 : le film 20 M sur Colab a tourné avec trois
+    versions de film-3, la machine reclonant la tête de la branche à chaque reprise). <film>/code.json garde le commit et les
+    réglages de chaque tronçon ; une reprise avec un autre commit est refusée (code de sortie 4), sauf UNIVERS_CHANGER_CODE=1,
+    qui note le changement dans code.json. Un film sans code.json (commencé avant cette règle) le reçoit à sa reprise."""
+    chemin = os.path.join(film, 'code.json')
+    c = version_du_code()
+    reglages = {k: opts[k] for k in ('pas-ma', 'pas-rencontre-ma', 'rencontres', 'gaz', 'efficacite', 'theta', 'sauvegarde-ma') if k in opts}
+    import gaz_galaxie
+    reglages['sous_pas_max_gaz'] = gaz_galaxie.SOUS_PAS_MAX
+    d = json.load(open(chemin, encoding='utf-8')) if os.path.exists(chemin) else dict(commit=c, troncons=[])
+    if d['commit'] != c:
+        if os.environ.get('UNIVERS_CHANGER_CODE') != '1':
+            print(f"ARRÊT : ce film est calculé par le commit {d['commit']}, le code présent est {c}. Reprendre avec le même commit, "
+                  f"ou poser UNIVERS_CHANGER_CODE=1 pour un changement voulu (il sera noté dans code.json).", flush=True)
+            sys.exit(4)
+        print(f"  changement de code voulu : {d['commit']} -> {c} à t = {t0:+.3f} Ga", flush=True)
+        d['commit'] = c
+    if c == 'inconnu' or c.endswith('+modifié'): print(f'  attention : version du code {c}, le film ne sera pas reproductible', flush=True)
+    d['troncons'].append(dict(t0=round(t0, 5), commit=c, reglages=reglages, debut=time.strftime('%Y-%m-%dT%H:%M:%S')))
+    with open(chemin + '.tmp', 'w', encoding='utf-8') as f_: json.dump(d, f_, ensure_ascii=False, indent=1)
+    os.replace(chemin + '.tmp', chemin)
+
+
+def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, journal=None, a_chaque_releve=None, replacement=None,
+            pas_rencontre_ma=None, rencontres=None):
+    """Avance de t0 à t1 (Ga). Écrit journal.json (centres relatifs à la Voie lactée, énergie) et des instantanés.
+    pas_rencontre_ma, rencontres : pas réduit quand une paire de galaxies est plus proche que son seuil (voir plus haut)."""
     dt = dt_ma * 1e-3 / T_UNIT
+    etat_r = dict(k=1)
+    j_ = journal or {}
+    travail0 = ((j_.get('travail_gaz') or [0.0])[-1], (j_.get('travail_maree') or [0.0])[-1])      # cumul repris après une reprise
     steps = int(round((t1 - t0) * 1000 / dt_ma)); every = int(round(releve_ma / dt_ma)); snap = int(round(instantane_ga * 1000 / dt_ma))
     journal = journal or dict(t=[], centres=[], vitesses=[], energie=[], e0=S.energie(), galaxies=ORDRE)
     debut = time.time()
@@ -246,6 +326,11 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
         cp_, cv = S.centres()
         journal['t'].append(round(t, 5)); journal['centres'].append((cp_ - cp_[0]).round(4).tolist()); journal['vitesses'].append((cv - cv[0]).round(3).tolist())
         journal['energie'].append(S.energie() / journal['e0'] - 1)
+        # Énergie corrigée (26/11/2026) : l'indicateur moins le travail reçu de la pression du gaz et de la marée extérieure, qui
+        # ne sont pas dans son bilan. Elle ne doit bouger que par l'erreur du calcul ; l'indicateur seul mélange erreur et physique.
+        wg = (S.gaz.travail if S.gaz else 0.0) + travail0[0]; wm = S.travail_maree + travail0[1]
+        journal.setdefault('travail_gaz', []).append(wg); journal.setdefault('travail_maree', []).append(wm)
+        journal.setdefault('energie_corrigee', []).append(journal['energie'][-1] - (wg + wm) / journal['e0'])
         if S.gaz:      # masse de gaz et d'étoiles nées, par galaxie d'origine (M☉) : le taux de naissance s'en déduit
             k_, mm = S.cp.asnumpy(S.kind_g), S.cp.asnumpy(S.m)
             journal.setdefault('gaz', []).append([float(mm[(k_ == 3) & (S.gid == g)].sum()) for g in range(len(ORDRE))])
@@ -253,14 +338,23 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
             journal.setdefault('sous_pas', []).append(int(S.gaz.sous_pas))
             journal.setdefault('courant', []).append(round(float(S.gaz.cfl), 3))      # nombre de Courant atteint : > 0,3 quand les sous-pas butent sur leur maximum
         d = np.linalg.norm(cp_ - cp_[0], axis=1)
-        print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % | {time.time() - debut:6.0f} s", flush=True)
+        print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % (corrigée {100 * journal['energie_corrigee'][-1]:+.3f} %) | {time.time() - debut:6.0f} s", flush=True)
         json.dump(journal, open(os.path.join(sortie, 'journal.json.tmp'), 'w', encoding='utf-8')); os.replace(os.path.join(sortie, 'journal.json.tmp'), os.path.join(sortie, 'journal.json'))
+        k = sous_pas_rencontre(cp_, rencontres, dt_ma, pas_rencontre_ma)
+        if k != etat_r['k']: print(f"  t = {t:+.3f} Ga : pas de gravité {dt_ma / k:g} Ma ({'rencontre' if k > 1 else 'hors rencontre'})", flush=True)
+        etat_r['k'] = k
+        journal.setdefault('sous_pas_gravite', []).append(k)
         if a_chaque_releve: a_chaque_releve(t, cp_, cv)
         avancement(t0, t1, t)
 
     if not journal['t']: releve(t0)
+    elif rencontres and pas_rencontre_ma:      # reprise : la décision du dernier relevé n'est pas sauvegardée, on la refait ici
+        etat_r['k'] = sous_pas_rencontre(S.centres()[0], rencontres, dt_ma, pas_rencontre_ma)
+        if etat_r['k'] > 1: print(f"  reprise en rencontre : pas de gravité {dt_ma / etat_r['k']:g} Ma", flush=True)
     for s in range(steps):
-        S.pas(dt, t0 + (s + 1) * dt_ma * 1e-3)
+        k = etat_r['k']
+        for i in range(k):      # k sous-pas égaux ; le dernier tombe exactement sur la date du pas
+            S.pas(dt / k, t0 + (s + (i + 1) / k) * dt_ma * 1e-3)
         t = t0 + (s + 1) * dt_ma * 1e-3
         if replacement and not replacement.get('fait') and t >= replacement['t'] - 1e-9: replacer(S, replacement)
         if (s + 1) % every == 0: releve(t)
@@ -268,6 +362,15 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
             np.savez(os.path.join(sortie, 'reprise.tmp.npz'), t=t, **S.etat()); os.replace(os.path.join(sortie, 'reprise.tmp.npz'), os.path.join(sortie, 'reprise.npz'))
         S.attendre()
     return journal
+
+
+def tronquer_journal(j, k):
+    """Garde les k premiers relevés du journal. Les séries ajoutées en cours de film (courant, sous_pas_gravite...) sont plus
+    courtes que t et alignées sur sa FIN : on en retire autant de relevés qu'on en retire à t (avant le 26/11, [:k] les
+    laissait entières, et une reprise y dupliquait les derniers relevés)."""
+    n = len(j['t'])
+    for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas', 'courant', 'sous_pas_gravite', 'travail_gaz', 'travail_maree', 'energie_corrigee'):
+        if cle in j and isinstance(j[cle], list): j[cle] = j[cle][:max(0, len(j[cle]) - (n - k))]
 
 
 def replacer(S, r):
@@ -416,14 +519,13 @@ def main():
             if t_reprise > t_depart:
                 k = len(j0['t'])
                 while k and j0['t'][k - 1] > t_reprise + 1e-9: k -= 1
-                for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas', 'courant'):
-                    if cle in j0: j0[cle] = j0[cle][:k]
+                tronquer_journal(j0, k)
                 journal0 = j0
                 if replacement and t_reprise >= replacement['t'] - 1e-9: replacement['fait'] = True
                 print(f"reprise à {t_reprise:+.3f} Ga", flush=True)
         S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'), t_ga=t_reprise)
         journal = avancer(S, t_reprise, 0.0, sortie, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=float(opts.get('releve-ma', 50.0)), replacement=replacement, journal=journal0,
-                          instantane_ga=0.05 if mode == 'passe' else 0.5)
+                          instantane_ga=0.05 if mode == 'passe' else 0.5, **options_rencontre(opts))
         ecart = ecart_a_la_cible(journal, cible)
         # Correction du départ : l'écart final de vitesse est retiré de la vitesse de départ ; l'écart final de position est
         # retiré de la position de départ, compte tenu de ce que le changement de vitesse déplace sur la durée du trajet
@@ -693,8 +795,7 @@ def futur(sortie, t_fin, opts, cible):
         journal = json.load(open(os.path.join(film, 'journal.json'), encoding='utf-8'))
         k = min(len(journal['t']), len(meta['t'])) if 't' in meta else len(journal['t'])      # on repart du dernier instantané : les images d'après sont refaites
         while k and journal['t'][k - 1] > t0 + 1e-9: k -= 1
-        for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas', 'courant'):
-            if cle in journal: journal[cle] = journal[cle][:k]
+        tronquer_journal(journal, k)
         if 't' in meta: meta['t'] = meta['t'][:k]
         if opts.get('film') == '3':
             import film_v3
@@ -750,6 +851,7 @@ def futur(sortie, t_fin, opts, cible):
             rep_ = C.charger()['repere']
             p = film_v3.ajouter_traceurs(p, np.array(rep_['soleil_position']) + cp_[0], np.array(rep_['soleil_vitesse']) + cv[0])
             meta['soleil'] = dict(ecart_position=[0.0, 0.0, 0.0], ecart_vitesse=[0.0, 0.0, 0.0])
+    verifier_version(film, t0, opts)      # avant de charger la carte : un refus ne coûte rien
     S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'))
     cp = S.cp
     tr = [cp.asarray(np.where((p['kind'] == 9) & (p['gid'] == g))[0]) for g in range(len(ORDRE))]
@@ -818,12 +920,13 @@ def futur(sortie, t_fin, opts, cible):
 
         # --sauvegarde-ma : écart entre deux sauvegardes de reprise (50 Ma par défaut ; un multiple de 2 Ma)
         avancer(S, t0, t_fin, film, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=2.0, instantane_ga=float(opts.get('sauvegarde-ma', 50.0)) / 1000.0,
-                journal=journal, a_chaque_releve=date_v3)
+                journal=journal, a_chaque_releve=date_v3, **options_rencontre(opts))
         ecr.sauver()
         print('film terminé (format 3) :', ecr.numero(), 'dates')
         return
     # Sauvegarde toutes les 5 images (50 Ma, environ 7 minutes de carte) : un arrêt ne perd jamais plus que cela.
-    avancer(S, t0, t_fin, film, releve_ma=releve_ma, instantane_ga=0.05, journal=journal, a_chaque_releve=image_et_index)
+    avancer(S, t0, t_fin, film, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=releve_ma, instantane_ga=0.05, journal=journal, a_chaque_releve=image_et_index,
+            **options_rencontre(opts))
     print('film terminé :', len(meta['t']), 'images')
 
 

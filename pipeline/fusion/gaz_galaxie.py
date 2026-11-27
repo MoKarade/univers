@@ -40,7 +40,10 @@ import gaz_gpu
 G = 4.30091e-6
 CS = 10.0                 # km/s
 COURANT = 0.3
-SOUS_PAS_MAX = 64
+# Plafond des sous-pas du gaz par pas de gravité. 64 jusqu'au 26/11/2026 : atteint dans 98 % des pas des films 10 M et 20 M,
+# et dépassé (nombre de Courant jusqu'à 0,53 au lieu de 0,3) dans 57 à 70 % des relevés après +8 Ga du film 10 M, dans les
+# chocs de la rencontre. 256 comme la version thermique ; réglable par UNIVERS_SOUS_PAS_MAX (puissance de 2).
+SOUS_PAS_MAX = int(os.environ.get('UNIVERS_SOUS_PAS_MAX', '256'))
 C_SEUIL2 = 54.2             # (km/s)² : k T / (mu m_p) à 8 000 K, gaz neutre (mu = 1,22)
 SEUIL_NH = 0.1            # cm^-3 (seuil de naissance d'étoiles, ordre de grandeur des simulations EAGLE : Schaye et al. 2015)
 # 1 M☉/kpc³ = 1e-9 M☉/pc³ = 1e-9 x 40,46 protons/cm³ ; avec 76 % d'hydrogène : n_H = 3,075e-8 cm^-3 par M☉/kpc³
@@ -62,6 +65,10 @@ class Gaz:
         self.cfl = 0.0; self.sous_pas = 0
         self._acc = None; self._taux = 0.0
         self.age0 = None; self.rendues = 0
+        # Travail cumulé des forces de pression (et de viscosité) sur le gaz, en M☉ (km/s)² : l'énergie que le gaz donne au
+        # mouvement (ou lui prend). Le gaz isotherme échange de l'énergie avec un réservoir implicite (son refroidissement et son
+        # chauffage supposés en équilibre) : sans ce terme, l'indicateur d'énergie du calcul ne peut pas se conserver (26/11/2026).
+        self.travail = 0.0
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resultats', 'retour_masse.json'), encoding='utf-8') as f:
             r = json.load(f)
         self._la = cp.asarray(np.log(np.array(r['ages_ans']))); self._pr = cp.asarray(np.array(r['part_rendue']))
@@ -90,14 +97,16 @@ class Gaz:
         k = 1
         while k < SOUS_PAS_MAX and dt / k * self._taux > COURANT: k *= 2
         d = dt / k; h = self.h[qui]; pire = 0.0
+        w = cp.zeros((), cp.float64)
         for _ in range(k):
-            v += 0.5 * d * self._acc
+            e0 = cp.sum(mm * cp.sum(v * v, axis=1)); v += 0.5 * d * self._acc; w += 0.5 * (cp.sum(mm * cp.sum(v * v, axis=1)) - e0)
             p += d * v
             r = self._sph(p, v, mm, h); h = r['h']
             self._acc = r['acc']
-            v += 0.5 * d * self._acc
+            e0 = cp.sum(mm * cp.sum(v * v, axis=1)); v += 0.5 * d * self._acc; w += 0.5 * (cp.sum(mm * cp.sum(v * v, axis=1)) - e0)
             pire = max(pire, float((r['vsig'] / r['h']).max()))
         pos[qui] = p; vel[qui] = v; self.h[qui] = h; self.rho[qui] = r['rho']
+        self.travail += float(w)
         self.cfl = d * pire; self._taux = pire; self.sous_pas = k
         return k
 
@@ -178,7 +187,7 @@ T_PLANCHER = 1.0e4
 U_PLANCHER = T_PLANCHER / K_PAR_U
 DT_EXPLOSION = 10 ** 7.5                                             # kelvins
 E_SN_PAR_MASSE = 1.0e51 / (100.0 * 1.989e33) * 1.0e-10               # (km/s)² par unité de masse d'étoiles formée : 5,03e5
-SOUS_PAS_MAX_THERMIQUE = 256
+SOUS_PAS_MAX_THERMIQUE = max(256, SOUS_PAS_MAX)
 
 
 def lambda_refroidissement(T):
@@ -227,15 +236,19 @@ class GazThermique(Gaz):
         k = 1
         while k < SOUS_PAS_MAX_THERMIQUE and dt / k * self._taux > COURANT: k *= 2
         d = dt / k; h = self.h[qui]; rho = self.rho[qui]; pire = 0.0
+        w = cp.zeros((), cp.float64)
         for _ in range(k):
-            v += 0.5 * d * self._acc; u = self._plancher(u + 0.5 * d * self._du, rho)
+            e0 = cp.sum(mm * cp.sum(v * v, axis=1)); v += 0.5 * d * self._acc; w += 0.5 * (cp.sum(mm * cp.sum(v * v, axis=1)) - e0)
+            u = self._plancher(u + 0.5 * d * self._du, rho)
             p += d * v
             r = self._sph(p, v, mm, h, u); h, rho = r['h'], r['rho']
             self._acc, self._du = r['acc'], r['dudt']
-            v += 0.5 * d * self._acc; u = self._plancher(u + 0.5 * d * self._du, rho)
+            e0 = cp.sum(mm * cp.sum(v * v, axis=1)); v += 0.5 * d * self._acc; w += 0.5 * (cp.sum(mm * cp.sum(v * v, axis=1)) - e0)
+            u = self._plancher(u + 0.5 * d * self._du, rho)
             u = self._plancher(self._refroidir(u, rho, d), rho)
             pire = max(pire, float((r['vsig'] / r['h']).max()))
         pos[qui] = p; vel[qui] = v; self.h[qui] = h; self.rho[qui] = rho; self.u[qui] = u
+        self.travail += float(w)
         self.cfl = d * pire; self._taux = pire; self.sous_pas = k
         return k
 

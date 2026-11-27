@@ -16,6 +16,8 @@ G="${UNIVERS_GALAXIES:?dossier des cinq galaxies de départ : UNIVERS_GALAXIES}"
 GAL="$G"      # dossier des cinq galaxies de départ
 ETAT="${UNIVERS_ETAT:?état de départ (etat_corrige.json) : UNIVERS_ETAT}"      # places et vitesses de départ des cinq galaxies (sortie des tirs de réglage)
 GAZ=""; [ "${UNIVERS_GAZ:-0}" != "0" ] && GAZ="--gaz=${UNIVERS_GAZ}"; [ -n "${UNIVERS_MAREE:-}" ] && GAZ="$GAZ --maree=$UNIVERS_MAREE"; [ -n "${UNIVERS_EFFICACITE:-}" ] && GAZ="$GAZ --efficacite=$UNIVERS_EFFICACITE"; [ -n "${UNIVERS_PAS_MA:-}" ] && GAZ="$GAZ --pas-ma=$UNIVERS_PAS_MA"      # gaz, naissances d'étoiles, retour de masse (gaz_galaxie.py)
+# Pas réduit pendant les rencontres (rencontre.py, RENCONTRES_DEFAUT) : UNIVERS_PAS_RENCONTRE_MA=0.0625, seuils UNIVERS_RENCONTRES=a-b:kpc,...
+[ -n "${UNIVERS_PAS_RENCONTRE_MA:-}" ] && GAZ="$GAZ --pas-rencontre-ma=$UNIVERS_PAS_RENCONTRE_MA"; [ -n "${UNIVERS_RENCONTRES:-}" ] && GAZ="$GAZ --rencontres=$UNIVERS_RENCONTRES"
 TR="${UNIVERS_TRACEURS:-$D/donnees/etoiles-visibles}"      # dossier des étoiles visibles
 S="${1:?dossier de sortie}"
 export PYTHONIOENCODING=utf-8

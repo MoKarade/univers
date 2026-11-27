@@ -13,6 +13,8 @@ G=C:/tmp/analyse-architecture/galaxies
 GAL="${UNIVERS_GALAXIES:-$G/plein}"      # dossier des cinq galaxies de départ
 ETAT="${UNIVERS_ETAT:-$G/etat_combine.json}"      # places et vitesses de départ des cinq galaxies (sortie des tirs de réglage)
 GAZ=""; [ "${UNIVERS_GAZ:-0}" != "0" ] && GAZ="--gaz=${UNIVERS_GAZ}"; [ -n "${UNIVERS_MAREE:-}" ] && GAZ="$GAZ --maree=$UNIVERS_MAREE"; [ -n "${UNIVERS_EFFICACITE:-}" ] && GAZ="$GAZ --efficacite=$UNIVERS_EFFICACITE"      # gaz, naissances d'étoiles, retour de masse (gaz_galaxie.py)
+# Pas réduit pendant les rencontres (rencontre.py, RENCONTRES_DEFAUT) : UNIVERS_PAS_RENCONTRE_MA=0.0625, seuils UNIVERS_RENCONTRES=a-b:kpc,...
+[ -n "${UNIVERS_PAS_MA:-}" ] && GAZ="$GAZ --pas-ma=$UNIVERS_PAS_MA"; [ -n "${UNIVERS_PAS_RENCONTRE_MA:-}" ] && GAZ="$GAZ --pas-rencontre-ma=$UNIVERS_PAS_RENCONTRE_MA"; [ -n "${UNIVERS_RENCONTRES:-}" ] && GAZ="$GAZ --rencontres=$UNIVERS_RENCONTRES"
 TR="${UNIVERS_TRACEURS:-C:/tmp/natif/donnees/etoiles-visibles}"      # dossier des étoiles visibles
 S="${1:-C:/tmp/natif/groupe-local}"
 export PYTHONIOENCODING=utf-8 UNIVERS_AVANCEMENT=C:/dev/Univers-PC/avancement
@@ -21,6 +23,15 @@ cd "$ICI" || exit 1
 VERROU="$S/lanceur.pid"
 if [ -f "$VERROU" ] && kill -0 "$(cat "$VERROU")" 2>/dev/null; then echo "déjà en cours (processus $(cat "$VERROU"))"; exit 0; fi
 echo $$ > "$VERROU"
+
+# Reprise légère d'un film au format 3 déjà commencé (même règle que lancer_colab.sh) : il suffit du code, de la marée et du
+# dossier film/ (reprise.npz, film.json, journal.json, evenements.bin, centraux/moyens/lents.bin). Sert à finir sur le PC un
+# film commencé ailleurs (le film 20 M de Colab, 26/11/2026).
+if [ -f "$S/film/reprise.npz" ] && [ -f "$S/film/film.json" ] && [ "${UNIVERS_FILM:-2}" = "3" ]; then
+  echo "=== reprise du film ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
+  "$PY" -u rencontre.py futur "$S" "${UNIVERS_FIN_GA:-10.0}" $GAZ --releve-ma=10 --champ=2 --film=3 --centraux=${UNIVERS_CENTRAUX:-740000,870000,2100000} ${UNIVERS_SAUVEGARDE_MA:+--sauvegarde-ma=$UNIVERS_SAUVEGARDE_MA} >> "$S/journal.txt" 2>&1
+  code=$?; echo "=== fin ($(date '+%d/%m %H:%M')), code $code" >> "$S/journal.txt"; rm -f "$VERROU"; exit $code
+fi
 
 if [ ! -f "$S/aujourdhui.npz" ]; then
   echo "=== passe : d'il y a 1 Ga à aujourd'hui ($(date '+%d/%m %H:%M'))" >> "$S/journal.txt"
