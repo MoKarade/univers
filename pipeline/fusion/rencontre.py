@@ -102,7 +102,7 @@ def assembler(dossier, etat, fraction=1.0, graine=20261113, angles=None):
 class Calcul:
     """Saute-mouton sur la carte graphique : gravité de toutes les particules (gravite_gpu) + énergie noire."""
 
-    def __init__(self, p, theta=0.7):
+    def __init__(self, p, theta=0.7, gaz=False, maree=None, t_ga=0.0):
         import cupy as cp
         import gravite_gpu
         self.cp, self.gg, self.theta = cp, gravite_gpu, theta
@@ -114,6 +114,33 @@ class Calcul:
         self.lourd = cp.asarray(p['kind'] != 9)      # les traceurs (9) ne comptent pas dans le centre de masse
         self.idx = [cp.asarray(np.where((p['gid'] == g) & np.isin(p['kind'], ETOILES))[0]) for g in range(len(ORDRE))]
         self.t_check = time.time()
+        # Marée extérieure au Groupe local (Vierge, grands voisins) : tenseur 3 x 3 par date au centre de masse de la paire,
+        # tiré d'un départ cosmologique contraint (fil « départ contraint », tables_raccord/maree.csv : T_ij = -d²Phi_ext/dx_i dx_j,
+        # a_i = T_ij x_j, (km/s/kpc)², repère de l'appli, énergie noire non comprise). Même ordre de grandeur que l'énergie
+        # noire (2e-3 contre 3,1e-3). [Modèle : la paire de ce départ contraint s'écarte du ciel réel ; dispersion 20-25 % au
+        # moins.] Hors des dates de la table, la valeur du bord est gardée.
+        self.maree = None; self.t_ga = t_ga
+        if maree:
+            T = np.loadtxt(maree, delimiter=',', skiprows=1)
+            self.maree = (T[:, 0], T[:, 1:10])
+        # Gaz (gaz_galaxie.py) : les particules de sorte 3 sentent la pression, les chocs, et deviennent des étoiles (sorte 5).
+        # Le gaz de toutes les galaxies est calculé ensemble ; il avance par sous-pas pendant le pas long de la gravité.
+        self.gaz = None; self.kind_g = cp.asarray(p['kind'])
+        if gaz and int((p['kind'] == 3).sum()) >= 100:
+            import gaz_galaxie
+            self.gaz = (gaz_galaxie.GazThermique if gaz == 2 else gaz_galaxie.Gaz)(len(p['kind']))
+            if 'u_gaz' in p and hasattr(self.gaz, 'u'): self.gaz.u = cp.asarray(p['u_gaz'], dtype=cp.float64)
+            if 'h_gaz' in p: self.gaz.h = cp.asarray(p['h_gaz'], dtype=cp.float64)
+            if 'naissance' in p: self.gaz.naissance = np.array(p['naissance'], dtype=np.float64)
+            self.gaz.ages_de_depart(p['kind'])
+            # Le retour de masse lit l'âge comme age0 + t (gaz_galaxie.retour) : age0 est donc l'âge À LA DATE 0, pas au
+            # départ. Un départ dans le passé (t < 0) sans ce décalage donnait un âge négatif aux étoiles de moins de 1,25 Ga
+            # (12 % du disque mince), prises pour des naissantes et rendues au gaz : 40 % de gaz en trop, naissances × 2,4,
+            # barre deux fois trop faible (essai du groupe du 20/11, mesuré le 21/11). Les états sauvegardés gardent age0
+            # dans cette convention.
+            self.gaz.age0 = self.gaz.age0 - t_ga
+            if 'age0' in p: self.gaz.age0 = cp.asarray(p['age0'], dtype=cp.float64)
+        self.travail_maree = 0.0      # M☉ (km/s)², cumulé : voir energie_corrigee dans avancer
         self.forces()
 
     def forces(self):
@@ -123,17 +150,38 @@ class Calcul:
         cm = cp.sum(self.pos * ml[:, None], axis=0) / cp.sum(ml)
         d = self.pos - cm
         self.acc = acc + self.K * d      # énergie noire : poussée H0² Ω_Λ (x − x_cm)
+        self.a_maree = None
+        if self.maree is not None:
+            tt, TT = self.maree
+            Tm = cp.asarray(np.array([np.interp(self.t_ga, tt, TT[:, k]) for k in range(9)]).reshape(3, 3))
+            self.a_maree = d @ Tm.T
+            self.acc += self.a_maree
         self.phi, self.d2 = phi, cp.sum(d * d, axis=1)
 
     def energie(self):
         cp = self.cp
         return float(0.5 * cp.sum(self.m * cp.sum(self.vel ** 2, axis=1)) + 0.5 * cp.sum(self.m * self.phi) - 0.5 * self.K * cp.sum(self.m * self.d2))
 
-    def pas(self, dt):
+    def pas(self, dt, t_ga=0.0):
+        cp = self.cp
+        self.t_ga = t_ga
         self.vel += 0.5 * dt * self.acc
-        self.pos += dt * self.vel
+        if self.a_maree is not None:      # travail de la marée extérieure (hors de l'indicateur d'énergie), demi-pas par demi-pas
+            self.travail_maree += 0.5 * dt * float(cp.sum(self.m * cp.sum(self.vel * self.a_maree, axis=1)))
+        if self.gaz:
+            est = self.kind_g == 3; qui = cp.where(est)[0]
+            self.pos[~est] += dt * self.vel[~est]
+            self.gaz.avancer(self.pos, self.vel, self.m, qui, dt)
+        else:
+            self.pos += dt * self.vel
         self.forces()
+        if self.a_maree is not None:
+            self.travail_maree += 0.5 * dt * float(cp.sum(self.m * cp.sum(self.vel * self.a_maree, axis=1)))
         self.vel += 0.5 * dt * self.acc
+        if self.gaz:
+            n1 = self.gaz.naissances(self.kind_g, cp.where(self.kind_g == 3)[0], dt, t_ga, pos=self.pos, m=self.m)
+            n2 = self.gaz.retour(self.kind_g, dt, t_ga)
+            if n1 or n2: self.kind = cp.asnumpy(self.kind_g)
 
     def centres(self):
         """Centre (sphère qui rétrécit, Power et al. 2003) et vitesse d'ensemble de chaque galaxie, sur ses étoiles."""
@@ -152,29 +200,27 @@ class Calcul:
         return np.array(out_p), np.array(out_v)
 
     def attendre(self):
-        """Rend la carte à Marc : si un autre programme l'occupe (son appli, un jeu), on attend."""
+        """Rend la carte à Marc : s'il joue ou ouvre son appli (carte.py), on attend, ou on se retire tout à fait."""
         if time.time() - self.t_check < 30: return
-        self.cp.cuda.Stream.null.synchronize()
+        import carte
         while True:
-            time.sleep(1.0)
-            try:
-                u = int(subprocess.run(['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=20,
-                                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout.split()[0])
-            except Exception:
-                break
-            if u < 35: break
+            raison = carte.prise(self.cp.get_default_memory_pool().total_bytes() / 2 ** 20)
+            if not raison: break
             if os.environ.get('UNIVERS_CEDER') == '1':
                 # Marc joue ou ouvre son appli : on rend TOUTE la carte (mémoire comprise) en s'arrêtant. Le veilleur
                 # (veilleur_calcul.ps1) relance le calcul depuis la dernière sauvegarde quand la carte est de nouveau libre.
-                print(f'  carte graphique occupée à {u} % par un autre programme : le calcul se retire, reprise à la dernière sauvegarde', flush=True)
+                print(f'  {raison} : le calcul se retire, reprise à la dernière sauvegarde', flush=True)
                 sys.exit(3)
-            print(f'  carte graphique occupée à {u} % par un autre programme : pause de 60 s', flush=True)
+            print(f'  {raison} : pause de 60 s', flush=True)
             time.sleep(60)
         self.t_check = time.time()
 
     def etat(self):
         cp = self.cp
-        return dict(pos=cp.asnumpy(self.pos), vel=cp.asnumpy(self.vel), m=cp.asnumpy(self.m), eps=cp.asnumpy(self.eps), kind=self.kind, gid=self.gid)
+        e = dict(pos=cp.asnumpy(self.pos), vel=cp.asnumpy(self.vel), m=cp.asnumpy(self.m), eps=cp.asnumpy(self.eps), kind=cp.asnumpy(self.kind_g), gid=self.gid)
+        if self.gaz: e.update(h_gaz=cp.asnumpy(self.gaz.h).astype(np.float32), naissance=self.gaz.naissance, age0=cp.asnumpy(self.gaz.age0).astype(np.float32))
+        if self.gaz is not None and hasattr(self.gaz, 'u'): e['u_gaz'] = cp.asnumpy(self.gaz.u).astype(np.float32)
+        return e
 
 
 def avancement(t0, t1, t):
@@ -196,9 +242,82 @@ def avancement(t0, t1, t):
 DEBUT = time.strftime('%Y-%m-%dT%H:%M:%S')
 
 
-def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, journal=None, a_chaque_releve=None):
-    """Avance de t0 à t1 (Ga). Écrit journal.json (centres relatifs à la Voie lactée, énergie) et des instantanés."""
+# Pas réduit pendant les rencontres (26/11/2026). Le pas unique de 0,25 Ma est trop long quand deux centres de galaxies se
+# traversent : dans le film 10 M fini, l'énergie a sauté de +0,21 % à +0,82 % au premier passage d'Andromède (+5,45 Ga), puis
+# jusqu'à +2,95 % à la fusion des centres, alors qu'elle dérivait de 0,05 % par Ga avant. Le critère des codes de référence,
+# dt = sqrt(2 eta eps / |a|) avec eta = 0,025 (Springel 2005, Gadget-2), donne ~0,2 Ma à 1 kpc du centre et ~0,08 Ma à 0,1 kpc
+# pour eps = 31 pc. Quand deux galaxies d'une paire listée sont plus proches que le seuil, chaque pas est coupé en sous-pas
+# saute-mouton égaux ; la cadence des relevés, des images et des sauvegardes ne change pas. La décision est prise à chaque
+# relevé (tous les 2 Ma en film 3 : une approche à 500 km/s y fait 1 kpc, bien moins que la marge du seuil).
+RENCONTRES_DEFAUT = 'voie_lactee-andromede:60,voie_lactee-triangle:60,andromede-triangle:60'
+
+
+def lire_rencontres(texte):
+    """« a-b:kpc,... » -> [(i, j, kpc)] dans l'ordre ORDRE."""
+    out = []
+    for morceau in (texte or '').split(','):
+        if not morceau.strip(): continue
+        paire, seuil = morceau.split(':'); a, b = paire.split('-')
+        out.append((ORDRE.index(a.strip()), ORDRE.index(b.strip()), float(seuil)))
+    return out
+
+
+def sous_pas_rencontre(centres, rencontres, dt_ma, pas_rencontre_ma):
+    """Nombre de sous-pas pour les pas à venir : 1 hors rencontre, dt_ma / pas_rencontre_ma (arrondi) pendant."""
+    if not rencontres or not pas_rencontre_ma or pas_rencontre_ma >= dt_ma: return 1
+    proche = any(float(np.linalg.norm(np.asarray(centres[i]) - np.asarray(centres[j]))) < seuil for i, j, seuil in rencontres)
+    return max(1, int(round(dt_ma / pas_rencontre_ma))) if proche else 1
+
+
+def options_rencontre(opts):
+    """--pas-rencontre-ma=0.0625 [--rencontres=a-b:kpc,...] : pas réduit pendant les rencontres. Absent : pas unique, comme avant."""
+    pr = opts.get('pas-rencontre-ma')
+    return dict(pas_rencontre_ma=float(pr) if pr else None, rencontres=lire_rencontres(opts.get('rencontres', RENCONTRES_DEFAUT)) if pr else None)
+
+
+def version_du_code():
+    """Commit du dépôt qui calcule (git rev-parse HEAD), ou « inconnu » hors dépôt git."""
+    try:
+        r = subprocess.run(['git', '-C', ICI, 'rev-parse', 'HEAD'], capture_output=True, text=True, timeout=30)
+        sale = subprocess.run(['git', '-C', ICI, 'status', '--porcelain', '--untracked-files=no', '--', '.'], capture_output=True, text=True, timeout=30)
+        c = r.stdout.strip() if r.returncode == 0 else 'inconnu'
+        return c + ('+modifié' if sale.returncode == 0 and sale.stdout.strip() else '')
+    except (OSError, subprocess.SubprocessError):
+        return 'inconnu'
+
+
+def verifier_version(film, t0, opts):
+    """Un film doit être calculé d'un bout à l'autre par le même code (26/11/2026 : le film 20 M sur Colab a tourné avec trois
+    versions de film-3, la machine reclonant la tête de la branche à chaque reprise). <film>/code.json garde le commit et les
+    réglages de chaque tronçon ; une reprise avec un autre commit est refusée (code de sortie 4), sauf UNIVERS_CHANGER_CODE=1,
+    qui note le changement dans code.json. Un film sans code.json (commencé avant cette règle) le reçoit à sa reprise."""
+    chemin = os.path.join(film, 'code.json')
+    c = version_du_code()
+    reglages = {k: opts[k] for k in ('pas-ma', 'pas-rencontre-ma', 'rencontres', 'gaz', 'efficacite', 'theta', 'sauvegarde-ma') if k in opts}
+    import gaz_galaxie
+    reglages['sous_pas_max_gaz'] = gaz_galaxie.SOUS_PAS_MAX
+    d = json.load(open(chemin, encoding='utf-8')) if os.path.exists(chemin) else dict(commit=c, troncons=[])
+    if d['commit'] != c:
+        if os.environ.get('UNIVERS_CHANGER_CODE') != '1':
+            print(f"ARRÊT : ce film est calculé par le commit {d['commit']}, le code présent est {c}. Reprendre avec le même commit, "
+                  f"ou poser UNIVERS_CHANGER_CODE=1 pour un changement voulu (il sera noté dans code.json).", flush=True)
+            sys.exit(4)
+        print(f"  changement de code voulu : {d['commit']} -> {c} à t = {t0:+.3f} Ga", flush=True)
+        d['commit'] = c
+    if c == 'inconnu' or c.endswith('+modifié'): print(f'  attention : version du code {c}, le film ne sera pas reproductible', flush=True)
+    d['troncons'].append(dict(t0=round(t0, 5), commit=c, reglages=reglages, debut=time.strftime('%Y-%m-%dT%H:%M:%S')))
+    with open(chemin + '.tmp', 'w', encoding='utf-8') as f_: json.dump(d, f_, ensure_ascii=False, indent=1)
+    os.replace(chemin + '.tmp', chemin)
+
+
+def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, journal=None, a_chaque_releve=None, replacement=None,
+            pas_rencontre_ma=None, rencontres=None):
+    """Avance de t0 à t1 (Ga). Écrit journal.json (centres relatifs à la Voie lactée, énergie) et des instantanés.
+    pas_rencontre_ma, rencontres : pas réduit quand une paire de galaxies est plus proche que son seuil (voir plus haut)."""
     dt = dt_ma * 1e-3 / T_UNIT
+    etat_r = dict(k=1)
+    j_ = journal or {}
+    travail0 = ((j_.get('travail_gaz') or [0.0])[-1], (j_.get('travail_maree') or [0.0])[-1])      # cumul repris après une reprise
     steps = int(round((t1 - t0) * 1000 / dt_ma)); every = int(round(releve_ma / dt_ma)); snap = int(round(instantane_ga * 1000 / dt_ma))
     journal = journal or dict(t=[], centres=[], vitesses=[], energie=[], e0=S.energie(), galaxies=ORDRE)
     debut = time.time()
@@ -207,21 +326,69 @@ def avancer(S, t0, t1, sortie, dt_ma=0.25, releve_ma=20.0, instantane_ga=0.5, jo
         cp_, cv = S.centres()
         journal['t'].append(round(t, 5)); journal['centres'].append((cp_ - cp_[0]).round(4).tolist()); journal['vitesses'].append((cv - cv[0]).round(3).tolist())
         journal['energie'].append(S.energie() / journal['e0'] - 1)
+        # Énergie corrigée (26/11/2026) : l'indicateur moins le travail reçu de la pression du gaz et de la marée extérieure, qui
+        # ne sont pas dans son bilan. Elle ne doit bouger que par l'erreur du calcul ; l'indicateur seul mélange erreur et physique.
+        wg = (S.gaz.travail if S.gaz else 0.0) + travail0[0]; wm = S.travail_maree + travail0[1]
+        journal.setdefault('travail_gaz', []).append(wg); journal.setdefault('travail_maree', []).append(wm)
+        journal.setdefault('energie_corrigee', []).append(journal['energie'][-1] - (wg + wm) / journal['e0'])
+        if S.gaz:      # masse de gaz et d'étoiles nées, par galaxie d'origine (M☉) : le taux de naissance s'en déduit
+            k_, mm = S.cp.asnumpy(S.kind_g), S.cp.asnumpy(S.m)
+            journal.setdefault('gaz', []).append([float(mm[(k_ == 3) & (S.gid == g)].sum()) for g in range(len(ORDRE))])
+            journal.setdefault('nees', []).append([float(mm[(k_ == 5) & (S.gid == g)].sum()) for g in range(len(ORDRE))])
+            journal.setdefault('sous_pas', []).append(int(S.gaz.sous_pas))
+            journal.setdefault('courant', []).append(round(float(S.gaz.cfl), 3))      # nombre de Courant atteint : > 0,3 quand les sous-pas butent sur leur maximum
         d = np.linalg.norm(cp_ - cp_[0], axis=1)
-        print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % | {time.time() - debut:6.0f} s", flush=True)
+        print(f"t = {t:+7.3f} Ga | distances au centre de la Voie lactée (kpc) : " + ' '.join(f'{x:6.1f}' for x in d[1:]) + f" | énergie {100 * journal['energie'][-1]:+.3f} % (corrigée {100 * journal['energie_corrigee'][-1]:+.3f} %) | {time.time() - debut:6.0f} s", flush=True)
         json.dump(journal, open(os.path.join(sortie, 'journal.json.tmp'), 'w', encoding='utf-8')); os.replace(os.path.join(sortie, 'journal.json.tmp'), os.path.join(sortie, 'journal.json'))
+        k = sous_pas_rencontre(cp_, rencontres, dt_ma, pas_rencontre_ma)
+        if k != etat_r['k']: print(f"  t = {t:+.3f} Ga : pas de gravité {dt_ma / k:g} Ma ({'rencontre' if k > 1 else 'hors rencontre'})", flush=True)
+        etat_r['k'] = k
+        journal.setdefault('sous_pas_gravite', []).append(k)
         if a_chaque_releve: a_chaque_releve(t, cp_, cv)
         avancement(t0, t1, t)
 
     if not journal['t']: releve(t0)
+    elif rencontres and pas_rencontre_ma:      # reprise : la décision du dernier relevé n'est pas sauvegardée, on la refait ici
+        etat_r['k'] = sous_pas_rencontre(S.centres()[0], rencontres, dt_ma, pas_rencontre_ma)
+        if etat_r['k'] > 1: print(f"  reprise en rencontre : pas de gravité {dt_ma / etat_r['k']:g} Ma", flush=True)
     for s in range(steps):
-        S.pas(dt)
+        k = etat_r['k']
+        for i in range(k):      # k sous-pas égaux ; le dernier tombe exactement sur la date du pas
+            S.pas(dt / k, t0 + (s + (i + 1) / k) * dt_ma * 1e-3)
         t = t0 + (s + 1) * dt_ma * 1e-3
+        if replacement and not replacement.get('fait') and t >= replacement['t'] - 1e-9: replacer(S, replacement)
         if (s + 1) % every == 0: releve(t)
         if (s + 1) % snap == 0 and s + 1 < steps:
             np.savez(os.path.join(sortie, 'reprise.tmp.npz'), t=t, **S.etat()); os.replace(os.path.join(sortie, 'reprise.tmp.npz'), os.path.join(sortie, 'reprise.npz'))
         S.attendre()
     return journal
+
+
+def tronquer_journal(j, k):
+    """Garde les k premiers relevés du journal. Les séries ajoutées en cours de film (courant, sous_pas_gravite...) sont plus
+    courtes que t et alignées sur sa FIN : on en retire autant de relevés qu'on en retire à t (avant le 26/11, [:k] les
+    laissait entières, et une reprise y dupliquait les derniers relevés)."""
+    n = len(j['t'])
+    for cle in ('t', 'centres', 'vitesses', 'energie', 'gaz', 'nees', 'sous_pas', 'courant', 'sous_pas_gravite', 'travail_gaz', 'travail_maree', 'energie_corrigee'):
+        if cle in j and isinstance(j[cle], list): j[cle] = j[cle][:max(0, len(j[cle]) - (n - k))]
+
+
+def replacer(S, r):
+    """Remet une galaxie à une place et une vitesse données (relatives à la Voie lactée) en cours de calcul, d'un bloc.
+    Sert au Petit Nuage : lié au Grand Nuage, il fait plusieurs rencontres serrées en un milliard d'années et son orbite
+    passée ne se laisse pas régler par tirs (20/11/2026 : 30 à 470 kpc d'écart à l'arrivée, sans convergence). On le
+    replace donc quelques centaines de millions d'années avant aujourd'hui, là où le modèle simple le fait remonter depuis
+    sa place mesurée ; avant cette date, sa route dans le calcul n'a pas de valeur. [Modèle, à dire à l'écran]"""
+    cp = S.cp
+    g = ORDRE.index(r['galaxie'])
+    cp_, cv = S.centres()
+    dp = cp.asarray(cp_[0] + np.array(r['pos'], float) - cp_[g]); dv = cp.asarray(cv[0] + np.array(r['vel'], float) - cv[g])
+    qui = cp.asarray(S.gid == g)
+    S.pos[qui] += dp; S.vel[qui] += dv
+    S.forces()
+    if S.gaz: S.gaz._acc = None
+    r['fait'] = True
+    print(f"  {r['galaxie']} replacé à t = {r['t']:+.2f} Ga (déplacement de {float(cp.linalg.norm(dp)):.1f} kpc, {float(cp.linalg.norm(dv)):.1f} km/s)", flush=True)
 
 
 def ecart_a_la_cible(journal, cible):
@@ -304,6 +471,9 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
     mode = args[0]
+    if 'efficacite' in opts:      # efficacité des naissances d'étoiles : le seul réglage permis sur le taux de naissance mesuré (1,65 ± 0,19 M☉/an)
+        import gaz_galaxie
+        gaz_galaxie.EFFICACITE = float(opts['efficacite'])
     cible = json.load(open(os.path.join(ICI, 'resultats', 'cible_aujourdhui.json'), encoding='utf-8'))
     t_depart = float(cible['debut_reference_ga'])
     ref = None
@@ -316,32 +486,67 @@ def main():
     if mode in ('tir', 'passe'):
         dossier, sortie = args[1], args[2]
         os.makedirs(sortie, exist_ok=True)
+        replacement = None
         if 'etat' in opts:
             precedent = json.load(open(opts['etat'], encoding='utf-8'))
             etat, t_depart = precedent['etat'], float(precedent['t_depart'])
+            if precedent.get('replacement'): replacement = dict(precedent['replacement'], fait=False)
         else:
             # Premier départ : on remonte depuis les places et vitesses mesurées aujourd'hui, dans le modèle simple des centres
             # bâti sur les masses de CE calcul. (Les orbites de la référence, avec leur frottement de formule, ne valent pas
             # pour les Nuages dans ce calcul : tirs 1 à 3 du 13/11, 120 à 250 kpc d'écart.)
             auj = {n: dict(pos=cible['galaxies'][n]['position_aujourdhui'], vel=cible['galaxies'][n]['vitesse_aujourdhui']) for n in ORDRE}
             etat = centres_simples(auj, t_depart / T_UNIT, profils(dossier))
+        if 'replacer' in opts and replacement is None:      # --replacer=petit_nuage:-0.30 : état remonté depuis les mesures, modèle simple
+            nom_r, t_r = opts['replacer'].split(':'); t_r = float(t_r)
+            auj = {n: dict(pos=cible['galaxies'][n]['position_aujourdhui'], vel=cible['galaxies'][n]['vitesse_aujourdhui']) for n in ORDRE}
+            e_r = centres_simples(auj, t_r / T_UNIT, profils(dossier))[nom_r]
+            replacement = dict(galaxie=nom_r, t=t_r, pos=e_r['pos'], vel=e_r['vel'], fait=False)
         angles = {a.split(':')[0]: float(a.split(':')[1]) for a in opts['angles'].split(',')} if 'angles' in opts else None
         p = assembler(dossier, etat, fraction=float(opts.get('fraction', 0.2 if mode == 'tir' else 1.0)), angles=angles)
         print(f"{mode} : {len(p['m'])} particules, de {t_depart:+.2f} Ga à aujourd'hui", flush=True)
-        S = Calcul(p, theta=float(opts.get('theta', 0.7)))
-        journal = avancer(S, t_depart, 0.0, sortie, releve_ma=float(opts.get('releve-ma', 50.0)))
+        # Reprise après un retrait (carte rendue à Marc) : le passe repart de sa dernière sauvegarde au lieu de tout refaire
+        # (20/11/2026 : 36 minutes de calcul perdues sur un retrait). Réservé au passe : le lanceur efface la sauvegarde
+        # entre ses deux passages ; un dossier de tir peut garder celle d'un autre réglage.
+        t_reprise, journal0 = t_depart, None
+        f_rep, f_jou = os.path.join(sortie, 'reprise.npz'), os.path.join(sortie, 'journal.json')
+        if mode == 'passe' and os.path.exists(f_rep) and os.path.exists(f_jou):
+            j0 = json.load(open(f_jou, encoding='utf-8'))
+            with np.load(f_rep) as z:
+                if len(z['m']) == len(p['m']) and j0['t'] and abs(j0['t'][0] - t_depart) < 1e-6:
+                    p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
+                    t_reprise = float(z['t'])
+            if t_reprise > t_depart:
+                k = len(j0['t'])
+                while k and j0['t'][k - 1] > t_reprise + 1e-9: k -= 1
+                tronquer_journal(j0, k)
+                journal0 = j0
+                if replacement and t_reprise >= replacement['t'] - 1e-9: replacement['fait'] = True
+                print(f"reprise à {t_reprise:+.3f} Ga", flush=True)
+        S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'), t_ga=t_reprise)
+        journal = avancer(S, t_reprise, 0.0, sortie, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=float(opts.get('releve-ma', 50.0)), replacement=replacement, journal=journal0,
+                          instantane_ga=0.05 if mode == 'passe' else 0.5, **options_rencontre(opts))
         ecart = ecart_a_la_cible(journal, cible)
         # Correction du départ : l'écart final de vitesse est retiré de la vitesse de départ ; l'écart final de position est
         # retiré de la position de départ, compte tenu de ce que le changement de vitesse déplace sur la durée du trajet
         # (mouvement libre : une approximation, d'où les tirs successifs). Amorti pour ne pas osciller.
         corrige = corriger(etat, ecart, t_depart, profils(dossier), float(opts.get('amorti', 0.5)))
-        json.dump(dict(t_depart=t_depart, etat=corrige, ecart_du_tir=ecart, particules=int(len(p['m']))), open(os.path.join(sortie, 'etat_corrige.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+        rep_c = None
+        if replacement:      # correction du replacement : mouvement libre sur la durée restante (courte), amortie
+            n_r = replacement['galaxie']; Tr = -replacement['t'] / T_UNIT; am = float(opts.get('amorti', 0.5))
+            dx, dv = np.array(ecart[n_r]['dx'], float), np.array(ecart[n_r]['dv'], float)
+            rep_c = dict(galaxie=n_r, t=replacement['t'], pos=(np.array(replacement['pos'], float) - am * (dx - dv * Tr)).tolist(),
+                         vel=(np.array(replacement['vel'], float) - am * dv).tolist())
+            corrige[n_r] = etat[n_r]      # son départ lointain n'est plus corrigé : il ne compte pas
+        json.dump(dict(t_depart=t_depart, etat=corrige, ecart_du_tir=ecart, particules=int(len(p['m'])), replacement=rep_c), open(os.path.join(sortie, 'etat_corrige.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         json.dump(dict(t_depart=t_depart, etat=etat), open(os.path.join(sortie, 'etat_utilise.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         print('écart à la place mesurée aujourd\'hui :')
         for n, e in ecart.items(): print(f"  {n:12s} {e['distance_kpc']:7.1f} kpc   {e['vitesse_kms']:6.1f} km/s")
         if mode == 'passe':
             np.savez(os.path.join(sortie, 'aujourdhui.npz'), t=0.0, **S.etat())
             print('instantané d\'aujourd\'hui écrit')
+    elif mode == 'tourner':      # python rencontre.py tourner <dossier> --traceurs=<étoiles visibles> [--galaxie=andromede]
+        tourner(args[1], opts, cible)
     elif mode == 'barre':
         barre(args[1], opts, cible)
     elif mode == 'futur':
@@ -361,6 +566,33 @@ def repere_disque(nom, pos, centre):
     return (pos - centre) @ rotation_vers(axe)
 
 
+JEUNES_GAZ_MIN = 20000      # particules de gaz qu'il faut à une galaxie pour y lire le courant des jeunes
+JEUNES_GAZ_VOISINS = 64     # voisines de gaz moyennées (gaz froid : ~1 km/s de bruit restant)
+
+
+def vitesses_de_jeans(x, p, centre, g, rng, n_rayons=48):
+    """Vitesses d'une population d'étoiles en boule (positions x relatives au centre, kpc) pour qu'elle reste en équilibre
+    dans l'attraction de TOUTE la masse du calcul autour de ce centre : agitation égale dans les trois directions,
+    sigma²(r) = (1/nu) * intégrale de r à l'infini de nu(s) G M(<s) / s² ds, nu étant la densité de la population.
+    La vitesse d'ensemble est celle des étoiles de la galaxie à moins de 1 kpc du centre. Rend les vitesses (km/s)."""
+    r = np.linalg.norm(x, axis=1)
+    bords = np.geomspace(max(np.percentile(r, 0.5), 0.02), np.percentile(r, 99.9) * 1.5, n_rayons + 1)
+    milieux = np.sqrt(bords[1:] * bords[:-1])
+    nu = np.histogram(r, bords)[0] / (4.0 / 3.0 * math.pi * (bords[1:] ** 3 - bords[:-1] ** 3))
+    nu = np.maximum(nu, nu[nu > 0].min() * 1e-3)
+    d = np.linalg.norm(p['pos'] - centre, axis=1); lourd = p['kind'] != 9
+    ordre = np.argsort(d[lourd]); cumul = np.cumsum(p['m'][lourd][ordre]); ds = d[lourd][ordre]
+    masse_sous = lambda s_: cumul[np.clip(np.searchsorted(ds, s_) - 1, 0, len(cumul) - 1)]
+    g_r = G * masse_sous(milieux) / milieux ** 2
+    terme = nu * g_r * np.diff(bords)
+    integrale = np.cumsum(terme[::-1])[::-1] - 0.5 * terme      # de r au bord extérieur (au-delà : négligé)
+    sigma = np.sqrt(np.maximum(integrale / nu, 0.0))
+    s_r = np.interp(r, milieux, sigma)
+    et = np.where((p['gid'] == g) & np.isin(p['kind'], ETOILES) & (d < 1.0))[0]
+    v0 = np.average(p['vel'][et], axis=0, weights=p['m'][et]) if len(et) >= 10 else p['vel'][p['gid'] == g].mean(0)
+    return v0 + rng.normal(0.0, 1.0, (len(r), 3)) * s_r[:, None]
+
+
 def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=20261116, sauf=()):
     """Donne à chaque étoile visible la vitesse d'une particule de masse voisine de la même famille (une des `voisins`
     plus proches, au hasard : l'agitation locale est ainsi celle de la masse). Les étoiles visibles sont posées d'après
@@ -376,11 +608,37 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
     tv = tv.copy(); pris = {}
     echelle = np.array([1.0, 1.0, 3.0])
     td = repere_disque(nom, tp, centre) * echelle
+    # Halo d'étoiles (6) : une boule tenue par son agitation. Ses vitesses du contrat viennent d'une formule qui n'est pas
+    # à l'équilibre dans la masse du calcul (film d'essai à 20 M du 24/11 : rayon à 10 % -32 %, à 90 % +47 % en 40 Ma).
+    # Il reçoit l'agitation qui tient SA répartition en équilibre (équation de Jeans). [Modèle : agitation égale dans
+    # les trois directions, pas de rotation d'ensemble.]
+    qui = np.where(comp == 6)[0]
+    if len(qui) and 6 not in sauf:
+        tv[qui] = vitesses_de_jeans(tp[qui] - centre, p, centre, g, rng); pris['6'] = int(len(qui))
     for c, sortes in PORTEUSES.items():
         qui = np.where(comp == c)[0]
         if not len(qui) or c in sauf: continue      # sauf : étoiles déjà posées sur la masse, position et vitesse
-        if c == 5:
+        # Galaxie sans rotation mesurée (Petit Nuage) : elle tient par l'agitation de ses étoiles, pas par un disque qui
+        # tourne. Ses jeunes sont bien plus serrées que ses vieilles (rayon médian 0,7 contre 2,9 kpc). Essais du 22/11 :
+        # posées sur le courant moyen du gaz (presque nul) elles tombaient au centre (-28 % en 50 Ma) ; avec la vitesse
+        # d'une vieille étoile voisine elles s'éparpillaient (+60 à +130 %). Elles reçoivent donc l'agitation qui tient
+        # LEUR répartition en équilibre dans l'attraction de la masse du calcul (équation de Jeans, boule sans direction
+        # préférée). [Modèle : pas de rotation d'ensemble des jeunes.]
+        sans_disque = not (C.galaxie(nom).get('disque') or {}).get('axe_rotation')
+        if c == 5 and sans_disque:
+            tv[qui] = vitesses_de_jeans(tp[qui] - centre, p, centre, g, rng)
+            pris[str(c)] = int(len(qui))
+            continue
+        if c == 5 and not sans_disque:
             masse = np.where((p['gid'] == g) & ((p['kind'] == 1) | (p['kind'] == 3)))[0]
+            # Quand le calcul porte du gaz, les jeunes prennent le courant du GAZ voisin : elles en naissent, et le gaz froid
+            # tourne à la vitesse du cercle, courant de la barre compris. Le courant moyen des étoiles, lui, traîne derrière
+            # (étoiles agitées) : sous 6 kpc, où il était gardé tel quel, les jeunes tombaient ensemble vers le centre puis
+            # remontaient (essai du groupe du 22/11 : rayon médian 5,93 -> 5,44 -> 5,81 kpc en 100 Ma, seul échec du critère
+            # d'équilibre de la Voie lactée avec le disque mince à 3 %).
+            gaz_voisin = np.where((p['gid'] == g) & (p['kind'] == 3))[0]
+            sur_le_gaz = len(gaz_voisin) >= JEUNES_GAZ_MIN
+            if sur_le_gaz: masse = gaz_voisin
             if len(masse) >= 320:
                 md = repere_disque(nom, p['pos'][masse], centre)
                 arbre = cKDTree(md[:, :2])
@@ -390,7 +648,7 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
                 # plusieurs km/s de bruit, ce qui suffisait à épaissir les jeunes : 49 -> 220 pc en 100 Ma, mesuré)
                 vm = np.zeros((len(qui), 3)); vmasse = (p['vel'][masse] - p['vel'][masse].mean(0)) @ R
                 for a0 in range(0, len(qui), 100000):      # 1 024 voisines : la moyenne garde ~1 km/s de bruit, y compris en hauteur (le disque ondule)
-                    _, v = arbre.query(td[qui[a0:a0 + 100000], :2], k=1024, workers=-1)
+                    _, v = arbre.query(td[qui[a0:a0 + 100000], :2], k=JEUNES_GAZ_VOISINS if sur_le_gaz else 1024, workers=-1)
                     vm[a0:a0 + 100000] = vmasse[v].mean(axis=1)
                 # Les étoiles agitées tournent moins vite que la vitesse circulaire (ici 196 au lieu de ~235 km/s au Soleil) ;
                 # des jeunes lancées à cette vitesse tomberaient vers le centre. Leur vitesse de rotation est donc remise à
@@ -408,6 +666,7 @@ def vitesses_de_la_masse(nom, tp, tv, comp, p, g, centre, voisins=8, graine=2026
                 # la remise à l'échelle entre progressivement de 6 à 9 kpc (run du 16/11 : appliquée partout, elle éjectait
                 # les jeunes du centre, rayon médian 5,9 -> 8,1 kpc en 50 Ma)
                 u_ = np.clip((Rj - 6.0) / 3.0, 0.0, 1.0); fj = 1.0 + (fj - 1.0) * u_ * u_ * (3 - 2 * u_)
+                if sur_le_gaz: fj = np.ones(len(qui))      # le gaz tourne déjà à la vitesse du cercle : pas de remise à l'échelle
                 er = td[qui, :2] / np.maximum(Rj, 1e-6)[:, None]; ep = np.stack([-er[:, 1], er[:, 0]], 1)
                 vr = (vm[:, :2] * er).sum(1); vp = (vm[:, :2] * ep).sum(1) * fj
                 vm[:, :2] = er * vr[:, None] + ep * vp[:, None]
@@ -450,11 +709,59 @@ def phase_barre(x, y, r0=1.0, r1=4.0):
     return float(abs(c)), float(np.degrees(np.angle(c)) / 2)
 
 
+def tourner(sortie, opts, cible, tolerance=3.0):
+    """Tourne d'un bloc une galaxie ISOLÉE autour de son propre axe, à t = 0 (positions et vitesses de toutes ses
+    particules), pour amener la barre de sa masse sur la barre mesurée. Réservé à Andromède : sa barre naît tard et sa
+    direction finale ne suit pas la rotation du départ (essai du 22/11 : départ tourné de +79,5°, arrivée à -84° au lieu
+    de -2,6°, comme au premier passage). À 770 kpc de tout voisin lourd, un tour sur elle-même ne change rien à ce
+    qu'elle subit : la marée extérieure y est mille fois plus faible que son attraction propre.
+    Voie lactée (--galaxie=voie_lactee) : permis pour un PETIT angle seulement (--angle-max, 15° par défaut). Un second
+    passage au départ tourné ne redonne pas la même barre (essai à 20 M du 24/11 : départ tourné de -7,8°, barre arrivée
+    à +5° au lieu de +39° et deux fois plus faible). Tourner la Voie lactée d'un bloc de quelques degrés autour de l'axe
+    de son disque ne déplace que la barre et les bras par rapport au Grand Nuage ; le sillage que le Nuage creuse dans
+    le halo se retrouve décalé d'autant [écart assumé, à écrire dans ecarts.txt].
+    Vérifie l'angle obtenu ; garde l'état d'avant dans aujourdhui_avant_tour[_<galaxie>].npz."""
+    nom = opts.get('galaxie', 'andromede'); g = ORDRE.index(nom)
+    f_auj = os.path.join(sortie, 'aujourdhui.npz')
+    with np.load(f_auj) as z: p = {k: z[k] for k in z.files}
+    with np.load(os.path.join(opts['traceurs'], f'etoiles_visibles_{nom}.npz')) as z: tp = z['pos'].astype(np.float64)
+    td = repere_disque(nom, tp, np.array(cible['galaxies'][nom]['position_aujourdhui']))
+    r1 = 4.0 if nom == 'voie_lactee' else 5.0      # comme le mode « barre »
+    _, cible_angle = phase_barre(td[:, 0], td[:, 1], 1.0, r1)
+    qui = np.where(p['gid'] == g)[0]; et = qui[np.isin(p['kind'][qui], ETOILES)]
+    c = np.median(p['pos'][et], axis=0)
+    for _ in range(8):      # centre des étoiles, sphère qui rétrécit
+        d = np.linalg.norm(p['pos'][et] - c, axis=1); c = np.average(p['pos'][et][d < np.percentile(d, 50)], axis=0, weights=p['m'][et][d < np.percentile(d, 50)])
+    d = np.linalg.norm(p['pos'][et] - c, axis=1); v0 = np.average(p['vel'][et][d < 2.0], axis=0, weights=p['m'][et][d < 2.0])
+    Rv = rotation_vers((C.galaxie(nom).get('disque') or {}).get('axe_rotation'))
+    masse = qui[p['kind'][qui] != 0]
+    def angle_de(pos):
+        md = (pos[masse] - c) @ Rv
+        return phase_barre(md[:, 0], md[:, 1], 1.0, r1)
+    f0, a0 = angle_de(p['pos'])
+    a = math.radians((cible_angle - a0 + 90.0) % 180.0 - 90.0)
+    if nom == 'voie_lactee' and abs(math.degrees(a)) > float(opts.get('angle-max', 15.0)):
+        raise SystemExit(f"Voie lactée : il faudrait la tourner de {math.degrees(a):+.1f}°, trop pour un tour d'un bloc")
+    Z = np.array([[math.cos(a), -math.sin(a), 0.0], [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]])
+    T = Rv @ Z.T @ Rv.T      # vecteurs en ligne : nouveau = ancien @ T
+    pos, vel = p['pos'].copy(), p['vel'].copy()
+    pos[qui] = (p['pos'][qui] - c) @ T + c; vel[qui] = (p['vel'][qui] - v0) @ T + v0
+    f1, a1 = angle_de(pos)
+    ecart = abs((a1 - cible_angle + 90.0) % 180.0 - 90.0)
+    print(f"{nom} : barre de la masse {f0:.3f} à {a0:+.1f}° ; tournée de {math.degrees(a):+.1f}° ; maintenant {f1:.3f} à {a1:+.1f}° (mesurée {cible_angle:+.1f}°, écart {ecart:.1f}°)")
+    if ecart > tolerance or abs(f1 - f0) > 0.005: raise SystemExit(f"tour raté : écart {ecart:.1f}°")
+    os.replace(f_auj, os.path.join(sortie, 'aujourdhui_avant_tour.npz' if nom == 'andromede' else f'aujourdhui_avant_tour_{nom}.npz'))
+    q = dict(p, pos=pos.astype(p['pos'].dtype), vel=vel.astype(p['vel'].dtype))
+    np.savez(os.path.join(sortie, 'aujourdhui.tmp.npz'), **q); os.replace(os.path.join(sortie, 'aujourdhui.tmp.npz'), f_auj)
+    json.dump(dict(galaxie=nom, tour_degres=round(math.degrees(a), 2), avant=round(a0, 1), apres=round(a1, 1), mesuree=round(cible_angle, 1)),
+              open(os.path.join(sortie, 'tour.json' if nom == 'andromede' else f'tour_{nom}.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+
+
 def barre(sortie, opts, cible):
     """Compare, à t = 0, la barre de la masse (aujourdhui.npz) à celle des étoiles visibles, galaxie par galaxie, et
     écrit l'angle dont il faut tourner la galaxie de départ autour de son axe (--angles du mode « passe »)."""
     with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
-        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
+        p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
     S0 = Calcul(p); cp_, _ = S0.centres(); del S0
     res = {}
     for g, nom in enumerate(ORDRE):
@@ -483,16 +790,19 @@ def futur(sortie, t_fin, opts, cible):
     releve_ma = float(opts.get('releve-ma', 10.0))
     if os.path.exists(reprise) and os.path.exists(os.path.join(film, 'film.json')):      # reprise après un arrêt
         with np.load(reprise) as z:
-            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}; t0 = float(z['t'])
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}; t0 = float(z['t'])
         meta = json.load(open(os.path.join(film, 'film.json'), encoding='utf-8'))
         journal = json.load(open(os.path.join(film, 'journal.json'), encoding='utf-8'))
-        k = min(len(journal['t']), len(meta['t']))      # on repart du dernier instantané : les images d'après sont refaites
+        k = min(len(journal['t']), len(meta['t'])) if 't' in meta else len(journal['t'])      # on repart du dernier instantané : les images d'après sont refaites
         while k and journal['t'][k - 1] > t0 + 1e-9: k -= 1
-        for cle in ('t', 'centres', 'vitesses', 'energie'): journal[cle] = journal[cle][:k]
-        meta['t'] = meta['t'][:k]
+        tronquer_journal(journal, k)
+        if 't' in meta: meta['t'] = meta['t'][:k]
+        if opts.get('film') == '3':
+            import film_v3
+            p = film_v3.retirer_gaia_apres_la_fin(p, meta, t0)
     else:
         with np.load(os.path.join(sortie, 'aujourdhui.npz')) as z:
-            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid')}
+            p = {k: z[k] for k in ('pos', 'vel', 'm', 'eps', 'kind', 'gid', 'h_gaz', 'naissance', 'age0', 'u_gaz') if k in z.files}
         t0, journal = 0.0, None
         S0 = Calcul(p, theta=float(opts.get('theta', 0.7)))
         cp_, cv = S0.centres(); del S0
@@ -516,11 +826,33 @@ def futur(sortie, t_fin, opts, cible):
                     meta.setdefault('vitesses_de_la_masse', {})[nom] = pris
                 ajout['pos'].append(tp); ajout['vel'].append(tv)
                 n = len(tp)
-                ajout['m'].append(np.full(n, 1.0)); ajout['eps'].append(np.full(n, 0.05)); ajout['kind'].append(np.full(n, 9, dtype=np.int8)); ajout['gid'].append(np.full(n, g, dtype=np.int8))
+                # « sans masse » : 1e-6 M☉ et non 0 (un nœud de l'arbre fait de traceurs seuls diviserait par 0) ; 8,5 M de traceurs pèsent 8,5 M☉ en tout (revue du 18/11, N4)
+                ajout['m'].append(np.full(n, 1e-6)); ajout['eps'].append(np.full(n, 0.05)); ajout['kind'].append(np.full(n, 9, dtype=np.int8)); ajout['gid'].append(np.full(n, g, dtype=np.int8))
                 meta['traceurs'][g] = n
                 meta['decalage_a_t0'][nom] = dict(position=((cp_[g] - cp_[0]) - mesure_p).round(3).tolist(), vitesse=((cv[g] - cv[0]) - mesure_v).round(3).tolist())
+            nt = sum(len(x) for x in ajout['m'])
+            if 'h_gaz' in p: ajout['h_gaz'] = [np.full(nt, 0.2, np.float32)]      # champs du gaz : sans objet pour les étoiles visibles
+            if 'naissance' in p: ajout['naissance'] = [np.full(nt, np.nan)]
+            if 'age0' in p: ajout['age0'] = [np.full(nt, np.nan, np.float32)]
+            if 'u_gaz' in p: ajout['u_gaz'] = [np.zeros(nt, np.float32)]
             p = {k: np.concatenate([p[k]] + ajout[k]) for k in p}
-    S = Calcul(p, theta=float(opts.get('theta', 0.7)))
+        if opts.get('film') == '3':      # traceurs mesurés de la Voie lactée, dans le repère du calcul : étoiles Gaia, puis le Soleil
+            import film_v3
+            if 'gaia' in opts:      # traceurs_gaia.py : places et vitesses mesurées, gardées telles quelles
+                with np.load(opts['gaia']) as z:
+                    p = film_v3.ajouter_traceurs(p, z['pos'] + cp_[0], z['vel'].astype(np.float64) + cv[0])
+                    meta['gaia'] = dict(nombre=int(len(z['rang'])), taille=int(z['taille']), crc32=int(z['crc32']), source=os.path.basename(opts['gaia']))
+                    z['rang'].astype('<u4').tofile(os.path.join(film, 'gaia.bin'))
+            if 'naines' in opts:      # traceurs_naines.py : un point par galaxie naine, place et vitesse mesurées
+                with np.load(opts['naines']) as z:
+                    p = film_v3.ajouter_traceurs(p, z['pos'] + cp_[0], z['vel'].astype(np.float64) + cv[0])
+                    meta['naines'] = dict(nombre=int(len(z['nom'])), noms=[str(x) for x in z['nom']], source=str(z['source']),
+                                          note="traceurs sans masse : l'attraction des naines (Sagittaire) n'est pas dans le calcul")
+            rep_ = C.charger()['repere']
+            p = film_v3.ajouter_traceurs(p, np.array(rep_['soleil_position']) + cp_[0], np.array(rep_['soleil_vitesse']) + cv[0])
+            meta['soleil'] = dict(ecart_position=[0.0, 0.0, 0.0], ecart_vitesse=[0.0, 0.0, 0.0])
+    verifier_version(film, t0, opts)      # avant de charger la carte : un refus ne coûte rien
+    S = Calcul(p, theta=float(opts.get('theta', 0.7)), gaz=int(opts.get('gaz', 0)), maree=opts.get('maree'))
     cp = S.cp
     tr = [cp.asarray(np.where((p['kind'] == 9) & (p['gid'] == g))[0]) for g in range(len(ORDRE))]
     print(f"futur : {int((p['kind'] != 9).sum())} particules de masse, {int((p['kind'] == 9).sum())} étoiles visibles, de {t0:+.3f} à {t_fin:+.2f} Ga", flush=True)
@@ -568,8 +900,33 @@ def futur(sortie, t_fin, opts, cible):
         except Exception as err:
             print(f'  index du film non écrit : {err}', flush=True)
 
+    if opts.get('film') == '3':      # format 3 (film_v3.py) : une date tous les 2 Ma, familles P (20 Ma) et C (entre deux)
+        import film_v3
+        infos = {k: meta[k] for k in ('decalage_a_t0', 'vitesses_de_la_masse', 'soleil', 'gaia', 'naines') if k in meta}
+        n_naines = int((meta.get('naines') or {}).get('nombre', 0))
+        n_gaia = film_v3.gaia_presentes(p, meta) if 'blocs' in meta else int((meta.get('gaia') or {}).get('nombre', 0))
+        ecr, r_matiere = film_v3.preparer(film, S, p, ORDRE, t0, infos, [int(x) for x in opts.get('centraux', '400000,600000,1600000').split(',')], G, n_gaia=n_gaia, n_naines=n_naines)
+        journal = journal or dict(t=[], centres=[], vitesses=[], energie=[], e0=S.energie(), galaxies=ORDRE)
+
+        def date_v3(t, centres, vitesses):
+            k = ecr.numero()
+            if champ is not None and k % (5 * int(opts['champ'])) == 0:      # --champ compté en pas de 10 Ma, comme au format 2
+                try:
+                    ecrire_champ(k, centres, vitesses)
+                except Exception as err:
+                    print(f'  champ non écrit à t = {t:+.3f} Ga : {err}', flush=True)
+            ecr.date(t, lambda r: cp.asnumpy(S.pos[r]), lambda r: cp.asnumpy(S.vel[r]), centres, vitesses, journal['energie'][-1],
+                     sortes_matiere=cp.asnumpy(S.kind_g[r_matiere]))
+
+        # --sauvegarde-ma : écart entre deux sauvegardes de reprise (50 Ma par défaut ; un multiple de 2 Ma)
+        avancer(S, t0, t_fin, film, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=2.0, instantane_ga=float(opts.get('sauvegarde-ma', 50.0)) / 1000.0,
+                journal=journal, a_chaque_releve=date_v3, **options_rencontre(opts))
+        ecr.sauver()
+        print('film terminé (format 3) :', ecr.numero(), 'dates')
+        return
     # Sauvegarde toutes les 5 images (50 Ma, environ 7 minutes de carte) : un arrêt ne perd jamais plus que cela.
-    avancer(S, t0, t_fin, film, releve_ma=releve_ma, instantane_ga=0.05, journal=journal, a_chaque_releve=image_et_index)
+    avancer(S, t0, t_fin, film, dt_ma=float(opts.get('pas-ma', 0.25)), releve_ma=releve_ma, instantane_ga=0.05, journal=journal, a_chaque_releve=image_et_index,
+            **options_rencontre(opts))
     print('film terminé :', len(meta['t']), 'images')
 
 

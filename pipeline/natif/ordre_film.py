@@ -48,6 +48,15 @@ def main():
     if d.max() > (3e-3 if plusieurs else 1e-3) or (doubles > 0.005 * n if plusieurs else not unique): raise SystemExit('ECHEC : les deux fichiers ne décrivent pas les mêmes étoiles')
     rang.astype('<u4').tofile(sortie + '.partiel'); os.replace(sortie + '.partiel', sortie)
     print('->', sortie)
+    # Lumière COMPLÈTE de chaque étoile (L☉, bande V), dans l'ordre de l'appli : vl_etoiles.bin ne garde que la part que
+    # Gaia ne montre pas déjà (lum_vue) ; quand le film mène et que Gaia s'éteint, l'appli a besoin de la lumière entière
+    # (revue de code du 18/11/2026, F1). Un flottant 32 bits par étoile, fichier <nom>.lum à côté de <nom>.ordre.
+    lums = []
+    for chemin_npz in npz.split(','):
+        with np.load(chemin_npz) as z: lums.append(z['lum'].astype(np.float32))
+    lum = os.path.splitext(sortie)[0] + '.lum'
+    np.concatenate(lums)[rang].astype('<f4').tofile(lum + '.partiel'); os.replace(lum + '.partiel', lum)
+    print('->', lum)
 
 
 if __name__ == '__main__':

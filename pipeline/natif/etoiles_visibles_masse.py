@@ -9,8 +9,8 @@ règle « un objet, une histoire » demande que l'image d'aujourd'hui soit déj�
 Ce script reprend le fichier du contrat et remplace, pour les populations vieilles, la position et la vitesse de chaque
 étoile par celles d'une particule d'étoiles de la masse à t = 0 (aujourdhui.npz de rencontre.py), décalée d'une fraction
 de la distance à ses voisines pour ne pas empiler les étoiles :
-- 1 disque mince et 2 bulbe et barre : particules du disque mince et du disque compact central (sorte 1, et 2 s'il y en a) ;
-  une étoile est rangée « barre » avec la part du disque compact à son rayon ;
+- 1 disque mince : particules du disque mince ; 2 bulbe et barre : particules du disque compact central et du bulbe
+  (reconnues à leur rang dans la galaxie de départ, pas à leur place d'aujourd'hui) ;
 - 4 disque épais : particules du disque épais (sorte 4).
 Ne changent pas : 5 étoiles jeunes (bras MESURÉS et régions HII : leurs positions sont des mesures ; rencontre.py leur
 donne la vitesse de la masse voisine) et 6 halo d'étoiles. Lumières, couleurs, graines : inchangées.
@@ -68,13 +68,20 @@ def main():
     mp -= c; mv -= cv      # repère de l'appli : Voie lactée à l'origine, au repos (mêmes axes que le calcul)
     print(f'{len(mp)} particules d\'étoiles de la Voie lactée à t = 0 ; sortes : ' + ', '.join(f'{k}: {int((mk == k).sum())}' for k in np.unique(mk)))
 
+    # Barre ou disque ? On le lit dans l'ORDRE des particules, pas dans leur place d'aujourd'hui : dans la galaxie de départ
+    # (modeles_v2.py) le disque mince vient avant le disque épais, le disque compact central (la masse de la barre) après,
+    # et le calcul garde cet ordre. Choisir d'après le rayon d'aujourd'hui serait faux : on prendrait pour « barre » des
+    # étoiles du disque de passage près du centre, qui repartent aussitôt (mesuré sur le film 2 : rayon médian de la barre
+    # + 13 % en 10 Ma, du disque - 3 % en 40 Ma).
     vieux = (mk == 1) | (mk == 2)
-    R = np.hypot(mp[vieux, 0], mp[vieux, 1])
-    s_compact = M_COMPACT / (2 * math.pi * RD_COMPACT ** 2) * np.exp(-R / RD_COMPACT); s_mince = S0_MINCE * np.exp(-R / RD_MINCE)
-    part_barre = s_compact / (s_compact + s_mince)
+    rang = np.arange(len(mk)); premier_epais = int(rang[mk == 4].min()) if (mk == 4).any() else len(mk)
+    compact = ((mk == 1) & (rang > premier_epais)) | (mk == 2)
+    mince = (mk == 1) & (rang < premier_epais)
     n1, n2, n4 = int((comp == 1).sum()), int((comp == 2).sum()), int((comp == 4).sum())
-    p2, v2 = tirer(rng, mp[vieux], mv[vieux], n2, part_barre)
-    p1, v1 = tirer(rng, mp[vieux], mv[vieux], n1, 1.0 - part_barre)
+    if compact.sum() < 1000: compact = vieux      # galaxie de départ sans disque compact : toute la vieille population
+    print(f'disque mince : {int(mince.sum())} particules ; disque compact et bulbe : {int(compact.sum())}')
+    p2, v2 = tirer(rng, mp[compact], mv[compact], n2)
+    p1, v1 = tirer(rng, mp[mince], mv[mince], n1)
     epais = mk == 4
     p4, v4 = tirer(rng, mp[epais], mv[epais], n4)
     for cc, p_, v_ in ((1, p1, v1), (2, p2, v2), (4, p4, v4)):
